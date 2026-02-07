@@ -1,0 +1,115 @@
+# ===========================
+# VEO Pro Max - .gitignore
+# ===========================
+
+# ========================
+# 🔴 SECURITY - NEVER COMMIT
+# ========================
+
+# Firebase Service Account (CRITICAL!)
+*firebase-adminsdk*.json
+*credentials*.json
+*secret*.txt
+
+# Admin folder (contains credentials and keygen)
+01 - ADMIN - License Security/
+05_Security/admin/
+00_ADMIN/
+admin/
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Encrypted credentials
+*.enc
+
+# ========================
+# 🔴 USER DATA - NEVER COMMIT
+# ========================
+
+# Browser profiles (contains cookies, session tokens)
+**/browser_profiles/
+**/browser_session_*/
+**/profile_*/
+
+# HAR files (contain auth tokens, cookies, API keys)
+*.har
+
+# User config with tokens
+**/config/settings.json
+**/config/profiles.json
+
+# ========================
+# 📦 Build Artifacts
+# ========================
+
+# PyInstaller
+build/
+dist/
+*.spec
+*.exe
+*.pyd
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ========================
+# 💻 IDE & OS
+# ========================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+
+# Antigravity / Agent
+.gemini/
+.agent/
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ========================
+# 📁 Temp & Logs
+# ========================
+
+*.log
+*.tmp
+*.temp
+logs/
+temp/
+tmp/
+
+# ========================
+# 🔧 Virtual Environment
+# ========================
+
+venv/
+.venv/
+ENV/
+env/
+
+# ========================
+# 📋 Whitelist (allow these JSON files)
+# ========================
+!package.json
+!tsconfig.json
+!**/themes/*.json
+nul

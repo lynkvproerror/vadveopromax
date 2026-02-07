@@ -1,0 +1,9 @@
+Loading HAR...
+HAR Loaded. Searching for 'ULTRA'...
+MATCH: .log.entries[1].response.content.text = {
+  "credits": 45000,
+  "userPaygateTier": "PAYGATE_TIER_TWO",
+  "sku": "WS_ULTRA"
+}
+
+Search complete.
