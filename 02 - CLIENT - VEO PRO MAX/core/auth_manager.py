@@ -13,7 +13,7 @@ import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from core.session import AccountSession, SubscriptionType, PaygateTier
+from core.session import AccountSession, AccountState, SubscriptionType, PaygateTier
 from config.constants import TokenLifetime
 
 
@@ -255,11 +255,21 @@ class AuthManager:
             )
             session.update_recaptcha(tokens.recaptcha_token)
             
-            # Store browser headers for later use
-            self._browser_headers = {
-                "x-browser-validation": tokens.browser_validation,
-                "x-client-data": tokens.client_data,
-            }
+            # Store browser headers ON THE SESSION (per-account, not singleton)
+            # Per Protocol Analysis §1.4: each account has its own browser context
+            session.update_browser_headers(
+                browser_validation=tokens.browser_validation,
+                client_data=tokens.client_data,
+                browser_channel=getattr(tokens, 'browser_channel', 'stable'),
+                browser_copyright=getattr(tokens, 'browser_copyright', ''),
+                browser_year=getattr(tokens, 'browser_year', ''),
+            )
+            
+            # Store profile_path so persistent browser can be launched later
+            session.profile_path = profile_path
+            
+            # Update account state
+            session.state = AccountState.CONNECTED
             
             # Save session
             self.save_session(session)
@@ -270,6 +280,17 @@ class AuthManager:
         finally:
             await extractor.close()
     
-    def get_browser_headers(self) -> Dict[str, str]:
-        """Get stored browser headers from last extraction."""
+    def get_browser_headers(self, email: Optional[str] = None) -> dict:
+        """Get browser headers for an account.
+        
+        Per-account headers are now stored on AccountSession.
+        This method provides backwards-compatible access.
+        
+        Args:
+            email: Account email. If provided, returns that account's headers.
+                   If None, returns headers from last extraction (legacy).
+        """
+        if email and email in self._sessions:
+            return self._sessions[email].get_browser_headers()
+        # Legacy fallback
         return getattr(self, '_browser_headers', {})

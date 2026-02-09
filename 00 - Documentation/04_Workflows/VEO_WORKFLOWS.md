@@ -67,8 +67,8 @@ def generate_video_*(self, prompt, model, aspect_ratio, count, ...):
     - Upload Start Frame → `startId`.
     - Upload End Frame → `endId`.
 2.  **Generate**:
-    - Payload: `{ "startImageId": startId, "endImageId": endId }`.
-    - Model: `veo_3_1_i2v_s_fast_fl_*`.
+    - Payload: `{ "startImage": {"mediaId": startId}, "endImage": {"mediaId": endId} }`
+    - Model: `veo_3_1_i2v_s_fast_fl_*_relaxed`.
 3.  **Poll Status**.
 
 ---
@@ -82,8 +82,8 @@ def generate_video_*(self, prompt, model, aspect_ratio, count, ...):
     - Upload 1-3 images (Character, Style, Background).
     - Collect `mediaIds`.
 2.  **Generate**:
-    - Payload: `{ "referenceImageIds": [id1, id2, ...] }`.
-    - Model: `veo_3_1_r2v_*`.
+    - Payload: `{ "referenceImages": [{"imageUsageType": "IMAGE_USAGE_TYPE_ASSET", "mediaId": id1}, ...] }`.
+    - Model: `veo_3_1_r2v_*_relaxed`.
 3.  **Poll Status**.
 
 ---
@@ -94,8 +94,12 @@ def generate_video_*(self, prompt, model, aspect_ratio, count, ...):
 **Endpoint**: `/flowMedia:batchGenerateImages`
 
 1.  **Generate**:
-    - **Synchronous** response (URLs returned immediately).
+    - **Synchronous** response (media returned immediately).
     - No polling required.
+    - HAR verified: `clientContext` must appear **both** at top-level AND inside each request item.
+    - Payload: `{ "clientContext": {...}, "requests": [{"clientContext": {...}, "seed": N, "imageModelName": "GEM_PIX_2", "promptInputs": [{"textInput": "..."}], "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE"}] }`.
+    - Model: `GEM_PIX_2` (Veo Fast Pro) | `GEM_PIX` (Veo Fast) | `IMAGEN_3_5` (Imagen 3.5).
+2.  **Download** images from response.
 
 ---
 
@@ -103,14 +107,28 @@ def generate_video_*(self, prompt, model, aspect_ratio, count, ...):
 
 **Methods**: `upscale_video()`, `upscale_image()`
 
-1.  **Prepare**:
-    - Input `mediaId` (from generation).
-    - Resolution: `VIDEO_RESOLUTION_1080P` or `VIDEO_RESOLUTION_4K`.
+### Video Upscale
+1.  **Prepare**: Input `mediaId`, resolution: `VIDEO_RESOLUTION_1080P` | `VIDEO_RESOLUTION_4K`.
+2.  **Send Request**: Returns `operationId`.
+3.  **Poll Status**: Uses `check_status`.
+
+### Image Upscale (HAR Verified)
+1.  **Prepare**: Input `mediaId` (⚠️ NOT `mediaGenerationId`).
 2.  **Send Request**:
-    - Returns `operationId` (Video) or `jobId` (Image).
-3.  **Poll Status**:
-    - Video: Uses `check_status`.
-    - Image: Uses separate status endpoint (or same, depends on implementation).
+    - Payload: `{ "mediaId": "...", "targetResolution": "UPSAMPLE_IMAGE_RESOLUTION_4K", "clientContext": {...} }`.
+    - Resolution: `UPSAMPLE_IMAGE_RESOLUTION_2K` | `UPSAMPLE_IMAGE_RESOLUTION_4K`.
+3.  **Response**: `{ "encodedImage": "base64..." }` — **Sync**, no polling.
+
+---
+
+## 🎞️ Workflow 7: GIF Preview (HAR Verified)
+
+**Method**: `api_client.generate_gif()`  
+**Endpoint**: `/v1/video:generatePinholeGif`
+
+1.  **Request**: `{ "mediaGenerationId": "..." }` — ⚠️ **NO clientContext**.
+2.  **Response**: `{ "encodedGif": "base64..." }` — Can be >10MB.
+3.  **No polling** required (synchronous).
 
 ---
 

@@ -1,8 +1,10 @@
 """
 Token Manager for VEO Pro Max.
 
-Handles automatic token refresh for all profiles.
+Handles access token tracking and expiry detection for all profiles.
 Based on ACCOUNT_SESSION_MANAGEMENT.md specifications.
+
+Tokens are refreshed via browser session (no OAuth).
 """
 
 import json
@@ -12,20 +14,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Callable
 
-from core.oauth_server import refresh_access_token, TokenResponse
-
 
 class TokenManager:
     """
-    Manages OAuth tokens for all profiles with auto-refresh.
+    Manages access tokens for all profiles with expiry tracking.
     
     Token Lifecycle (from docs):
     - Access Token: ~60 min lifetime
-    - Refresh Zone: After 50 min, refresh before expiry
-    - Refresh Token: Long-lived, used to get new access tokens
+    - Refresh Zone: After 50 min, flag for refresh
+    - Refresh is handled by browser session re-login
     """
     
-    REFRESH_BUFFER_SECONDS = 600  # Refresh 10 min before expiry (50 min mark)
+    REFRESH_BUFFER_SECONDS = 600  # Flag refresh 10 min before expiry
     CHECK_INTERVAL_SECONDS = 60   # Check every minute
     
     def __init__(self, tokens_path: Optional[Path] = None):
@@ -70,10 +70,10 @@ class TokenManager:
         print("[TokenManager] Stopped")
     
     def _refresh_loop(self):
-        """Background loop to check and refresh tokens."""
+        """Background loop to check token expiry."""
         while self._running:
             try:
-                self._check_and_refresh_all()
+                self._check_and_flag_expiring()
             except Exception as e:
                 print(f"[TokenManager] Error in refresh loop: {e}")
             
@@ -83,49 +83,29 @@ class TokenManager:
                     break
                 time.sleep(1)
     
-    def _check_and_refresh_all(self):
-        """Check all tokens and refresh if needed."""
+    def _check_and_flag_expiring(self):
+        """Check all tokens and notify if expiring soon."""
         tokens = self._load_tokens()
         
         if not tokens:
             return
         
         now = datetime.now().timestamp()
-        updated = False
         
         for email, token_data in tokens.items():
             expires_at = token_data.get("expires_at", 0)
-            refresh_token = token_data.get("refresh_token", "")
             
             # Check if token needs refresh (10 min buffer)
             if expires_at - now < self.REFRESH_BUFFER_SECONDS:
-                if refresh_token:
-                    print(f"[TokenManager] Token expiring soon for {email}, refreshing...")
-                    
+                print(f"[TokenManager] Token expired/expiring for {email}, refreshing...")
+                
+                # Notify callback — browser session will handle refresh
+                if "token_refreshed" in self._callbacks:
                     try:
-                        new_token = refresh_access_token(refresh_token)
-                        
-                        # Update token data
-                        token_data["access_token"] = new_token.access_token
-                        token_data["expires_at"] = new_token.expires_at
-                        token_data["updated_at"] = datetime.now().isoformat()
-                        
-                        # If new refresh_token provided, update it
-                        if new_token.refresh_token:
-                            token_data["refresh_token"] = new_token.refresh_token
-                        
-                        updated = True
-                        print(f"[TokenManager] ✅ Refreshed token for {email}")
-                        
-                        # Notify callback
-                        if "token_refreshed" in self._callbacks:
-                            self._callbacks["token_refreshed"](email)
-                            
+                        self._callbacks["token_refreshed"](email)
+                        print(f"[TokenManager] ✅ Token refreshed for {email}")
                     except Exception as e:
                         print(f"[TokenManager] ❌ Failed to refresh token for {email}: {e}")
-        
-        if updated:
-            self._save_tokens(tokens)
     
     def _load_tokens(self) -> Dict:
         """Load tokens from file."""
@@ -147,17 +127,33 @@ class TokenManager:
         except Exception as e:
             print(f"[TokenManager] Error saving tokens: {e}")
     
+    def save_token(self, email: str, access_token: str, expires_in: int = 3599):
+        """Save/update token for an email (from browser session).
+        
+        Args:
+            email: Account email
+            access_token: The access token
+            expires_in: Seconds until expiry (default ~1h)
+        """
+        tokens = self._load_tokens()
+        tokens[email] = {
+            "access_token": access_token,
+            "expires_at": datetime.now().timestamp() + expires_in,
+            "updated_at": datetime.now().isoformat(),
+        }
+        self._save_tokens(tokens)
+    
     def get_valid_token(self, email: str) -> Optional[str]:
         """
         Get a valid access token for an email.
         
-        If token is expired or expiring soon, refreshes it first.
+        Returns None if token is expired.
         
         Args:
             email: Email address of the profile
             
         Returns:
-            Valid access_token or None if not available
+            Valid access_token or None if expired/not available
         """
         tokens = self._load_tokens()
         token_data = tokens.get(email)
@@ -168,7 +164,6 @@ class TokenManager:
         
         access_token = token_data.get("access_token", "")
         expires_at = token_data.get("expires_at", 0)
-        refresh_token = token_data.get("refresh_token", "")
         
         now = datetime.now().timestamp()
         
@@ -176,33 +171,9 @@ class TokenManager:
         if expires_at - now > self.REFRESH_BUFFER_SECONDS:
             return access_token
         
-        # Need to refresh
-        if not refresh_token:
-            print(f"[TokenManager] No refresh_token for {email}")
-            return None
-        
-        print(f"[TokenManager] Token expired/expiring for {email}, refreshing...")
-        
-        try:
-            new_token = refresh_access_token(refresh_token)
-            
-            # Update stored tokens
-            token_data["access_token"] = new_token.access_token
-            token_data["expires_at"] = new_token.expires_at
-            token_data["updated_at"] = datetime.now().isoformat()
-            
-            if new_token.refresh_token:
-                token_data["refresh_token"] = new_token.refresh_token
-            
-            tokens[email] = token_data
-            self._save_tokens(tokens)
-            
-            print(f"[TokenManager] ✅ Token refreshed for {email}")
-            return new_token.access_token
-            
-        except Exception as e:
-            print(f"[TokenManager] ❌ Refresh failed for {email}: {e}")
-            return None
+        # Token expired — needs browser re-login
+        print(f"[TokenManager] Token expired/expiring for {email}, needs browser refresh")
+        return None
     
     def remove_tokens(self, email: str):
         """Remove tokens for an email."""

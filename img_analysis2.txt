@@ -1,0 +1,83 @@
+﻿
+================================================================================
+  TEXT TO IMAGE: F12 Dev/New/Text to image.har
+  Total entries: 37
+================================================================================
+
+  ALL API CALLS:
+  [ 0] GET TRPC: project.searchProjectScenes -> 200
+  [ 1] GET TRPC: project.searchProjectWorkflows -> 200
+  [ 2] GET TRPC: project.searchProjectScenes -> 200
+  [ 3] POST OTHER: www.google-analytics.com -> 302
+  [ 4] POST TRPC: general.submitBatchLog -> 200
+  [ 5] GET REST: /v1/media/CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS1iNzk3LWJmYjhiMjAzNWNjYiIDQ0FFKiRhOGJjYj -> 200
+  [ 6] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [ 7] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [ 8] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [ 9] GET OTHER: www.google-analytics.com -> 204
+  [10] POST RECAP: reload -> 200
+  [11] POST REST: /v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batchGenerateImages -> 200
+  [12] POST RECAP: clr -> 200
+  [13] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [14] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [15] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [16] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [17] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [18] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [19] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [20] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [21] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [22] GET TRPC: project.searchProjectScenes -> 200
+  [23] POST OTHER: www.google-analytics.com -> 302
+  [24] POST TRPC: general.submitBatchLog -> 200
+  [25] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [26] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [27] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [28] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [29] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [30] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [31] GET OTHER: www.google-analytics.com -> 204
+  [32] POST RECAP: reload -> 200
+  [33] POST RECAP: clr -> 200
+  [34] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [35] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [36] GET TRPC: media.fetchUserHistoryDirectly -> 200
+
+  UNIQUE IDENTIFIERS:
+  seed=410143, model=GEM_PIX_2, has_imageInputs=True
+    imageInput.name=CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS1iNzk3LWJm
+    imageInput.type=IMAGE_INPUT_TYPE_REFERENCE
+
+================================================================================
+  IMAGE TO IMAGE 2: F12 Dev/New/image to image 2.har
+  Total entries: 22
+================================================================================
+
+  ALL API CALLS:
+  [ 0] GET TRPC: project.searchProjectScenes -> 200
+  [ 1] GET TRPC: project.searchProjectWorkflows -> 200
+  [ 2] GET TRPC: project.searchProjectScenes -> 200
+  [ 3] POST OTHER: www.google-analytics.com -> 302
+  [ 4] POST TRPC: general.submitBatchLog -> 200
+  [ 5] GET REST: /v1/media/CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS1iNzk3LWJmYjhiMjAzNWNjYiIDQ0FFKiRhOGJjYj -> 200
+  [ 6] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [ 7] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [ 8] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [ 9] GET OTHER: www.google-analytics.com -> 204
+  [10] POST RECAP: reload -> 200
+  [11] POST REST: /v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batchGenerateImages -> 200
+  [12] POST RECAP: clr -> 200
+  [13] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [14] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [15] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [16] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [17] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [18] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [19] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [20] GET TRPC: media.fetchUserHistoryDirectly -> 200
+  [21] GET TRPC: media.fetchUserHistoryDirectly -> 200
+
+  UNIQUE IDENTIFIERS:
+  seed=410143, model=GEM_PIX_2, has_imageInputs=True
+    imageInput.name=CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS1iNzk3LWJm
+    imageInput.type=IMAGE_INPUT_TYPE_REFERENCE

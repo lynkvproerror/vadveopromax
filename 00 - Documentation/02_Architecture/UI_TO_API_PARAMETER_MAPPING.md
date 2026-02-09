@@ -85,7 +85,7 @@ async def process_t2v(ui_config: dict) -> list[str]:
 |------|--------|------------|----------|
 | 1 | Select image | File Picker | - |
 | 2 | **Upload image** | - | `POST /v1:uploadUserImage` |
-| 3 | Get mediaId | - | Response: `imageOutput.mediaGenerationId` |
+| 3 | Get mediaId | - | Response: `mediaGenerationId.mediaGenerationId` |
 | 4 | Collect prompt | Prompt TextArea | - |
 | 5 | Map parameters | Dropdowns | Aspect, Model → API values |
 | 6 | Build request | - | Include `startImage.mediaId` |
@@ -275,7 +275,7 @@ async def process_text_to_image(ui_config: dict) -> list[str]:
 |------|--------|------------|----------|
 | 1 | Select source image | Image Library | `[tag_name]` reference |
 | 2 | **Upload source** | - | `POST /v1:uploadUserImage` |
-| 3 | Get mediaId | - | Response: `imageOutput.mediaGenerationId` |
+| 3 | Get mediaId | - | Response: `mediaGenerationId.mediaGenerationId` |
 | 4 | Enter modification prompt | Prompt TextArea | - |
 | 5 | Map parameters | Dropdowns | Aspect, Model, Quality |
 | 6 | Build request | - | Include `imageInputs[].mediaId` |
@@ -337,7 +337,7 @@ async def generate_gif_preview(video_media_id: str) -> bytes:
     response = await api_client.post(GIF_ENDPOINT, payload)
     
     # Response contains base64 GIF
-    gif_b64 = response.get("gifData", "")
+     gif_b64 = response.get("encodedGif", "")
     return base64.b64decode(gif_b64)
 ```
 
@@ -374,7 +374,7 @@ def map_aspect_ratio(ui_value: str) -> str:
 | Model | **Veo 3.1 [Relaxed]** | `videoModelKey` | `veo_3_1_t2v_fast_landscape_ultra_relaxed` | Lower priority |
 | Model | **I2V Single** | `videoModelKey` | `veo_3_1_i2v_s_fast_ultra_relaxed` | Start frame only |
 | Model | **F2V (Start+End)** | `videoModelKey` | `veo_3_1_i2v_s_fast_fl_ultra_relaxed` | Start + End frames (F2V) |
-| Model | **Ingredients** | `videoModelKey` | `veo_3_1_r2v_fast_landscape_ultra` | 1-3 reference images |
+| Model | **Ingredients** | `videoModelKey` | `veo_3_1_r2v_fast_landscape_ultra_relaxed` | 1-3 reference images |
 
 **Python Converter**:
 ```python
@@ -389,12 +389,18 @@ VIDEO_MODEL_MAP = {
         "9:16": "veo_3_1_t2v_fast_portrait_relaxed"
     },
     # I2V Models
-    "I2V Single": "veo_3_1_i2v_s_fast_ultra_relaxed",
-    "F2V Dual": "veo_3_1_i2v_s_fast_fl_ultra_relaxed",  # F2V = Frames-to-Video (First+Last)
+    "I2V Single": {
+        "16:9": "veo_3_1_i2v_s_fast_ultra_relaxed",
+        "9:16": "veo_3_1_i2v_s_fast_portrait_ultra_relaxed"  # HAR: portrait variant
+    },
+    "F2V Dual": {
+        "16:9": "veo_3_1_i2v_s_fast_fl_ultra_relaxed",
+        "9:16": "veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed"  # HAR verified ✅
+    },
     # R2V Models
     "Ingredients": {
-        "16:9": "veo_3_1_r2v_fast_landscape_ultra",
-        "9:16": "veo_3_1_r2v_fast_portrait_ultra"
+        "16:9": "veo_3_1_r2v_fast_landscape_ultra_relaxed",  # Added _relaxed (HAR)
+        "9:16": "veo_3_1_r2v_fast_portrait_ultra_relaxed"  # HAR verified ✅
     }
 }
 
@@ -549,13 +555,23 @@ Các field cố định cần có trong mọi request:
 ```python
 import time
 
-def build_client_context(project_id: str, paygate_tier: str = "PAYGATE_TIER_NOT_PAID") -> dict:
-    return {
+def build_client_context(
+    project_id: str,
+    recaptcha_token: str = "",
+    paygate_tier: str = "PAYGATE_TIER_NOT_PAID"
+) -> dict:
+    ctx = {
         "sessionId": f";{int(time.time() * 1000)}",
         "projectId": project_id,
         "tool": "PINHOLE",
         "userPaygateTier": paygate_tier
     }
+    if recaptcha_token:  # Required for generation, NOT for polling/upload
+        ctx["recaptchaContext"] = {
+            "token": recaptcha_token,
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        }
+    return ctx
 ```
 
 ---
@@ -928,109 +944,103 @@ flowchart TD
 
 ### Frame Extraction for Continuation
 
+> [!NOTE]
+> Frame extraction uses **FFmpeg local pipeline** (not browser canvas).
+> See [FRAME_CONTINUATION_WORKFLOW.md](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md) for full spec.
+
 ```python
 class FrameExtractor:
-    """Extract frames from generated videos for continuation."""
+    """Extract frames from generated videos for continuation.
     
-    async def extract_last_frame(self, video_url: str) -> str:
-        """
-        Extract last frame from video for continuation mode.
-        
-        Returns:
-            Base64 encoded JPEG of last frame
-        """
-        
-        # Method 1: Using browser canvas (from video element)
-        frame_data = await self.browser.execute_script("""
-            const video = arguments[0];
-            return new Promise((resolve) => {
-                video.crossOrigin = 'anonymous';
-                
-                // Seek to last frame
-                video.currentTime = video.duration - 0.1;
-                
-                video.addEventListener('seeked', () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(video, 0, 0);
-                    
-                    // Return as base64 JPEG
-                    resolve(canvas.toDataURL('image/jpeg', 0.95));
-                }, { once: true });
-            });
-        """, video_element)
-        
-        return frame_data
+    Uses FFmpeg subprocess — no browser dependency.
+    Supports both LAST and FIRST frame extraction via frame_source setting.
+    """
     
-    async def extract_from_file(self, video_path: str) -> str:
-        """Extract last frame from local video file using OpenCV."""
-        import cv2
+    DEFAULT_OFFSET_MS = 750  # Extract 750ms before video end
+    FRAME_FORMAT = "jpg"
+    FRAME_QUALITY = 2  # FFmpeg quality (2=near-lossless, 31=low)
+    
+    def extract_frame(
+        self,
+        video_path: str,
+        offset_ms: int = 750,
+        from_end: bool = True  # True for LAST, False for FIRST
+    ) -> Optional[str]:
+        """Extract a single frame from video via FFmpeg.
         
-        cap = cv2.VideoCapture(video_path)
+        Returns: Path to extracted JPEG frame, or None on error.
+        """
+        if from_end:
+            duration = self.get_video_duration(video_path)
+            timestamp_sec = max(0, duration - (offset_ms / 1000.0))
+        else:
+            timestamp_sec = offset_ms / 1000.0
         
-        # Seek to last frame
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames - 1)
-        
-        ret, frame = cap.read()
-        cap.release()
-        
-        if not ret:
-            raise FrameExtractionError("Could not read last frame")
-        
-        # Encode to JPEG
-        _, jpeg_bytes = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        
-        return base64.b64encode(jpeg_bytes.tobytes()).decode('utf-8')
+        # FFmpeg: extract single frame at timestamp
+        subprocess.run([
+            self._ffmpeg_path,
+            "-y", "-ss", str(timestamp_sec),
+            "-i", video_path,
+            "-frames:v", "1",
+            "-q:v", str(self.FRAME_QUALITY),
+            output_path
+        ])
+        return output_path if Path(output_path).exists() else None
 ```
 
 ### Continuation Chain Processing
 
 ```python
 class ContinuationProcessor:
-    """Process video continuation chains."""
+    """Process video continuation chains using FFmpeg pipeline."""
     
-    async def process_chain(self, chain: list[Task]) -> list[str]:
+    def __init__(self, frame_extractor: FrameExtractor, api_client: 'VEOApiClient'):
+        self.frame_extractor = frame_extractor
+        self.api_client = api_client
+    
+    async def process_chain(
+        self, chain: list[Task], settings: 'AppSettings'
+    ) -> list[str]:
         """
         Process a chain of prompts with frame continuation.
-        
-        Chain example:
-        - Task 1: "Girl reading book" (standalone)
-        - Task 2: "Girl closes book" (continue from #1)
-        - Task 3: "Girl stands up" (continue from #2)
+        Uses FFmpeg pipeline: download → extract → base64 → upload → mediaId.
         """
         
         results = []
-        previous_video_url = None
+        continuation_media_id = None
         
         for i, task in enumerate(chain):
-            if task.chain_mode == "continue" and previous_video_url:
-                # Extract last frame from previous video
-                frame_b64 = await self.frame_extractor.extract_last_frame(previous_video_url)
-                
-                # Upload as starting image
-                upload_response = await self.api_client.upload_image({
-                    "rawImageBytes": frame_b64,
-                    "mimeType": "image/jpeg",
-                    "isUserUploaded": True,
-                    "aspectRatio": task.aspect_ratio
-                })
-                
-                media_id = upload_response["imageOutput"]["mediaGenerationId"]
-                
-                # Use I2V endpoint instead of T2V
+            if task.chain_mode == "continue" and continuation_media_id:
+                # Use I2V endpoint with uploaded continuation frame
                 task.mode = "image-to-video"
-                task.start_image_id = media_id
+                task.start_image_id = continuation_media_id
+                # frame_position derived from frame_source:
+                # LAST → START, FIRST → END
+                task.frame_position = (
+                    "START" if settings.frame_source == "LAST" else "END"
+                )
             
             # Generate video
             video_url = await self._generate_video(task)
             results.append(video_url)
             
-            # Store for next iteration
-            previous_video_url = video_url
+            # Extract frame for next prompt via FFmpeg pipeline
+            if i < len(chain) - 1 and chain[i+1].chain_mode == "continue":
+                video_path = await self._download_video(video_url)
+                from_end = (settings.frame_source == "LAST")
+                frame_path = self.frame_extractor.extract_frame(
+                    video_path, settings.extract_point_ms, from_end
+                )
+                if frame_path:
+                    import base64
+                    with open(frame_path, "rb") as f:
+                        frame_b64 = base64.b64encode(f.read()).decode()
+                    resp = await self.api_client.upload_image(
+                        access_token=self._token,
+                        recaptcha_token=self._recaptcha,
+                        image_base64=frame_b64
+                    )
+                    continuation_media_id = resp.data.get("mediaId")
         
         return results
 ```
@@ -1089,6 +1099,7 @@ sequenceDiagram
 
 - [API Mapping](./API_MAPPING.md)
 - [CHEATSHEET](../CHEATSHEET.md) - Model Keys Reference
+- [Frame Continuation Workflow](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md)
 - [Text-to-Video Workflow](../04_Workflows/WORKFLOW_TAB_01_TEXT_TO_VIDEO.md)
 - [Image Generation Workflow](../04_Workflows/WORKFLOW_TAB_04_TEXT_TO_IMAGE.md)
 - [Error Handling](../03_Backend/ERROR_HANDLING_STRATEGY.md)

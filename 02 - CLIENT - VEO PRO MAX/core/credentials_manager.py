@@ -67,7 +67,9 @@ class CredentialsManager:
         return self.storage_path.exists()
     
     def save_credentials(self, email: str, password: str) -> bool:
-        """Save encrypted credentials.
+        """Save encrypted credentials for an account.
+        
+        Storage format: {"accounts": {email: {email, password}}}
         
         Args:
             email: Google account email
@@ -81,13 +83,19 @@ class CredentialsManager:
             return False
         
         try:
-            data = {
-                "email": email,
+            # Load existing accounts to merge
+            all_accounts = self._load_all_raw() or {}
+            
+            # Add/update this account (email is the key, no need to store it again)
+            all_accounts[email] = {
                 "password": password
             }
             
+            # Wrap under "accounts" key for clarity
+            storage = {"accounts": all_accounts}
+            
             # Serialize and encrypt
-            json_bytes = json.dumps(data).encode('utf-8')
+            json_bytes = json.dumps(storage).encode('utf-8')
             encrypted = self._fernet.encrypt(json_bytes)
             
             # Save to file
@@ -99,36 +107,120 @@ class CredentialsManager:
             print(f"[CredentialsManager] ❌ Failed to save: {e}")
             return False
     
+    def _load_all_raw(self) -> Optional[Dict[str, Any]]:
+        """Load all account credentials as dict keyed by email.
+        
+        Storage format: {"accounts": {email: {email, password}}}
+        Handles backward compat with old formats.
+        
+        Returns:
+            Dict mapping email -> {email, password}, or None
+        """
+        if not self._fernet or not self.storage_path.exists():
+            return None
+        
+        try:
+            encrypted = self.storage_path.read_bytes()
+            decrypted = self._fernet.decrypt(encrypted)
+            data = json.loads(decrypted.decode('utf-8'))
+            
+            # Current format: {"accounts": {email: {...}}}
+            if isinstance(data, dict) and "accounts" in data:
+                return data["accounts"]
+            
+            # Legacy v2: {email: {email, password}} (flat dict without wrapper)
+            if isinstance(data, dict) and "email" not in data and "password" not in data:
+                return data
+            
+            # Legacy v1: {email, password} (single entry)
+            if isinstance(data, dict) and "email" in data and "password" in data:
+                return {data["email"]: data}
+            
+            return data
+        except Exception:
+            return None
+    
     def load_credentials(self) -> Optional[Dict[str, str]]:
-        """Load and decrypt credentials.
+        """Load and decrypt credentials (returns first entry).
         
         Returns:
             Dict with 'email' and 'password', or None if not found/error
         """
-        if not self._fernet:
-            print("[CredentialsManager] ❌ cryptography package not installed")
+        all_accounts = self._load_all_raw()
+        if not all_accounts:
             return None
         
-        if not self.storage_path.exists():
-            print("[CredentialsManager] ℹ️ No credentials stored")
+        # Return first entry, reconstruct email from key
+        for email, creds in all_accounts.items():
+            print(f"[CredentialsManager] ✅ Loaded credentials for {email}")
+            return {"email": email, "password": creds.get("password", "")}
+        return None
+    
+    def load_credentials_for(self, email: str) -> Optional[Dict[str, str]]:
+        """Load credentials for a specific email.
+        
+        Args:
+            email: Email to look up
+            
+        Returns:
+            Dict with 'email' and 'password', or None
+        """
+        all_accounts = self._load_all_raw()
+        if not all_accounts:
             return None
+        
+        creds = all_accounts.get(email)
+        if creds:
+            print(f"[CredentialsManager] ✅ Loaded credentials for {email}")
+            return {"email": email, "password": creds.get("password", "")}
+        return None
+    
+    def has_credentials_for(self, email: str) -> bool:
+        """Check if credentials exist for a specific email."""
+        all_creds = self._load_all_raw()
+        return bool(all_creds and email in all_creds)
+    
+    def delete_credentials_for(self, email: str) -> bool:
+        """Delete stored credentials for a specific email.
+        
+        Removes only this email's entry, preserves others.
+        
+        Args:
+            email: Email to delete credentials for
+            
+        Returns:
+            True if deleted successfully
+        """
+        if not self._fernet:
+            return False
         
         try:
-            # Read and decrypt
-            encrypted = self.storage_path.read_bytes()
-            decrypted = self._fernet.decrypt(encrypted)
+            all_accounts = self._load_all_raw()
+            if not all_accounts or email not in all_accounts:
+                return False
             
-            # Parse JSON
-            data = json.loads(decrypted.decode('utf-8'))
-            print(f"[CredentialsManager] ✅ Loaded credentials for {data.get('email', 'unknown')}")
-            return data
+            del all_accounts[email]
+            print(f"[CredentialsManager] 🗑️ Deleted credentials for {email}")
+            
+            if not all_accounts:
+                # No more accounts — delete the file entirely
+                if self.storage_path.exists():
+                    self.storage_path.unlink()
+                return True
+            
+            # Re-save remaining accounts
+            storage = {"accounts": all_accounts}
+            json_bytes = json.dumps(storage).encode('utf-8')
+            encrypted = self._fernet.encrypt(json_bytes)
+            self.storage_path.write_bytes(encrypted)
+            return True
             
         except Exception as e:
-            print(f"[CredentialsManager] ❌ Failed to load: {e}")
-            return None
+            print(f"[CredentialsManager] ❌ Failed to delete for {email}: {e}")
+            return False
     
     def delete_credentials(self) -> bool:
-        """Delete stored credentials.
+        """Delete ALL stored credentials.
         
         Returns:
             True if deleted successfully
@@ -136,7 +228,7 @@ class CredentialsManager:
         try:
             if self.storage_path.exists():
                 self.storage_path.unlink()
-                print("[CredentialsManager] ✅ Credentials deleted")
+                print("[CredentialsManager] ✅ All credentials deleted")
             return True
         except Exception as e:
             print(f"[CredentialsManager] ❌ Failed to delete: {e}")

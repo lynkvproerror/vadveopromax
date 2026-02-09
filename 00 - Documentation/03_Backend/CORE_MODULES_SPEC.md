@@ -69,9 +69,10 @@ class VEOApiClient:
 | `generate_video_i2v_single()` | `/v1/video:batchAsyncGenerateVideoStartImage` | Async | `operation_id` |
 | `generate_video_i2v_dual()` | `/v1/video:batchAsyncGenerateVideoStartAndEndImage` | Async | `operation_id` |
 | `generate_video_r2v()` | `/v1/video:batchAsyncGenerateVideoReferenceImages` | Async | `operation_id` |
-| `generate_image()` | `/v1/projects/{id}/flowMedia:batchGenerateImages` | **Sync** | `[urls]` |
+| `generate_image()` | `/v1/projects/{id}/flowMedia:batchGenerateImages` | **Sync** | `media[]` |
+| `generate_gif()` | `/v1/video:generatePinholeGif` | **Sync** | `encodedGif` |
 | `upscale_video()` | `/v1/video:batchAsyncGenerateVideoUpsampleVideo` | Async | `operation_id` |
-| `upscale_image()` | `/v1/flow/upsampleImage` | Async | `job_id` |
+| `upscale_image()` | `/v1/flow/upsampleImage` | **Sync** | `encodedImage` |
 | `check_status()` | `/v1/video:batchCheckAsyncVideoGenerationStatus` | Sync | `status_dict` |
 | `download_media()` | Direct URL | Sync | `bool` |
 
@@ -117,16 +118,21 @@ def generate_video_t2v(
     ```json
     {
         "clientContext": {
-            "tool": "VEGA_WEB",
-            "recaptchaToken": "..."
+            "recaptchaContext": {
+                "token": "...",
+                "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+            },
+            "sessionId": ";{timestamp_ms}",
+            "projectId": "uuid",
+            "tool": "PINHOLE",
+            "userPaygateTier": "PAYGATE_TIER_NOT_PAID"
         },
         "requests": [{
             "textInput": {"prompt": "..."},
             "aspectRatio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-            "durationSeconds": 8,
             "videoModelKey": "veo_3_1_t2v_fast_landscape_ultra",
-            "numberOfVideos": 4,
-            "seed": 25325
+            "seed": 25325,
+            "metadata": {"sceneId": "uuid"}
         }]
     }
     ```
@@ -144,8 +150,8 @@ def generate_video_t2v(
         Handles both Single Frame (I2V) and Start/End Frame (F2V).
         Requires recaptcha_token and x-browser-* headers.
         
-        Payload uses `imageInputMediaId` for single frame,
-        `startImageId` + `endImageId` for dual frame.
+        Payload uses `startImage.mediaId` for single frame,
+        `startImage.mediaId` + `endImage.mediaId` for dual frame.
         """
 
     - upscale_video(media_id, resolution, recaptcha_token):
@@ -155,7 +161,11 @@ def generate_video_t2v(
             "clientContext": _get_client_context(recaptcha_token),
             "requests": [{
                 "videoInput": {"mediaId": ...},
-                "resolution": "VIDEO_RESOLUTION_1080P" | "VIDEO_RESOLUTION_4K"
+                "resolution": "VIDEO_RESOLUTION_1080P" | "VIDEO_RESOLUTION_4K",
+                "seed": 12345,
+                "aspectRatio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+                "videoModelKey": "veo_3_1_upsampler_1080p",
+                "metadata": {"sceneId": "uuid"}
             }]
         }
         """
@@ -170,13 +180,65 @@ def generate_video_t2v(
         Returns: Direct download URL (or streams content)
         """
 
-    - _get_client_context(recaptcha_token):
+    - _get_client_context(recaptcha_token, project_id, paygate_tier, tool):
         """
-        Returns:
+        HAR verified structure:
         {
-            "tool": "PINHOLE",
-            "recaptchaContext": {"token": recaptcha_token}
+            "sessionId": ";{timestamp_ms}",
+            "tool": "PINHOLE" | "ASSET_MANAGER",
+            "projectId": "uuid",
+            "userPaygateTier": "PAYGATE_TIER_NOT_PAID" | "PAYGATE_TIER_TWO",
+            "recaptchaContext": {
+                "token": "...",
+                "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+            }
         }
+        Note: tool="ASSET_MANAGER" for uploads, "PINHOLE" for everything else.
+        Note: recaptchaContext omitted for polling and GIF requests.
+        """
+
+    - generate_image(prompt, project_id, model, aspect_ratio, seed):
+        """
+        Text-to-Image (T2I). HAR verified.
+        
+        IMPORTANT: clientContext appears BOTH at top-level AND per-request-item.
+        
+        Payload:
+        {
+            "clientContext": _get_client_context(...),
+            "requests": [{
+                "clientContext": _get_client_context(...),  // DUPLICATE!
+                "seed": 651946,
+                "imageModelName": "GEM_PIX_2",
+                "promptInputs": [{"textInput": "..."}],
+                "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE"
+            }]
+        }
+        Response: {"media": [{"image": {"generatedImage": {...}}}]}
+        """
+
+    - generate_gif(media_generation_id):
+        """
+        Generate preview GIF. HAR verified.
+        
+        IMPORTANT: NO clientContext in request!
+        Payload: {"mediaGenerationId": "..."}
+        Response: {"encodedGif": "base64..."}
+        Note: Response can be >10MB.
+        """
+
+    - upscale_image(media_id, target_resolution, project_id):
+        """
+        Upscale image to 2K/4K. HAR verified.
+        
+        IMPORTANT: Uses "mediaId" (NOT "mediaGenerationId").
+        Payload:
+        {
+            "mediaId": "...",
+            "targetResolution": "UPSAMPLE_IMAGE_RESOLUTION_2K" | "UPSAMPLE_IMAGE_RESOLUTION_4K",
+            "clientContext": _get_client_context(recaptcha_token, project_id)
+        }
+        Response: {"encodedImage": "base64..."}
         """
     """
 
@@ -184,7 +246,7 @@ def generate_video_r2v(
     self,
     media_ids: list,
     prompt: str,
-    model: str = "veo_3_1_r2v_fast_landscape_ultra",
+    model: str = "veo_3_1_r2v_fast_landscape_ultra_relaxed",
     count: int = 4
 ) -> list:
     """

@@ -1,0 +1,96 @@
+﻿
+================================================================================
+  TEXT TO IMAGE: F12 Dev/New/Text to image.har
+  Total entries: 37
+================================================================================
+
+--- batchGenerateImages #1 (Entry 11) ---
+  URL: /v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batchGenerateImages
+  MODE: I2I
+  prompt: Hook-end scene. Close-up, dolly out. Realistic Vietnamese family scene, cinematic lighting. Vietnamese countryside kitch
+  imageModelName: GEM_PIX_2
+  imageAspectRatio: IMAGE_ASPECT_RATIO_PORTRAIT
+  seed: 410143
+  imageInput: name=CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS... type=IMAGE_INPUT_TYPE_REFERENCE
+  cc.tool: PINHOLE
+  cc.projectId: a89ea3a4-168c-4133-8fb0-7a852f11b33b
+  cc.userPaygateTier: MISSING
+  cc.recaptcha: YES
+  cc.sessionId: ;1770534060719
+  HTTP Status: 200
+  Response: 1 images returned
+    resp.prompt: Hook-end scene. Close-up, dolly out. Realistic Vietnamese family scene, cinemati
+    resp.model: GEM_PIX_2
+    resp.seed: 410143
+    original_prompt: Hook-end scene. Close-up, dolly out. Realistic Vietnamese family scene, cinemati
+    resp.imageInputs: 1 items
+      -> type=IMAGE_INPUT_TYPE_REFERENCE, id=CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS
+
+  SUMMARY: 1 generate, 0 upload, 0 upsample
+
+================================================================================
+  FULL PAYLOAD DUMP - First batchGenerateImages call
+================================================================================
+{
+  "clientContext": {
+    "recaptchaContext": {
+      "token": "0cAFcWeA4mxC9BkrAyEkdhGuxUAMVIQ58Z5EOkG-OiICLjHCaN6OeIZ3QSmoEA3EdsjnXxdMFYWXtR18T4TZ4ymjl1jHVlEJHdUCWSkdXy-6PckXN_ngtQRHSUIoCk2GZO_5BuSoQSw2svUh6qsE2DgDz9APfpHDOorvwW-i_U2yThlDWlBT7WWsIWZjtXVZtmfYcMFaUusF7SlvoAuJZosufxlBQJtLBvbAEKZImXBfGXWl7DLQMSk5lWPm-EIY7TSTZcxaUH81Ze-JA2lrF14P2IXhXUQkVGHnQMk2sKeb9HkaPn_NKY2gE_96Dur366fJeInDORZV1wkNtXzrQODpENRpvLHlDnbqgXpssH5-XdzM1TD20x-MtInbZ7hYceNI6sG5d4Nlftw2UR-zjYgYui_qrTXZOXzR9qIKN--143-oOaDe9HURXvRUO-XhT2-i3G472KPWWU-miveEmglToptlCi70khqqYk9RJ6GvZ5oEurqPZ-EDl1aFjgG4cDv36xN_3fxKHj6p2DzmZFb8Ash30tHPrUqiv02HD6pXwLEjHzM3UaYHFbd_nHyS3DdKzfv84nKqgjKxY0cIQwxstb9cHe0zxcZlanbcJrbwIyB6_RFbsikBhVYmSpvgMZTq088_comF_f7WY_DJEQxjYGsab7kEH65OEd8pQJCwUu3NW42-0h-u62EvF_meLu7fTDyg66P4kOup0JXRJNMrhJsVISVRJiLq-2MxZc3VkBaHpTM_346Vj197l2GODKTDrJx6bVJx0F2Jg6P-V4OdfyfWzfhcJJa7bYPouw81RWO1L7_reCyjL5og-tEZ9F9ujigQnkBdU6ZsbNtf65iGChuKRL0FEF8ILQ8AGUFfUnS7pMY6VrLtHKatQ3uuZDFpDtPOeq_nM987WXBfqfuFWx9XRRs3FE_99PiLnInMk6_lYIj7Xsd4BiVQHmVhqG6gbxa1WarUI5pof6qK9kF2jPHF3reZJavu5D-8ySMAKyyt-XzRxd8xhMdPk88OUK8pBeN1sGvHeQdwRyhFKp9UAAIiXmmkcQ2FjH3KxAyx_ud-ZCvV8w64CEVMp8ucb4irxeN8CwKyh5-ahRMKRnFh8sUNCJU4k4aTU2FFww0ycRJtATDyDvo4pPASucasQaAAlHlyFJZPganb5yooDHCOrhSARuUpBALw7c86vahfv-SLnk9IQpyK3CZq3RcKI6o7FwSJhgzVtUV8OxgEkxVSunObZAA94k7axKsZGzdH-7d0gf94sR1WUaL2YMvTYEAFHM4ct6zVPlaOBi3l5ri8hxR4Lb-iCKzsQBgN-RP7tTOc9BNVy5XUC_0NoHzqPpLYBXHeHpQP93uTjh47xor9yE_zSHO6qCOXbCjXGKwb3yuHa3rMhpONy3zUnm6prjWixhY8jz151R8BfdfzixorPoOJF3L-sIsyYNNOKqwV9SJ4E5TtpM07teEYpElpAi8X6LPRlB_JUW651_hNmCFJjqi_oRLQNnmH11T1I7o3ZKRRrCIAypPfRw60zx99i8Rj6lrsSnwe86nrvyr66EDMgJVlZKGg3Q3-cnuuSoFtllxnzHIBEVE1aqvxviMs5IDhCR_irMnQEuRMWCSefWmF7TFlvPgKQOLDPicL41H8Tu25WJMC_qgw5UT2MOnqQK82dclJ-nMsKlbN7slVt_qQ1_AZ63ywkY3IHIjejXcXt-VgQBYdZKASu-N0O2-WQK18bLJH5hY7O-3OpJnMEMH-bvX6UfD9ryhRXHFgcvtGwYx2XBbaOHr2C1xEJUJgyGcQLrDEA1pWZYoBvL8FZx6c87bPU_gWBwlkRQh_GgdU7u3WYykf6CjzneMR73dy9piKGb6mb6eNgen8Fz6MmsJrRUKs_WkdsX8vBA5Hb3aTX7UJRNnan7NRSxHCEbR64Y7lL3b0ijT2ARpe5AUK4Wx9W0BrdmtjA8W2l74aCgb1mT39Ow4FPFUGvyqIaFoz4HAonEEzOlwgVkoxxcRmIq72vD8OLueFE-BjbUh8vFfoxXiDsHBQN2m5tOtVfb646RCzQ57cBfmQxSkhTfBvy4JmHM0KF033pGoCXPnllvyhpf-4lIFLbBS-uVf8VUXgzq49v18invif-67gmj4c6LT9U-uUxkX9VU4hwaGqoIa57lScwdP8t0_3M",
+      "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+    },
+    "sessionId": ";1770534060719",
+    "projectId": "a89ea3a4-168c-4133-8fb0-7a852f11b33b",
+    "tool": "PINHOLE"
+  },
+  "requests": [
+    {
+      "clientContext": {
+        "recaptchaContext": {
+          "token": "0cAFcWeA4mxC9BkrAyEkdhGuxUAMVIQ58Z5EOkG-OiICLjHCaN6OeIZ3QSmoEA3EdsjnXxdMFYWXtR18T4TZ4ymjl1jHVlEJHdUCWSkdXy-6PckXN_ngtQRHSUIoCk2GZO_5BuSoQSw2svUh6qsE2DgDz9APfpHDOorvwW-i_U2yThlDWlBT7WWsIWZjtXVZtmfYcMFaUusF7SlvoAuJZosufxlBQJtLBvbAEKZImXBfGXWl7DLQMSk5lWPm-EIY7TSTZcxaUH81Ze-JA2lrF14P2IXhXUQkVGHnQMk2sKeb9HkaPn_NKY2gE_96Dur366fJeInDORZV1wkNtXzrQODpENRpvLHlDnbqgXpssH5-XdzM1TD20x-MtInbZ7hYceNI6sG5d4Nlftw2UR-zjYgYui_qrTXZOXzR9qIKN--143-oOaDe9HURXvRUO-XhT2-i3G472KPWWU-miveEmglToptlCi70kh
+
+================================================================================
+  IMAGE TO IMAGE 2: F12 Dev/New/image to image 2.har
+  Total entries: 22
+================================================================================
+
+--- batchGenerateImages #1 (Entry 11) ---
+  URL: /v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batchGenerateImages
+  MODE: I2I
+  prompt: Hook-end scene. Close-up, dolly out. Realistic Vietnamese family scene, cinematic lighting. Vietnamese countryside kitch
+  imageModelName: GEM_PIX_2
+  imageAspectRatio: IMAGE_ASPECT_RATIO_PORTRAIT
+  seed: 410143
+  imageInput: name=CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS... type=IMAGE_INPUT_TYPE_REFERENCE
+  cc.tool: PINHOLE
+  cc.projectId: a89ea3a4-168c-4133-8fb0-7a852f11b33b
+  cc.userPaygateTier: MISSING
+  cc.recaptcha: YES
+  cc.sessionId: ;1770534060719
+  HTTP Status: 200
+  Response: 1 images returned
+    resp.prompt: Hook-end scene. Close-up, dolly out. Realistic Vietnamese family scene, cinemati
+    resp.model: GEM_PIX_2
+    resp.seed: 410143
+    original_prompt: Hook-end scene. Close-up, dolly out. Realistic Vietnamese family scene, cinemati
+    resp.imageInputs: 1 items
+      -> type=IMAGE_INPUT_TYPE_REFERENCE, id=CAMaJDQ3NTgwZDMxLTE4NDYtNGI3OS
+
+  SUMMARY: 1 generate, 0 upload, 0 upsample
+
+================================================================================
+  FULL PAYLOAD DUMP - First batchGenerateImages call
+================================================================================
+{
+  "clientContext": {
+    "recaptchaContext": {
+      "token": "0cAFcWeA4mxC9BkrAyEkdhGuxUAMVIQ58Z5EOkG-OiICLjHCaN6OeIZ3QSmoEA3EdsjnXxdMFYWXtR18T4TZ4ymjl1jHVlEJHdUCWSkdXy-6PckXN_ngtQRHSUIoCk2GZO_5BuSoQSw2svUh6qsE2DgDz9APfpHDOorvwW-i_U2yThlDWlBT7WWsIWZjtXVZtmfYcMFaUusF7SlvoAuJZosufxlBQJtLBvbAEKZImXBfGXWl7DLQMSk5lWPm-EIY7TSTZcxaUH81Ze-JA2lrF14P2IXhXUQkVGHnQMk2sKeb9HkaPn_NKY2gE_96Dur366fJeInDORZV1wkNtXzrQODpENRpvLHlDnbqgXpssH5-XdzM1TD20x-MtInbZ7hYceNI6sG5d4Nlftw2UR-zjYgYui_qrTXZOXzR9qIKN--143-oOaDe9HURXvRUO-XhT2-i3G472KPWWU-miveEmglToptlCi70khqqYk9RJ6GvZ5oEurqPZ-EDl1aFjgG4cDv36xN_3fxKHj6p2DzmZFb8Ash30tHPrUqiv02HD6pXwLEjHzM3UaYHFbd_nHyS3DdKzfv84nKqgjKxY0cIQwxstb9cHe0zxcZlanbcJrbwIyB6_RFbsikBhVYmSpvgMZTq088_comF_f7WY_DJEQxjYGsab7kEH65OEd8pQJCwUu3NW42-0h-u62EvF_meLu7fTDyg66P4kOup0JXRJNMrhJsVISVRJiLq-2MxZc3VkBaHpTM_346Vj197l2GODKTDrJx6bVJx0F2Jg6P-V4OdfyfWzfhcJJa7bYPouw81RWO1L7_reCyjL5og-tEZ9F9ujigQnkBdU6ZsbNtf65iGChuKRL0FEF8ILQ8AGUFfUnS7pMY6VrLtHKatQ3uuZDFpDtPOeq_nM987WXBfqfuFWx9XRRs3FE_99PiLnInMk6_lYIj7Xsd4BiVQHmVhqG6gbxa1WarUI5pof6qK9kF2jPHF3reZJavu5D-8ySMAKyyt-XzRxd8xhMdPk88OUK8pBeN1sGvHeQdwRyhFKp9UAAIiXmmkcQ2FjH3KxAyx_ud-ZCvV8w64CEVMp8ucb4irxeN8CwKyh5-ahRMKRnFh8sUNCJU4k4aTU2FFww0ycRJtATDyDvo4pPASucasQaAAlHlyFJZPganb5yooDHCOrhSARuUpBALw7c86vahfv-SLnk9IQpyK3CZq3RcKI6o7FwSJhgzVtUV8OxgEkxVSunObZAA94k7axKsZGzdH-7d0gf94sR1WUaL2YMvTYEAFHM4ct6zVPlaOBi3l5ri8hxR4Lb-iCKzsQBgN-RP7tTOc9BNVy5XUC_0NoHzqPpLYBXHeHpQP93uTjh47xor9yE_zSHO6qCOXbCjXGKwb3yuHa3rMhpONy3zUnm6prjWixhY8jz151R8BfdfzixorPoOJF3L-sIsyYNNOKqwV9SJ4E5TtpM07teEYpElpAi8X6LPRlB_JUW651_hNmCFJjqi_oRLQNnmH11T1I7o3ZKRRrCIAypPfRw60zx99i8Rj6lrsSnwe86nrvyr66EDMgJVlZKGg3Q3-cnuuSoFtllxnzHIBEVE1aqvxviMs5IDhCR_irMnQEuRMWCSefWmF7TFlvPgKQOLDPicL41H8Tu25WJMC_qgw5UT2MOnqQK82dclJ-nMsKlbN7slVt_qQ1_AZ63ywkY3IHIjejXcXt-VgQBYdZKASu-N0O2-WQK18bLJH5hY7O-3OpJnMEMH-bvX6UfD9ryhRXHFgcvtGwYx2XBbaOHr2C1xEJUJgyGcQLrDEA1pWZYoBvL8FZx6c87bPU_gWBwlkRQh_GgdU7u3WYykf6CjzneMR73dy9piKGb6mb6eNgen8Fz6MmsJrRUKs_WkdsX8vBA5Hb3aTX7UJRNnan7NRSxHCEbR64Y7lL3b0ijT2ARpe5AUK4Wx9W0BrdmtjA8W2l74aCgb1mT39Ow4FPFUGvyqIaFoz4HAonEEzOlwgVkoxxcRmIq72vD8OLueFE-BjbUh8vFfoxXiDsHBQN2m5tOtVfb646RCzQ57cBfmQxSkhTfBvy4JmHM0KF033pGoCXPnllvyhpf-4lIFLbBS-uVf8VUXgzq49v18invif-67gmj4c6LT9U-uUxkX9VU4hwaGqoIa57lScwdP8t0_3M",
+      "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+    },
+    "sessionId": ";1770534060719",
+    "projectId": "a89ea3a4-168c-4133-8fb0-7a852f11b33b",
+    "tool": "PINHOLE"
+  },
+  "requests": [
+    {
+      "clientContext": {
+        "recaptchaContext": {
+          "token": "0cAFcWeA4mxC9BkrAyEkdhGuxUAMVIQ58Z5EOkG-OiICLjHCaN6OeIZ3QSmoEA3EdsjnXxdMFYWXtR18T4TZ4ymjl1jHVlEJHdUCWSkdXy-6PckXN_ngtQRHSUIoCk2GZO_5BuSoQSw2svUh6qsE2DgDz9APfpHDOorvwW-i_U2yThlDWlBT7WWsIWZjtXVZtmfYcMFaUusF7SlvoAuJZosufxlBQJtLBvbAEKZImXBfGXWl7DLQMSk5lWPm-EIY7TSTZcxaUH81Ze-JA2lrF14P2IXhXUQkVGHnQMk2sKeb9HkaPn_NKY2gE_96Dur366fJeInDORZV1wkNtXzrQODpENRpvLHlDnbqgXpssH5-XdzM1TD20x-MtInbZ7hYceNI6sG5d4Nlftw2UR-zjYgYui_qrTXZOXzR9qIKN--143-oOaDe9HURXvRUO-XhT2-i3G472KPWWU-miveEmglToptlCi70kh

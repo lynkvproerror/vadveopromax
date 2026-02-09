@@ -1,0 +1,691 @@
+Total HAR files found: 50
+================================================================================
+   1. 0. Tao Project.har
+   2. 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+   3. 01. ingedients to video submit prompt 3 anh.har
+   4. 01.2 169 ingedients to video done 4 video prompt 3 anh.har
+   5. 01.2 169 ingedients to video submit 4 video prompt 3 anh.har
+   6. 01.3 169 ingedients to video done 4 video prompt 3 anh.har
+   7. 01.3 169 ingedients to video submit 4 video prompt 3 anh.har
+   8. 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+   9. 916 frame to video submit 4 video prompt - Upscale all done.har
+  10. 916 frame to video submit 4 video prompt - Upscale start.har
+  11. 916 frame to video submit 4 video prompt - done.har
+  12. 916 frame to video submit 4 video prompt - start.har
+  13. 916 ingre to video submit 4 video prompt - done.har
+  14. 916 ingre to video submit 4 video prompt - start.har
+  15. Check Ultra.har
+  16. Check tr?ng th?i t?i kho?n Ultra hay Pro haay Thuong.har
+  17. Check tr?ng th?i t?i kho?n Ultra hay Pro.har
+  18. Download 720 4 vid.har
+  19. Download anh 1k.har
+  20. Download anh 2k.har
+  21. Download anh 4k bat dau.har
+  22. Download anh 4k hoan thanh.har
+  23. Download gif 4 vid.har
+  24. Download upscale 1080p 4 vid done.har
+  25. Download upscale 1080p 4 vid.har
+  26. Download upscale 4k 4 vid done.har
+  27. Download upscale 4k 4 vid processing.har
+  28. Download upscale 4k 4 vid start.har
+  29. Full t?o ?nh.har
+  30. Login dieu huong Flow.har
+  31. Model Video (ingedients to video).har
+  32. Model Video (text to video).har
+  33. Tao hinh image 4.har
+  34. Tao hinh nanobanana pro.har
+  35. Tao hinh nanobanana.har
+  36. chon firt va last b?t ??u 1.har
+  37. chon firt va last b?t ??u 10.har
+  38. chon firt va last b?t ??u 25.har
+  39. chon firt va last b?t ??u 50 2video dau xong 2 video sau 65.har
+  40. chon firt va last b?t ??u 50 4video done.har
+  41. chon firt va last b?t ??u 50.har
+  42. chon firt va last b?t ??u.har
+  43. chon firt va last.har
+  44. download image 4k.har
+  45. labs.google.har
+  46. tao video vs anh first frame.har
+  47. upload anh first frame.har
+  48. whisk 2.har
+  49. whisk 3.har
+  50. whisk.har
+
+
+====================================================================================================
+SECTION 1: CHRONOLOGICAL ORDER OF API CALLS (per HAR file)
+====================================================================================================
+Shows the ORDER in which endpoints are called within each session.
+
+
+--- 0. Tao Project.har (14 total calls, 10 unique) ---
+   1. [19:49:05] [TRPC      ] general.submitBatchLog
+   2. [19:49:05] [TRPC      ] project.createProject
+   3. [19:49:06] [TRPC      ] project.getProject
+   4. [19:49:06] [TRPC      ] project.searchProjectScenes
+   5. [19:49:07] [TRPC      ] media.fetchUserHistoryDirectly
+   6. [19:49:07] [TRPC      ] videoFx.getUserSettings
+   7. [19:49:07] [TRPC      ] videoFx.getVideoModelConfig
+   8. [19:49:07] [TRPC      ] general.fetchUserPreferences
+   9. [19:49:07] [TRPC      ] project.searchProjectWorkflows
+  10. [19:49:07] [TRPC      ] videoFx.listPreambles
+
+--- 01. ingedients to video hoan thanh 4 video prompt 3 anh.har (90 total calls, 12 unique) ---
+   1. [20:08:35] [TRPC      ] project.searchProjectScenes
+   2. [20:08:36] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [20:08:37] [TRPC      ] general.fetchUserAcknowledgement
+   4. [20:08:37] [REST      ] GET /v1/media/{id}
+   5. [20:08:51] [TRPC      ] general.submitBatchLog
+   6. [20:08:53] [REST      ] POST /v1:uploadUserImage
+   7. [20:10:02] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   8. [20:10:16] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   9. [20:10:48] [RECAPTCHA ] recaptcha/enterprise/reload
+  10. [20:10:48] [REST      ] POST /v1/video:batchAsyncGenerateVideoReferenceImages
+  11. [20:10:48] [RECAPTCHA ] recaptcha/enterprise/clr
+  12. [20:11:28] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 01. ingedients to video submit prompt 3 anh.har (85 total calls, 10 unique) ---
+   1. [20:08:35] [TRPC      ] project.searchProjectScenes
+   2. [20:08:36] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [20:08:37] [TRPC      ] general.fetchUserAcknowledgement
+   4. [20:08:37] [REST      ] GET /v1/media/{id}
+   5. [20:08:51] [TRPC      ] general.submitBatchLog
+   6. [20:08:53] [REST      ] POST /v1:uploadUserImage
+   7. [20:10:02] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   8. [20:10:16] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   9. [20:10:48] [RECAPTCHA ] recaptcha/enterprise/reload
+  10. [20:10:48] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- 01.2 169 ingedients to video done 4 video prompt 3 anh.har (15 total calls, 8 unique) ---
+   1. [20:12:49] [TRPC      ] project.searchProjectScenes
+   2. [20:12:49] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   3. [20:12:49] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   4. [20:13:00] [TRPC      ] general.submitBatchLog
+   5. [20:13:01] [RECAPTCHA ] recaptcha/enterprise/reload
+   6. [20:13:01] [REST      ] POST /v1/video:batchAsyncGenerateVideoReferenceImages
+   7. [20:13:01] [RECAPTCHA ] recaptcha/enterprise/clr
+   8. [20:13:41] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 01.2 169 ingedients to video submit 4 video prompt 3 anh.har (9 total calls, 6 unique) ---
+   1. [20:12:49] [TRPC      ] project.searchProjectScenes
+   2. [20:12:49] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   3. [20:12:49] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   4. [20:13:00] [TRPC      ] general.submitBatchLog
+   5. [20:13:01] [RECAPTCHA ] recaptcha/enterprise/reload
+   6. [20:13:01] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- 01.3 169 ingedients to video done 4 video prompt 3 anh.har (14 total calls, 8 unique) ---
+   1. [20:15:55] [TRPC      ] project.searchProjectScenes
+   2. [20:15:55] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   3. [20:15:55] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   4. [20:16:05] [TRPC      ] general.submitBatchLog
+   5. [20:16:06] [RECAPTCHA ] recaptcha/enterprise/reload
+   6. [20:16:06] [REST      ] POST /v1/video:batchAsyncGenerateVideoReferenceImages
+   7. [20:16:06] [RECAPTCHA ] recaptcha/enterprise/clr
+   8. [20:16:43] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 01.3 169 ingedients to video submit 4 video prompt 3 anh.har (11 total calls, 8 unique) ---
+   1. [20:15:55] [TRPC      ] project.searchProjectScenes
+   2. [20:15:55] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   3. [20:15:55] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   4. [20:16:05] [TRPC      ] general.submitBatchLog
+   5. [20:16:06] [RECAPTCHA ] recaptcha/enterprise/reload
+   6. [20:16:06] [REST      ] POST /v1/video:batchAsyncGenerateVideoReferenceImages
+   7. [20:16:06] [RECAPTCHA ] recaptcha/enterprise/clr
+   8. [20:16:43] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har (147 total calls, 7 unique) ---
+   1. [23:23:07] [TRPC      ] project.searchProjectScenes
+   2. [23:23:11] [TRPC      ] general.submitBatchLog
+   3. [23:23:11] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [23:23:12] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [23:23:12] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [23:23:18] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+   7. [23:24:09] [REST      ] GET /v1/media/{id}
+
+--- 916 frame to video submit 4 video prompt - Upscale all done.har (184 total calls, 7 unique) ---
+   1. [23:23:07] [TRPC      ] project.searchProjectScenes
+   2. [23:23:11] [TRPC      ] general.submitBatchLog
+   3. [23:23:11] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [23:23:12] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [23:23:12] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [23:23:18] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+   7. [23:24:09] [REST      ] GET /v1/media/{id}
+
+--- 916 frame to video submit 4 video prompt - Upscale start.har (43 total calls, 6 unique) ---
+   1. [23:23:07] [TRPC      ] project.searchProjectScenes
+   2. [23:23:11] [TRPC      ] general.submitBatchLog
+   3. [23:23:11] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [23:23:12] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [23:23:12] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [23:23:18] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 916 frame to video submit 4 video prompt - done.har (58 total calls, 11 unique) ---
+   1. [23:19:04] [TRPC      ] project.searchProjectScenes
+   2. [23:19:15] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [23:19:15] [TRPC      ] general.fetchUserAcknowledgement
+   4. [23:19:15] [REST      ] GET /v1/media/{id}
+   5. [23:19:35] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   6. [23:19:37] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   7. [23:19:53] [TRPC      ] general.submitBatchLog
+   8. [23:19:54] [RECAPTCHA ] recaptcha/enterprise/reload
+   9. [23:19:54] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+  10. [23:19:54] [RECAPTCHA ] recaptcha/enterprise/clr
+  11. [23:20:10] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 916 frame to video submit 4 video prompt - start.har (56 total calls, 11 unique) ---
+   1. [23:19:04] [TRPC      ] project.searchProjectScenes
+   2. [23:19:15] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [23:19:15] [TRPC      ] general.fetchUserAcknowledgement
+   4. [23:19:15] [REST      ] GET /v1/media/{id}
+   5. [23:19:35] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   6. [23:19:37] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   7. [23:19:53] [TRPC      ] general.submitBatchLog
+   8. [23:19:54] [RECAPTCHA ] recaptcha/enterprise/reload
+   9. [23:19:54] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+  10. [23:19:54] [RECAPTCHA ] recaptcha/enterprise/clr
+  11. [23:20:10] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 916 ingre to video submit 4 video prompt - done.har (30 total calls, 8 unique) ---
+   1. [23:29:14] [TRPC      ] project.searchProjectScenes
+   2. [23:29:18] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [23:29:20] [TRPC      ] general.fetchUserAcknowledgement
+   4. [23:29:59] [TRPC      ] general.submitBatchLog
+   5. [23:30:00] [RECAPTCHA ] recaptcha/enterprise/reload
+   6. [23:30:00] [REST      ] POST /v1/video:batchAsyncGenerateVideoReferenceImages
+   7. [23:30:00] [RECAPTCHA ] recaptcha/enterprise/clr
+   8. [23:30:38] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- 916 ingre to video submit 4 video prompt - start.har (23 total calls, 6 unique) ---
+   1. [23:29:14] [TRPC      ] project.searchProjectScenes
+   2. [23:29:18] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [23:29:20] [TRPC      ] general.fetchUserAcknowledgement
+   4. [23:29:59] [TRPC      ] general.submitBatchLog
+   5. [23:30:00] [RECAPTCHA ] recaptcha/enterprise/reload
+   6. [23:30:00] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- Check Ultra.har (4 total calls, 4 unique) ---
+   1. [09:55:10] [TRPC      ] project.searchProjectScenes
+   2. [09:55:10] [REST      ] GET /v1/credits
+   3. [09:55:10] [AUTH      ] GET /fx/api/auth/session
+   4. [09:55:10] [REST      ] POST /v1:fetchUserRecommendations
+
+--- Check tr?ng th?i t?i kho?n Ultra hay Pro haay Thuong.har (18 total calls, 16 unique) ---
+   1. [17:54:18] [REST      ] GET /v1/credits
+   2. [17:54:18] [REST      ] POST /v1:fetchUserRecommendations
+   3. [17:54:18] [REST      ] POST /v1:checkAppAvailability
+   4. [17:54:18] [TRPC      ] project.getProject
+   5. [17:54:18] [TRPC      ] videoFx.getFlowAppConfig
+   6. [17:54:18] [TRPC      ] project.searchProjectScenes
+   7. [17:54:18] [TRPC      ] general.fetchUserAcknowledgement
+   8. [17:54:18] [TRPC      ] general.fetchUserLocale
+   9. [17:54:18] [TRPC      ] general.submitBatchLog
+  10. [17:54:18] [TRPC      ] videoFx.getUserSettings
+  11. [17:54:18] [TRPC      ] general.fetchUserPreferences
+  12. [17:54:18] [TRPC      ] project.searchProjectWorkflows
+  13. [17:54:18] [TRPC      ] videoFx.getVideoModelConfig
+  14. [17:54:18] [TRPC      ] videoFx.listPreambles
+  15. [17:54:19] [TRPC      ] media.fetchUserHistoryDirectly
+  16. [17:54:19] [TRPC      ] media.fetchFlowUserIngredients
+
+--- Check tr?ng th?i t?i kho?n Ultra hay Pro.har (19 total calls, 16 unique) ---
+   1. [17:37:34] [REST      ] GET /v1/credits
+   2. [17:37:34] [REST      ] POST /v1:fetchUserRecommendations
+   3. [17:37:34] [REST      ] POST /v1:checkAppAvailability
+   4. [17:37:34] [TRPC      ] project.getProject
+   5. [17:37:34] [TRPC      ] videoFx.getFlowAppConfig
+   6. [17:37:34] [TRPC      ] project.searchProjectScenes
+   7. [17:37:34] [TRPC      ] general.fetchUserAcknowledgement
+   8. [17:37:34] [TRPC      ] general.fetchUserLocale
+   9. [17:37:34] [TRPC      ] general.submitBatchLog
+  10. [17:37:35] [TRPC      ] videoFx.getUserSettings
+  11. [17:37:35] [TRPC      ] general.fetchUserPreferences
+  12. [17:37:35] [TRPC      ] project.searchProjectWorkflows
+  13. [17:37:35] [TRPC      ] videoFx.getVideoModelConfig
+  14. [17:37:35] [TRPC      ] videoFx.listPreambles
+  15. [17:37:35] [TRPC      ] media.fetchUserHistoryDirectly
+  16. [17:37:35] [TRPC      ] media.fetchFlowUserIngredients
+
+--- Download 720 4 vid.har (9 total calls, 3 unique) ---
+   1. [03:35:45] [TRPC      ] project.searchProjectScenes
+   2. [03:35:47] [STORAGE   ] storage.googleapis.com download
+   3. [03:35:47] [TRPC      ] general.submitBatchLog
+
+--- Download anh 1k.har (3 total calls, 3 unique) ---
+   1. [17:34:00] [TRPC      ] project.searchProjectScenes
+   2. [17:34:02] [REST      ] GET /v1/media/{id}
+   3. [17:34:02] [TRPC      ] general.submitBatchLog
+
+--- Download anh 2k.har (6 total calls, 5 unique) ---
+   1. [17:34:36] [TRPC      ] project.searchProjectScenes
+   2. [17:34:39] [TRPC      ] general.submitBatchLog
+   3. [17:34:39] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [17:34:39] [REST      ] POST /v1/flow/upsampleImage
+   5. [17:34:39] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- Download anh 4k bat dau.har (6 total calls, 5 unique) ---
+   1. [17:34:59] [TRPC      ] project.searchProjectScenes
+   2. [17:35:00] [TRPC      ] general.submitBatchLog
+   3. [17:35:00] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [17:35:00] [REST      ] POST /v1/flow/upsampleImage
+   5. [17:35:00] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- Download anh 4k hoan thanh.har (6 total calls, 5 unique) ---
+   1. [17:34:59] [TRPC      ] project.searchProjectScenes
+   2. [17:35:00] [TRPC      ] general.submitBatchLog
+   3. [17:35:00] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [17:35:00] [REST      ] POST /v1/flow/upsampleImage
+   5. [17:35:00] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- Download gif 4 vid.har (6 total calls, 3 unique) ---
+   1. [03:26:03] [TRPC      ] project.searchProjectScenes
+   2. [03:26:06] [REST      ] POST /v1/video:generatePinholeGif
+   3. [03:26:06] [TRPC      ] general.submitBatchLog
+
+--- Download upscale 1080p 4 vid done.har (84 total calls, 7 unique) ---
+   1. [04:09:51] [TRPC      ] project.searchProjectScenes
+   2. [04:09:54] [TRPC      ] general.submitBatchLog
+   3. [04:09:54] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [04:09:54] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [04:09:54] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [04:10:00] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+   7. [04:10:49] [REST      ] GET /v1/media/{id}
+
+--- Download upscale 1080p 4 vid.har (42 total calls, 6 unique) ---
+   1. [04:09:51] [TRPC      ] project.searchProjectScenes
+   2. [04:09:54] [TRPC      ] general.submitBatchLog
+   3. [04:09:54] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [04:09:54] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [04:09:54] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [04:10:00] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- Download upscale 4k 4 vid done.har (294 total calls, 10 unique) ---
+   1. [05:05:08] [TRPC      ] project.searchProjectScenes
+   2. [05:05:18] [TRPC      ] general.submitBatchLog
+   3. [05:05:19] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [05:05:19] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [05:05:19] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [05:05:25] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+   7. [05:06:28] [REST      ] GET /v1/credits
+   8. [05:06:28] [AUTH      ] GET /fx/api/auth/session
+   9. [05:06:29] [REST      ] POST /v1:fetchUserRecommendations
+  10. [05:10:00] [REST      ] GET /v1/media/{id}
+
+--- Download upscale 4k 4 vid processing.har (66 total calls, 6 unique) ---
+   1. [05:05:08] [TRPC      ] project.searchProjectScenes
+   2. [05:05:18] [TRPC      ] general.submitBatchLog
+   3. [05:05:19] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [05:05:19] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [05:05:19] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [05:05:25] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- Download upscale 4k 4 vid start.har (41 total calls, 6 unique) ---
+   1. [05:05:08] [TRPC      ] project.searchProjectScenes
+   2. [05:05:18] [TRPC      ] general.submitBatchLog
+   3. [05:05:19] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [05:05:19] [REST      ] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+   5. [05:05:19] [RECAPTCHA ] recaptcha/enterprise/clr
+   6. [05:05:25] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- Full t?o ?nh.har (687 total calls, 9 unique) ---
+   1. [22:22:46] [TRPC      ] project.searchProjectScenes
+   2. [22:22:46] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [22:22:46] [TRPC      ] general.fetchUserAcknowledgement
+   4. [22:22:53] [TRPC      ] general.submitBatchLog
+   5. [22:22:54] [REST      ] POST /v1:uploadUserImage
+   6. [22:23:17] [REST      ] GET /v1/media/{id}
+   7. [22:23:18] [RECAPTCHA ] recaptcha/enterprise/reload
+   8. [22:23:18] [REST      ] POST /v1/projects/{id}/flowMedia:batchGenerateImages
+   9. [22:23:18] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- Model Video (ingedients to video).har (11 total calls, 3 unique) ---
+   1. [17:14:09] [TRPC      ] project.searchProjectScenes
+   2. [17:14:13] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   3. [17:14:27] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+
+--- Model Video (text to video).har (11 total calls, 3 unique) ---
+   1. [17:12:33] [TRPC      ] project.searchProjectScenes
+   2. [17:12:43] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   3. [17:13:05] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+
+--- Tao hinh image 4.har (102 total calls, 6 unique) ---
+   1. [17:27:43] [TRPC      ] project.searchProjectScenes
+   2. [17:28:10] [TRPC      ] general.submitBatchLog
+   3. [17:28:10] [TRPC      ] media.fetchUserHistoryDirectly
+   4. [17:28:10] [RECAPTCHA ] recaptcha/enterprise/reload
+   5. [17:28:11] [REST      ] POST /v1/projects/{id}/flowMedia:batchGenerateImages
+   6. [17:28:11] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- Tao hinh nanobanana pro.har (108 total calls, 6 unique) ---
+   1. [17:31:58] [TRPC      ] project.searchProjectScenes
+   2. [17:32:08] [TRPC      ] general.submitBatchLog
+   3. [17:32:08] [TRPC      ] media.fetchUserHistoryDirectly
+   4. [17:32:09] [RECAPTCHA ] recaptcha/enterprise/reload
+   5. [17:32:09] [REST      ] POST /v1/projects/{id}/flowMedia:batchGenerateImages
+   6. [17:32:09] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- Tao hinh nanobanana.har (95 total calls, 6 unique) ---
+   1. [17:30:44] [TRPC      ] project.searchProjectScenes
+   2. [17:30:56] [TRPC      ] general.submitBatchLog
+   3. [17:30:57] [TRPC      ] media.fetchUserHistoryDirectly
+   4. [17:30:57] [RECAPTCHA ] recaptcha/enterprise/reload
+   5. [17:30:57] [REST      ] POST /v1/projects/{id}/flowMedia:batchGenerateImages
+   6. [17:30:57] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- chon firt va last b?t ??u 1.har (29 total calls, 8 unique) ---
+   1. [11:01:11] [TRPC      ] project.searchProjectScenes
+   2. [11:01:14] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [11:01:14] [TRPC      ] general.fetchUserAcknowledgement
+   4. [11:01:20] [TRPC      ] general.submitBatchLog
+   5. [11:01:35] [REST      ] POST /v1:uploadUserImage
+   6. [11:01:55] [TRPC      ] general.submitUserAcknowledgement
+   7. [11:02:33] [RECAPTCHA ] recaptcha/enterprise/reload
+   8. [11:02:34] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- chon firt va last b?t ??u 10.har (31 total calls, 10 unique) ---
+   1. [11:01:11] [TRPC      ] project.searchProjectScenes
+   2. [11:01:14] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [11:01:14] [TRPC      ] general.fetchUserAcknowledgement
+   4. [11:01:20] [TRPC      ] general.submitBatchLog
+   5. [11:01:35] [REST      ] POST /v1:uploadUserImage
+   6. [11:01:55] [TRPC      ] general.submitUserAcknowledgement
+   7. [11:02:33] [RECAPTCHA ] recaptcha/enterprise/reload
+   8. [11:02:34] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+   9. [11:02:34] [RECAPTCHA ] recaptcha/enterprise/clr
+  10. [11:02:48] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- chon firt va last b?t ??u 25.har (34 total calls, 10 unique) ---
+   1. [11:01:11] [TRPC      ] project.searchProjectScenes
+   2. [11:01:14] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [11:01:14] [TRPC      ] general.fetchUserAcknowledgement
+   4. [11:01:20] [TRPC      ] general.submitBatchLog
+   5. [11:01:35] [REST      ] POST /v1:uploadUserImage
+   6. [11:01:55] [TRPC      ] general.submitUserAcknowledgement
+   7. [11:02:33] [RECAPTCHA ] recaptcha/enterprise/reload
+   8. [11:02:34] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+   9. [11:02:34] [RECAPTCHA ] recaptcha/enterprise/clr
+  10. [11:02:48] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- chon firt va last b?t ??u 50 2video dau xong 2 video sau 65.har (45 total calls, 10 unique) ---
+   1. [11:01:11] [TRPC      ] project.searchProjectScenes
+   2. [11:01:14] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [11:01:14] [TRPC      ] general.fetchUserAcknowledgement
+   4. [11:01:20] [TRPC      ] general.submitBatchLog
+   5. [11:01:35] [REST      ] POST /v1:uploadUserImage
+   6. [11:01:55] [TRPC      ] general.submitUserAcknowledgement
+   7. [11:02:33] [RECAPTCHA ] recaptcha/enterprise/reload
+   8. [11:02:34] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+   9. [11:02:34] [RECAPTCHA ] recaptcha/enterprise/clr
+  10. [11:02:48] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- chon firt va last b?t ??u 50 4video done.har (46 total calls, 10 unique) ---
+   1. [11:01:11] [TRPC      ] project.searchProjectScenes
+   2. [11:01:14] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [11:01:14] [TRPC      ] general.fetchUserAcknowledgement
+   4. [11:01:20] [TRPC      ] general.submitBatchLog
+   5. [11:01:35] [REST      ] POST /v1:uploadUserImage
+   6. [11:01:55] [TRPC      ] general.submitUserAcknowledgement
+   7. [11:02:33] [RECAPTCHA ] recaptcha/enterprise/reload
+   8. [11:02:34] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+   9. [11:02:34] [RECAPTCHA ] recaptcha/enterprise/clr
+  10. [11:02:48] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- chon firt va last b?t ??u 50.har (41 total calls, 10 unique) ---
+   1. [11:01:11] [TRPC      ] project.searchProjectScenes
+   2. [11:01:14] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [11:01:14] [TRPC      ] general.fetchUserAcknowledgement
+   4. [11:01:20] [TRPC      ] general.submitBatchLog
+   5. [11:01:35] [REST      ] POST /v1:uploadUserImage
+   6. [11:01:55] [TRPC      ] general.submitUserAcknowledgement
+   7. [11:02:33] [RECAPTCHA ] recaptcha/enterprise/reload
+   8. [11:02:34] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+   9. [11:02:34] [RECAPTCHA ] recaptcha/enterprise/clr
+  10. [11:02:48] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- chon firt va last b?t ??u.har (34 total calls, 10 unique) ---
+   1. [10:55:09] [TRPC      ] project.searchProjectScenes
+   2. [10:55:09] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [10:55:09] [TRPC      ] general.fetchUserAcknowledgement
+   4. [10:55:42] [TRPC      ] general.submitBatchLog
+   5. [10:55:45] [REST      ] POST /v1:uploadUserImage
+   6. [10:55:55] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   7. [10:58:19] [RECAPTCHA ] recaptcha/enterprise/clr
+   8. [10:58:19] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+   9. [10:58:20] [TRPC      ] general.reportClientSideError
+  10. [10:58:20] [REST      ] GET /v1/credits
+
+--- chon firt va last.har (40 total calls, 4 unique) ---
+   1. [01:23:45] [TRPC      ] project.searchProjectScenes
+   2. [01:25:16] [TRPC      ] media.fetchUserHistoryDirectly
+   3. [01:25:16] [TRPC      ] general.fetchUserAcknowledgement
+   4. [01:25:16] [REST      ] GET /v1/media/{id}
+
+--- download image 4k.har (6 total calls, 5 unique) ---
+   1. [00:10:50] [TRPC      ] project.searchProjectScenes
+   2. [00:10:50] [TRPC      ] general.submitBatchLog
+   3. [00:10:50] [RECAPTCHA ] recaptcha/enterprise/reload
+   4. [00:10:51] [REST      ] POST /v1/flow/upsampleImage
+   5. [00:10:51] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- labs.google.har (89 total calls, 12 unique) ---
+   1. [23:39:34] [AUTH      ] GET /fx/api/auth/session
+   2. [23:39:34] [TRPC      ] project.searchProjectScenes
+   3. [23:39:44] [TRPC      ] media.fetchUserHistoryDirectly
+   4. [23:39:44] [TRPC      ] general.fetchUserAcknowledgement
+   5. [23:39:44] [REST      ] GET /v1/media/{id}
+   6. [23:40:04] [TRPC      ] general.submitBatchLog
+   7. [23:40:28] [REST      ] POST /v1:uploadUserImage
+   8. [23:40:38] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   9. [23:40:49] [TRPC      ] project.searchProjectWorkflows
+  10. [23:40:49] [RECAPTCHA ] recaptcha/enterprise/reload
+  11. [23:40:50] [REST      ] POST /v1/projects/{id}/flowMedia:batchGenerateImages
+  12. [23:40:50] [RECAPTCHA ] recaptcha/enterprise/clr
+
+--- tao video vs anh first frame.har (30 total calls, 8 unique) ---
+   1. [01:36:34] [TRPC      ] project.searchProjectScenes
+   2. [01:36:47] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+   3. [01:37:00] [TRPC      ] videoFx.setLastSelectedVideoModelKey
+   4. [01:37:29] [TRPC      ] general.submitBatchLog
+   5. [01:37:29] [RECAPTCHA ] recaptcha/enterprise/reload
+   6. [01:37:30] [REST      ] POST /v1/video:batchAsyncGenerateVideoStartImage
+   7. [01:37:30] [RECAPTCHA ] recaptcha/enterprise/clr
+   8. [01:37:43] [REST      ] POST /v1/video:batchCheckAsyncVideoGenerationStatus
+
+--- upload anh first frame.har (15 total calls, 6 unique) ---
+   1. [01:33:42] [TRPC      ] project.searchProjectScenes
+   2. [01:33:42] [TRPC      ] general.fetchUserAcknowledgement
+   3. [01:33:43] [TRPC      ] media.fetchUserHistoryDirectly
+   4. [01:33:53] [TRPC      ] general.submitBatchLog
+   5. [01:33:56] [REST      ] POST /v1:uploadUserImage
+   6. [01:34:08] [TRPC      ] videoFx.setLastSelectedVideoAspectRatio
+
+--- whisk 2.har (45 total calls, 13 unique) ---
+   1. [12:02:19] [REST      ] POST /v1:checkAppAvailability
+   2. [12:02:19] [TRPC      ] general.fetchToolAvailability
+   3. [12:02:19] [TRPC      ] general.fetchUserAcknowledgement
+   4. [12:02:19] [TRPC      ] general.fetchUserLocale
+   5. [12:02:19] [TRPC      ] general.submitBatchLog
+   6. [12:02:19] [AUTH      ] GET /fx/api/auth/session
+   7. [12:02:19] [TRPC      ] general.fetchFeatureAvailability
+   8. [12:02:19] [TRPC      ] general.fetchUserPreferences
+   9. [12:02:19] [REST      ] GET /v1/media/{id}
+  10. [12:02:20] [REST      ] POST /v1/whisk:getVideoCreditStatus
+  11. [12:03:12] [REST      ] GET /v1/credits
+  12. [12:03:12] [REST      ] POST /v1:fetchUserRecommendations
+  13. [12:03:12] [TRPC      ] videoFx.getFlowAppConfig
+
+--- whisk 3.har (45 total calls, 13 unique) ---
+   1. [12:07:49] [REST      ] POST /v1:checkAppAvailability
+   2. [12:07:49] [TRPC      ] general.fetchToolAvailability
+   3. [12:07:49] [TRPC      ] general.fetchUserAcknowledgement
+   4. [12:07:49] [TRPC      ] general.fetchUserLocale
+   5. [12:07:49] [TRPC      ] general.submitBatchLog
+   6. [12:07:49] [AUTH      ] GET /fx/api/auth/session
+   7. [12:07:49] [TRPC      ] general.fetchFeatureAvailability
+   8. [12:07:49] [TRPC      ] general.fetchUserPreferences
+   9. [12:07:49] [REST      ] GET /v1/media/{id}
+  10. [12:07:50] [REST      ] POST /v1/whisk:getVideoCreditStatus
+  11. [12:07:55] [REST      ] GET /v1/credits
+  12. [12:07:55] [REST      ] POST /v1:fetchUserRecommendations
+  13. [12:07:55] [TRPC      ] videoFx.getFlowAppConfig
+
+--- whisk.har (41 total calls, 10 unique) ---
+   1. [12:02:19] [REST      ] POST /v1:checkAppAvailability
+   2. [12:02:19] [TRPC      ] general.fetchToolAvailability
+   3. [12:02:19] [TRPC      ] general.fetchUserAcknowledgement
+   4. [12:02:19] [TRPC      ] general.fetchUserLocale
+   5. [12:02:19] [TRPC      ] general.submitBatchLog
+   6. [12:02:19] [AUTH      ] GET /fx/api/auth/session
+   7. [12:02:19] [TRPC      ] general.fetchFeatureAvailability
+   8. [12:02:19] [TRPC      ] general.fetchUserPreferences
+   9. [12:02:19] [REST      ] GET /v1/media/{id}
+  10. [12:02:20] [REST      ] POST /v1/whisk:getVideoCreditStatus
+
+
+====================================================================================================
+SECTION 2: AGGREGATED TYPICAL EXECUTION ORDER
+====================================================================================================
+Shows the AVERAGE position of each endpoint across all sessions.
+
+  #  Avg Pos  Min-Max  Files  Category    Endpoint
+------------------------------------------------------------------------------------------
+  1      1.3   1-6        46  TRPC        project.searchProjectScenes
+  2      1.8   1-3         5  REST        POST /v1:checkAppAvailability
+  3      2.0   2-2         1  TRPC        project.createProject
+  4      2.0   2-2         1  STORAGE     storage.googleapis.com download
+  5      2.0   2-2         1  REST        POST /v1/video:generatePinholeGif
+  6      2.0   2-2         3  TRPC        general.fetchToolAvailability
+  7      3.4   2-7        22  TRPC        general.fetchUserAcknowledgement
+  8      3.5   2-15       23  TRPC        media.fetchUserHistoryDirectly
+  9      3.5   2-7        11  TRPC        videoFx.setLastSelectedVideoModelKey
+ 10      3.7   3-4         3  TRPC        project.getProject
+ 11      3.7   1-9        45  TRPC        general.submitBatchLog
+ 12      4.0   4-4         8  REST        POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+ 13      4.0   4-4         4  REST        POST /v1/flow/upsampleImage
+ 14      4.9   2-8        14  TRPC        videoFx.setLastSelectedVideoAspectRatio
+ 15      5.0   1-8         6  AUTH        GET /fx/api/auth/session
+ 16      5.2   3-10       34  RECAPTCHA   recaptcha/enterprise/reload
+ 17      5.3   5-7        12  REST        POST /v1:uploadUserImage
+ 18      5.6   4-8         5  TRPC        general.fetchUserLocale
+ 19      6.0   6-6         6  TRPC        general.submitUserAcknowledgement
+ 20      6.0   6-6         1  REST        POST /v1/video:batchAsyncGenerateVideoStartImage
+ 21      6.1   2-10       15  REST        GET /v1/media/{id}
+ 22      6.1   1-11        7  REST        GET /v1/credits
+ 23      6.8   6-10        5  REST        POST /v1/video:batchAsyncGenerateVideoReferenceImages
+ 24      6.8   5-11        5  REST        POST /v1/projects/{id}/flowMedia:batchGenerateImages
+ 25      6.8   2-12        6  REST        POST /v1:fetchUserRecommendations
+ 26      7.0   7-7         3  TRPC        general.fetchFeatureAvailability
+ 27      7.1   5-12       35  RECAPTCHA   recaptcha/enterprise/clr
+ 28      8.2   6-12       21  REST        POST /v1/video:batchCheckAsyncVideoGenerationStatus
+ 29      8.2   8-9         8  REST        POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+ 30      8.7   6-10        3  TRPC        videoFx.getUserSettings
+ 31      9.0   8-11        6  TRPC        general.fetchUserPreferences
+ 32      9.0   5-13        4  TRPC        videoFx.getFlowAppConfig
+ 33      9.0   9-9         1  TRPC        general.reportClientSideError
+ 34     10.0  10-10        3  REST        POST /v1/whisk:getVideoCreditStatus
+ 35     10.5   9-12        4  TRPC        project.searchProjectWorkflows
+ 36     11.0   7-13        3  TRPC        videoFx.getVideoModelConfig
+ 37     12.7  10-14        3  TRPC        videoFx.listPreambles
+ 38     16.0  16-16        2  TRPC        media.fetchFlowUserIngredients
+
+
+====================================================================================================
+SECTION 3: CROSS-REFERENCE — HAR endpoints vs §1.4.D Documentation
+====================================================================================================
+
+3A. Endpoints in HAR but NOT in doc (0):
+
+3B. Endpoints in doc but NOT in HAR (0):
+
+3C. Matched endpoints (38/38):
+  OK: AUTH|GET /fx/api/auth/session -> Nhom 1: Lay session (avg pos: 5.0, 6 files)
+  OK: RECAPTCHA|recaptcha/enterprise/clr -> Nhom 2: Log ket qua (avg pos: 7.1, 35 files)
+  OK: RECAPTCHA|recaptcha/enterprise/reload -> Nhom 2: Lay token moi (avg pos: 5.2, 34 files)
+  OK: REST|GET /v1/credits -> Nhom 1: Kiem tra credits (avg pos: 6.1, 7 files)
+  OK: REST|GET /v1/media/{id} -> Nhom 1: Load media item (avg pos: 6.1, 15 files)
+  OK: REST|POST /v1/flow/upsampleImage -> Nhom 3: Upscale anh (avg pos: 4.0, 4 files)
+  OK: REST|POST /v1/projects/{id}/flowMedia:batchGenerateImages -> Nhom 3: Generate anh (avg pos: 6.8, 5 files)
+  OK: REST|POST /v1/video:batchAsyncGenerateVideoReferenceImages -> Nhom 3: R2V (avg pos: 6.8, 5 files)
+  OK: REST|POST /v1/video:batchAsyncGenerateVideoStartAndEndImage -> Nhom 3: I2V S+E (avg pos: 8.2, 8 files)
+  OK: REST|POST /v1/video:batchAsyncGenerateVideoStartImage -> Nhom 3: I2V start (avg pos: 6.0, 1 files)
+  OK: REST|POST /v1/video:batchAsyncGenerateVideoUpsampleVideo -> Nhom 3: Upscale video (avg pos: 4.0, 8 files)
+  OK: REST|POST /v1/video:batchCheckAsyncVideoGenerationStatus -> Nhom 4: Poll trang thai (avg pos: 8.2, 21 files)
+  OK: REST|POST /v1/video:generatePinholeGif -> Nhom 4: Generate GIF (avg pos: 2.0, 1 files)
+  OK: REST|POST /v1/whisk:getVideoCreditStatus -> Nhom 1: Lay credit status (avg pos: 10.0, 3 files)
+  OK: REST|POST /v1:checkAppAvailability -> Nhom 1: Kiem tra availability (avg pos: 1.8, 5 files)
+  OK: REST|POST /v1:fetchUserRecommendations -> Nhom 1: Lay recommendations (avg pos: 6.8, 6 files)
+  OK: REST|POST /v1:uploadUserImage -> Nhom 3: Upload anh (avg pos: 5.3, 12 files)
+  OK: STORAGE|storage.googleapis.com download -> Nhom 5: Tai video (avg pos: 2.0, 1 files)
+  OK: TRPC|general.fetchFeatureAvailability -> Nhom 1: Lay feature flags (avg pos: 7.0, 3 files)
+  OK: TRPC|general.fetchToolAvailability -> Nhom 1: Lay tool flags (avg pos: 2.0, 3 files)
+  OK: TRPC|general.fetchUserAcknowledgement -> Nhom 1: Lay acknowledgement (avg pos: 3.4, 22 files)
+  OK: TRPC|general.fetchUserLocale -> Nhom 1: Lay locale (avg pos: 5.6, 5 files)
+  OK: TRPC|general.fetchUserPreferences -> Nhom 1: Lay preferences (avg pos: 9.0, 6 files)
+  OK: TRPC|general.reportClientSideError -> Nhom 6: Report error (avg pos: 9.0, 1 files)
+  OK: TRPC|general.submitBatchLog -> Nhom 6: Logging event (avg pos: 3.7, 45 files)
+  OK: TRPC|general.submitUserAcknowledgement -> Nhom 1: Xac nhan acknowledgement (avg pos: 6.0, 6 files)
+  OK: TRPC|media.fetchFlowUserIngredients -> Nhom 1: Lay ingredients (avg pos: 16.0, 2 files)
+  OK: TRPC|media.fetchUserHistoryDirectly -> Nhom 1: Lay lich su (avg pos: 3.5, 23 files)
+  OK: TRPC|project.createProject -> Nhom 1: Tao project (avg pos: 2.0, 1 files)
+  OK: TRPC|project.getProject -> Nhom 1: Load project (avg pos: 3.7, 3 files)
+  OK: TRPC|project.searchProjectScenes -> Nhom 1: Load scenes (avg pos: 1.3, 46 files)
+  OK: TRPC|project.searchProjectWorkflows -> Nhom 1: Load workflows (avg pos: 10.5, 4 files)
+  OK: TRPC|videoFx.getFlowAppConfig -> Nhom 1: Lay app config (avg pos: 9.0, 4 files)
+  OK: TRPC|videoFx.getUserSettings -> Nhom 1: Lay user settings (avg pos: 8.7, 3 files)
+  OK: TRPC|videoFx.getVideoModelConfig -> Nhom 1: Lay model config (avg pos: 11.0, 3 files)
+  OK: TRPC|videoFx.listPreambles -> Nhom 1: Lay preambles (avg pos: 12.7, 3 files)
+  OK: TRPC|videoFx.setLastSelectedVideoAspectRatio -> Nhom 6: Set aspect ratio (avg pos: 4.9, 14 files)
+  OK: TRPC|videoFx.setLastSelectedVideoModelKey -> Nhom 6: Set model key (avg pos: 3.5, 11 files)
+
+
+====================================================================================================
+SECTION 4: RECOMMENDED CHRONOLOGICAL ORDER FOR §1.4.D
+====================================================================================================
+Based on actual execution order observed across all sessions:
+
+
+  === PHASE 1: Init & Config ===
+   1. [  1.3] project.searchProjectScenes                             (46 files)
+   2. [  1.8] POST /v1:checkAppAvailability                           ( 5 files)
+   3. [  2.0] POST /v1/video:generatePinholeGif                       ( 1 files)
+   4. [  2.0] storage.googleapis.com download                         ( 1 files)
+   5. [  2.0] general.fetchToolAvailability                           ( 3 files)
+   6. [  2.0] project.createProject                                   ( 1 files)
+   7. [  3.4] general.fetchUserAcknowledgement                        (22 files)
+   8. [  3.5] media.fetchUserHistoryDirectly                          (23 files)
+   9. [  3.5] videoFx.setLastSelectedVideoModelKey                    (11 files)
+  10. [  3.7] project.getProject                                      ( 3 files)
+  11. [  3.7] general.submitBatchLog                                  (45 files)
+  12. [  4.0] POST /v1/flow/upsampleImage                             ( 4 files)
+  13. [  4.0] POST /v1/video:batchAsyncGenerateVideoUpsampleVideo     ( 8 files)
+  14. [  4.9] videoFx.setLastSelectedVideoAspectRatio                 (14 files)
+
+  === PHASE 2: Load Project & Data ===
+  15. [  5.0] GET /fx/api/auth/session                                ( 6 files)
+  16. [  5.2] recaptcha/enterprise/reload                             (34 files)
+  17. [  5.3] POST /v1:uploadUserImage                                (12 files)
+  18. [  5.6] general.fetchUserLocale                                 ( 5 files)
+  19. [  6.0] POST /v1/video:batchAsyncGenerateVideoStartImage        ( 1 files)
+  20. [  6.0] general.submitUserAcknowledgement                       ( 6 files)
+  21. [  6.1] GET /v1/media/{id}                                      (15 files)
+  22. [  6.1] GET /v1/credits                                         ( 7 files)
+  23. [  6.8] POST /v1/projects/{id}/flowMedia:batchGenerateImages    ( 5 files)
+  24. [  6.8] POST /v1/video:batchAsyncGenerateVideoReferenceImages   ( 5 files)
+  25. [  6.8] POST /v1:fetchUserRecommendations                       ( 6 files)
+  26. [  7.0] general.fetchFeatureAvailability                        ( 3 files)
+  27. [  7.1] recaptcha/enterprise/clr                                (35 files)
+  28. [  8.2] POST /v1/video:batchCheckAsyncVideoGenerationStatus     (21 files)
+  29. [  8.2] POST /v1/video:batchAsyncGenerateVideoStartAndEndImage  ( 8 files)
+  30. [  8.7] videoFx.getUserSettings                                 ( 3 files)
+  31. [  9.0] general.fetchUserPreferences                            ( 6 files)
+  32. [  9.0] general.reportClientSideError                           ( 1 files)
+  33. [  9.0] videoFx.getFlowAppConfig                                ( 4 files)
+
+  === PHASE 3: Pre-Generate (reCAPTCHA, upload) ===
+  34. [ 10.0] POST /v1/whisk:getVideoCreditStatus                     ( 3 files)
+  35. [ 10.5] project.searchProjectWorkflows                          ( 4 files)
+  36. [ 11.0] videoFx.getVideoModelConfig                             ( 3 files)
+  37. [ 12.7] videoFx.listPreambles                                   ( 3 files)
+
+  === PHASE 4: Generate & Submit ===
+  38. [ 16.0] media.fetchFlowUserIngredients                          ( 2 files)

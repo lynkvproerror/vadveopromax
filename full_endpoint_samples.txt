@@ -1,0 +1,723 @@
+=== FULL ENDPOINT SAMPLE EXTRACTION ===
+
+================================================================================
+TARGET: general.submitBatchLog
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/general.submitBatchLog
+METHOD: POST
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+PAYLOAD MIME: application/json
+PAYLOAD: {"json":{"appEvents":[{"event":"PINHOLE_CREATE_NEW_PROJECT","eventMetadata":{"sessionId":";1769888782642"},"eventProperties":[{"key":"TOOL_NAME","stringValue":"PINHOLE"},{"key":"G1_PAYGATE_TIER","stringValue":"PAYGATE_TIER_TWO"},{"key":"PINHOLE_PROMPT_BOX_MODE","stringValue":"TEXT_TO_VIDEO"},{"key":"USER_AGENT","stringValue":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},{"key":"IS_DESKTOP"}],"activeExperiments":[],"eventTime":"
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: project.createProject
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/project.createProject
+METHOD: POST
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+PAYLOAD MIME: application/json
+PAYLOAD: {"json":{"projectTitle":"Feb 01 - 02:49","toolName":"PINHOLE"}}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"projectId":"daba1978-e588-4d76-a4fd-6c3126074187","projectInfo":{"projectTitle":"Feb 01 - 02:49"}},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: project.getProject
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/project.getProject?input=%7B%22json%22%3A%7B%22projectId%22%3A%22daba1978-e588-4d76-a4fd-6c3126074187%22%2C%22toolName%22%3A%22PINHOLE%22%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"projectId":"daba1978-e588-4d76-a4fd-6c3126074187","toolName":"PINHOLE"}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"projectId":"daba1978-e588-4d76-a4fd-6c3126074187","projectInfo":{"projectTitle":"Feb 01 - 02:49"}},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: project.searchProjectScenes
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/project.searchProjectScenes?input=%7B%22json%22%3A%7B%22projectId%22%3A%22daba1978-e588-4d76-a4fd-6c3126074187%22%2C%22toolName%22%3A%22PINHOLE%22%2C%22pageSize%22%3A10
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"projectId":"daba1978-e588-4d76-a4fd-6c3126074187","toolName":"PINHOLE","pageSize":10}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: media.fetchUserHistoryDirectly
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/media.fetchUserHistoryDirectly?input=%7B%22json%22%3A%7B%22type%22%3A%22ASSET_MANAGER%22%2C%22pageSize%22%3A18%2C%22responseScope%22%3A%22RESPONSE_SCOPE_UNSPECIFIED%22%
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"type":"ASSET_MANAGER","pageSize":18,"responseScope":"RESPONSE_SCOPE_UNSPECIFIED","cursor":
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"userWorkflows":[{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","media":{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","userUploadedImage":{"aspectRatio":"IMAGE_ASPECT_RATIO_PORTRAIT"},"mediaGenerationId":{"mediaType":"IMAGE","workflowId":"f661b53a-4bf2-4b6e-ada1-5fcbfb751583","workflowStepId":"CAE","mediaKey":"
+
+================================================================================
+TARGET: videoFx.getUserSettings
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/videoFx.getUserSettings?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":null,"meta":{"values":["undefined"]}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"lastSelectedVideoModelKey":"veo_2_0_t2v","lastAcknowledgedChangeLogId":"2025-12-18-v0-e2054626-1ac3-4d64-81ec-3134a94549a4","dismissedBannerIds":["e40fc7a7-aea8-4ec7-8250-89c5d266c177","8dbcafbe-bd31-4de1-b9f8-b64d06015b2c","d7011273-f85f-4da5-829a-8feadef78fa7","94d90f50-4ec6-4e73-8c42-d3e709105da7","cd266941-aba8-484c-b74f-64f8f39a49f6","165ea8a4-91d4-4011-b46a-f522b1fd310c"],"lastSelectedVideoAspectRatio":"VIDEO_ASPECT_RATIO_LANDSCAPE"},"status":200,"stat
+
+================================================================================
+TARGET: videoFx.getVideoModelConfig
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/videoFx.getVideoModelConfig?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":null,"meta":{"values":["undefined"]}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"videoModels":[{"key":"veo_3_0_t2v_fast_portrait_ultra","supportedAspectRatios":["VIDEO_ASPECT_RATIO_PORTRAIT"],"accessType":"MODEL_ACCESS_TYPE_GENERAL","capabilities":["VIDEO_MODEL_CAPABILITY_TEXT","VIDEO_MODEL_CAPABILITY_AUDIO"],"videoLengthSeconds":8,"videoGenerationTimeSeconds":100,"displayName":"Veo 3 - Fast","framesPerSecond":24,"paygateTier":"PAYGATE_TIER_TWO","modelAccessInfo":{},"modelMetadata":{"veoModelName":"Beta Audio"},"modelStatus":"MODEL_STATU
+
+================================================================================
+TARGET: general.fetchUserPreferences
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/general.fetchUserPreferences?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":null,"meta":{"values":["undefined"]}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"enableHistory":true},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: project.searchProjectWorkflows
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/project.searchProjectWorkflows?input=%7B%22json%22%3A%7B%22pageSize%22%3A4%2C%22projectId%22%3A%22daba1978-e588-4d76-a4fd-6c3126074187%22%2C%22toolName%22%3A%22PINHOLE%
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"pageSize":4,"projectId":"daba1978-e588-4d76-a4fd-6c3126074187","toolName":"PINHOLE","fetch
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: videoFx.listPreambles
+SOURCE: 0. Tao Project.har
+URL: https://labs.google/fx/api/trpc/videoFx.listPreambles?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":null,"meta":{"values":["undefined"]}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: general.fetchUserAcknowledgement
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://labs.google/fx/api/trpc/general.fetchUserAcknowledgement?input=%7B%22json%22%3A%7B%22acknowledgementVersion%22%3A%22FLOW_IMAGE_UPLOAD_TOS%22%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"acknowledgementVersion":"FLOW_IMAGE_UPLOAD_TOS"}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"hasAcknowledgement":true},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: uploadUserImage
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://aisandbox-pa.googleapis.com/v1:uploadUserImage
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: [Image data - 418232 chars total]
+PAYLOAD KEYS: ['imageInput', 'clientContext']
+  imageInput keys: ['rawImageBytes', 'mimeType', 'isUserUploaded', 'aspectRatio']
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "mediaGenerationId": {
+    "mediaGenerationId": "CAMaJGM3ZTdkODY4LWI2NDgtNGQyMi1hZjUyLTM0M2ZmMjA5YjhhMSIDQ0FFKiRkNzVkZjc4OS1lZDMyLTQyNmYtYjUwYi1mMTg3ODFlOTc2OWI"
+  },
+  "width": 1920,
+  "height": 1080
+}
+
+
+================================================================================
+TARGET: videoFx.setLastSelectedVideoModelKey
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://labs.google/fx/api/trpc/videoFx.setLastSelectedVideoModelKey
+METHOD: POST
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+PAYLOAD MIME: application/json
+PAYLOAD: {"json":{"modelKey":"veo_3_1_t2v_fast_portrait_ultra"}}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"lastSelectedVideoModelKey":"veo_3_1_t2v_fast_portrait_ultra","lastAcknowledgedChangeLogId":"2025-12-18-v0-e2054626-1ac3-4d64-81ec-3134a94549a4","dismissedBannerIds":["e40fc7a7-aea8-4ec7-8250-89c5d266c177","8dbcafbe-bd31-4de1-b9f8-b64d06015b2c","d7011273-f85f-4da5-829a-8feadef78fa7","94d90f50-4ec6-4e73-8c42-d3e709105da7","cd266941-aba8-484c-b74f-64f8f39a49f6","165ea8a4-91d4-4011-b46a-f522b1fd310c"],"lastSelectedVideoAspectRatio":"VIDEO_ASPECT_RATIO_LANDSCAPE"
+
+================================================================================
+TARGET: videoFx.setLastSelectedVideoAspectRatio
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://labs.google/fx/api/trpc/videoFx.setLastSelectedVideoAspectRatio
+METHOD: POST
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+PAYLOAD MIME: application/json
+PAYLOAD: {"json":{"videoAspectRatio":"VIDEO_ASPECT_RATIO_PORTRAIT"}}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"lastSelectedVideoModelKey":"veo_3_1_t2v_fast_portrait_ultra_relaxed","lastAcknowledgedChangeLogId":"2025-12-18-v0-e2054626-1ac3-4d64-81ec-3134a94549a4","dismissedBannerIds":["e40fc7a7-aea8-4ec7-8250-89c5d266c177","8dbcafbe-bd31-4de1-b9f8-b64d06015b2c","d7011273-f85f-4da5-829a-8feadef78fa7","94d90f50-4ec6-4e73-8c42-d3e709105da7","cd266941-aba8-484c-b74f-64f8f39a49f6","165ea8a4-91d4-4011-b46a-f522b1fd310c"],"lastSelectedVideoAspectRatio":"VIDEO_ASPECT_RATIO_PO
+
+================================================================================
+TARGET: recaptcha/enterprise/reload
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://www.google.com/recaptcha/enterprise/reload?k=6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV
+METHOD: POST
+QUERY PARAMS:
+  k: 6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV
+KEY HEADERS:
+  content-type: application/x-protobuffer
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: application/x-protobuffer
+PAYLOAD: 
+N67nZn4AqZkNcbeMu4prBgzg¹03AFcWeA6nqgw9O2uACIN-5RL08uBuSVxSX9iKQBUZGlGYHPC-hLuS0TjwsC7gPvbx_jbq2cXpxVlAbafCF62MticxD-aTWVKq6K8yvd4SoeLZXlazXwsh12y_slCyf0ZfkXPhxiqhQM7DGgJovMnSaNwYu-joPIedXUpvPVf1S5g_gmhfcOqZl6F9iFC9AQYsDakij9Bh0iUgzPqPGPf9q5l0ymtW8J8wmFbbuLr1-Teprni4x_RNH-kQVodWf35pZ4lvMjQC4XlkHoi1P8TSLrLPZAhud8dP1Ccsm65X6LY3n29jvGNfpJNBb1FNNGP8wgQe1Zt-eC2hSL3TkobPUjCuU5rAHuncIwDSQ76fggylNv3mzvrTmRLncsASXleSqZmX9M_6ro2_yOiY2SlzDOmquTr2zAb6AlZ8UuDM3XzhwNmYz21fJbt0bJKrzx5pZlY2H9NW3pyo91CQQx19u
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: )]}'
+["rresp","0cAFcWeA57uAL6OvX4ROdTu2oBZKnkRD8Y54oALkXSEebCjQzmarnUqki9tnh0jtkxtDBaKnORCTY_2X3DTdbatZTnvydvQOoVTXYTciLbH2sikH93R2ZbSVFWJJJzVY0WhmVZw_fLG-CX1hJM_HhM8Rz0oW6eYDY-4kVztK_WcPOBdiSrDXikJsjbWJu6Xx5sGpXTVIzaOyVuDbWRPSeTM5XnMa_BKKXbar-Qf9ozJxmdrCbFOJisU2XXtupLsDz5w5Sth_Z1qYYWG6scf3Zljcb559lnmebptmN2UsT-9FAFqGY-XgBXwtur2VUWv2DBoaTV29o4jjNrU1C6xbmDqk_HXQCzrOY_n7yAM150ncWlBGE8S8sVULGmoMJR9aC8yTNAePKHzVXTBVEeLtoP_A5I3GWZWimraRvRGqA6-DepQ0co41NYHWtYyMD3bGjK4Kz7ejo0hNKxIQqTS8k3GbugXtBNP7hTWEx
+
+================================================================================
+TARGET: batchAsyncGenerateVideoReferenceImages
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"clientContext":{"recaptchaContext":{"token":"0cAFcWeA57uAL6OvX4ROdTu2oBZKnkRD8Y54oALkXSEebCjQzmarnUqki9tnh0jtkxtDBaKnORCTY_2X3DTdbatZTnvydvQOoVTXYTciLbH2sikH93R2ZbSVFWJJJzVY0WhmVZw_fLG-CX1hJM_HhM8Rz0oW6eYDY-4kVztK_WcPOBdiSrDXikJsjbWJu6Xx5sGpXTVIzaOyVuDbWRPSeTM5XnMa_BKKXbar-Qf9ozJxmdrCbFOJisU2XXtupLsDz5w5Sth_Z1qYYWG6scf3Zljcb559lnmebptmN2UsT-9FAFqGY-XgBXwtur2VUWv2DBoaTV29o4jjNrU1C6xbmDqk_HXQCzrOY_n7yAM150ncWlBGE8S8sVULGmoMJR9aC8yTNAePKHzVXTBVEeLtoP_A5I3GWZWimraRvRGqA6-DepQ0co41NYHWtYyMD3bGjK4Kz
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "operations": [
+    {
+      "operation": {
+        "name": "92cea5b7-0bdf-4b66-8d99-442c5cb21108"
+      },
+      "sceneId": "1088d16f-b395-44e0-8aa8-be1df603b0a9",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    },
+    {
+      "operation": {
+        "name": "d9607a25-f7a1-49ef-aea3-392bcb4c2faa"
+      },
+      "sceneId": "5a9dc801-1211-43cd-8326-5d636c99c4f5",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    },
+    {
+      "operation": {
+        "name": "f7e9c5f8-4d9f-4a23-9791-09
+
+================================================================================
+TARGET: recaptcha/enterprise/clr
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://www.google.com/recaptcha/enterprise/clr?k=6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV
+METHOD: POST
+QUERY PARAMS:
+  k: 6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV
+KEY HEADERS:
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: 
+PAYLOAD: 
+(6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV¹03AFcWeA6nqgw9O2uACIN-5RL08uBuSVxSX9iKQBUZGlGYHPC-hLuS0TjwsC7gPvbx_jbq2cXpxVlAbafCF62MticxD-aTWVKq6K8yvd4SoeLZXlazXwsh12y_slCyf0ZfkXPhxiqhQM7DGgJovMnSaNwYu-joPIedXUpvPVf1S5g_gmhfcOqZl6F9iFC9AQYsDakij9Bh0iUgzPqPGPf9q5l0ymtW8J8wmFbbuLr1-Teprni4x_RNH-kQVodWf35pZ4lvMjQC4XlkHoi1P8TSLrLPZAhud8dP1Ccsm65X6LY3n29jvGNfpJNBb1FNNGP8wgQe1Zt-eC2hSL3TkobPUjCuU5rAHuncIwDSQ76fggylNv3mzvrTmRLncsASXleSqZmX9M_6ro2_yOiY2SlzDOmquTr2zAb6AlZ8UuDM3XzhwNmYz21fJbt0bJKrzx5pZlY2H
+RESPONSE STATUS: 200
+
+================================================================================
+TARGET: batchCheckAsyncVideoGenerationStatus
+SOURCE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"operations":[{"operation":{"name":"92cea5b7-0bdf-4b66-8d99-442c5cb21108"},"sceneId":"1088d16f-b395-44e0-8aa8-be1df603b0a9","status":"MEDIA_GENERATION_STATUS_PENDING"},{"operation":{"name":"d9607a25-f7a1-49ef-aea3-392bcb4c2faa"},"sceneId":"5a9dc801-1211-43cd-8326-5d636c99c4f5","status":"MEDIA_GENERATION_STATUS_PENDING"},{"operation":{"name":"f7e9c5f8-4d9f-4a23-9791-09c77443c3eb"},"sceneId":"b3b80676-daaa-425d-a992-096a4e2a084b","status":"MEDIA_GENERATION_STATUS_PENDING"},{"operation":{"name":"5
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "operations": [
+    {
+      "operation": {
+        "name": "92cea5b7-0bdf-4b66-8d99-442c5cb21108"
+      },
+      "sceneId": "1088d16f-b395-44e0-8aa8-be1df603b0a9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    },
+    {
+      "operation": {
+        "name": "d9607a25-f7a1-49ef-aea3-392bcb4c2faa"
+      },
+      "sceneId": "5a9dc801-1211-43cd-8326-5d636c99c4f5",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    },
+    {
+      "operation": {
+        "name": "f7e9c5f8-4d9f-4a23-9791-09c7
+
+================================================================================
+TARGET: batchAsyncGenerateVideoUpsampleVideo
+SOURCE: 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"requests":[{"aspectRatio":"VIDEO_ASPECT_RATIO_PORTRAIT","resolution":"VIDEO_RESOLUTION_1080P","seed":18779,"videoInput":{"mediaId":"CAUSJDRmZDdmYjcyLTc5MGItNGMzZS04Y2MxLTJiZmMzYjQyNDVlMxokNWFiNzk4YzEtNTA4MS00MWVkLWJlMGEtZjNhNDYxNzRkNWFlIgNDQUUqJDdhMDE0MjM2LWQ0YmEtNDQ4Yi04ZDVlLTMxNWRiMGZhZDQwNw"},"videoModelKey":"veo_3_1_upsampler_1080p","metadata":{"sceneId":"09f1cc82-6925-41fd-860f-4e264abcc886"}}],"clientContext":{"recaptchaContext":{"token":"0cAFcWeA71jcHG4-m3eyQtY-smwU5xo6WnjPLQDwHkVq1lR03
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "operations": [
+    {
+      "operation": {
+        "name": "7a014236-d4ba-448b-8d5e-315db0fad407_upsampled"
+      },
+      "sceneId": "09f1cc82-6925-41fd-860f-4e264abcc886",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    }
+  ],
+  "remainingCredits": 44990,
+  "workflows": [
+    {
+      "metadata": {
+        "createTime": "2026-02-01T23:23:14.782856Z",
+        "primaryMediaId": "7a014236-d4ba-448b-8d5e-315db0fad407_upsampled",
+        "batchId": "3d4c0475-7124-4d52-b660-1ce8a09e48b8"
+  
+
+================================================================================
+TARGET: batchAsyncGenerateVideoStartAndEndImage
+SOURCE: 916 frame to video submit 4 video prompt - done.har
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"clientContext":{"recaptchaContext":{"token":"0cAFcWeA6z7psF_IX4vu02Mh50e7PtGdtIqez16qZpLJR1IEjVhLDr-Cnh7SwBNw6K33x3251UQnSnJ11E7RiaHV8Y1eeRQH-hq757NU6AdvoWOBMo9gsbfbAwvRvl8Lt4eNvZ1Bm6ey6xgh8ptGmBcEQMp1ZlDXzI_c7us9YVBAnCvwTAWw60pBBEBkyMZ1elKDEh8Lo3afJ1RvyY_Ezje0TqgN-NO1q9NW-Thuvp2mFNij4e6_SiRYHyQ8kr2VpfXsH_XXAygmvAKnEqa4OrtAxXfhCaIDR24YeN6_-ixItVfbmlC5YBBM4kfISpcN-epKHCOK9p0pNwOYaY6sYTvAq5561u53U8Q9zxB0PMb5kiVlfKSxUrY24tjdIFOIU8WTPo0wejg09ofuC6_Nv7732j36eNpl5tNB1gG3mfzh3nZzaniBrXHMbq0CxYGAuuEjU
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "operations": [
+    {
+      "operation": {
+        "name": "cf0c9bf1a56eb27990f00cc5156ebb30"
+      },
+      "sceneId": "a85c142f-561d-48ea-849b-8a3a32e1664b",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    },
+    {
+      "operation": {
+        "name": "7e43114d93bd4debf24052d317430a3c"
+      },
+      "sceneId": "75047cb2-92f5-46f1-b913-99c6fe12ad0a",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    },
+    {
+      "operation": {
+        "name": "ba618836053b6d466d071c3b85b191b9"
+
+
+================================================================================
+TARGET: /v1/credits
+SOURCE: Check Ultra.har
+URL: https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+METHOD: GET
+QUERY PARAMS:
+  key: AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+KEY HEADERS:
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0B
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "credits": 45000,
+  "userPaygateTier": "PAYGATE_TIER_TWO",
+  "sku": "WS_ULTRA",
+  "serviceTier": "SERVICE_TIER_ADVANCED"
+}
+
+
+================================================================================
+TARGET: auth/session
+SOURCE: Check Ultra.har
+URL: https://labs.google/fx/api/auth/session
+METHOD: GET
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"user":{"name":"Shop ultra","email":"sss5540198@tnx.blue-orbita.com","image":"https://lh3.googleusercontent.com/a/ACg8ocLrkVVTrR6SxDIHFBzjxO6XrRMohYEslFT9zr1yOFi5eITNIA=s96-c"},"expires":"2026-02-06T19:42:31.000Z","access_token":"ya29.a0AUMWg_IRQ_Ul_ZJKho9BgrfRRX9VFP6dpBX7DiPHW7hBVhZgzI16inTueug9MkSFKwtEFnv55p1arxO0kZn3_MAigTaS4Mrx7PnmPpBPfSSsEU1vvl6Lngb8VBvOjoKnKfIctCZaRF-RbcKe0d7AYmu-bTQx5NmXca_Gi9bKWVFjrGC3hMR9PuOo622iKysoKeccUEXDV0zDGktMtfyHUeVjtfaGQ1H-RL_2c3xm_xxB3avGWVh9e1IdkTkmDxJ9iqrHtG
+
+================================================================================
+TARGET: fetchUserRecommendations
+SOURCE: Check Ultra.har
+URL: https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0B
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"onramp":["WHISK_UPGRADE_BUTTON","WHISK_MANAGE_AI_CREDITS","WHISK_CREDIT_QUOTA_UPGRADE","WHISK_ANIMATE_TOAST"]}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "recommendation": [
+    {
+      "onramp": "WHISK_UPGRADE_BUTTON",
+      "upsellMessage": "Add AI credits",
+      "recommendationUri": "https://support.google.com/a/users?p=gws_ai_ultra_credits&ms=pt:1061;s:966;vp:9"
+    },
+    {
+      "onramp": "WHISK_MANAGE_AI_CREDITS",
+      "recommendationUri": "https://support.google.com/a/users?p=gws_ai_ultra_credits&ms=pt:1061;s:965;vp:9"
+    },
+    {
+      "onramp": "WHISK_CREDIT_QUOTA_UPGRADE",
+      "upsellMessage": "Manage subscription",
+      "rec
+
+================================================================================
+TARGET: checkAppAvailability
+SOURCE: Check trạng thái tài khoản Ultra hay Pro haay Thuong.har
+URL: https://aisandbox-pa.googleapis.com/v1:checkAppAvailability
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  x-goog-api-key: AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"clientContext":{"tool":"PINHOLE"}}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "availabilityState": "AVAILABLE"
+}
+
+
+================================================================================
+TARGET: videoFx.getFlowAppConfig
+SOURCE: Check trạng thái tài khoản Ultra hay Pro haay Thuong.har
+URL: https://labs.google/fx/api/trpc/videoFx.getFlowAppConfig?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":null,"meta":{"values":["undefined"]}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"changeLogId":"2025-12-18-v0-e2054626-1ac3-4d64-81ec-3134a94549a4","siteContent":{"banners":[{"id":"e40fc7a7-aea8-4ec7-8250-89c5d266c177","headline":"Nano Banana Pro Has Arrived!","caption":"Unlock improved precision editing and control, state of the art text rendering and more with Google’s latest image model. Available in all paid plans.","ctaText":"See it in action.","ctaClickBehavior":"CTA_CLICK_BEHAVIOR_OPEN_URL","ctaUri":"https://x.com/FlowbyGoogle/stat
+
+================================================================================
+TARGET: general.fetchUserLocale
+SOURCE: Check trạng thái tài khoản Ultra hay Pro haay Thuong.har
+URL: https://labs.google/fx/api/trpc/general.fetchUserLocale?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":null,"meta":{"values":["undefined"]}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"languageSetting":"en-GB"},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: media.fetchFlowUserIngredients
+SOURCE: Check trạng thái tài khoản Ultra hay Pro haay Thuong.har
+URL: https://labs.google/fx/api/trpc/media.fetchFlowUserIngredients?input=%7B%22json%22%3A%7B%22type%22%3A%22All%22%2C%22pageSize%22%3A18%2C%22activityType%22%3A%22ACTIVITY_TYPE_ADD_TO_FLOW_INGREDIENT_DRAW
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"type":"All","pageSize":18,"activityType":"ACTIVITY_TYPE_ADD_TO_FLOW_INGREDIENT_DRAWER","cu
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: /v1/flow/upsampleImage
+SOURCE: Download anh 2k.har
+URL: https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"mediaId":"CAMSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokZjlkZjdjZjAtNjA5Zi00ODNmLTljYjEtYTU1YWI0MmQ3ZjBhIgNDQUUqJDdiZWUxNmFiLWFkY2UtNDJjNS04NjY2LTI1OWYyNjIxNTUyMQ","targetResolution":"UPSAMPLE_IMAGE_RESOLUTION_2K","clientContext":{"recaptchaContext":{"token":"0cAFcWeA5CltsPcEHcqy_iYXV0Syl3rDf7j86X4aj9dMHpFwZMxxDzfHTTe2hkpeGwWoRcOFtcMag6Cvlz3mwKPI-Mus_knm_fUBpisV8Mw_D0XY6Pc7r0KJFOt-FAThCmCVw05yhfW7Fspu6FJwvNc6CYhXXvNEU_SDnhL8vPoula4lwjvkkZy14jTvdONaIJm-kHGFox6QDmrEZI9sBWg9QgFWZb9d78LJ
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "encodedImage": "/9j/4AAQSkZJRgABAQEBLAEsAAD/61cLSlAAAQAAAAEAAFcBanVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAF9pqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOjA1NGQ5YjgzLTE4MWYtOTY2Yi1mNGJlLTQyZDBjZDEzY2Q4YgAAABODanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNTY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDI
+
+================================================================================
+TARGET: generatePinholeGif
+SOURCE: Download gif 4 vid.har
+URL: https://aisandbox-pa.googleapis.com/v1/video:generatePinholeGif
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: m1p/flp8o0rsqq649T7rsY5vgtE=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"mediaGenerationId":"CAUSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokMzQ5MjdkZjMtNjQ5Yi00N2YxLWFjMGMtMDkxZmFkNzk0ZGY0IgNDQUUqJDM3Nzc2ZmNlLTgzZmMtNDM3MC1iNjdkLTVlNjlmNWE3NTVkZg"}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "encodedGif": "R0lGODlh4AEOAfcfAAAAACQAAEgAAGwAAJAAALQAANgAAPwAAAAkACQkAEgkAGwkAJAkALQkANgkAPwkAABIACRIAEhIAGxIAJBIALRIANhIAPxIAABsACRsAEhsAGxsAJBsALRsANhsAPxsAACQACSQAEiQAGyQAJCQALSQANiQAPyQAAC0ACS0AEi0AGy0AJC0ALS0ANi0APy0AADYACTYAEjYAGzYAJDYALTYANjYAPzYAAD8ACT8AEj8AGz8AJD8ALT8ANj8APz8AAAAVSQAVUgAVWwAVZAAVbQAVdgAVfwAVQAkVSQkVUgkVWwkVZAkVbQkVdgkVfwkVQBIVSRIVUhIVWxIVZBIVbRIVdhIVfxIVQBsVSRsVUhsVWxsVZBsVbRsVdhsVfxsVQCQVSSQVUiQVWyQVZCQVbSQVdiQVfyQVQC0VSS0VUi0VWy0VZC0VbS0Vdi0Vfy0VQDYVSTYVUjYVWzYV
+
+================================================================================
+TARGET: flowMedia:batchGenerateImages
+SOURCE: Full tạo ảnh.har
+URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"clientContext":{"recaptchaContext":{"token":"0cAFcWeA5w_xpJmNPoQ65RcYOOnb5RX9Wsfa4H7jPzyQz7tKpW7L2vw1012HXLCuZIAItAow2iIg6CRkAlEwavan08objDZUrSAvzVwUy6pUR8gOQOPZtOhOYrH7uqqZRrkaJMVD4h12-KETAg7aL46wgyUHi6VFMKuBp9ifcqvdfyEmEBL0_a2JqLjx2eCpN5knjRmM8jGOWn5XNjVE3HHDijY-Gp35D0Ao_hFt3YGra8JYapdAPhzPek1aeAXNPMPGNq_yo4wHmaJiLg7Wc8VwYFXl72k6GeXznYbanYSw49VxFKAIBwkuGJHBgEkoHanW6J9-CCjx4GOdsOuoMRcv5cLe5Oe8EmkDmmYayPPdhkrGRGH9tBdefgo_LWDaLr7HB0yn92rVwnSzsKh4nlvwFFf8f7JthZYDGYCs6dpSwI7bDW9Xy50Dghl7T-IPdJEoV
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "media": [
+    {
+      "name": "CAMSJGRhYmExOTc4LWU1ODgtNGQ3Ni1hNGZkLTZjMzEyNjA3NDE4NxokYWIzZjFiMWEtODAyOC00ZjM5LWE1MDQtNDg4YmFjODYwMjRiIgNDQUUqJDA4ZTMyMzE4LTQ1YzMtNGQ5Mi1hOGM0LTg2MGFmOTMzYWY0NA",
+      "workflowId": "ab3f1b1a-8028-4f39-a504-488bac86024b",
+      "image": {
+        "generatedImage": {
+          "seed": 651946,
+          "mediaGenerationId": "CAMSJGRhYmExOTc4LWU1ODgtNGQ3Ni1hNGZkLTZjMzEyNjA3NDE4NxokYWIzZjFiMWEtODAyOC00ZjM5LWE1MDQtNDg4YmFjODYwMjRiIgNDQUUqJDA4ZTMyMzE4LTQ1YzMtNGQ5
+
+================================================================================
+TARGET: general.submitUserAcknowledgement
+SOURCE: chon firt va last bắt đầu 1.har
+URL: https://labs.google/fx/api/trpc/general.submitUserAcknowledgement
+METHOD: POST
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+PAYLOAD MIME: application/json
+PAYLOAD: {"json":{"acknowledgementVersion":"FLOW_IMAGE_UPLOAD_TOS","frontendCommitHash":"v-release-candidate-01-22-26-4778f698f-260127195236"}}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: general.reportClientSideError
+SOURCE: chon firt va last bắt đầu.har
+URL: https://labs.google/fx/api/trpc/general.reportClientSideError
+METHOD: POST
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+PAYLOAD MIME: application/json
+PAYLOAD: {"json":{"message":"{\"json\":\"React Query\"} | {\"json\":{}}"}}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":null,"meta":{"values":["undefined"]}}}}
+
+================================================================================
+TARGET: batchAsyncGenerateVideoStartImage
+SOURCE: tao video vs anh first frame.har
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: m1p/flp8o0rsqq649T7rsY5vgtE=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCNmqzwE=
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {"clientContext":{"recaptchaContext":{"token":"0cAFcWeA5T6Org6AwgoyLF0KhUfAkAJJO8XEfnSuv-McDNEn3VucpO35FykSqJ7rwNKqedtWkpj1Mgk6n5hTVkTe2clhxFCjK3MJ9hr9fbymKPW_IQ6QrlOAGQXoh7HhJSEvrvZW6qQGQOXuNLmZVO8fd3MgHaL-BNJxpbfiaMzPDRj-4yW83nNofYrSm5JAfcEaLqZK3VJmewxeAN79VXRP29_uwVgNYheiS0H3Ci3NNoYVLrU0C8iESj4UkuKlNUl81Iq7CyCterd23oBU-wnrLDfkCRkjQ_JfZRA2EQd7tdjiW5jOgFaEBudNuZoum46rfqX_8C_2Ih0ydSBabpl9BppOkV2b32htmzMVGqEU9UmSs3qyWonwbsjzI2TpxXUgREG5265lfhvdYg1Q8AOqW8Pxu01GIOAITyRXAXkWzsF7TPhd-c4N-tDxmQ4tCNacI
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "operations": [
+    {
+      "operation": {
+        "name": "0b4c004e3adb478c4ad3e576580dbabe"
+      },
+      "sceneId": "0dc07a5e-16e5-46e4-a8c1-2a17107d536b",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    },
+    {
+      "operation": {
+        "name": "e7cdf7a52cf9c8eea600d3396be16722"
+      },
+      "sceneId": "7c618fa9-83f2-4b85-a8c1-9918498d54c6",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    },
+    {
+      "operation": {
+        "name": "7a39099bf8d20b35aadbf1093d943322"
+
+
+================================================================================
+TARGET: general.fetchToolAvailability
+SOURCE: whisk 2.har
+URL: https://labs.google/fx/api/trpc/general.fetchToolAvailability?input=%7B%22json%22%3A%7B%22tool%22%3A%22BACKBONE%22%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"tool":"BACKBONE"}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"availabilityState":"AVAILABLE"},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: general.fetchFeatureAvailability
+SOURCE: whisk 2.har
+URL: https://labs.google/fx/api/trpc/general.fetchFeatureAvailability?input=%7B%22json%22%3A%7B%22features%22%3A%5B%22WHISK_R2I%22%2C%22WHISK_R2I_PHOTOREALISTIC_REFERENCE%22%5D%7D%7D
+METHOD: GET
+QUERY PARAMS:
+  input: {"json":{"features":["WHISK_R2I","WHISK_R2I_PHOTOREALISTIC_REFERENCE"]}}
+KEY HEADERS:
+  content-type: application/json
+  Cookie: NO
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {"result":{"data":{"json":{"result":{"featureAvailability":{"WHISK_R2I":"AVAILABLE","WHISK_R2I_PHOTOREALISTIC_REFERENCE":"AVAILABLE"}},"status":200,"statusText":"OK"}}}}
+
+================================================================================
+TARGET: getVideoCreditStatus
+SOURCE: whisk 2.har
+URL: https://aisandbox-pa.googleapis.com/v1/whisk:getVideoCreditStatus
+METHOD: POST
+KEY HEADERS:
+  content-type: text/plain;charset=UTF-8
+  x-browser-channel: stable
+  x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.
+  x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I=
+  x-browser-year: 2026
+  x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0B
+  Cookie: NO
+PAYLOAD MIME: text/plain;charset=UTF-8
+PAYLOAD: {}
+RESPONSE STATUS: 200
+RESPONSE MIME: application/json
+RESPONSE: {
+  "credits": 44890,
+  "g1MembershipState": "AVAILABLE_CREDITS",
+  "isUserAnimateCountryEnabled": true,
+  "userPaygateTier": "PAYGATE_TIER_TWO",
+  "isGemPix2CreditAvailable": false
+}
+
+

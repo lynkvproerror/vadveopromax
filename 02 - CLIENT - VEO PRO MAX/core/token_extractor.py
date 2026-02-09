@@ -1,6 +1,15 @@
 """
 VEO Pro Max - Token Extractor
 
+.. deprecated::
+    For ongoing token operations, use RecaptchaBrowserSession instead.
+    TokenExtractor is retained ONLY for initial login flow (one-shot extraction).
+    RecaptchaBrowserSession provides:
+    - Persistent browser context (keeps cookies alive)
+    - Auto-refresh reCAPTCHA tokens (every ~80s)
+    - Header interception for all 5 x-browser-* headers
+    - Integration with AccountManager lifecycle
+
 Unified extraction of all required tokens from headless browser session.
 
 Reference: TOKEN_SECURITY.md (Methods C, D, and Unified Flow)
@@ -73,13 +82,20 @@ class TokenExtractor:
     """
     Extract all required tokens from headless browser session.
     
+    .. deprecated::
+        Use RecaptchaBrowserSession for ongoing operations.
+        TokenExtractor is only for initial login (one-shot extraction).
+        After login, AccountManager.ensure_browser() creates a
+        RecaptchaBrowserSession that handles reCAPTCHA refresh and
+        header capture continuously.
+    
     Tokens extracted:
     1. Access Token - from __NEXT_DATA__ JSON
     2. reCAPTCHA Token - from grecaptcha.execute()
     3. x-browser-validation - from intercepted API request
     4. x-client-data - from intercepted API request
     
-    Usage:
+    Usage (initial login only):
         extractor = TokenExtractor()
         await extractor.initialize()
         tokens = await extractor.extract_all(profile_path)

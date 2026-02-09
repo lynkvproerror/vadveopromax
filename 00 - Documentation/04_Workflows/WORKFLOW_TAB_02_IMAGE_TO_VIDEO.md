@@ -324,18 +324,42 @@ QUEUE_FULL_POPUP_XPATH = "//li[@data-sonner-toast and .//i[normalize-space(text(
 
 ---
 
-## 🔄 continuation Mode (Frame Chaining)
+## 🔄 Continuation Mode (Frame Chaining)
 
-Khi continuation mode được bật, ảnh nguồn được thay thế bằng frame cuối từ video trước:
+Khi continuation mode được bật, extracted frame **thay thế** ảnh upload theo Frame Source × Frame Mode matrix.
+
+### Processing Pipeline (LOCAL → API)
 
 ```mermaid
 flowchart LR
-    A[Video #1 complete] --> B[Extract last frame]
-    B --> C[Convert to base64]
-    C --> D[Use as image for #2]
-    D --> E[Skip user image]
-    E --> F[processImageAndPromptOnPage]
+    A[Video #1 complete] --> B[Download 720p]
+    B --> C[FFmpeg Extract Frame]
+    C --> D[Base64 Encode]
+    D --> E[Upload Image API]
+    E --> F[Get mediaId]
+    F --> G[Generate Video #2]
 ```
+
+### Frame Source × Frame Mode Matrix
+
+#### `frame_source = LAST` (default):
+
+| Frame Mode | CONT OFF | CONT ON |
+|------------|----------|--------|
+| **Start Only** | Upload → startImage | 🔗 Extracted **thay thế Start** |
+| **End Only** | Upload → endImage | ❌ CONT **auto-disable** |
+| **Start+End** | Upload cả 2 | 🔗 Extracted **thay thế Start** + giữ End |
+
+#### `frame_source = FIRST` (tester only — ngược lại):
+
+| Frame Mode | CONT OFF | CONT ON |
+|------------|----------|--------|
+| **Start Only** | Upload → startImage | ❌ CONT **auto-disable** |
+| **End Only** | Upload → endImage | 🔗 Extracted **thay thế End** |
+| **Start+End** | Upload cả 2 | Giữ Start + 🔗 Extracted **thay thế End** |
+
+> [!NOTE]
+> "Last/First Frame" = **nguồn trích xuất** (lấy frame từ cuối/đầu video trước), KHÔNG phải vị trí đặt trong video mới.
 
 ---
 
@@ -344,4 +368,4 @@ flowchart LR
 | File | Description |
 |------|-------------|
 | [TAB_02_IMAGE_TO_VIDEO.md](../01_UI_UX/TAB_02_IMAGE_TO_VIDEO.md) | UI Layout & Widgets |
-| [FRAME_CONTINUATION_WORKFLOW.md](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md) | Frame extraction & chaining |
+| [FRAME_CONTINUATION_WORKFLOW.md](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md) | Full continuation workflow & terminology |

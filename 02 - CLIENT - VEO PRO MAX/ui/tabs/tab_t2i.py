@@ -146,6 +146,7 @@ class TabT2I(QWidget):
         
         self.import_btn = QPushButton("📥 Import TXT")
         self.import_btn.setProperty("variant", "secondary")
+        self.import_btn.clicked.connect(self._on_import_txt)
         btn_layout.addWidget(self.import_btn)
         
         self.clear_btn = QPushButton("🗑️ Clear")
@@ -186,6 +187,8 @@ class TabT2I(QWidget):
         
         # Prompt table (simpler than video tabs - no continuation)
         self.prompt_table = PromptTable()
+        self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
+        self.prompt_table.delete_clicked.connect(self._on_delete_prompt)
         layout.addWidget(self.prompt_table)
         
         return frame
@@ -227,11 +230,54 @@ Tips:
         self.prompt_table.set_prompts(prompts)
         self.parsed_title.setText(f"📊 PARSED PROMPTS ({len(prompts)})")
     
+    def _sync_to_input(self, prompts):
+        """Sync prompt table changes back to text input (after edit/delete)."""
+        self.prompt_input.blockSignals(True)
+        text = '\n'.join(p.text for p in prompts)
+        self.prompt_input.setPlainText(text)
+        self.prompt_input.blockSignals(False)
+        self.prompt_count.setText(f"{len(prompts)} prompts")
+    
+    def _on_import_txt(self):
+        """Import prompts from TXT file."""
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Prompts", "", "Text files (*.txt);;All files (*.*)"
+        )
+        if path:
+            with open(path, 'r', encoding='utf-8') as f:
+                self.prompt_input.setPlainText(f.read())
+    
     def _on_clear(self):
         """Clear prompt input."""
         self.prompt_input.clear()
         self.prompt_table.set_prompts([])
         self.parsed_title.setText("📊 PARSED PROMPTS (0)")
+    
+    def _on_edit_prompt(self, row_index: int):
+        """Handle edit prompt action."""
+        from PySide6.QtWidgets import QInputDialog
+        prompts = self.prompt_table.get_prompts()
+        if 0 <= row_index < len(prompts):
+            current_text = prompts[row_index].text
+            new_text, ok = QInputDialog.getMultiLineText(
+                self, "Edit Prompt", "Prompt:", current_text
+            )
+            if ok and new_text:
+                prompts[row_index].text = new_text
+                self.prompt_table.set_prompts(prompts)
+                self._sync_to_input(prompts)
+    
+    def _on_delete_prompt(self, row_index: int):
+        """Handle delete prompt action."""
+        prompts = self.prompt_table.get_prompts()
+        if 0 <= row_index < len(prompts):
+            del prompts[row_index]
+            for i, prompt in enumerate(prompts):
+                prompt.index = i + 1
+            self.prompt_table.set_prompts(prompts)
+            self.parsed_title.setText(f"📊 PARSED PROMPTS ({len(prompts)})")
+            self._sync_to_input(prompts)
     
     def _on_add_to_queue(self):
         """Collect prompts and settings, submit to controller."""
@@ -240,10 +286,42 @@ Tips:
             return
         
         settings = self.sidebar.get_values()
-        settings['mode'] = 'T2I'
-        
-        self.add_to_queue.emit(prompts)
         
         if self.controller:
             self.controller.add_t2i_batch(prompts, settings)
             self.prompt_table.set_prompts([])
+    
+    # ── Session Persistence ─────────────────────────────────────
+    
+    def save_state(self) -> dict:
+        """Save tab state for session persistence."""
+        prompts = self.prompt_table.get_prompts()
+        return {
+            "prompts": [
+                {
+                    "index": p.index,
+                    "text": p.text,
+                    "image_path": p.image_path,
+                }
+                for p in prompts
+            ],
+            "sidebar": self.sidebar.get_values(),
+        }
+    
+    def restore_state(self, data: dict):
+        """Restore tab state from saved session data."""
+        from ui.components.prompt_table import PromptRow
+        
+        if "sidebar" in data:
+            self.sidebar.set_values(data["sidebar"])
+        
+        if "prompts" in data and data["prompts"]:
+            rows = []
+            for pd in data["prompts"]:
+                rows.append(PromptRow(
+                    index=pd.get("index", 0),
+                    text=pd.get("text", ""),
+                    image_path=pd.get("image_path"),
+                ))
+            self.prompt_table.set_prompts(rows)
+

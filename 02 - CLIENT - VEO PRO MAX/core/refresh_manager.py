@@ -1,8 +1,15 @@
 """
-VEO Pro Max - Cookie Refresh Manager
+VEO Pro Max - Session Refresh Manager
 
-Reference: SESSION_06_WORKFLOWS_SECURITY.md
-Role: Manage cookie refresh flow
+Reference: SESSION_06_WORKFLOWS_SECURITY.md, VEO_Web_Client_Protocol_Analysis.md §1.4
+Role: Manage browser session refresh flow
+
+IMPORTANT (B2): REST auth uses x-browser-* headers (from browser context),
+NOT rotating Bearer tokens. "Refresh" means re-extracting session data from
+the live browser, not token rotation. Focus is on:
+- Keeping browser context alive for x-browser-* header extraction
+- Refreshing reCAPTCHA tokens (expire ~80s)
+- Re-extracting session when cookies expire
 """
 
 from dataclasses import dataclass
@@ -29,7 +36,7 @@ class RefreshStatus(str, Enum):
 
 @dataclass
 class RefreshRequest:
-    """A cookie refresh request."""
+    """A session refresh request (browser session keepalive)."""
     email: str
     reason: str
     requested_at: datetime
@@ -39,12 +46,16 @@ class RefreshRequest:
 
 
 class CookieRefreshManager:
-    """Manage cookie refresh operations.
+    """Manage browser session refresh operations.
+    
+    Per Protocol Analysis §1.4: REST endpoints use x-browser-* headers
+    (from browser context) for auth — NOT Bearer tokens. "Refresh" means
+    re-extracting session data from the live browser.
     
     Features:
-    - User-assisted refresh flow
-    - Auto-refresh check timer
-    - Refresh queue management
+    - User-assisted browser re-login flow
+    - Auto-refresh check timer (reCAPTCHA expiry + cookie expiry)
+    - Refresh queue management per-account
     """
     
     REFRESH_CHECK_INTERVAL = 30 * 60  # 30 minutes
@@ -58,6 +69,7 @@ class CookieRefreshManager:
         self._on_refresh_needed: Optional[Callable[[str, str], None]] = None
         self._on_refresh_complete: Optional[Callable[[str, bool], None]] = None
         self._show_refresh_dialog: Optional[Callable[[RefreshRequest], bool]] = None
+        self._on_auto_relogin: Optional[Callable[[str], Optional[str]]] = None
         
         # Timer
         self._timer_thread: Optional[threading.Thread] = None
@@ -86,6 +98,18 @@ class CookieRefreshManager:
         Callback should return True if user completed refresh.
         """
         self._show_refresh_dialog = callback
+    
+    def set_complete_callback(self, callback: Callable[[str, bool], None]):
+        """Set callback when refresh completes. Callback receives (email, success)."""
+        self._on_refresh_complete = callback
+    
+    def set_auto_relogin_callback(self, callback: Callable[[str], Optional[str]]):
+        """Set callback for auto re-login when refresh fails.
+        
+        Callback receives email, returns email if success or None.
+        This is typically profiles_controller.auto_relogin().
+        """
+        self._on_auto_relogin = callback
     
     def request_refresh(self, email: str, reason: str) -> RefreshRequest:
         """Request a cookie refresh.
@@ -167,6 +191,18 @@ class CookieRefreshManager:
         # Notify
         if self._on_refresh_complete:
             self._on_refresh_complete(email, success)
+        
+        # Auto re-login on failure
+        if not success and self._on_auto_relogin:
+            print(f"[RefreshManager] 🔑 Refresh failed for {email}, attempting auto re-login...")
+            try:
+                relogin_result = self._on_auto_relogin(email)
+                if relogin_result:
+                    print(f"[RefreshManager] ✅ Auto re-login successful for {email}")
+                else:
+                    print(f"[RefreshManager] ❌ Auto re-login failed for {email}")
+            except Exception as e:
+                print(f"[RefreshManager] Auto re-login error: {e}")
     
     def cancel_refresh(self, email: str):
         """Cancel a pending refresh request."""

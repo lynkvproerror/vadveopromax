@@ -1,0 +1,839 @@
+================================================================================
+reCAPTCHA TOKEN ANALYSIS FROM 54 HAR FILES
+================================================================================
+
+Total POST requests with recaptcha token found: 94
+Total generate/upscale URLs found: 128
+
+================================================================================
+DETAIL: Each reCAPTCHA token found
+================================================================================
+
+[1] FILE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA57uAL6OvX4R...PLICATION_TYPE_WEB'}" (len=1766)
+
+[2] FILE: 01.2 169 ingedients to video done 4 video prompt 3 anh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4hq4-lbPxcL...PLICATION_TYPE_WEB'}" (len=1766)
+
+[3] FILE: 01.3 169 ingedients to video done 4 video prompt 3 anh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA45LAC7BKDC4...PLICATION_TYPE_WEB'}" (len=1766)
+
+[4] FILE: 01.3 169 ingedients to video submit 4 video prompt 3 anh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA45LAC7BKDC4...PLICATION_TYPE_WEB'}" (len=1766)
+
+[5] FILE: 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA71jcHG4-m3e...PLICATION_TYPE_WEB'}" (len=1787)
+
+[6] FILE: 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA43_99wt7j7a...PLICATION_TYPE_WEB'}" (len=1766)
+
+[7] FILE: 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA77CzRDJN8Kj...PLICATION_TYPE_WEB'}" (len=1787)
+
+[8] FILE: 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6k3qcEp0Daf...PLICATION_TYPE_WEB'}" (len=1787)
+
+[9] FILE: 916 frame to video submit 4 video prompt - Upscale all done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA71jcHG4-m3e...PLICATION_TYPE_WEB'}" (len=1787)
+
+[10] FILE: 916 frame to video submit 4 video prompt - Upscale all done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA43_99wt7j7a...PLICATION_TYPE_WEB'}" (len=1766)
+
+[11] FILE: 916 frame to video submit 4 video prompt - Upscale all done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA77CzRDJN8Kj...PLICATION_TYPE_WEB'}" (len=1787)
+
+[12] FILE: 916 frame to video submit 4 video prompt - Upscale all done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6k3qcEp0Daf...PLICATION_TYPE_WEB'}" (len=1787)
+
+[13] FILE: 916 frame to video submit 4 video prompt - Upscale start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA71jcHG4-m3e...PLICATION_TYPE_WEB'}" (len=1787)
+
+[14] FILE: 916 frame to video submit 4 video prompt - Upscale start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA43_99wt7j7a...PLICATION_TYPE_WEB'}" (len=1766)
+
+[15] FILE: 916 frame to video submit 4 video prompt - Upscale start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA77CzRDJN8Kj...PLICATION_TYPE_WEB'}" (len=1787)
+
+[16] FILE: 916 frame to video submit 4 video prompt - Upscale start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6k3qcEp0Daf...PLICATION_TYPE_WEB'}" (len=1787)
+
+[17] FILE: 916 frame to video submit 4 video prompt - done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6z7psF_IX4v...PLICATION_TYPE_WEB'}" (len=1744)
+
+[18] FILE: 916 frame to video submit 4 video prompt - start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6z7psF_IX4v...PLICATION_TYPE_WEB'}" (len=1744)
+
+[19] FILE: 916 ingre to video submit 4 video prompt - done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6L7g2DwcA2K...PLICATION_TYPE_WEB'}" (len=1787)
+
+[20] FILE: Download anh 2k.har
+    URL: https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5CltsPcEHcq...PLICATION_TYPE_WEB'}" (len=1766)
+
+[21] FILE: Download anh 4k bat dau.har
+    URL: https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4ShzbjDjp4x...PLICATION_TYPE_WEB'}" (len=1894)
+
+[22] FILE: Download anh 4k hoan thanh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4ShzbjDjp4x...PLICATION_TYPE_WEB'}" (len=1894)
+
+[23] FILE: Download upscale 1080p 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4YWrYHne2ly...PLICATION_TYPE_WEB'}" (len=1830)
+
+[24] FILE: Download upscale 1080p 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA73b9Asf4k_W...PLICATION_TYPE_WEB'}" (len=1808)
+
+[25] FILE: Download upscale 1080p 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6ynt9WlicVb...PLICATION_TYPE_WEB'}" (len=1787)
+
+[26] FILE: Download upscale 1080p 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6wSKJG3hbtA...PLICATION_TYPE_WEB'}" (len=1830)
+
+[27] FILE: Download upscale 1080p 4 vid.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4YWrYHne2ly...PLICATION_TYPE_WEB'}" (len=1830)
+
+[28] FILE: Download upscale 1080p 4 vid.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA73b9Asf4k_W...PLICATION_TYPE_WEB'}" (len=1808)
+
+[29] FILE: Download upscale 1080p 4 vid.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6ynt9WlicVb...PLICATION_TYPE_WEB'}" (len=1787)
+
+[30] FILE: Download upscale 1080p 4 vid.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6wSKJG3hbtA...PLICATION_TYPE_WEB'}" (len=1830)
+
+[31] FILE: Download upscale 4k 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA7TLzyLNAhby...PLICATION_TYPE_WEB'}" (len=1787)
+
+[32] FILE: Download upscale 4k 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA59OL-pqu4BS...PLICATION_TYPE_WEB'}" (len=1808)
+
+[33] FILE: Download upscale 4k 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4z_y0eN53Wr...PLICATION_TYPE_WEB'}" (len=1787)
+
+[34] FILE: Download upscale 4k 4 vid done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4UI2Jh2auUs...PLICATION_TYPE_WEB'}" (len=1744)
+
+[35] FILE: Download upscale 4k 4 vid processing.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA7TLzyLNAhby...PLICATION_TYPE_WEB'}" (len=1787)
+
+[36] FILE: Download upscale 4k 4 vid processing.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA59OL-pqu4BS...PLICATION_TYPE_WEB'}" (len=1808)
+
+[37] FILE: Download upscale 4k 4 vid processing.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4z_y0eN53Wr...PLICATION_TYPE_WEB'}" (len=1787)
+
+[38] FILE: Download upscale 4k 4 vid processing.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4UI2Jh2auUs...PLICATION_TYPE_WEB'}" (len=1744)
+
+[39] FILE: Download upscale 4k 4 vid start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA7TLzyLNAhby...PLICATION_TYPE_WEB'}" (len=1787)
+
+[40] FILE: Download upscale 4k 4 vid start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA59OL-pqu4BS...PLICATION_TYPE_WEB'}" (len=1808)
+
+[41] FILE: Download upscale 4k 4 vid start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4z_y0eN53Wr...PLICATION_TYPE_WEB'}" (len=1787)
+
+[42] FILE: Download upscale 4k 4 vid start.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4UI2Jh2auUs...PLICATION_TYPE_WEB'}" (len=1744)
+
+[43] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5w_xpJmNPoQ...PLICATION_TYPE_WEB'}" (len=1766)
+
+[44] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5w_xpJmNPoQ...PLICATION_TYPE_WEB'}" (len=1766)
+
+[45] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5w_xpJmNPoQ...PLICATION_TYPE_WEB'}" (len=1766)
+
+[46] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[2].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5w_xpJmNPoQ...PLICATION_TYPE_WEB'}" (len=1766)
+
+[47] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[3].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5w_xpJmNPoQ...PLICATION_TYPE_WEB'}" (len=1766)
+
+[48] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5QCBxyvwo9W...PLICATION_TYPE_WEB'}" (len=1744)
+
+[49] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5QCBxyvwo9W...PLICATION_TYPE_WEB'}" (len=1744)
+
+[50] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5QCBxyvwo9W...PLICATION_TYPE_WEB'}" (len=1744)
+
+[51] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[2].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5QCBxyvwo9W...PLICATION_TYPE_WEB'}" (len=1744)
+
+[52] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[3].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5QCBxyvwo9W...PLICATION_TYPE_WEB'}" (len=1744)
+
+[53] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4fC7lLVOw69...PLICATION_TYPE_WEB'}" (len=1744)
+
+[54] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4fC7lLVOw69...PLICATION_TYPE_WEB'}" (len=1744)
+
+[55] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4fC7lLVOw69...PLICATION_TYPE_WEB'}" (len=1744)
+
+[56] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[2].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4fC7lLVOw69...PLICATION_TYPE_WEB'}" (len=1744)
+
+[57] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[3].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4fC7lLVOw69...PLICATION_TYPE_WEB'}" (len=1744)
+
+[58] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6XrPMMFGzSo...PLICATION_TYPE_WEB'}" (len=1766)
+
+[59] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6XrPMMFGzSo...PLICATION_TYPE_WEB'}" (len=1766)
+
+[60] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6XrPMMFGzSo...PLICATION_TYPE_WEB'}" (len=1766)
+
+[61] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[2].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6XrPMMFGzSo...PLICATION_TYPE_WEB'}" (len=1766)
+
+[62] FILE: Full tạo ảnh.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batch
+    KEY: requests[3].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6XrPMMFGzSo...PLICATION_TYPE_WEB'}" (len=1766)
+
+[63] FILE: Tao hinh image 4.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5TyYyapeNjC...PLICATION_TYPE_WEB'}" (len=1808)
+
+[64] FILE: Tao hinh image 4.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5TyYyapeNjC...PLICATION_TYPE_WEB'}" (len=1808)
+
+[65] FILE: Tao hinh image 4.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5TyYyapeNjC...PLICATION_TYPE_WEB'}" (len=1808)
+
+[66] FILE: Tao hinh image 4.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[2].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5TyYyapeNjC...PLICATION_TYPE_WEB'}" (len=1808)
+
+[67] FILE: Tao hinh image 4.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[3].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5TyYyapeNjC...PLICATION_TYPE_WEB'}" (len=1808)
+
+[68] FILE: Tao hinh nanobanana pro.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA74_Kym12mZ6...PLICATION_TYPE_WEB'}" (len=1830)
+
+[69] FILE: Tao hinh nanobanana pro.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA74_Kym12mZ6...PLICATION_TYPE_WEB'}" (len=1830)
+
+[70] FILE: Tao hinh nanobanana pro.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA74_Kym12mZ6...PLICATION_TYPE_WEB'}" (len=1830)
+
+[71] FILE: Tao hinh nanobanana pro.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[2].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA74_Kym12mZ6...PLICATION_TYPE_WEB'}" (len=1830)
+
+[72] FILE: Tao hinh nanobanana pro.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[3].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA74_Kym12mZ6...PLICATION_TYPE_WEB'}" (len=1830)
+
+[73] FILE: Tao hinh nanobanana.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4QEssyzk_H_...PLICATION_TYPE_WEB'}" (len=1808)
+
+[74] FILE: Tao hinh nanobanana.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4QEssyzk_H_...PLICATION_TYPE_WEB'}" (len=1808)
+
+[75] FILE: Tao hinh nanobanana.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4QEssyzk_H_...PLICATION_TYPE_WEB'}" (len=1808)
+
+[76] FILE: Tao hinh nanobanana.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[2].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4QEssyzk_H_...PLICATION_TYPE_WEB'}" (len=1808)
+
+[77] FILE: Tao hinh nanobanana.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[3].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4QEssyzk_H_...PLICATION_TYPE_WEB'}" (len=1808)
+
+[78] FILE: Text to image.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4mxC9BkrAyE...PLICATION_TYPE_WEB'}" (len=2235)
+
+[79] FILE: Text to image.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4mxC9BkrAyE...PLICATION_TYPE_WEB'}" (len=2235)
+
+[80] FILE: Text to video 1.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5AInSldiYtu...PLICATION_TYPE_WEB'}" (len=2214)
+
+[81] FILE: Text to video 2.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5AInSldiYtu...PLICATION_TYPE_WEB'}" (len=2214)
+
+[82] FILE: chon firt va last bắt đầu 10.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4xLI1naQbjw...PLICATION_TYPE_WEB'}" (len=1787)
+
+[83] FILE: chon firt va last bắt đầu 25.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4xLI1naQbjw...PLICATION_TYPE_WEB'}" (len=1787)
+
+[84] FILE: chon firt va last bắt đầu 50 2video dau xong 2 video sau 65.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4xLI1naQbjw...PLICATION_TYPE_WEB'}" (len=1787)
+
+[85] FILE: chon firt va last bắt đầu 50 4video done.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4xLI1naQbjw...PLICATION_TYPE_WEB'}" (len=1787)
+
+[86] FILE: chon firt va last bắt đầu 50.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4xLI1naQbjw...PLICATION_TYPE_WEB'}" (len=1787)
+
+[87] FILE: chon firt va last bắt đầu.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': 'HFaHZsew9KPgI3W2BZR...PLICATION_TYPE_WEB'}" (len=2582)
+
+[88] FILE: download image 4k.har
+    URL: https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA6PujP6AksLr...PLICATION_TYPE_WEB'}" (len=1830)
+
+[89] FILE: image to image 2.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4mxC9BkrAyE...PLICATION_TYPE_WEB'}" (len=2235)
+
+[90] FILE: image to image 2.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA4mxC9BkrAyE...PLICATION_TYPE_WEB'}" (len=2235)
+
+[91] FILE: labs.google.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5FpV9F9S0qB...PLICATION_TYPE_WEB'}" (len=1808)
+
+[92] FILE: labs.google.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[0].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5FpV9F9S0qB...PLICATION_TYPE_WEB'}" (len=1808)
+
+[93] FILE: labs.google.har
+    URL: https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batch
+    KEY: requests[1].clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5FpV9F9S0qB...PLICATION_TYPE_WEB'}" (len=1808)
+
+[94] FILE: tao video vs anh first frame.har
+    URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage
+    KEY: clientContext.recaptchaContext
+    TOKEN: "{'token': '0cAFcWeA5T6Org6Awgo...PLICATION_TYPE_WEB'}" (len=1808)
+
+================================================================================
+UNIQUENESS CHECK: Per-file token analysis
+================================================================================
+
+--- 01. ingedients to video hoan thanh 4 video prompt 3 anh.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA57uAL6OvX4R..." len=1766
+
+--- 01.2 169 ingedients to video done 4 video prompt 3 anh.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4hq4-lbPxcL..." len=1766
+
+--- 01.3 169 ingedients to video done 4 video prompt 3 anh.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA45LAC7BKDC4..." len=1766
+
+--- 01.3 169 ingedients to video submit 4 video prompt 3 anh.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA45LAC7BKDC4..." len=1766
+
+--- 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA71jcHG4-m3e..." len=1787
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA43_99wt7j7a..." len=1766
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA77CzRDJN8Kj..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA6k3qcEp0Daf..." len=1787
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- 916 frame to video submit 4 video prompt - Upscale all done.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA71jcHG4-m3e..." len=1787
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA43_99wt7j7a..." len=1766
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA77CzRDJN8Kj..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA6k3qcEp0Daf..." len=1787
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- 916 frame to video submit 4 video prompt - Upscale start.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA71jcHG4-m3e..." len=1787
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA43_99wt7j7a..." len=1766
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA77CzRDJN8Kj..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA6k3qcEp0Daf..." len=1787
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- 916 frame to video submit 4 video prompt - done.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA6z7psF_IX4v..." len=1744
+
+--- 916 frame to video submit 4 video prompt - start.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA6z7psF_IX4v..." len=1744
+
+--- 916 ingre to video submit 4 video prompt - done.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA6L7g2DwcA2K..." len=1787
+
+--- Download anh 2k.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA5CltsPcEHcq..." len=1766
+
+--- Download anh 4k bat dau.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4ShzbjDjp4x..." len=1894
+
+--- Download anh 4k hoan thanh.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4ShzbjDjp4x..." len=1894
+
+--- Download upscale 1080p 4 vid done.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4YWrYHne2ly..." len=1830
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA73b9Asf4k_W..." len=1808
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA6ynt9WlicVb..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA6wSKJG3hbtA..." len=1830
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- Download upscale 1080p 4 vid.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4YWrYHne2ly..." len=1830
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA73b9Asf4k_W..." len=1808
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA6ynt9WlicVb..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA6wSKJG3hbtA..." len=1830
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- Download upscale 4k 4 vid done.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA7TLzyLNAhby..." len=1787
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA59OL-pqu4BS..." len=1808
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA4z_y0eN53Wr..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA4UI2Jh2auUs..." len=1744
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- Download upscale 4k 4 vid processing.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA7TLzyLNAhby..." len=1787
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA59OL-pqu4BS..." len=1808
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA4z_y0eN53Wr..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA4UI2Jh2auUs..." len=1744
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- Download upscale 4k 4 vid start.har ---
+    Token count: 4
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA7TLzyLNAhby..." len=1787
+    [2] clientContext.recaptchaContext: "{'token': '0cAFcWeA59OL-pqu4BS..." len=1808
+    [3] clientContext.recaptchaContext: "{'token': '0cAFcWeA4z_y0eN53Wr..." len=1787
+    [4] clientContext.recaptchaContext: "{'token': '0cAFcWeA4UI2Jh2auUs..." len=1744
+    >>> ALL 4 TOKENS ARE UNIQUE (DIFFERENT)
+
+--- Full tạo ảnh.har ---
+    Token count: 20
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA5w_xpJmNPoQ..." len=1766
+    [2] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA5w_xpJmNPoQ..." len=1766
+    [3] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA5w_xpJmNPoQ..." len=1766
+    [4] requests[2].clientContext.recaptchaContext: "{'token': '0cAFcWeA5w_xpJmNPoQ..." len=1766
+    [5] requests[3].clientContext.recaptchaContext: "{'token': '0cAFcWeA5w_xpJmNPoQ..." len=1766
+    [6] clientContext.recaptchaContext: "{'token': '0cAFcWeA5QCBxyvwo9W..." len=1744
+    [7] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA5QCBxyvwo9W..." len=1744
+    [8] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA5QCBxyvwo9W..." len=1744
+    [9] requests[2].clientContext.recaptchaContext: "{'token': '0cAFcWeA5QCBxyvwo9W..." len=1744
+    [10] requests[3].clientContext.recaptchaContext: "{'token': '0cAFcWeA5QCBxyvwo9W..." len=1744
+    [11] clientContext.recaptchaContext: "{'token': '0cAFcWeA4fC7lLVOw69..." len=1744
+    [12] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA4fC7lLVOw69..." len=1744
+    [13] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA4fC7lLVOw69..." len=1744
+    [14] requests[2].clientContext.recaptchaContext: "{'token': '0cAFcWeA4fC7lLVOw69..." len=1744
+    [15] requests[3].clientContext.recaptchaContext: "{'token': '0cAFcWeA4fC7lLVOw69..." len=1744
+    [16] clientContext.recaptchaContext: "{'token': '0cAFcWeA6XrPMMFGzSo..." len=1766
+    [17] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA6XrPMMFGzSo..." len=1766
+    [18] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA6XrPMMFGzSo..." len=1766
+    [19] requests[2].clientContext.recaptchaContext: "{'token': '0cAFcWeA6XrPMMFGzSo..." len=1766
+    [20] requests[3].clientContext.recaptchaContext: "{'token': '0cAFcWeA6XrPMMFGzSo..." len=1766
+    >>> DUPLICATES FOUND: 4 unique out of 20 total
+
+--- Tao hinh image 4.har ---
+    Token count: 5
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA5TyYyapeNjC..." len=1808
+    [2] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA5TyYyapeNjC..." len=1808
+    [3] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA5TyYyapeNjC..." len=1808
+    [4] requests[2].clientContext.recaptchaContext: "{'token': '0cAFcWeA5TyYyapeNjC..." len=1808
+    [5] requests[3].clientContext.recaptchaContext: "{'token': '0cAFcWeA5TyYyapeNjC..." len=1808
+    >>> DUPLICATES FOUND: 1 unique out of 5 total
+
+--- Tao hinh nanobanana pro.har ---
+    Token count: 5
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA74_Kym12mZ6..." len=1830
+    [2] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA74_Kym12mZ6..." len=1830
+    [3] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA74_Kym12mZ6..." len=1830
+    [4] requests[2].clientContext.recaptchaContext: "{'token': '0cAFcWeA74_Kym12mZ6..." len=1830
+    [5] requests[3].clientContext.recaptchaContext: "{'token': '0cAFcWeA74_Kym12mZ6..." len=1830
+    >>> DUPLICATES FOUND: 1 unique out of 5 total
+
+--- Tao hinh nanobanana.har ---
+    Token count: 5
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4QEssyzk_H_..." len=1808
+    [2] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA4QEssyzk_H_..." len=1808
+    [3] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA4QEssyzk_H_..." len=1808
+    [4] requests[2].clientContext.recaptchaContext: "{'token': '0cAFcWeA4QEssyzk_H_..." len=1808
+    [5] requests[3].clientContext.recaptchaContext: "{'token': '0cAFcWeA4QEssyzk_H_..." len=1808
+    >>> DUPLICATES FOUND: 1 unique out of 5 total
+
+--- Text to image.har ---
+    Token count: 2
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4mxC9BkrAyE..." len=2235
+    [2] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA4mxC9BkrAyE..." len=2235
+    >>> DUPLICATES FOUND: 1 unique out of 2 total
+
+--- Text to video 1.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA5AInSldiYtu..." len=2214
+
+--- Text to video 2.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA5AInSldiYtu..." len=2214
+
+--- chon firt va last bắt đầu 10.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4xLI1naQbjw..." len=1787
+
+--- chon firt va last bắt đầu 25.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4xLI1naQbjw..." len=1787
+
+--- chon firt va last bắt đầu 50 2video dau xong 2 video sau 65.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4xLI1naQbjw..." len=1787
+
+--- chon firt va last bắt đầu 50 4video done.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4xLI1naQbjw..." len=1787
+
+--- chon firt va last bắt đầu 50.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4xLI1naQbjw..." len=1787
+
+--- chon firt va last bắt đầu.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': 'HFaHZsew9KPgI3W2BZR..." len=2582
+
+--- download image 4k.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA6PujP6AksLr..." len=1830
+
+--- image to image 2.har ---
+    Token count: 2
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA4mxC9BkrAyE..." len=2235
+    [2] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA4mxC9BkrAyE..." len=2235
+    >>> DUPLICATES FOUND: 1 unique out of 2 total
+
+--- labs.google.har ---
+    Token count: 3
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA5FpV9F9S0qB..." len=1808
+    [2] requests[0].clientContext.recaptchaContext: "{'token': '0cAFcWeA5FpV9F9S0qB..." len=1808
+    [3] requests[1].clientContext.recaptchaContext: "{'token': '0cAFcWeA5FpV9F9S0qB..." len=1808
+    >>> DUPLICATES FOUND: 1 unique out of 3 total
+
+--- tao video vs anh first frame.har ---
+    Token count: 1
+    [1] clientContext.recaptchaContext: "{'token': '0cAFcWeA5T6Org6Awgo..." len=1808
+
+================================================================================
+GENERATE/UPSCALE URL PATTERNS
+================================================================================
+  01. ingedients to video hoan thanh 4 video prompt 3 anh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  01. ingedients to video hoan thanh 4 video prompt 3 anh.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+  01. ingedients to video submit prompt 3 anh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  01.2 169 ingedients to video done 4 video prompt 3 anh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  01.2 169 ingedients to video done 4 video prompt 3 anh.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+  01.2 169 ingedients to video submit 4 video prompt 3 anh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  01.3 169 ingedients to video done 4 video prompt 3 anh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  01.3 169 ingedients to video done 4 video prompt 3 anh.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+  01.3 169 ingedients to video submit 4 video prompt 3 anh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  01.3 169 ingedients to video submit 4 video prompt 3 anh.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale all done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - Upscale start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  916 frame to video submit 4 video prompt - done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  916 frame to video submit 4 video prompt - start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 frame to video submit 4 video prompt - start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  916 ingre to video submit 4 video prompt - done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  916 ingre to video submit 4 video prompt - done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+  916 ingre to video submit 4 video prompt - start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  Download gif 4 vid.har: POST https://aisandbox-pa.googleapis.com/v1/video:generatePinholeGif
+  Download upscale 1080p 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 1080p 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 1080p 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 1080p 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 1080p 4 vid.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 1080p 4 vid.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 1080p 4 vid.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 1080p 4 vid.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 1080p 4 vid.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid processing.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid processing.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid processing.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid processing.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid processing.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid processing.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid processing.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid processing.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid processing.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Download upscale 4k 4 vid start.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Download upscale 4k 4 vid start.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+  Full tạo ảnh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Full tạo ảnh.har: POST https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+  Full tạo ảnh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Full tạo ảnh.har: POST https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+  Full tạo ảnh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Full tạo ảnh.har: POST https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+  Full tạo ảnh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Full tạo ảnh.har: POST https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+  Full tạo ảnh.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  Tao hinh image 4.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  Tao hinh image 4.har: POST https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batchGenerateImages
+  Tao hinh nanobanana pro.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  Tao hinh nanobanana pro.har: POST https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batchGenerateImages
+  Tao hinh nanobanana.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  Tao hinh nanobanana.har: POST https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batchGenerateImages
+  Text to image.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je6241v883763742z89224422997za20gzb9224422997zd922
+  Text to image.har: POST https://aisandbox-pa.googleapis.com/v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batchGenerateImages
+  Text to image.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je6241v883763742z89224422997za20gzb9224422997zd922
+  Text to video 1.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je6241v883763742z89224422997za20gzb9224422997zd922
+  Text to video 1.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText
+  Text to video 2.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je6241v883763742z89224422997za20gzb9224422997zd922
+  Text to video 2.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText
+  chon firt va last bắt đầu 1.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  chon firt va last bắt đầu 10.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  chon firt va last bắt đầu 10.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  chon firt va last bắt đầu 25.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  chon firt va last bắt đầu 25.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  chon firt va last bắt đầu 50 2video dau xong 2 video sau 65.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  chon firt va last bắt đầu 50 2video dau xong 2 video sau 65.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  chon firt va last bắt đầu 50 4video done.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  chon firt va last bắt đầu 50 4video done.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  chon firt va last bắt đầu 50.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  chon firt va last bắt đầu 50.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  chon firt va last bắt đầu.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  chon firt va last bắt đầu.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage
+  image to image 2.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je6241v883763742z89224422997za20gzb9224422997zd922
+  image to image 2.har: POST https://aisandbox-pa.googleapis.com/v1/projects/a89ea3a4-168c-4133-8fb0-7a852f11b33b/flowMedia:batchGenerateImages
+  labs.google.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za200zd883763742&_p=17
+  labs.google.har: POST https://aisandbox-pa.googleapis.com/v1/projects/f5db1342-c676-437b-b763-d97ae2d7cd16/flowMedia:batchGenerateImages
+  tao video vs anh first frame.har: POST https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je61r1v883763742z89224422997za20gzb9224422997zd922
+  tao video vs anh first frame.har: POST https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage
+
+================================================================================
+FINAL SUMMARY
+================================================================================
+HAR files scanned: 54
+HAR files with recaptcha tokens: 35
+Total recaptcha tokens found: 94
+Files with 2+ tokens (can check uniqueness): 15
+Files where ALL tokens are unique: 8

@@ -1,0 +1,466 @@
+Processing 50 HAR files from: D:\Music\Ruby\Produce for Customer\##Tools\VEO Tool\#NEW VEO API\F12 Dev\New
+
+Skipped 327 non-API requests (CSS, JS, images, etc.)
+
+========================================================================================================================
+SECTION 1: FULL AUTH MATRIX PER ENDPOINT (Normalized)
+========================================================================================================================
+
+============================================================
+  CATEGORY: AUTH (1 unique endpoints)
+============================================================
+
+  [GET /fx/api/auth/session]
+    Occurrences: 9 across 6 files
+    Cookie header: 0/9 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+============================================================
+  CATEGORY: TRPC (20 unique endpoints)
+============================================================
+
+  [general.fetchFeatureAvailability]
+    Occurrences: 3 across 3 files
+    Cookie header: 0/3 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [general.fetchToolAvailability]
+    Occurrences: 3 across 3 files
+    Cookie header: 0/3 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [general.fetchUserAcknowledgement]
+    Occurrences: 77 across 22 files
+    Cookie header: 0/77 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [general.fetchUserLocale]
+    Occurrences: 5 across 5 files
+    Cookie header: 0/5 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [general.fetchUserPreferences]
+    Occurrences: 15 across 6 files
+    Cookie header: 0/15 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [general.reportClientSideError]
+    Occurrences: 1 across 1 files
+    Cookie header: 0/1 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [general.submitBatchLog]
+    Occurrences: 346 across 45 files
+    Cookie header: 0/346 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [general.submitUserAcknowledgement]
+    Occurrences: 6 across 6 files
+    Cookie header: 0/6 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [media.fetchFlowUserIngredients]
+    Occurrences: 2 across 2 files
+    Cookie header: 0/2 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [media.fetchUserHistoryDirectly]
+    Occurrences: 1015 across 23 files
+    Cookie header: 0/1015 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [project.createProject]
+    Occurrences: 1 across 1 files
+    Cookie header: 0/1 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [project.getProject]
+    Occurrences: 3 across 3 files
+    Cookie header: 0/3 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [project.searchProjectScenes]
+    Occurrences: 80 across 46 files
+    Cookie header: 0/80 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [project.searchProjectWorkflows]
+    Occurrences: 4 across 4 files
+    Cookie header: 0/4 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [videoFx.getFlowAppConfig]
+    Occurrences: 4 across 4 files
+    Cookie header: 0/4 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [videoFx.getUserSettings]
+    Occurrences: 3 across 3 files
+    Cookie header: 0/3 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [videoFx.getVideoModelConfig]
+    Occurrences: 3 across 3 files
+    Cookie header: 0/3 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [videoFx.listPreambles]
+    Occurrences: 3 across 3 files
+    Cookie header: 0/3 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [videoFx.setLastSelectedVideoAspectRatio]
+    Occurrences: 19 across 14 files
+    Cookie header: 0/19 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+  [videoFx.setLastSelectedVideoModelKey]
+    Occurrences: 56 across 11 files
+    Cookie header: 0/56 (0%)
+    API Key: NONE
+    Custom Headers: NONE
+    reCAPTCHA in payload: NO
+    Content-Type: application/json
+
+============================================================
+  CATEGORY: REST (12 unique endpoints)
+============================================================
+
+  [GET /v1/credits]
+    Occurrences: 7 across 7 files
+    Cookie header: 0/7 (0%)
+    API Key: {'URL_query': 7}
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: NO
+
+  [GET /v1/media/{id}]
+    Occurrences: 351 across 15 files
+    Cookie header: 0/351 (0%)
+    API Key: {'URL_query': 351, 'header_x-goog-api-key': 72}
+    Custom Headers (5/5): ALL PRESENT in every request
+    SPECIAL HEADER [x-goog-api-key]: 72/351
+    reCAPTCHA in payload: NO
+
+  [POST /v1/flow/upsampleImage]
+    Occurrences: 4 across 4 files
+    Cookie header: 0/4 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: YES (4/4)
+      Paths: clientContext.recaptchaContext
+    Content-Type: text/plain
+
+  [POST /v1/projects/{id}/flowMedia:batchGenerateImages]
+    Occurrences: 8 across 5 files
+    Cookie header: 0/8 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: YES (8/8)
+      Paths: clientContext.recaptchaContext, requests[0].clientContext.recaptchaContext, requests[1].clientContext.recaptchaContext, requests[2].clientContext.recaptchaContext, requests[3].clientContext.recaptchaContext
+    Content-Type: text/plain
+
+  [POST /v1/video:batchAsyncGenerateVideoReferenceImages]
+    Occurrences: 5 across 5 files
+    Cookie header: 0/5 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: YES (5/5)
+      Paths: clientContext.recaptchaContext
+    Content-Type: text/plain
+
+  [POST /v1/video:batchAsyncGenerateVideoStartAndEndImage]
+    Occurrences: 8 across 8 files
+    Cookie header: 0/8 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: YES (8/8)
+      Paths: clientContext.recaptchaContext
+    Content-Type: text/plain
+
+  [POST /v1/video:batchAsyncGenerateVideoStartImage]
+    Occurrences: 1 across 1 files
+    Cookie header: 0/1 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: YES (1/1)
+      Paths: clientContext.recaptchaContext
+    Content-Type: text/plain
+
+  [POST /v1/video:batchAsyncGenerateVideoUpsampleVideo]
+    Occurrences: 32 across 8 files
+    Cookie header: 0/32 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: YES (32/32)
+      Paths: clientContext.recaptchaContext
+    Content-Type: text/plain
+
+  [POST /v1/video:batchCheckAsyncVideoGenerationStatus]
+    Occurrences: 721 across 21 files
+    Cookie header: 0/721 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: NO
+    Content-Type: text/plain
+
+  [POST /v1/video:generatePinholeGif]
+    Occurrences: 1 across 1 files
+    Cookie header: 0/1 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: NO
+    Content-Type: text/plain
+
+  [POST /v1/whisk:getVideoCreditStatus]
+    Occurrences: 9 across 3 files
+    Cookie header: 0/9 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: NO
+    Content-Type: text/plain
+
+  [POST aisandbox(unknown)]
+    Occurrences: 36 across 19 files
+    Cookie header: 0/36 (0%)
+    API Key: {'header_x-goog-api-key': 5}
+    Custom Headers (5/5): ALL PRESENT in every request
+    SPECIAL HEADER [x-goog-api-key]: 5/36
+    reCAPTCHA in payload: NO
+    Content-Type: text/plain
+
+============================================================
+  CATEGORY: RECAPTCHA (2 unique endpoints)
+============================================================
+
+  [POST recaptcha/enterprise/clr]
+    Occurrences: 62 across 35 files
+    Cookie header: 0/62 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: NO
+
+  [POST recaptcha/enterprise/reload]
+    Occurrences: 61 across 34 files
+    Cookie header: 0/61 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: NO
+    Content-Type: application/x-protobuffer
+
+============================================================
+  CATEGORY: STORAGE (1 unique endpoints)
+============================================================
+
+  [GET storage.googleapis.com]
+    Occurrences: 4 across 1 files
+    Cookie header: 0/4 (0%)
+    API Key: NONE
+    Custom Headers (5/5): ALL PRESENT in every request
+    reCAPTCHA in payload: NO
+    Signed URL: YES (4/4)
+
+
+========================================================================================================================
+SECTION 2: COOKIES DEEP DIVE
+========================================================================================================================
+
+All unique cookie names found across all endpoints (0):
+
+  AUTH: 0 endpoints WITH cookies, 1 WITHOUT
+
+  TRPC: 0 endpoints WITH cookies, 20 WITHOUT
+
+  REST: 0 endpoints WITH cookies, 12 WITHOUT
+
+  RECAPTCHA: 0 endpoints WITH cookies, 2 WITHOUT
+
+  STORAGE: 0 endpoints WITH cookies, 1 WITHOUT
+
+
+========================================================================================================================
+SECTION 3: TRPC AUTHENTICATION DETAILS
+========================================================================================================================
+  general.fetchFeatureAvailability: cookies=0/3, special_headers=none
+  general.fetchToolAvailability: cookies=0/3, special_headers=none
+  general.fetchUserAcknowledgement: cookies=0/77, special_headers=none
+  general.fetchUserLocale: cookies=0/5, special_headers=none
+  general.fetchUserPreferences: cookies=0/15, special_headers=none
+  general.reportClientSideError: cookies=0/1, special_headers=none
+  general.submitBatchLog: cookies=0/346, special_headers=none
+  general.submitUserAcknowledgement: cookies=0/6, special_headers=none
+  media.fetchFlowUserIngredients: cookies=0/2, special_headers=none
+  media.fetchUserHistoryDirectly: cookies=0/1015, special_headers=none
+  project.createProject: cookies=0/1, special_headers=none
+  project.getProject: cookies=0/3, special_headers=none
+  project.searchProjectScenes: cookies=0/80, special_headers=none
+  project.searchProjectWorkflows: cookies=0/4, special_headers=none
+  videoFx.getFlowAppConfig: cookies=0/4, special_headers=none
+  videoFx.getUserSettings: cookies=0/3, special_headers=none
+  videoFx.getVideoModelConfig: cookies=0/3, special_headers=none
+  videoFx.listPreambles: cookies=0/3, special_headers=none
+  videoFx.setLastSelectedVideoAspectRatio: cookies=0/19, special_headers=none
+  videoFx.setLastSelectedVideoModelKey: cookies=0/56, special_headers=none
+
+
+========================================================================================================================
+SECTION 4: REST POST API KEY DEEP ANALYSIS
+========================================================================================================================
+  POST /v1/flow/upsampleImage
+    Total: 4, API Key locations: NONE, x-goog-api-key header: 0/4
+  POST /v1/projects/{id}/flowMedia:batchGenerateImages
+    Total: 8, API Key locations: NONE, x-goog-api-key header: 0/8
+  POST /v1/video:batchAsyncGenerateVideoReferenceImages
+    Total: 5, API Key locations: NONE, x-goog-api-key header: 0/5
+  POST /v1/video:batchAsyncGenerateVideoStartAndEndImage
+    Total: 8, API Key locations: NONE, x-goog-api-key header: 0/8
+  POST /v1/video:batchAsyncGenerateVideoStartImage
+    Total: 1, API Key locations: NONE, x-goog-api-key header: 0/1
+  POST /v1/video:batchAsyncGenerateVideoUpsampleVideo
+    Total: 32, API Key locations: NONE, x-goog-api-key header: 0/32
+  POST /v1/video:batchCheckAsyncVideoGenerationStatus
+    Total: 721, API Key locations: NONE, x-goog-api-key header: 0/721
+  POST /v1/video:generatePinholeGif
+    Total: 1, API Key locations: NONE, x-goog-api-key header: 0/1
+  POST /v1/whisk:getVideoCreditStatus
+    Total: 9, API Key locations: NONE, x-goog-api-key header: 0/9
+  POST aisandbox(unknown)
+    Total: 36, API Key locations: {'header_x-goog-api-key': 5}, x-goog-api-key header: 5/36
+
+
+========================================================================================================================
+SECTION 5: GAP ANALYSIS - Endpoints in HAR but possibly NOT in doc §1.4.D
+========================================================================================================================
+
+Endpoints found in HAR but possibly UNDOCUMENTED:
+  ❓ POST /v1/video:generatePinholeGif (count: 1, files: 1)
+  ❓ POST aisandbox(unknown) (count: 36, files: 19)
+
+
+========================================================================================================================
+SECTION 6: COMPLETE ENDPOINT INVENTORY
+========================================================================================================================
+
+  AUTH (1 unique):
+    GET /fx/api/auth/session [9 calls, 6 files]
+
+  TRPC (20 unique):
+    general.fetchFeatureAvailability [3 calls, 3 files]
+    general.fetchToolAvailability [3 calls, 3 files]
+    general.fetchUserAcknowledgement [77 calls, 22 files]
+    general.fetchUserLocale [5 calls, 5 files]
+    general.fetchUserPreferences [15 calls, 6 files]
+    general.reportClientSideError [1 calls, 1 files]
+    general.submitBatchLog [346 calls, 45 files]
+    general.submitUserAcknowledgement [6 calls, 6 files]
+    media.fetchFlowUserIngredients [2 calls, 2 files]
+    media.fetchUserHistoryDirectly [1015 calls, 23 files]
+    project.createProject [1 calls, 1 files]
+    project.getProject [3 calls, 3 files]
+    project.searchProjectScenes [80 calls, 46 files]
+    project.searchProjectWorkflows [4 calls, 4 files]
+    videoFx.getFlowAppConfig [4 calls, 4 files]
+    videoFx.getUserSettings [3 calls, 3 files]
+    videoFx.getVideoModelConfig [3 calls, 3 files]
+    videoFx.listPreambles [3 calls, 3 files]
+    videoFx.setLastSelectedVideoAspectRatio [19 calls, 14 files]
+    videoFx.setLastSelectedVideoModelKey [56 calls, 11 files]
+
+  REST (12 unique):
+    GET /v1/credits [7 calls, 7 files]
+    GET /v1/media/{id} [351 calls, 15 files]
+    POST /v1/flow/upsampleImage [4 calls, 4 files]
+    POST /v1/projects/{id}/flowMedia:batchGenerateImages [8 calls, 5 files]
+    POST /v1/video:batchAsyncGenerateVideoReferenceImages [5 calls, 5 files]
+    POST /v1/video:batchAsyncGenerateVideoStartAndEndImage [8 calls, 8 files]
+    POST /v1/video:batchAsyncGenerateVideoStartImage [1 calls, 1 files]
+    POST /v1/video:batchAsyncGenerateVideoUpsampleVideo [32 calls, 8 files]
+    POST /v1/video:batchCheckAsyncVideoGenerationStatus [721 calls, 21 files]
+    POST /v1/video:generatePinholeGif [1 calls, 1 files]
+    POST /v1/whisk:getVideoCreditStatus [9 calls, 3 files]
+    POST aisandbox(unknown) [36 calls, 19 files]
+
+  RECAPTCHA (2 unique):
+    POST recaptcha/enterprise/clr [62 calls, 35 files]
+    POST recaptcha/enterprise/reload [61 calls, 34 files]
+
+  STORAGE (1 unique):
+    GET storage.googleapis.com [4 calls, 1 files]
+
+
+========================================================================================================================
+SECTION 7: SUMMARY STATISTICS
+========================================================================================================================
+
+  Total unique endpoints: 36
+  Total API requests analyzed: 2968
+  Total HAR files: 50
+  Skipped non-API requests: 327
+
+  Auth Method Distribution:
+    Endpoints with Cookie header:      0/36
+    Endpoints with API Key:             3/36
+    Endpoints with Custom Headers 5/5:  15/36
+    Endpoints with reCAPTCHA payload:    6/36
+    Endpoints with Signed URL:           1/36
+    Endpoints with Authorization hdr:    0/36
+    Endpoints with x-goog-recaptcha hdr: 0/36

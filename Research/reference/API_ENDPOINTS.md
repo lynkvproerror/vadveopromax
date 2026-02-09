@@ -24,19 +24,19 @@ graph TD
         %% 2. Image-to-Video Single Frame (I2V)
         B -->|2. Image-to-Video<br/>Single Frame| I2V1[CMD_UPLOAD_IMAGE<br/>+ Headers Only]
         I2V1 --> I2V2[Get reCAPTCHA Token]
-        I2V2 --> I2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_i2v_s_*<br/>+ imageInputMediaId]
+        I2V2 --> I2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_i2v_s_*<br/>+ startImage.mediaId]
         I2V3 --> POLL
         
         %% 3. Frames-to-Video (Start + End Image)
         B -->|3. Frames-to-Video<br/>Start + End| F2V1[CMD_UPLOAD_IMAGE x2<br/>+ Headers Only]
         F2V1 --> F2V2[Get reCAPTCHA Token]
-        F2V2 --> F2V3[CMD_GENERATE_VIDEO_START_END<br/>model: veo_3_1_i2v_s_fast_fl_*<br/>+ startImageId + endImageId]
+        F2V2 --> F2V3[CMD_GENERATE_VIDEO_START_END<br/>model: veo_3_1_i2v_s_fast_fl_*<br/>+ startImage.mediaId + endImage.mediaId]
         F2V3 --> POLL
         
         %% 4. Ingredients-to-Video (R2V)
         B -->|4. Ingredients<br/>1-3 Reference Images| R2V1[CMD_UPLOAD_IMAGE x1-3<br/>+ Headers Only]
         R2V1 --> R2V2[Get reCAPTCHA Token]
-        R2V2 --> R2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_r2v_*<br/>+ referenceImageIds array]
+        R2V2 --> R2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_r2v_*<br/>+ referenceImages array]
         R2V3 --> POLL
     end
     
@@ -123,43 +123,52 @@ graph TD
 **Auth**: `Authorization: Bearer <token>` + `x-browser-*` headers.
 **reCAPTCHA**: **NO**. Not observed in HAR payloads.
 **Payload**: Raw bytes (image data), usually octet-stream or multipart with boundary.
-**Returns**: `{"imageOutput": {"mediaGenerationId": "..."}}`
+**Returns**: `{"mediaGenerationId": {"mediaGenerationId": "..."}}`
 
 ### 3. `CMD_GENERATE_IMAGE` (T2I / I2I)
 **Purpose**: Generate images from text or text+image.
 **Endpoint**: `POST /v1/projects/{projectId}/flowMedia:batchGenerateImages`
 **Auth**: `Authorization: Bearer <token>` + `x-browser-*` headers.
-**reCAPTCHA**: **REQUIRED**. Included in payload `clientContext.recaptchaContext.token`.
-**Payload (T2I)**:
+**reCAPTCHA**: **REQUIRED**. Included in BOTH top-level AND per-request-item `clientContext.recaptchaContext.token`.
+**Payload (T2I — HAR Verified)**:
 ```json
 {
-  "clientContext": { ...recaptcha... },
+  "clientContext": {
+    "recaptchaContext": { "token": "..." },
+    "sessionId": ";{timestamp_ms}",
+    "projectId": "uuid",
+    "tool": "PINHOLE"
+  },
   "requests": [{
-    "imageModelName": "IMAGEN_3_5",
-    "prompt": "...",
-    "imageInputs": []
+    "clientContext": { ... },          // DUPLICATE of top-level!
+    "seed": 651946,
+    "imageModelName": "GEM_PIX_2",
+    "promptInputs": [{"textInput": "..."}],
+    "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE"
   }]
 }
 ```
-**Payload (I2I)**: Same as T2I but `imageInputs` array contains media IDs from `CMD_UPLOAD_IMAGE`.
+**Payload (I2I)**: Same as T2I but add `imageInputs` array with media IDs from `CMD_UPLOAD_IMAGE`.
 
 ### 4. `CMD_UPSCALE_IMAGE`
 **Purpose**: Post-processing upscale for images (2K/4K).
 **Endpoint**: `POST /v1/flow/upsampleImage`
 **Auth**: `Authorization: Bearer <token>` + `x-browser-*` headers.
 **reCAPTCHA**: **REQUIRED**. Included in payload `clientContext.recaptchaContext.token`.
-**Payload**:
+**Payload (HAR Verified)**:
 ```json
 {
   "mediaId": "...",
   "targetResolution": "UPSAMPLE_IMAGE_RESOLUTION_4K",
   "clientContext": {
-    "recaptchaContext": { "token": "..." },
-    "tool": "PINHOLE",
-    ...
+    "recaptchaContext": { "token": "...", "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB" },
+    "sessionId": ";{timestamp_ms}",
+    "projectId": "uuid",
+    "tool": "PINHOLE"
   }
 }
 ```
+**Returns**: `{"encodedImage": "base64..."}`
 
 ### 5. `CMD_CHECK_STATUS` (Poll)
 **Purpose**: Check status of async generations (Video).
@@ -169,9 +178,30 @@ graph TD
 **Payload**:
 ```json
 {
-  "operationNames": ["projects/.../operations/..."]
+  "operations": [
+    {
+      "operation": {"name": "operation-uuid"},
+      "sceneId": "scene-uuid",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    }
+  ]
 }
 ```
+
+---
+
+### 6. `CMD_GENERATE_GIF` (HAR Verified)
+**Purpose**: Generate preview GIF from a video.
+**Endpoint**: `POST /v1/video:generatePinholeGif`
+**Auth**: `Authorization: Bearer <token>` + `x-browser-*` headers.
+**reCAPTCHA**: **NO**. HAR shows no clientContext in request.
+**Payload**:
+```json
+{
+  "mediaGenerationId": "CAUSJGY1ZGIxMzQy..."
+}
+```
+**Returns**: `{"encodedGif": "base64..."}` — Can be >10MB.
 
 ---
 
@@ -182,6 +212,7 @@ graph TD
 | **Upload Image** | `/v1:uploadUserImage` | ✅ | ✅ | ❌ |
 | **Gen Video (All)** | `...:batchAsyncGenerateVideo...` | ✅ | ✅ | ✅ |
 | **Gen Image (T2I/I2I)**| `...:batchGenerateImages` | ✅ | ✅ | ✅ |
+| **Generate GIF** | `/v1/video:generatePinholeGif` | ✅ | ✅ | ❌ |
 | **Upscale Image** | `/v1/flow/upsampleImage` | ✅ | ✅ | ✅ |
 | **Upscale Video** | `...:batchAsyncGenerateVideoUpsampleVideo` | ✅ | ✅ | ✅ |
 | **Poll Status** | `...:batchCheckAsync...` | ✅ | ✅ | ❌ |

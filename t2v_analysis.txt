@@ -1,0 +1,869 @@
+
+====================================================================================================
+FILE: Text to video 1.har
+====================================================================================================
+Total entries: 38
+
+--- POST /v1/video:batchAsyncGenerateVideoText (status: 200) ---
+Body size: 3740 bytes
+
+REQUEST PAYLOAD:
+{
+  "clientContext": {
+    "recaptchaContext": {
+      "token": "0cAFcWeA5AInSldiYtuksST3kqKbCQb0a7CpwDOSov40umIWOieJVpHhNYyD1fifFHskWeh-wceJ-TSq... (2148 chars)",
+      "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+    },
+    "sessionId": ";1770534060719",
+    "projectId": "a89ea3a4-168c-4133-8fb0-7a852f11b33b",
+    "tool": "PINHOLE",
+    "userPaygateTier": "PAYGATE_TIER_TWO"
+  },
+  "requests": [
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 12546,
+      "textInput": {
+        "prompt": "Hook scene [2 SEG], underweight baby. Realistic Vietnamese family scene, cinemat... (1136 chars)"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9"
+      }
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    }
+  ],
+  "remainingCredits": 45000
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 166 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+====================================================================================================
+FILE: Text to video 2.har
+====================================================================================================
+Total entries: 42
+
+--- POST /v1/video:batchAsyncGenerateVideoText (status: 200) ---
+Body size: 3740 bytes
+
+REQUEST PAYLOAD:
+{
+  "clientContext": {
+    "recaptchaContext": {
+      "token": "0cAFcWeA5AInSldiYtuksST3kqKbCQb0a7CpwDOSov40umIWOieJVpHhNYyD1fifFHskWeh-wceJ-TSq... (2148 chars)",
+      "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+    },
+    "sessionId": ";1770534060719",
+    "projectId": "a89ea3a4-168c-4133-8fb0-7a852f11b33b",
+    "tool": "PINHOLE",
+    "userPaygateTier": "PAYGATE_TIER_TWO"
+  },
+  "requests": [
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 12546,
+      "textInput": {
+        "prompt": "Hook scene [2 SEG], underweight baby. Realistic Vietnamese family scene, cinemat... (1136 chars)"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9"
+      }
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    }
+  ],
+  "remainingCredits": 45000
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 166 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_PENDING"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+--- POST /v1/video:batchCheckAsyncVideoGenerationStatus (status: 200) ---
+Body size: 165 bytes
+
+REQUEST PAYLOAD:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677"
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "status": "MEDIA_GENERATION_STATUS_ACTIVE"
+    }
+  ]
+}
+
+RESPONSE:
+{
+  "operations": [
+    {
+      "operation": {
+        "name": "d3e32c4ec3465c7a39f6e7c002948677",
+        "metadata": {
+          "@type": "type.googleapis.com/google.internal.labs.aisandbox.v1.Media",
+          "name": "CAUSJGE4OWVhM2E0LTE2OGMtNDEzMy04ZmIwLTdhODUyZjExYjMzYhokNDI5Zjk1NDAtZWQyMS00ODU3... (162 chars)",
+          "video": {
+            "seed": 12546,
+            "mediaGenerationId": "CAUSJGE4OWVhM2E0LTE2OGMtNDEzMy04ZmIwLTdhODUyZjExYjMzYhokNDI5Zjk1NDAtZWQyMS00ODU3... (162 chars)",
+            "prompt": "Hook scene [2 SEG], underweight baby. Realistic Vietnamese family scene, cinemat... (1136 chars)",
+            "fifeUrl": "https://storage.googleapis.com/ai-sandbox-videofx/video/010ad9bb-04dd-4d62-897b-... (575 chars)",
+            "mediaVisibility": "PRIVATE",
+            "servingBaseUri": "https://storage.googleapis.com/ai-sandbox-videofx/image/010ad9bb-04dd-4d62-897b-... (571 chars)",
+            "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+            "isLooped": false,
+            "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT"
+          }
+        }
+      },
+      "sceneId": "2ab41e06-983f-47cc-b2f8-425c6fc9a6b9",
+      "mediaGenerationId": "CAUSJGE4OWVhM2E0LTE2OGMtNDEzMy04ZmIwLTdhODUyZjExYjMzYhokNDI5Zjk1NDAtZWQyMS00ODU3... (162 chars)",
+      "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL"
+    }
+  ],
+  "remainingCredits": 45000
+}

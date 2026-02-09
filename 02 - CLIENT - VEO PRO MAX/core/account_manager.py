@@ -1,21 +1,29 @@
 """
 VEO Pro Max - Account Manager (CHỦ)
 
-Reference: ACCOUNT_SESSION_MANAGEMENT.md
-Role: Manages individual account session, token refresh, slot semaphore
+Reference: ACCOUNT_SESSION_MANAGEMENT.md, MULTITHREADING_ARCHITECTURE.md
+Role: Manages individual account session, token refresh, slot semaphore,
+      persistent browser session, and reCAPTCHA token cache.
 
-Architecture: Asyncio (Hybrid with ProcessPoolExecutor for CPU tasks)
+Architecture: CHỦ owns BrowserManager + TokenCache per architecture spec.
+              Browser stays alive during generation for on-demand reCAPTCHA refresh.
 """
 
 from typing import Optional, Callable
 from datetime import datetime, timedelta
 import asyncio
+import threading
+import logging
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from core.session import AccountSession, SubscriptionType, PaygateTier
+from core.session import AccountSession, AccountState, SubscriptionType, PaygateTier
 from config.constants import TokenLifetime
+from core.project_manager import ProjectManager
+from core.recaptcha_session import RecaptchaBrowserSession, TokenCache
+
+log = logging.getLogger(__name__)
 
 
 class AccountManager:
@@ -28,19 +36,47 @@ class AccountManager:
     - Project management integration
     """
     
-    MAX_SLOTS = 4
+    @property
+    def max_slots(self) -> int:
+        """Get max concurrent slots for this account."""
+        return self._session.max_slots
+    
+    def set_max_slots(self, n: int):
+        """Set max concurrent slots (0-4). 0 effectively disables processing."""
+        self._session.max_slots = max(0, min(n, 4))
+    
+    @property
+    def retry_count(self) -> int:
+        """Get retry count for this account."""
+        return self._session.retry_count
+    
+    @property
+    def request_timeout(self) -> int:
+        """Get request timeout for this account."""
+        return self._session.request_timeout
     
     def __init__(self, session: AccountSession):
         self._session = session
-        self._slot_semaphore = asyncio.Semaphore(self.MAX_SLOTS)
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()  # threading.Lock for sync methods
+        
+        # Enabled flag — disabled accounts are skipped during dispatch
+        self._enabled = True
         
         # Callbacks for token refresh
         self._on_token_refresh_needed: Optional[Callable] = None
         self._on_recaptcha_refresh_needed: Optional[Callable] = None
         
-        # Project cache
+        # Project manager (CHỦ owns ProjectManager per MULTITHREADING_ARCHITECTURE.md)
+        self._project_manager = ProjectManager()
         self._project_id: Optional[str] = None
+        
+        # Persistent browser session for reCAPTCHA refresh
+        # (CHỦ owns BrowserManager per MULTITHREADING_ARCHITECTURE.md §6.1)
+        self._browser_session: Optional[RecaptchaBrowserSession] = None
+        self._token_cache = TokenCache()
+        
+        # Paygate tier — auto-detected from GET /v1/credits
+        self._paygate_tier: str = "PAYGATE_TIER_NOT_PAID"
     
     @property
     def session(self) -> AccountSession:
@@ -54,8 +90,29 @@ class AccountManager:
     
     @property
     def is_ready(self) -> bool:
-        """Check if account is ready for API calls."""
-        return self._session.is_ready
+        """Check if account is ready for API calls.
+        
+        Must be enabled AND session ready.
+        """
+        return self._enabled and self._session.is_ready
+    
+    @property
+    def is_enabled(self) -> bool:
+        """Check if account is enabled for dispatch."""
+        return self._enabled
+    
+    def enable(self):
+        """Enable this account for task dispatch."""
+        self._enabled = True
+        log.info(f"[{self.email}] Account enabled")
+    
+    def disable(self):
+        """Disable this account — won't be selected for new tasks.
+        
+        Running tasks will complete normally.
+        """
+        self._enabled = False
+        log.info(f"[{self.email}] Account disabled")
     
     @property
     def available_slots(self) -> int:
@@ -72,34 +129,59 @@ class AccountManager:
         """Get cached project ID."""
         return self._project_id
     
+    @property
+    def project_manager(self) -> ProjectManager:
+        """Get the ProjectManager for this account (CHỬ owns it)."""
+        return self._project_manager
+    
     def set_project_id(self, project_id: str):
         """Set project ID for this account."""
         self._project_id = project_id
     
-    def acquire_slot(self, timeout: Optional[float] = None) -> bool:
-        """Attempt to acquire a slot (non-blocking check).
+    @property
+    def paygate_tier(self) -> str:
+        """Get cached paygate tier (auto-detected from /v1/credits)."""
+        return self._paygate_tier
+    
+    async def fetch_paygate_tier(self, api_client) -> str:
+        """Fetch paygate tier from GET /v1/credits and cache it.
         
-        For async semaphore, use non-blocking try_acquire pattern.
-        In async context, use 'async with self._slot_semaphore' instead.
+        Protocol §3.3.1: Response contains userPaygateTier field.
+        Called once per account, cached for session lifetime.
+        """
+        try:
+            resp = await api_client.get_credits(
+                access_token=self.get_access_token() or "",
+                account_headers=self.get_api_headers(),
+            )
+            if resp.success and resp.data:
+                tier = resp.data.get("userPaygateTier", "")
+                if tier:
+                    self._paygate_tier = tier
+                    log.info(f"Account {self.email}: paygate tier = {tier}")
+        except Exception as e:
+            log.warning(f"Failed to fetch paygate tier for {self.email}: {e}")
+        return self._paygate_tier
+    
+    def acquire_slot(self) -> bool:
+        """Attempt to acquire a slot (non-blocking, thread-safe).
+        
+        Delegates to AccountSession.acquire_slot() which is the
+        single source of truth for slot tracking (Issue 4+9 fix).
         
         Returns:
             True if slot acquired, False otherwise.
         """
-        # Quick check without blocking
-        acquired = self._slot_semaphore._value > 0
-        if acquired:
-            # Decrement semaphore
-            self._slot_semaphore._value -= 1
-            self._session.active_slots += 1
-            self._session.last_activity = datetime.now()
-        
-        return acquired
+        with self._lock:
+            return self._session.acquire_slot()
     
     def release_slot(self):
-        """Release a slot."""
-        if self._session.active_slots > 0:
-            self._session.active_slots -= 1
-            self._slot_semaphore.release()
+        """Release a slot (thread-safe).
+        
+        Delegates to AccountSession.release_slot().
+        """
+        with self._lock:
+            self._session.release_slot()
     
     def get_access_token(self) -> Optional[str]:
         """Get valid access token.
@@ -123,17 +205,100 @@ class AccountManager:
         return self._session.access_token
     
     def get_recaptcha_token(self) -> Optional[str]:
-        """Get valid reCAPTCHA token.
+        """Get valid reCAPTCHA token from cache or session.
         
-        Returns None if token needs refresh.
-        Triggers refresh callback if needed.
+        Returns cached token if still valid (< 90s old).
+        Returns session token as fallback.
+        Returns None if all expired.
         """
-        if self._session.needs_recaptcha_refresh:
+        # Priority 1: TokenCache (most fresh, < 90s)
+        cached = self._token_cache.get()
+        if cached:
+            return cached
+        
+        # Priority 2: Session token (may be stale but worth trying)
+        if not self._session.needs_recaptcha_refresh:
+            return self._session.recaptcha_token
+        
+        # All expired — caller must await refresh_recaptcha()
+        return None
+    
+    async def refresh_recaptcha(self) -> Optional[str]:
+        """Get fresh reCAPTCHA token from alive browser.
+        
+        This is the CORRECT way to refresh reCAPTCHA:
+        - Browser is already on VEO page (persistent session)
+        - Calls grecaptcha.execute() directly (~100-500ms)
+        - Updates both TokenCache and AccountSession
+        
+        Returns:
+            Fresh reCAPTCHA token, or None if browser is not available
+        """
+        if not self._browser_session or not self._browser_session.is_ready:
+            log.warning(f"[{self.email}] Browser not ready for reCAPTCHA refresh")
+            # Fallback: fire old callback if exists
             if self._on_recaptcha_refresh_needed:
                 self._on_recaptcha_refresh_needed(self)
             return None
         
-        return self._session.recaptcha_token
+        try:
+            token = await self._browser_session.get_recaptcha_token()
+            if token:
+                self._token_cache.set(token)
+                self._session.update_recaptcha(token)
+                log.info(f"[{self.email}] reCAPTCHA refreshed via persistent browser")
+            return token
+        except Exception as e:
+            log.error(f"[{self.email}] reCAPTCHA refresh failed: {e}")
+            return None
+    
+    async def ensure_browser(self, headless: bool = True):
+        """Start persistent browser if not running.
+        
+        Called by MultiAccountManager.startup() or lazily before first generate.
+        """
+        if self._browser_session and self._browser_session.is_ready:
+            return
+        
+        profile_path = self._session.profile_path
+        if not profile_path:
+            log.warning(f"[{self.email}] No profile_path set, cannot start browser")
+            return
+        
+        self._browser_session = RecaptchaBrowserSession(profile_path)
+        await self._browser_session.ensure_ready(headless=headless)
+        
+        # Capture initial headers — ALL 5 per Protocol Analysis §1.4
+        headers = self._browser_session.captured_headers
+        if headers:
+            self._session.update_browser_headers(
+                browser_validation=headers.get("x-browser-validation", ""),
+                client_data=headers.get("x-client-data", ""),
+                browser_channel=headers.get("x-browser-channel", "stable"),
+                browser_copyright=headers.get("x-browser-copyright", ""),
+                browser_year=headers.get("x-browser-year", ""),
+            )
+            log.info(f"[{self.email}] Browser headers captured: {list(headers.keys())}")
+    
+    async def close_browser(self):
+        """Close persistent browser session."""
+        if self._browser_session:
+            await self._browser_session.close()
+            self._browser_session = None
+    
+    def get_api_headers(self) -> dict:
+        """Get per-account x-browser-* headers for API calls.
+        
+        Returns dict suitable for passing as account_headers to VEOApiClient.
+        Delegates to AccountSession.get_browser_headers().
+        """
+        return self._session.get_browser_headers()
+    
+    def get_browser_headers(self) -> dict:
+        """Get x-browser-* headers from persistent browser."""
+        if self._browser_session:
+            return self._browser_session.captured_headers
+        return {}
     
     def update_access_token(self, token: str, expires_in: int = TokenLifetime.ACCESS_TOKEN):
         """Update access token.
@@ -167,7 +332,17 @@ class AccountManager:
     def get_headers(self) -> Optional[dict]:
         """Get HTTP headers for API requests.
         
-        Returns None if tokens not available.
+        DEPRECATED: This method previously returned wrong auth headers
+        (Authorization: Bearer, application/json, x-recaptcha-token).
+        
+        Per VEO_Web_Client_Protocol_Analysis.md §3.3:
+        - REST endpoints use text/plain;charset=UTF-8
+        - NO Authorization: Bearer header
+        - reCAPTCHA goes in request body clientContext, not headers
+        - x-browser-* headers are set by api_client._build_headers()
+        
+        Callers should use api_client._build_headers() instead.
+        Returns minimal headers for backwards compatibility.
         """
         access_token = self.get_access_token()
         recaptcha_token = self.get_recaptcha_token()
@@ -175,23 +350,28 @@ class AccountManager:
         if not access_token or not recaptcha_token:
             return None
         
+        # Only return Content-Type — auth is handled via x-browser-* headers
+        # in api_client._build_headers()
         return {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-            "x-recaptcha-token": recaptcha_token,
+            "Content-Type": "text/plain;charset=UTF-8",
         }
     
     def get_status(self) -> dict:
         """Get account status summary."""
+        browser_ready = self._browser_session.is_ready if self._browser_session else False
+        cache_age = f"{self._token_cache.age:.0f}s" if self._token_cache.age != float("inf") else "N/A"
         return {
             "email": self.email,
+            "enabled": self._enabled,
             "sku": self._session.sku.value,
             "paygate_tier": self._session.paygate_tier.value,
             "credits": self._session.credits,
-            "slots": f"{self.active_slots}/{self.MAX_SLOTS}",
+            "slots": f"{self.active_slots}/{self.max_slots}",
             "token_expired": self._session.is_token_expired,
             "needs_recaptcha": self._session.needs_recaptcha_refresh,
             "recaptcha_age": f"{self._session.recaptcha_age:.0f}s",
+            "recaptcha_cache_age": cache_age,
+            "browser_alive": browser_ready,
             "project_id": self._project_id,
             "is_ready": self.is_ready,
         }

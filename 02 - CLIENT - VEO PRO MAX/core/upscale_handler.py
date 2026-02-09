@@ -126,43 +126,44 @@ class UpscaleHandler:
                 return UpscaleResult(success=False, error="Upscale operation timed out")
             
             # Check status
+            # Doc §6.20: use operations= array of dicts, not operation_names=
             response = await self._api_client.check_status(
                 access_token=access_token,
-                recaptcha_token=recaptcha_token,
-                operation_names=[operation_name],
+                recaptcha_token="",  # Not needed for polling (Doc §6.20)
+                operations=[{
+                    "operation": {"name": operation_name},
+                    "sceneId": "",
+                    "status": "MEDIA_GENERATION_STATUS_PENDING",
+                }],
             )
             
             if not response.success:
                 return UpscaleResult(success=False, error=response.error)
             
-            # Parse status
+            # Parse status — Doc §6.20: response is operations[].status
             data = response.data or {}
-            statuses = data.get("operationStatuses", [])
+            ops = data.get("operations", [])
             
-            if not statuses:
-                return UpscaleResult(success=False, error="No status in response")
+            if not ops:
+                return UpscaleResult(success=False, error="No operations in response")
             
-            status = statuses[0]
-            state = status.get("state", "UNKNOWN")
+            op = ops[0]
+            status = op.get("status", "UNKNOWN")
             
             # Report progress
             if self._on_progress:
-                self._on_progress(operation_name, state)
+                self._on_progress(operation_name, status)
             
-            if state == "SUCCEEDED":
-                # Extract output
-                result_data = status.get("result", {})
-                output_uri = result_data.get("videoUri")
+            if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
+                # Doc §6.20: output URI is in servingBaseUri
+                output_uri = op.get("servingBaseUri")
                 return UpscaleResult(success=True, output_uri=output_uri)
             
-            elif state == "FAILED":
-                error_msg = status.get("error", {}).get("message", "Upscale failed")
+            elif status == "MEDIA_GENERATION_STATUS_FAILED":
+                error_msg = op.get("error", {}).get("message", "Upscale failed")
                 return UpscaleResult(success=False, error=error_msg)
             
-            elif state == "CANCELLED":
-                return UpscaleResult(success=False, error="Operation cancelled")
-            
-            # Still processing, wait and poll again
+            # ACTIVE or PENDING — still processing, wait and poll again
             await asyncio.sleep(self._poll_interval)
     
     async def check_upscale_status(
@@ -173,31 +174,36 @@ class UpscaleHandler:
     ) -> tuple[str, Optional[str]]:
         """Check status of an upscale operation.
         
-        Returns: (state, output_uri or error_message)
+        Returns: (status, output_uri or error_message)
+        Per Doc §6.20: uses operations[].status format.
         """
         response = await self._api_client.check_status(
             access_token=access_token,
-            recaptcha_token=recaptcha_token,
-            operation_names=[operation_name],
+            recaptcha_token="",  # Not needed for polling
+            operations=[{
+                "operation": {"name": operation_name},
+                "sceneId": "",
+                "status": "MEDIA_GENERATION_STATUS_PENDING",
+            }],
         )
         
         if not response.success:
             return "ERROR", response.error
         
         data = response.data or {}
-        statuses = data.get("operationStatuses", [])
+        ops = data.get("operations", [])
         
-        if not statuses:
+        if not ops:
             return "UNKNOWN", None
         
-        status = statuses[0]
-        state = status.get("state", "UNKNOWN")
+        op = ops[0]
+        status = op.get("status", "UNKNOWN")
         
-        if state == "SUCCEEDED":
-            output_uri = status.get("result", {}).get("videoUri")
-            return state, output_uri
-        elif state == "FAILED":
-            error_msg = status.get("error", {}).get("message")
-            return state, error_msg
+        if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
+            output_uri = op.get("servingBaseUri")
+            return status, output_uri
+        elif status == "MEDIA_GENERATION_STATUS_FAILED":
+            error_msg = op.get("error", {}).get("message")
+            return status, error_msg
         
-        return state, None
+        return status, None

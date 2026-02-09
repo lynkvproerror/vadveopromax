@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QComboBox, QLineEdit, QCheckBox,
-    QRadioButton, QButtonGroup, QSpinBox, QTableWidget, QTableWidgetItem,
+    QRadioButton, QButtonGroup, QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox
 )
 from PySide6.QtCore import Qt, Signal, Slot
@@ -111,6 +111,10 @@ class TabSettings(QWidget):
             on_profiles_changed=self._refresh_profiles_table
         )
         
+        # Issue E: Bridge ProfilesController → AppController for startup sync
+        if self.controller and hasattr(self.controller, 'set_profiles_controller'):
+            self.controller.set_profiles_controller(self.profiles_controller)
+        
         self._setup_ui()
     
     def _setup_ui(self):
@@ -179,18 +183,59 @@ class TabSettings(QWidget):
         
         return section, content_layout
     
+    def _create_enable_row(
+        self, label_text: str, checked: bool = True,
+        bold: bool = False, color: str = "", badge: str = ""
+    ) -> ToggleSwitch:
+        """Create a standard enable/disable row with label + ToggleSwitch.
+        
+        Returns the ToggleSwitch widget for signal connections.
+        Layout: [Label 150px] [ToggleSwitch 56x26] [badge?] [stretch]
+        
+        Args:
+            bold: Make label bold (for sub-feature headers)
+            color: Override label color (e.g. Theme.YELLOW)
+            badge: Optional badge text after toggle (e.g. "BETA")
+        """
+        row = QHBoxLayout()
+        label = QLabel(label_text)
+        label.setFixedWidth(150)
+        style_parts = [f"color: {color or Theme.TEXT}"]
+        if bold:
+            style_parts.append("font-weight: bold")
+        label.setStyleSheet("; ".join(style_parts) + ";")
+        row.addWidget(label)
+        
+        toggle = ToggleSwitch(checked=checked)
+        row.addWidget(toggle)
+        
+        if badge:
+            badge_label = QLabel(badge)
+            badge_label.setStyleSheet(
+                f"color: {Theme.BASE}; background-color: {Theme.YELLOW};"
+                f" font-size: 9px; font-weight: bold; padding: 1px 6px;"
+                f" border-radius: 3px;"
+            )
+            row.addWidget(badge_label)
+        
+        row.addStretch()
+        
+        # Store layout reference for caller
+        toggle._row_layout = row
+        return toggle
+    
     def _create_profiles_section(self) -> QWidget:
         """Create Chrome Profiles section - per TAB_07_SETTINGS.md spec.
         
-        8 columns: ✓, #, Email, Type, Plan, Credits, Status, Actions
+        9 columns: ✓, #, Email, Type, Plan, Credits, Status, Slots, Actions
         """
         section, layout = self._create_section("🌐 Chrome Profiles (Account Manager)")
         
-        # Create QTableWidget with 8 columns (added Type column)
+        # Create QTableWidget with 9 columns (added Slots column)
         self.profiles_table = QTableWidget()
-        self.profiles_table.setColumnCount(8)
+        self.profiles_table.setColumnCount(9)
         self.profiles_table.setHorizontalHeaderLabels([
-            "✓", "#", "Email", "Type", "Plan", "Credits", "Status", "Actions"
+            "✓", "#", "Email", "Type", "Plan", "Credits", "Status", "Slots", "Actions"
         ])
         
         # Set column widths per docs spec
@@ -202,7 +247,8 @@ class TabSettings(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Plan
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)  # Credits
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)  # Status
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)  # Actions
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)  # Slots
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)  # Actions
         
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
@@ -210,9 +256,10 @@ class TabSettings(QWidget):
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status - "🟢 Ready" needs more space
-        self.profiles_table.setColumnWidth(7, 120)  # Actions - 3 buttons + spacing
+        self.profiles_table.setColumnWidth(7, 60)   # Slots - SpinBox 0-4
+        self.profiles_table.setColumnWidth(8, 120)  # Actions - 3 buttons + spacing
         
-        self.profiles_table.setMinimumHeight(150)
+        self.profiles_table.setMinimumHeight(80)
         self.profiles_table.setStyleSheet(f"background-color: {Theme.SURFACE2};")
         self.profiles_table.setAlternatingRowColors(True)
         
@@ -225,21 +272,15 @@ class TabSettings(QWidget):
         
         layout.addWidget(self.profiles_table)
         
-        # Dual login buttons - OAuth (quick) and Browser (full session)
+        # Login button - Browser login only
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
         
-        # OAuth login - quick but plan shows "Wait"
-        oauth_btn = QPushButton("🔑 OAuth")
-        oauth_btn.setToolTip("Quick login via OAuth. Plan/Credits will show after first video.")
-        oauth_btn.setStyleSheet(f"background-color: {Theme.BLUE}; height: 32px;")
-        oauth_btn.clicked.connect(self._on_add_profile)
-        btn_layout.addWidget(oauth_btn)
-        
         # Browser login - full session with real-time subscription
-        browser_btn = QPushButton("🌐 Browser")
+        browser_btn = QPushButton("🌐 Add Account")
         browser_btn.setToolTip("Login in browser. Plan/Credits available immediately.")
-        browser_btn.setStyleSheet(f"background-color: {Theme.GREEN}; height: 32px;")
+        browser_btn.setFixedHeight(28)
+        browser_btn.setStyleSheet(f"background-color: {Theme.GREEN}; font-size: 12px; padding: 2px 12px;")
         browser_btn.clicked.connect(self._on_add_profile_browser)
         btn_layout.addWidget(browser_btn)
         
@@ -290,10 +331,11 @@ class TabSettings(QWidget):
         
         # If no profiles exist, show empty state message
         if not accounts:
-            placeholder = QTableWidgetItem("No profiles added. Click '🔑 OAuth' or '🌐 Browser' to add.")
+            placeholder = QTableWidgetItem("No profiles added. Click '🌐 Add Account' to add.")
             self.profiles_table.insertRow(0)
-            self.profiles_table.setSpan(0, 0, 1, 8)  # 8 columns now
+            self.profiles_table.setSpan(0, 0, 1, 9)  # 9 columns now
             self.profiles_table.setItem(0, 0, placeholder)
+            self._adjust_table_height(1)
             return
         
         for i, acc in enumerate(accounts):
@@ -315,20 +357,43 @@ class TabSettings(QWidget):
             row_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.profiles_table.setItem(i, 1, row_item)
             
-            # Email (col 2)
-            email_item = QTableWidgetItem(acc.get('email', 'Unknown'))
+            # Email (col 2) — with credential status icon
+            email_text = acc.get('email', 'Unknown')
+            try:
+                from core.credentials_manager import get_credentials_manager
+                has_creds = get_credentials_manager().has_credentials_for(email_text)
+                cred_icon = "🔑" if has_creds else "🔓"
+                cred_tip = "Stored credentials available (auto re-login ready)" if has_creds else "No stored credentials"
+            except Exception:
+                cred_icon = ""
+                cred_tip = ""
+            email_item = QTableWidgetItem(f"{cred_icon} {email_text}")
+            email_item.setToolTip(cred_tip)
             email_item.setFlags(email_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.profiles_table.setItem(i, 2, email_item)
             
-            # Type (col 3) - 🔑 OAuth or 🌐 Browser (emoji only) - centered
-            login_method = acc.get('login_method', 'oauth')
-            type_emoji = "🌐" if login_method == "browser" else "🔑"
-            type_tooltip = "Browser Login - Full session" if login_method == "browser" else "OAuth Login - Token based"
-            type_item = QTableWidgetItem(type_emoji)
-            type_item.setToolTip(type_tooltip)
-            type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            type_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(i, 3, type_item)
+            # Type (col 3) - Clickable 🌐 button to open debug browser
+            type_btn = QPushButton("🌐")
+            type_btn.setToolTip("Click to open browser with this profile for debugging")
+            type_btn.setFixedSize(40, 30)
+            type_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Theme.SURFACE2};
+                    border: 1px solid {Theme.OVERLAY0};
+                    border-radius: 4px;
+                    font-size: 16px;
+                    cursor: pointer;
+                }}
+                QPushButton:hover {{
+                    background-color: {Theme.BLUE};
+                    border-color: {Theme.BLUE};
+                }}
+            """)
+            email_for_browser = acc.get('email', '')
+            type_btn.clicked.connect(
+                lambda checked, e=email_for_browser: self._on_open_debug_browser(e)
+            )
+            self.profiles_table.setCellWidget(i, 3, type_btn)
             
             # Plan (col 4) - tier_display already formatted - centered
             plan_item = QTableWidgetItem(acc.get('tier', '👤 Free'))
@@ -353,7 +418,19 @@ class TabSettings(QWidget):
             # Get email for action handlers
             email = acc.get('email', '')
             
-            # Actions buttons (col 7)
+            # Slots SpinBox (col 7) — per-account concurrent worker limit
+            slots_spin = QSpinBox()
+            slots_spin.setRange(0, 4)
+            slots_spin.setValue(acc.get('max_slots', 4))
+            slots_spin.setToolTip("Max concurrent workers for this account (0 = disabled)")
+            slots_spin.setFixedWidth(50)
+            slots_spin.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 2px; text-align: center;")
+            slots_spin.valueChanged.connect(
+                lambda value, e=email: self._on_slots_changed(e, value)
+            )
+            self.profiles_table.setCellWidget(i, 7, slots_spin)
+            
+            # Actions buttons (col 8)
             actions_widget = QWidget()
             actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
@@ -362,11 +439,11 @@ class TabSettings(QWidget):
             
             style = self.style()
             
-            # Refresh button - refresh OAuth tokens
+            # Refresh button - refresh session via browser
             refresh_btn = QPushButton()
             refresh_btn.setIcon(style.standardIcon(style.StandardPixmap.SP_BrowserReload))
             refresh_btn.setFixedSize(26, 26)
-            refresh_btn.setToolTip("Refresh OAuth Token")
+            refresh_btn.setToolTip("Refresh Session")
             refresh_btn.setStyleSheet(f"background-color: {Theme.BLUE}; border-radius: 4px;")
             refresh_btn.clicked.connect(lambda checked, e=email: self._on_refresh_session(e))
             actions_layout.addWidget(refresh_btn)
@@ -380,7 +457,19 @@ class TabSettings(QWidget):
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
             
-            self.profiles_table.setCellWidget(i, 7, actions_widget)
+            self.profiles_table.setCellWidget(i, 8, actions_widget)
+        
+        # Auto-expand table height to fit all rows
+        self._adjust_table_height(len(accounts))
+    
+    def _adjust_table_height(self, row_count: int):
+        """Adjust table height to show all rows without scrolling (max 10 rows)."""
+        row_height = self.profiles_table.verticalHeader().defaultSectionSize()
+        header_height = self.profiles_table.horizontalHeader().height()
+        visible_rows = min(row_count, 10)  # Cap at 10 rows visible
+        # +2 for borders/padding
+        total_height = header_height + (row_height * visible_rows) + 2
+        self.profiles_table.setFixedHeight(max(total_height, 80))
     
     def _create_profile_row(self, name: str, status: str, last_used: str) -> QWidget:
         """Create a profile row - matches CTK _create_profile_row."""
@@ -494,17 +583,32 @@ class TabSettings(QWidget):
         return row
     
     def _on_add_account(self):
-        """Add new account."""
+        """Add new account via simplified path.
+        
+        Note: This is a convenience shortcut. The primary way to add accounts
+        is through Browser login in the profiles table, which sets
+        up proper tokens and browser sessions.
+        
+        This path only creates a placeholder profile that needs login afterward.
+        """
         email = self.account_email_input.text().strip()
         if not email or '@' not in email:
             return
         
-        if self.controller and hasattr(self.controller, 'add_account'):
-            from core.session import AccountSession
-            session = AccountSession(email=email)
-            self.controller.add_account(session)
-            self.account_email_input.clear()
-            self._refresh_accounts()
+        # Add as a profile placeholder (needs login later)
+        if self.profiles_controller:
+            success = self.profiles_controller.add_profile(
+                email=email,
+                profile_path="",
+                display_name=email.split("@")[0],
+                is_ready=False,
+            )
+            if success:
+                self.account_email_input.clear()
+                self._refresh_profiles_table()
+                print(f"[Settings] Profile added: {email} (needs login)")
+            else:
+                print(f"[Settings] Profile already exists: {email}")
     
     def _on_remove_account(self, email: str):
         """Remove account."""
@@ -596,22 +700,14 @@ class TabSettings(QWidget):
         return section
     
     def _create_continuation_section(self) -> QWidget:
-        """Create Continuation Frame section - matches CTK lines 204-299."""
+        """Create Continuation Frame section."""
         section, layout = self._create_section("🔗 Continuation Frame Extraction")
         
         # Enable toggle
-        enable_layout = QHBoxLayout()
-        enable_label = QLabel("Enable Continuation:")
-        enable_label.setStyleSheet(f"color: {Theme.TEXT};")
-        enable_layout.addWidget(enable_label)
-        enable_layout.addStretch()
+        self.cont_switch = self._create_enable_row("Enable Continuation:", checked=True)
+        layout.addLayout(self.cont_switch._row_layout)
         
-        self.cont_switch = QCheckBox()
-        self.cont_switch.setChecked(True)
-        enable_layout.addWidget(self.cont_switch)
-        layout.addLayout(enable_layout)
-        
-        # Extract Point - EXACT from CTK line 244
+        # Extract Point
         extract_layout = QHBoxLayout()
         extract_label = QLabel("Extract Point:")
         extract_label.setFixedWidth(150)
@@ -630,32 +726,53 @@ class TabSettings(QWidget):
         extract_layout.addStretch()
         layout.addLayout(extract_layout)
         
-        # Frame Mode for I2V - CTK lines 261-299
-        mode_label = QLabel("── TAB_02 (I2V/F2V) ──")
-        mode_label.setStyleSheet(f"color: {Theme.SUBTEXT1}; font-size: 11px;")
-        layout.addWidget(mode_label)
+        # === ✨ Enhancer Image — BETA sub-feature ===
+        self.enhancer_switch = self._create_enable_row(
+            "✨ Enhancer Image (beta):", checked=False,
+            bold=True, color=Theme.PURPLE
+        )
+        layout.addLayout(self.enhancer_switch._row_layout)
         
-        frame_layout = QHBoxLayout()
-        frame_label = QLabel("Use extracted frame as:")
-        frame_label.setFixedWidth(150)
-        frame_label.setStyleSheet(f"color: {Theme.TEXT};")
-        frame_layout.addWidget(frame_label)
+        # Collapsible settings for Enhancer
+        self.enhancer_container = QWidget()
+        enhancer_layout = QVBoxLayout(self.enhancer_container)
+        enhancer_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.frame_button_group = QButtonGroup(self)
+        # Quality
+        quality_row = QHBoxLayout()
+        quality_label = QLabel("Quality:")
+        quality_label.setFixedWidth(150)
+        quality_label.setStyleSheet(f"color: {Theme.TEXT};")
+        quality_row.addWidget(quality_label)
         
-        first_radio = QRadioButton("First Frame")
-        first_radio.setChecked(True)
-        first_radio.setStyleSheet(f"color: {Theme.TEXT};")
-        self.frame_button_group.addButton(first_radio)
-        frame_layout.addWidget(first_radio)
+        self.enhancer_quality = QComboBox()
+        self.enhancer_quality.addItems(["Low (fast)", "Medium", "High (slow)"])
+        self.enhancer_quality.setCurrentText("Medium")
+        self.enhancer_quality.setFixedWidth(200)
+        quality_row.addWidget(self.enhancer_quality)
+        quality_row.addStretch()
+        enhancer_layout.addLayout(quality_row)
         
-        last_radio = QRadioButton("Last Frame")
-        last_radio.setStyleSheet(f"color: {Theme.TEXT};")
-        self.frame_button_group.addButton(last_radio)
-        frame_layout.addWidget(last_radio)
+        # Scale
+        scale_row = QHBoxLayout()
+        scale_label = QLabel("Upscale:")
+        scale_label.setFixedWidth(150)
+        scale_label.setStyleSheet(f"color: {Theme.TEXT};")
+        scale_row.addWidget(scale_label)
         
-        frame_layout.addStretch()
-        layout.addLayout(frame_layout)
+        self.enhancer_scale = QComboBox()
+        self.enhancer_scale.addItems(["1x (enhance only)", "2x", "4x"])
+        self.enhancer_scale.setCurrentText("1x (enhance only)")
+        self.enhancer_scale.setFixedWidth(200)
+        scale_row.addWidget(self.enhancer_scale)
+        scale_row.addStretch()
+        enhancer_layout.addLayout(scale_row)
+        
+        layout.addWidget(self.enhancer_container)
+        
+        # Toggle visibility
+        self.enhancer_container.setVisible(self.enhancer_switch.isToggled())
+        self.enhancer_switch.toggled_signal.connect(self.enhancer_container.setVisible)
         
         return section
     
@@ -663,32 +780,30 @@ class TabSettings(QWidget):
         """Create Worker Settings section per TAB_07_SETTINGS.md spec."""
         section, layout = self._create_section("🎯 Worker Settings")
         
-        # Max Concurrent Workers
-        workers_row = QHBoxLayout()
-        workers_label = QLabel("Max Concurrent Workers:")
-        workers_label.setFixedWidth(180)
-        workers_label.setStyleSheet(f"color: {Theme.TEXT};")
-        workers_row.addWidget(workers_label)
+        # Load saved values from controller if available
+        saved = {}
+        if self.controller and hasattr(self.controller, 'settings') and self.controller.settings:
+            s = self.controller.settings
+            saved = {
+                'retry_count': getattr(s, 'retry_count', 3),
+                'request_timeout': getattr(s, 'request_timeout', 120),
+                'anti_detect_enabled': getattr(s, 'anti_detect_enabled', True),
+                'anti_detect_delay_min': getattr(s, 'anti_detect_delay_min', 1.0),
+                'anti_detect_delay_max': getattr(s, 'anti_detect_delay_max', 5.0),
+            }
         
-        self.max_workers = QSpinBox()
-        self.max_workers.setRange(1, 8)
-        self.max_workers.setValue(2)
-        self.max_workers.setFixedWidth(80)
-        self.max_workers.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
-        workers_row.addWidget(self.max_workers)
-        workers_row.addStretch()
-        layout.addLayout(workers_row)
+        # Note: Max Concurrent Workers removed — now per-account via Chrome Profiles
         
-        # Retry on Error
+        # Retry on Error (default for new accounts)
         retry_row = QHBoxLayout()
         retry_label = QLabel("Retry on Error:")
-        retry_label.setFixedWidth(180)
+        retry_label.setFixedWidth(150)
         retry_label.setStyleSheet(f"color: {Theme.TEXT};")
         retry_row.addWidget(retry_label)
         
         self.retry_count = QSpinBox()
         self.retry_count.setRange(0, 5)
-        self.retry_count.setValue(3)
+        self.retry_count.setValue(saved.get('retry_count', 3))
         self.retry_count.setFixedWidth(80)
         self.retry_count.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
         retry_row.addWidget(self.retry_count)
@@ -698,19 +813,75 @@ class TabSettings(QWidget):
         # Request Timeout
         timeout_row = QHBoxLayout()
         timeout_label = QLabel("Request Timeout (s):")
-        timeout_label.setFixedWidth(180)
+        timeout_label.setFixedWidth(150)
         timeout_label.setStyleSheet(f"color: {Theme.TEXT};")
         timeout_row.addWidget(timeout_label)
         
         self.request_timeout = QSpinBox()
         self.request_timeout.setRange(30, 300)
-        self.request_timeout.setValue(120)
+        self.request_timeout.setValue(saved.get('request_timeout', 120))
         self.request_timeout.setFixedWidth(80)
         self.request_timeout.setSuffix("s")
         self.request_timeout.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
         timeout_row.addWidget(self.request_timeout)
         timeout_row.addStretch()
         layout.addLayout(timeout_row)
+        
+        # === Anti-Detect Spam — bold + emoji ===
+        self.anti_detect_switch = self._create_enable_row(
+            "🛡️ Anti-Detect Spam:", checked=saved.get('anti_detect_enabled', True),
+            bold=True, color=Theme.YELLOW
+        )
+        layout.addLayout(self.anti_detect_switch._row_layout)
+        
+        # Collapsible container for delay settings
+        self.anti_detect_container = QWidget()
+        detect_layout = QVBoxLayout(self.anti_detect_container)
+        detect_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Min Delay
+        min_delay_row = QHBoxLayout()
+        min_delay_label = QLabel("Min Delay (s):")
+        min_delay_label.setFixedWidth(150)
+        min_delay_label.setStyleSheet(f"color: {Theme.TEXT};")
+        min_delay_row.addWidget(min_delay_label)
+        
+        self.anti_detect_delay_min = QDoubleSpinBox()
+        self.anti_detect_delay_min.setRange(0.5, 10.0)
+        self.anti_detect_delay_min.setSingleStep(0.1)
+        self.anti_detect_delay_min.setDecimals(1)
+        self.anti_detect_delay_min.setValue(saved.get('anti_detect_delay_min', 1.0))
+        self.anti_detect_delay_min.setFixedWidth(80)
+        self.anti_detect_delay_min.setSuffix("s")
+        self.anti_detect_delay_min.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        min_delay_row.addWidget(self.anti_detect_delay_min)
+        min_delay_row.addStretch()
+        detect_layout.addLayout(min_delay_row)
+        
+        # Max Delay
+        max_delay_row = QHBoxLayout()
+        max_delay_label = QLabel("Max Delay (s):")
+        max_delay_label.setFixedWidth(150)
+        max_delay_label.setStyleSheet(f"color: {Theme.TEXT};")
+        max_delay_row.addWidget(max_delay_label)
+        
+        self.anti_detect_delay_max = QDoubleSpinBox()
+        self.anti_detect_delay_max.setRange(1.0, 30.0)
+        self.anti_detect_delay_max.setSingleStep(0.1)
+        self.anti_detect_delay_max.setDecimals(1)
+        self.anti_detect_delay_max.setValue(saved.get('anti_detect_delay_max', 5.0))
+        self.anti_detect_delay_max.setFixedWidth(80)
+        self.anti_detect_delay_max.setSuffix("s")
+        self.anti_detect_delay_max.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        max_delay_row.addWidget(self.anti_detect_delay_max)
+        max_delay_row.addStretch()
+        detect_layout.addLayout(max_delay_row)
+        
+        layout.addWidget(self.anti_detect_container)
+        
+        # Toggle visibility based on enable state
+        self.anti_detect_container.setVisible(self.anti_detect_switch.isToggled())
+        self.anti_detect_switch.toggled_signal.connect(self.anti_detect_container.setVisible)
         
         return section
     
@@ -825,6 +996,17 @@ class TabSettings(QWidget):
             toggle.setChecked(False)
         for toggle in self.browser_toggles.values():
             toggle.setChecked(False)
+        # Reset worker spinboxes to defaults
+        self.retry_count.setValue(3)
+        self.request_timeout.setValue(120)
+        # Reset anti-detect spam to defaults
+        self.anti_detect_switch.setToggled(True)
+        self.anti_detect_delay_min.setValue(1.0)
+        self.anti_detect_delay_max.setValue(5.0)
+        # Reset enhancer image to defaults
+        self.enhancer_switch.setToggled(False)
+        self.enhancer_quality.setCurrentText("Medium")
+        self.enhancer_scale.setCurrentText("1x (enhance only)")
     
     def _on_export(self):
         """Export config to file."""
@@ -862,6 +1044,18 @@ class TabSettings(QWidget):
             self.setting_combos["AI Model"].setCurrentText(settings["ai_model"])
         if "output_folder" in settings:
             self.output_folder_entry.setText(settings["output_folder"])
+        # Worker settings
+        if "retry_count" in settings:
+            self.retry_count.setValue(int(settings["retry_count"]))
+        if "request_timeout" in settings:
+            self.request_timeout.setValue(int(settings["request_timeout"]))
+        # Anti-Detect Spam
+        if "anti_detect_enabled" in settings:
+            self.anti_detect_switch.setToggled(bool(settings["anti_detect_enabled"]))
+        if "anti_detect_delay_min" in settings:
+            self.anti_detect_delay_min.setValue(float(settings["anti_detect_delay_min"]))
+        if "anti_detect_delay_max" in settings:
+            self.anti_detect_delay_max.setValue(float(settings["anti_detect_delay_max"]))
     
     def _create_setting_row(self, parent_layout, label: str, options: list) -> QComboBox:
         """Create a setting row with dropdown - matches CTK lines 443-465."""
@@ -883,63 +1077,51 @@ class TabSettings(QWidget):
         
         return combo
     
-    def _on_add_profile(self):
-        """Add new Chrome profile via browser OAuth."""
+    def _on_open_debug_browser(self, email: str):
+        """Open browser with saved profile for manual debugging."""
         import threading
         
-        # Show status in UI without blocking
-        self.setEnabled(False)  # Disable tab during OAuth
+        print(f"[Settings] Opening debug browser for {email}...")
         
-        def run_oauth():
-            """Run OAuth in background thread."""
-            print("[Settings] Starting browser OAuth flow...")
-            try:
-                email = self.profiles_controller.add_profile_via_browser()
-                
-                # Update UI on main thread using signal
-                from PySide6.QtCore import QMetaObject, Qt, Slot
-                
-                if email:
-                    print(f"[Settings] Profile added: {email}")
-                    # Schedule table refresh and re-enable
-                    QMetaObject.invokeMethod(
-                        self, "_on_oauth_complete",
-                        Qt.ConnectionType.QueuedConnection
-                    )
-                else:
-                    print("[Settings] OAuth cancelled or failed")
-                    QMetaObject.invokeMethod(
-                        self, "_on_oauth_failed",
-                        Qt.ConnectionType.QueuedConnection
-                    )
-            except Exception as e:
-                print(f"[Settings] OAuth error: {e}")
-                from PySide6.QtCore import QMetaObject, Qt, Slot
+        def open_browser():
+            success = self.profiles_controller.open_browser_for_debug(email)
+            if not success:
+                from PySide6.QtCore import QMetaObject, Qt
                 QMetaObject.invokeMethod(
-                    self, "_on_oauth_failed",
+                    self, "_on_debug_browser_failed",
                     Qt.ConnectionType.QueuedConnection
                 )
         
-        # Start OAuth in background thread
-        thread = threading.Thread(target=run_oauth, daemon=True)
+        thread = threading.Thread(target=open_browser, daemon=True)
         thread.start()
-        
-        # Show non-blocking message (just print, browser opens automatically)
-        print("[Settings] OAuth started - browser will open automatically")
+    
+    @Slot()
+    def _on_debug_browser_failed(self):
+        """Called when debug browser fails to open."""
+        QMessageBox.warning(
+            self, "Browser Error",
+            "Failed to open debug browser.\n"
+            "Profile may not have a browser session yet.\n"
+            "Try 'Add Account' first."
+        )
+    
+    def _on_add_profile(self):
+        """Add new profile via browser login (same as _on_add_profile_browser)."""
+        self._on_add_profile_browser()
     
     @Slot()
     def _on_oauth_complete(self):
-        """Called when OAuth completes successfully."""
+        """Called when login completes successfully."""
         self.setEnabled(True)  # Re-enable tab
         self._refresh_profiles_table()
         QMessageBox.information(self, "Success", "✅ Profile added successfully!")
     
     @Slot()
     def _on_oauth_failed(self):
-        """Called when OAuth fails or is cancelled."""
+        """Called when login fails or is cancelled."""
         self.setEnabled(True)  # Re-enable tab
         self._refresh_profiles_table()
-        QMessageBox.warning(self, "OAuth", "OAuth cancelled or failed.")
+        QMessageBox.warning(self, "Login", "Login cancelled or failed.")
     
     def _on_add_profile_browser(self):
         """Auto-login with email/password credentials."""
@@ -984,13 +1166,23 @@ class TabSettings(QWidget):
         layout.addLayout(form)
         
         # Info label
-        from PySide6.QtWidgets import QLabel
+        from PySide6.QtWidgets import QLabel, QCheckBox
         info_label = QLabel(
             "⚠️ Credentials are encrypted and stored locally.\n"
-            "Browser will open to perform Google login."
+            "Browser will open for Google login.\n"
+            "You can interact with 2FA/CAPTCHA if needed."
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
+        
+        # Keep browser open checkbox
+        keep_open_cb = QCheckBox("🔓 Keep browser open after login (for debugging)")
+        keep_open_cb.setChecked(False)
+        keep_open_cb.setToolTip(
+            "When checked, the browser will NOT auto-close after login.\n"
+            "Use this to manually inspect the browser session."
+        )
+        layout.addWidget(keep_open_cb)
         
         # Buttons
         buttons = QDialogButtonBox(
@@ -1006,6 +1198,7 @@ class TabSettings(QWidget):
         
         email = email_input.text().strip()
         password = password_input.text()
+        keep_browser_open = keep_open_cb.isChecked()
         
         if not email or not password:
             QMessageBox.warning(self, "Error", "Please enter both email and password.")
@@ -1016,17 +1209,22 @@ class TabSettings(QWidget):
             QMessageBox.warning(self, "Error", "Failed to save credentials.")
             return
         
+        # Always show browser — login often needs 2FA/CAPTCHA interaction
+        headless = False
+        
         # Start auto-login
         self.setEnabled(False)
         
         def run_auto_login():
             """Run auto-login in background thread."""
-            print(f"[Settings] Starting auto-login for {email}...")
+            print(f"[Settings] Starting auto-login for {email} (headless={headless})...")
             try:
                 result_email = self.profiles_controller.auto_login_with_credentials(
                     email=email,
                     password=password,
-                    timeout_seconds=120
+                    timeout_seconds=120,
+                    headless=headless,
+                    keep_browser_open=keep_browser_open
                 )
                 
                 from PySide6.QtCore import QMetaObject, Qt
@@ -1073,94 +1271,140 @@ class TabSettings(QWidget):
         QMessageBox.warning(self, "Browser Login", "Login cancelled or timed out.")
     
     def _on_refresh_session(self, email: str):
-        """Refresh session based on login method.
-        
-        OAuth: Refresh OAuth token, subscription shows placeholder
-        Browser: Fetch subscription real-time via browser profile
-        """
+        """Refresh session via browser — fetch subscription real-time."""
         import threading
         
-        # Get profile to check login method
         profile = self.profiles_controller.get_profile(email)
         if not profile:
             QMessageBox.warning(self, "Error", f"Profile not found: {email}")
             return
         
-        is_browser = profile.login_method == "browser"
-        print(f"[Settings] Refreshing session for: {email} (method: {profile.login_method})")
+        print(f"[Settings] Refreshing session for: {email}")
         
         # Show loading state immediately on the row
         self._update_row_status(email, "⏳ Refreshing...", "...")
+        self.setEnabled(False)
         
-        if is_browser:
-            # Browser profile: Just fetch subscription real-time
-            self.setEnabled(False)
+        def fetch_browser():
+            print(f"[Settings] Fetching subscription via browser...")
+            result = self.profiles_controller.fetch_subscription_info(email)
             
-            def fetch_browser():
-                print(f"[Settings] Fetching subscription via browser...")
-                sub_success = self.profiles_controller.fetch_subscription_info(email)
-                
-                from PySide6.QtCore import QMetaObject, Qt, Q_ARG
-                QMetaObject.invokeMethod(
-                    self, "_on_subscription_fetched",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, email),
-                    Q_ARG(bool, sub_success)
-                )
-            
-            thread = threading.Thread(target=fetch_browser, daemon=True)
-            thread.start()
-        else:
-            # OAuth profile: Refresh token, then fetch (placeholder)
-            # Force UI repaint before blocking call so user sees loading state
-            from PySide6.QtWidgets import QApplication
-            QApplication.processEvents()
-            
-            token_success = self.profiles_controller.refresh_session(email)
-            
-            if not token_success:
-                # Update row to show error state
-                self._update_row_status(email, "🔴 Failed", "N/A")
-                QMessageBox.warning(
-                    self, "Token Refresh Failed",
-                    f"❌ Failed to refresh token for {email}\nMay need to re-login."
-                )
-                return
-            
-            # Don't refresh table yet - keep showing loading state
-            # Row already shows "⏳ Refreshing..." from above
-            
-            # Run subscription fetch in background
-            def fetch_oauth():
-                print(f"[Settings] OAuth refresh - fetching subscription...")
-                success = self.profiles_controller.fetch_subscription_info(email)
-                
-                from PySide6.QtCore import QMetaObject, Qt, Q_ARG
-                QMetaObject.invokeMethod(
-                    self, "_on_subscription_fetched",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, email),
-                    Q_ARG(bool, success)
-                )
-            
-            thread = threading.Thread(target=fetch_oauth, daemon=True)
-            thread.start()
-            
-            # No blocking QMessageBox - user sees inline "⏳ Refreshing..."
-            print(f"[Settings] 🔑 OAuth token refreshed for {email}, fetching subscription...")
+            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
+            import json
+            result_json = json.dumps(result)
+            QMetaObject.invokeMethod(
+                self, "_on_subscription_fetched",
+                Qt.ConnectionType.QueuedConnection,
+                Q_ARG(str, email),
+                Q_ARG(str, result_json)
+            )
+        
+        thread = threading.Thread(target=fetch_browser, daemon=True)
+        thread.start()
     
-    @Slot(str, bool)
-    def _on_subscription_fetched(self, email: str, success: bool):
-        """Called when subscription fetch completes (from background thread)."""
-        self.setEnabled(True)  # Re-enable tab (was disabled for browser fetch)
+    @Slot(str, str)
+    def _on_subscription_fetched(self, email: str, result_json: str):
+        """Called when subscription fetch completes (from background thread).
+        
+        Shows notification dialog with specific failure reason and auto-login option.
+        """
+        import json
+        result = json.loads(result_json)
+        
+        self.setEnabled(True)  # Re-enable tab
         self._refresh_profiles_table()
+        
+        success = result.get("success", False)
+        reason = result.get("reason", "unknown")
+        can_auto_login = result.get("can_auto_login", False)
         
         if success:
             profile = self.profiles_controller.get_profile(email)
             if profile:
                 print(f"[Settings] ✅ Subscription updated: {profile.tier_display}, {profile.credits} credits")
+            return
+        
+        # --- FAILURE: Show notification dialog ---
+        reason_messages = {
+            "profile_missing": "Browser profile not found.\nThe saved browser data has been deleted or moved.",
+            "session_expired": "Session has expired.\nGoogle login session is no longer valid.",
+            "not_logged_in": "Not logged in.\nNo active Google session found in browser profile.",
+            "credits_api_failed": "Credits API failed.\nCouldn't fetch subscription info, but session is active.",
+            "exception": "Unexpected error during subscription fetch.",
+        }
+        
+        msg = reason_messages.get(reason, f"Unknown error: {reason}")
+        
+        if can_auto_login and reason in ("profile_missing", "session_expired", "not_logged_in"):
+            # Offer auto-login
+            reply = QMessageBox.question(
+                self,
+                f"⚠️ Session Problem - {email}",
+                f"{msg}\n\n"
+                f"🔑 Stored credentials found.\n"
+                f"Auto re-login now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self._start_auto_relogin(email)
         else:
-            print(f"[Settings] ⚠️ Couldn't fetch subscription for {email}")
+            # No auto-login available
+            action = "Please re-login manually using the Browser button." if reason != "credits_api_failed" else "Try refreshing again later."
+            QMessageBox.warning(
+                self,
+                f"⚠️ Session Problem - {email}",
+                f"{msg}\n\n{action}"
+            )
+    
+    def _start_auto_relogin(self, email: str):
+        """Start auto re-login in background thread."""
+        import threading
+        
+        self.setEnabled(False)
+        self._update_row_status(email, "🔑 Re-logging in...", "...")
+        
+        def run_relogin():
+            result_email = self.profiles_controller.auto_relogin(email)
+            
+            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
+            if result_email:
+                QMetaObject.invokeMethod(
+                    self, "_on_auto_relogin_complete",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(str, email)
+                )
+            else:
+                QMetaObject.invokeMethod(
+                    self, "_on_auto_relogin_failed",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(str, email)
+                )
+        
+        thread = threading.Thread(target=run_relogin, daemon=True)
+        thread.start()
+    
+    @Slot(str)
+    def _on_auto_relogin_complete(self, email: str):
+        """Called when auto re-login succeeds."""
+        self.setEnabled(True)
+        self._refresh_profiles_table()
+        QMessageBox.information(
+            self,
+            "Auto Re-Login",
+            f"✅ Successfully re-logged in: {email}\n\nSubscription info updated."
+        )
+    
+    @Slot(str)
+    def _on_auto_relogin_failed(self, email: str):
+        """Called when auto re-login fails."""
+        self.setEnabled(True)
+        self._refresh_profiles_table()
+        QMessageBox.warning(
+            self,
+            "Auto Re-Login Failed",
+            f"❌ Failed to re-login: {email}\n\nPlease login manually using the Browser button."
+        )
     
     def _on_toggle_account(self, email: str, enabled: bool):
         """Handle toggle switch change - enable/disable account for generation.
@@ -1169,12 +1413,33 @@ class TabSettings(QWidget):
             email: Account email
             enabled: New enabled state
         """
-        profile = self.profiles_controller.get_profile(email)
-        if profile:
-            profile.is_enabled = enabled
-            self.profiles_controller.update_profile(profile)
-            state_str = "enabled ✅" if enabled else "disabled ⚫"
-            print(f"[Settings] Account {email} {state_str}")
+        # Issue A fix: correct update_profile signature (email, **kwargs)
+        if self.profiles_controller:
+            self.profiles_controller.update_profile(email, is_enabled=enabled)
+        
+        # Issue C fix: propagate to runtime AccountManager._enabled
+        if self.controller and hasattr(self.controller, 'toggle_account'):
+            self.controller.toggle_account(email, enabled)
+        
+        state_str = "enabled ✅" if enabled else "disabled ⚫"
+        print(f"[Settings] Account {email} {state_str}")
+    
+    def _on_slots_changed(self, email: str, value: int):
+        """Handle Slots SpinBox change — per-account concurrent worker limit.
+        
+        Args:
+            email: Account email
+            value: New max_slots value (0-4)
+        """
+        # Persist to ChromeProfile
+        if self.profiles_controller:
+            self.profiles_controller.update_profile(email, max_slots=value)
+        
+        # Propagate to runtime AccountManager._session.max_slots
+        if self.controller and hasattr(self.controller, 'set_account_max_slots'):
+            self.controller.set_account_max_slots(email, value)
+        
+        print(f"[Settings] Account {email} max_slots → {value}")
     
     def _on_delete_profile(self, email: str):
         """Delete the specified profile after confirmation."""
@@ -1188,6 +1453,12 @@ class TabSettings(QWidget):
             print(f"[Settings] Deleting profile: {email}")
             self.profiles_controller.remove_profile(email)
             self._refresh_profiles_table()  # Reload table after delete
+    
+    def _parse_extract_point(self, text: str) -> int:
+        """Convert '750ms (recommended)' → 750."""
+        import re
+        match = re.search(r'(\d+)', text)
+        return int(match.group(1)) if match else 750
     
     def get_settings(self) -> dict:
         """Get current settings."""
@@ -1204,13 +1475,20 @@ class TabSettings(QWidget):
             "headless": self.browser_toggles.get("Headless mode").isChecked() if "Headless mode" in self.browser_toggles else False,
             "persistent_profile": self.browser_toggles.get("Use persistent profile").isChecked() if "Use persistent profile" in self.browser_toggles else False,
             "auto_retry": self.browser_toggles.get("Enable auto-retry on failure").isChecked() if "Enable auto-retry on failure" in self.browser_toggles else False,
-            "continuation_enabled": self.cont_switch.isChecked(),
-            "extract_point": self.extract_menu.currentText(),
+            "continuation_enabled": self.cont_switch.isToggled(),
+            "extract_point_ms": self._parse_extract_point(self.extract_menu.currentText()),
+            # Enhancer Image (BETA)
+            "enhancer_enabled": self.enhancer_switch.isToggled(),
+            "enhancer_quality": self.enhancer_quality.currentText(),
+            "enhancer_scale": self.enhancer_scale.currentText(),
             "language": self.lang_menu.currentText(),
-            # Worker Settings (new per docs)
-            "max_workers": self.max_workers.value(),
+            # Worker Settings (defaults for new accounts)
             "retry_count": self.retry_count.value(),
             "request_timeout": self.request_timeout.value(),
+            # Anti-Detect Spam
+            "anti_detect_enabled": self.anti_detect_switch.isToggled(),
+            "anti_detect_delay_min": self.anti_detect_delay_min.value(),
+            "anti_detect_delay_max": self.anti_detect_delay_max.value(),
             # Font Size (new per docs)
             "font_size": self.font_size_menu.currentText(),
         }

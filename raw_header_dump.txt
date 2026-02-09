@@ -1,0 +1,699 @@
+
+====================================================================================================
+TARGET: TRPC_sample (sample 1)
+FILE: 0. Tao Project.har
+METHOD: POST
+URL: https://labs.google/fx/api/trpc/general.submitBatchLog
+====================================================================================================
+
+  REQUEST HEADERS (19 total):
+    :authority: labs.google
+    :method: POST
+    :path: /fx/api/trpc/general.submitBatchLog
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 529
+    content-type: application/json
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/fx/tools/flow
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: same-origin
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: application/json, length: 529):
+    No API key (AIzaSy) found in body
+    Body preview: {"json":{"appEvents":[{"event":"PINHOLE_CREATE_NEW_PROJECT","eventMetadata":{"sessionId":";1769888782642"},"eventProperties":[{"key":"TOOL_NAME","stringValue":"PINHOLE"},{"key":"G1_PAYGATE_TIER","stringValue":"PAYGATE_TIER_TWO"},{"key":"PINHOLE_PROMPT_BOX_MODE","stringValue":"TEXT_TO_VIDEO"},{"key":...
+
+
+====================================================================================================
+TARGET: TRPC_sample (sample 2)
+FILE: 0. Tao Project.har
+METHOD: POST
+URL: https://labs.google/fx/api/trpc/project.createProject
+====================================================================================================
+
+  REQUEST HEADERS (19 total):
+    :authority: labs.google
+    :method: POST
+    :path: /fx/api/trpc/project.createProject
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 63
+    content-type: application/json
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/fx/tools/flow
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: same-origin
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: application/json, length: 63):
+    No API key (AIzaSy) found in body
+    Body: {"json":{"projectTitle":"Feb 01 - 02:49","toolName":"PINHOLE"}}
+
+
+====================================================================================================
+TARGET: REST_GET_media (sample 1)
+FILE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+METHOD: GET
+URL: https://aisandbox-pa.googleapis.com/v1/media/CAMaJDMzODBkZTVjLTE4MTEtNDJhYS1iMmU0LTRlZjFiYzYzYTMyYyIDQ0FFKiQ3NzdhYWY3Ny0wNmJhLTQ5NGUtOTY0Ny01MDY2YzJhZjg1MzI?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+====================================================================================================
+
+  REQUEST HEADERS (22 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: GET
+    :path: /v1/media/CAMaJDMzODBkZTVjLTE4MTEtNDJhYS1iMmU0LTRlZjFiYzYzYT ... t3oJAA5VWt3pY&clientContext.tool=PINHOLE
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  QUERY PARAMS (2):
+    key: AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+    clientContext.tool: PINHOLE
+
+
+====================================================================================================
+TARGET: REST_POST_upload (sample 1)
+FILE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1:uploadUserImage
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1:uploadUserImage
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 418232
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 418232):
+    No API key (AIzaSy) found in body
+    Body preview: {"imageInput":{"rawImageBytes":"/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAAB...
+
+
+====================================================================================================
+TARGET: RECAPTCHA_reload (sample 1)
+FILE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+METHOD: POST
+URL: https://www.google.com/recaptcha/enterprise/reload?k=6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV
+====================================================================================================
+
+  REQUEST HEADERS (25 total):
+    :authority: www.google.com
+    :method: POST
+    :path: /recaptcha/enterprise/reload?k=6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 18066
+    content-type: application/x-protobuffer
+    origin: https://www.google.com
+    priority: u=1, i
+    referer: https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=6L ... s=20000&execute-ms=30000&cb=3pl4wwsul9rf
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: same-origin
+    sec-fetch-storage-access: active
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  QUERY PARAMS (1):
+    k: 6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV
+
+  POST DATA (mime: application/x-protobuffer, length: 18066):
+    No API key (AIzaSy) found in body
+    Body preview: 
+N67nZn4AqZkNcbeMu4prBgzg¹03AFcWeA6nqgw9O2uACIN-5RL08uBuSVxSX9iKQBUZGlGYHPC-hLuS0TjwsC7gPvbx_jbq2cXpxVlAbafCF62MticxD-aTWVKq6K8yvd4SoeLZXlazXwsh12y_slCyf0ZfkXPhxiqhQM7DGgJovMnSaNwYu-joPIedXUpvPVf1S5g_gmhfcOqZl6F9iFC9AQYsDakij9Bh0iUgzPqPGPf9q5l0ymtW8J8wmFbbuLr1-Teprni4x_RNH-kQVodWf35pZ4lvMjQC4XlkH...
+
+
+====================================================================================================
+TARGET: REST_POST_generate_video (sample 1)
+FILE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/video:batchAsyncGenerateVideoReferenceImages
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 4992
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 4960):
+    No API key (AIzaSy) found in body
+    Body preview: {"clientContext":{"recaptchaContext":{"token":"0cAFcWeA57uAL6OvX4ROdTu2oBZKnkRD8Y54oALkXSEebCjQzmarnUqki9tnh0jtkxtDBaKnORCTY_2X3DTdbatZTnvydvQOoVTXYTciLbH2sikH93R2ZbSVFWJJJzVY0WhmVZw_fLG-CX1hJM_HhM8Rz0oW6eYDY-4kVztK_WcPOBdiSrDXikJsjbWJu6Xx5sGpXTVIzaOyVuDbWRPSeTM5XnMa_BKKXbar-Qf9ozJxmdrCbFOJisU2XXtup...
+
+
+====================================================================================================
+TARGET: REST_POST_poll (sample 1)
+FILE: 01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/video:batchCheckAsyncVideoGenerationStatus
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 632
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 632):
+    No API key (AIzaSy) found in body
+    Body preview: {"operations":[{"operation":{"name":"92cea5b7-0bdf-4b66-8d99-442c5cb21108"},"sceneId":"1088d16f-b395-44e0-8aa8-be1df603b0a9","status":"MEDIA_GENERATION_STATUS_PENDING"},{"operation":{"name":"d9607a25-f7a1-49ef-aea3-392bcb4c2faa"},"sceneId":"5a9dc801-1211-43cd-8326-5d636c99c4f5","status":"MEDIA_GENER...
+
+
+====================================================================================================
+TARGET: REST_POST_generate_video (sample 2)
+FILE: 01.2 169 ingedients to video done 4 video prompt 3 anh.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/video:batchAsyncGenerateVideoReferenceImages
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 5004
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 4972):
+    No API key (AIzaSy) found in body
+    Body preview: {"clientContext":{"recaptchaContext":{"token":"0cAFcWeA4hq4-lbPxcLhqXNDobwi49KnUIC5LdkmI3XpQ6WJ_CzJTl1aky50LLKUIJGfA1n-ng9gRooR1fjHYCQPSMkgp6YLDC6eUFn1WZWeyGAO0Qt8jp54nI-wYELK85x0FiJ3xl7UVyTN7T3W87ugwOL57N-YTlj9GfmMGAoQCVClOAQ3UpohGOEwRq50BEq7pbprvqo1DRaR3vk8bEkRRc72s8aZCEqUQR--tPAbFi9vJYYAuDEtMIHWg...
+
+
+====================================================================================================
+TARGET: REST_POST_upsample_video (sample 1)
+FILE: 916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/video:batchAsyncGenerateVideoUpsampleVideo
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: en-US,en;q=0.9,vi;q=0.8
+    content-length: 2256
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 2256):
+    No API key (AIzaSy) found in body
+    Body preview: {"requests":[{"aspectRatio":"VIDEO_ASPECT_RATIO_PORTRAIT","resolution":"VIDEO_RESOLUTION_1080P","seed":18779,"videoInput":{"mediaId":"CAUSJDRmZDdmYjcyLTc5MGItNGMzZS04Y2MxLTJiZmMzYjQyNDVlMxokNWFiNzk4YzEtNTA4MS00MWVkLWJlMGEtZjNhNDYxNzRkNWFlIgNDQUUqJDdhMDE0MjM2LWQ0YmEtNDQ4Yi04ZDVlLTMxNWRiMGZhZDQwNw"},"...
+
+
+====================================================================================================
+TARGET: REST_GET_credits (sample 1)
+FILE: Check Ultra.har
+METHOD: GET
+URL: https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+====================================================================================================
+
+  REQUEST HEADERS (22 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: GET
+    :path: /v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0B ⭐
+
+  COOKIES ARRAY (0 items):
+
+  QUERY PARAMS (1):
+    key: AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY
+
+
+====================================================================================================
+TARGET: AUTH_sample (sample 1)
+FILE: Check Ultra.har
+METHOD: GET
+URL: https://labs.google/fx/api/auth/session
+====================================================================================================
+
+  REQUEST HEADERS (17 total):
+    :authority: labs.google
+    :method: GET
+    :path: /fx/api/auth/session
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5
+    content-type: application/json
+    priority: u=1, i
+    referer: https://labs.google/fx/tools/flow/project/368870ec-2572-4083-8a20-920a535728fa
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: same-origin
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+
+  COOKIES ARRAY (0 items):
+
+
+====================================================================================================
+TARGET: REST_POST_recommend (sample 1)
+FILE: Check Ultra.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1:fetchUserRecommendations
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: en
+    content-length: 112
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0B ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 112):
+    No API key (AIzaSy) found in body
+    Body: {"onramp":["WHISK_UPGRADE_BUTTON","WHISK_MANAGE_AI_CREDITS","WHISK_CREDIT_QUOTA_UPGRADE","WHISK_ANIMATE_TOAST"]}
+
+
+====================================================================================================
+TARGET: REST_POST_checkApp (sample 1)
+FILE: Check trạng thái tài khoản Ultra hay Pro haay Thuong.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1:checkAppAvailability
+====================================================================================================
+
+  REQUEST HEADERS (25 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1:checkAppAvailability
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: en-US,en;q=0.9
+    content-length: 36
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+    x-goog-api-key: AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 36):
+    No API key (AIzaSy) found in body
+    Body: {"clientContext":{"tool":"PINHOLE"}}
+
+
+====================================================================================================
+TARGET: STORAGE_download (sample 1)
+FILE: Download 720 4 vid.har
+METHOD: GET
+URL: https://storage.googleapis.com/ai-sandbox-videofx/video/37776fce-83fc-4370-b67d-5e69f5a755df?GoogleAccessId=labs-ai-sandbox-videoserver-prod@system.gserviceaccount.com&Expires=1769845118&Signature=stv
+====================================================================================================
+
+  REQUEST HEADERS (22 total):
+    :authority: storage.googleapis.com
+    :method: GET
+    :path: /ai-sandbox-videofx/video/37776fce-83fc-4370-b67d-5e69f5a755 ... ifwmdYyOU8F6r5TzHuVrfhtnUBRdSSh2JQ%3D%3D
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: m1p/flp8o0rsqq649T7rsY5vgtE= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  QUERY PARAMS (3):
+    GoogleAccessId: labs-ai-sandbox-videoserver-prod@system.gserviceaccount.com
+    Expires: 1769845118
+    Signature: stveZ3u3QZ5i4OTNezMtGr4nSRU%2BaJI6Jou4Lt...fhtnUBRdSSh2JQ%3D%3D
+
+
+====================================================================================================
+TARGET: REST_POST_upsample (sample 1)
+FILE: Download anh 2k.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/flow/upsampleImage
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 2124
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 2124):
+    No API key (AIzaSy) found in body
+    Body preview: {"mediaId":"CAMSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokZjlkZjdjZjAtNjA5Zi00ODNmLTljYjEtYTU1YWI0MmQ3ZjBhIgNDQUUqJDdiZWUxNmFiLWFkY2UtNDJjNS04NjY2LTI1OWYyNjIxNTUyMQ","targetResolution":"UPSAMPLE_IMAGE_RESOLUTION_2K","clientContext":{"recaptchaContext":{"token":"0cAFcWeA5CltsPcEHcqy_iYXV0Sy...
+
+
+====================================================================================================
+TARGET: REST_POST_gif (sample 1)
+FILE: Download gif 4 vid.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/video:generatePinholeGif
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/video:generatePinholeGif
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 186
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: m1p/flp8o0rsqq649T7rsY5vgtE= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 186):
+    No API key (AIzaSy) found in body
+    Body: {"mediaGenerationId":"CAUSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokMzQ5MjdkZjMtNjQ5Yi00N2YxLWFjMGMtMDkxZmFkNzk0ZGY0IgNDQUUqJDM3Nzc2ZmNlLTgzZmMtNDM3MC1iNjdkLTVlNjlmNWE3NTVkZg"}
+
+
+====================================================================================================
+TARGET: REST_POST_generate_image (sample 1)
+FILE: Full tạo ảnh.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 10776
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIlqHLAQiFoM0BCNmqzwE= ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 10740):
+    No API key (AIzaSy) found in body
+    Body preview: {"clientContext":{"recaptchaContext":{"token":"0cAFcWeA5w_xpJmNPoQ65RcYOOnb5RX9Wsfa4H7jPzyQz7tKpW7L2vw1012HXLCuZIAItAow2iIg6CRkAlEwavan08objDZUrSAvzVwUy6pUR8gOQOPZtOhOYrH7uqqZRrkaJMVD4h12-KETAg7aL46wgyUHi6VFMKuBp9ifcqvdfyEmEBL0_a2JqLjx2eCpN5knjRmM8jGOWn5XNjVE3HHDijY-Gp35D0Ao_hFt3YGra8JYapdAPhzPek1ae...
+
+
+====================================================================================================
+TARGET: REST_POST_whisk_credit (sample 1)
+FILE: whisk 2.har
+METHOD: POST
+URL: https://aisandbox-pa.googleapis.com/v1/whisk:getVideoCreditStatus
+====================================================================================================
+
+  REQUEST HEADERS (24 total):
+    :authority: aisandbox-pa.googleapis.com
+    :method: POST
+    :path: /v1/whisk:getVideoCreditStatus
+    :scheme: https
+    accept: */*
+    accept-encoding: gzip, deflate, br, zstd
+    accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7
+    content-length: 2
+    content-type: text/plain;charset=UTF-8
+    origin: https://labs.google
+    priority: u=1, i
+    referer: https://labs.google/
+    sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+    sec-ch-ua-mobile: ?0
+    sec-ch-ua-platform: "Windows"
+    sec-fetch-dest: empty
+    sec-fetch-mode: cors
+    sec-fetch-site: cross-site
+    user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+    x-browser-channel: stable ⭐
+    x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved. ⭐
+    x-browser-validation: WVxyJFF0uIgXSTejJocZmmZTO+I= ⭐
+    x-browser-year: 2026 ⭐
+    x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0B ⭐
+
+  COOKIES ARRAY (0 items):
+
+  POST DATA (mime: text/plain;charset=UTF-8, length: 2):
+    No API key (AIzaSy) found in body
+    Body: {}
+

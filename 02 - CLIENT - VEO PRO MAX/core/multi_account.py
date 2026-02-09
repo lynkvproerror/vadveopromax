@@ -2,7 +2,8 @@
 VEO Pro Max - Multi-Account Manager (ĐẠI CHỦ)
 
 Reference: MULTITHREADING_ARCHITECTURE.md
-Role: Manages multiple AccountManagers, load balancing, capacity tracking
+Role: Manages multiple AccountManagers, load balancing, capacity tracking,
+      and browser lifecycle for all accounts.
 
 Architecture: Asyncio (Hybrid with ProcessPoolExecutor for CPU tasks)
 """
@@ -10,12 +11,15 @@ Architecture: Asyncio (Hybrid with ProcessPoolExecutor for CPU tasks)
 from typing import Optional, List
 from datetime import datetime
 import asyncio
+import logging
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.session import AccountSession
 from core.account_manager import AccountManager
+
+log = logging.getLogger(__name__)
 
 
 class MultiAccountManager:
@@ -38,7 +42,7 @@ class MultiAccountManager:
     @property
     def total_capacity(self) -> int:
         """Total capacity = N accounts × 4 slots."""
-        return len(self._accounts) * AccountManager.MAX_SLOTS
+        return sum(acc.max_slots for acc in self._accounts)
     
     @property
     def total_available(self) -> int:
@@ -78,14 +82,16 @@ class MultiAccountManager:
     async def remove_account(self, email: str) -> bool:
         """Remove an account from the pool.
         
+        Closes browser session before removing.
         Returns True if removed successfully.
         """
         async with self._lock:
             for i, acc in enumerate(self._accounts):
                 if acc.email == email:
-                    # Don't remove if has active slots
                     if acc.active_slots > 0:
                         return False
+                    # Close browser before removing
+                    await acc.close_browser()
                     self._accounts.pop(i)
                     return True
             return False
@@ -158,9 +164,39 @@ class MultiAccountManager:
             "accounts": [acc.get_status() for acc in self._accounts]
         }
     
+    async def startup_browsers(self, headless: bool = True):
+        """Start persistent browsers for all accounts.
+        
+        Call this when engine starts. Each CHỦ gets a persistent browser
+        for on-demand reCAPTCHA refresh.
+        
+        Note: Each browser uses ~100-200MB RAM.
+        """
+        log.info(f"Starting browsers for {len(self._accounts)} accounts...")
+        for acc in self._accounts:
+            try:
+                await acc.ensure_browser(headless=headless)
+            except Exception as e:
+                log.error(f"Failed to start browser for {acc.email}: {e}")
+        log.info("All account browsers initialized")
+    
+    async def shutdown_browsers(self):
+        """Close all persistent browsers.
+        
+        Call this on engine stop or application exit.
+        """
+        log.info("Shutting down all account browsers...")
+        for acc in self._accounts:
+            try:
+                await acc.close_browser()
+            except Exception as e:
+                log.error(f"Failed to close browser for {acc.email}: {e}")
+        log.info("All browsers closed")
+    
     async def clear_all(self):
         """Clear all accounts (for testing/reset)."""
         async with self._lock:
-            # Only clear if no active slots
             if self.total_active == 0:
+                # Close all browsers first
+                await self.shutdown_browsers()
                 self._accounts.clear()

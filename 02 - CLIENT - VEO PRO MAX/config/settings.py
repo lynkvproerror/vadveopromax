@@ -32,6 +32,16 @@ class AppSettings:
     auto_start_queue: bool = False
     pause_on_error: bool = True
     
+    # === WORKER DEFAULTS (applied to new accounts) ===
+    # Per-account max_slots is stored in AccountSession, not here
+    retry_count: int = 3        # Default retry count for new accounts
+    request_timeout: int = 120  # Default timeout (seconds) for new accounts
+    
+    # === ANTI-DETECT SPAM ===
+    anti_detect_enabled: bool = True
+    anti_detect_delay_min: float = 1.0   # seconds (microsecond precision at runtime)
+    anti_detect_delay_max: float = 5.0   # seconds
+    
     # === BROWSER ===
     headless_mode: bool = False
     use_persistent_profile: bool = True
@@ -39,6 +49,11 @@ class AppSettings:
     # === CONTINUATION ===
     continuation_enabled: bool = True
     extract_point_ms: int = 750
+    
+    # === ENHANCER IMAGE (BETA) ===
+    enhancer_enabled: bool = False
+    enhancer_quality: str = "Medium"  # "Low (fast)" | "Medium" | "High (slow)"
+    enhancer_scale: str = "1x (enhance only)"  # "1x (enhance only)" | "2x" | "4x"
     
     # === UI ===
     developer_mode: bool = False

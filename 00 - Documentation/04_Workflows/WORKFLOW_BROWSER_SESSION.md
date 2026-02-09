@@ -529,10 +529,14 @@ flowchart TD
 class CONTINUATIONChainProcessor:
     """Process continuation chain on dedicated tab."""
     
-    async def process(self, project: Project, tab: Tab):
+    def __init__(self, frame_extractor: 'FrameExtractor', api_client: 'VEOApiClient'):
+        self.frame_extractor = frame_extractor  # FFmpeg-based
+        self.api_client = api_client
+    
+    async def process(self, project: Project, tab: Tab, settings: 'AppSettings'):
         """Process entire continuation chain."""
         
-        last_frame: Optional[bytes] = None
+        continuation_frame_id: Optional[str] = None  # mediaId from uploaded frame
         
         for i, prompt in enumerate(project.prompts):
             log.info(f"Processing continuation {project.name}: {i+1}/{len(project.prompts)}")
@@ -542,9 +546,9 @@ class CONTINUATIONChainProcessor:
                 await self._set_mode(tab, "text-to-video")
                 await self._submit_prompt(tab, prompt)
             else:
-                # Subsequent: frames-to-video with injected frame
+                # Subsequent: frames-to-video with uploaded frame
                 await self._set_mode(tab, "frames-to-video")
-                await self._inject_frame(tab, last_frame)
+                await self._inject_frame_by_id(tab, continuation_frame_id, settings.frame_source)
                 await self._submit_prompt(tab, prompt)
             
             # Wait for video generation
@@ -558,13 +562,39 @@ class CONTINUATIONChainProcessor:
             prompt.status = "complete"
             prompt.video_url = video_url
             
-            # Extract last frame for next prompt (except last)
+            # Extract frame for next prompt using FFmpeg pipeline
             if i < len(project.prompts) - 1:
-                last_frame = await self._extract_last_frame(tab, video_url)
-                log.info(f"Extracted frame: {len(last_frame)} bytes")
+                continuation_frame_id = await self._extract_and_upload(
+                    video_url, settings
+                )
+                log.info(f"Uploaded continuation frame: {continuation_frame_id}")
         
         # Release tab
         await self._release_tab(tab)
+    
+    async def _extract_and_upload(
+        self, video_url: str, settings: 'AppSettings'
+    ) -> Optional[str]:
+        """FFmpeg pipeline: download → extract → base64 → upload → mediaId."""
+        # 1. Download video locally
+        video_path = await self._download_video(video_url)
+        # 2. Extract frame via FFmpeg
+        from_end = (settings.frame_source == "LAST")
+        frame_path = self.frame_extractor.extract_frame(
+            video_path, settings.extract_point_ms, from_end
+        )
+        if not frame_path:
+            return None
+        # 3. Base64 encode
+        import base64
+        with open(frame_path, "rb") as f:
+            frame_b64 = base64.b64encode(f.read()).decode()
+        # 4. Upload and get mediaId
+        resp = await self.api_client.upload_image(
+            access_token=self._token, recaptcha_token=self._recaptcha,
+            image_base64=frame_b64
+        )
+        return resp.data.get("mediaId") if resp.success else None
 ```
 
 ---
@@ -806,7 +836,7 @@ if len(CONTINUATION_projects) > len(cookies) * tabs_per_cookie:
 ### Case 2: Tab Crash During continuation
 
 ```python
-async def on_tab_crash(self, tab: Tab, project: Project):
+async def on_tab_crash(self, tab: Tab, project: Project, settings: 'AppSettings'):
     """Handle tab crash during continuation chain."""
     
     current_index = project.current_prompt_index
@@ -814,16 +844,19 @@ async def on_tab_crash(self, tab: Tab, project: Project):
     # Create new tab
     new_tab = await self._create_replacement_tab(tab.cookie)
     
-    # Restore chain state
+    # Restore chain state via FFmpeg pipeline
+    continuation_frame_id = None
     if current_index > 0:
-        # Need to regenerate last frame
+        # Re-extract frame from last completed video
         last_video = project.prompts[current_index - 1].video_url
-        last_frame = await self._extract_frame_from_url(last_video)
-    else:
-        last_frame = None
+        continuation_frame_id = await self._extract_and_upload(
+            last_video, settings
+        )
     
     # Resume chain
-    await self._resume_CONTINUATION_chain(project, new_tab, current_index, last_frame)
+    await self._resume_CONTINUATION_chain(
+        project, new_tab, current_index, continuation_frame_id
+    )
 ```
 
 ---

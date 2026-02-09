@@ -3,6 +3,9 @@ VEO Pro Max - Continuation Toggle Component (PySide6)
 
 Reference: TAB_01_TEXT_TO_VIDEO.md
 Migrated from CustomTkinter to PySide6.
+
+Simplified: VEO only supports start frame input, so continuation
+always extracts from video END. No placement choice needed.
 """
 
 from typing import Optional, Callable
@@ -25,36 +28,30 @@ class ContinuationMode(Enum):
     ON = "on"
 
 
-class ContinuationPlacement(Enum):
-    """Where to place continuation frame (for I2V/R2V tabs)."""
-    FIRST = "first"
-    LAST = "last"
-
-
 class ContinuationHeader(QWidget):
     """Header component with All/None quick select (PySide6).
     
     UI: 🔗 CONT: [☐ All] [☐ None]
+    
+    Simplified: No First/Last placement — VEO always uses
+    extracted frame as start frame for next video.
     """
     
     # Signals
     select_all = Signal()
     select_none = Signal()
-    placement_changed = Signal(ContinuationPlacement)
     
     def __init__(
         self,
         parent: Optional[QWidget] = None,
         on_select_all: Optional[Callable[[], None]] = None,
         on_select_none: Optional[Callable[[], None]] = None,
-        show_placement: bool = False,
+        show_placement: bool = False,  # Kept for backward compat, ignored
     ):
         super().__init__(parent)
         
         self._on_select_all = on_select_all
         self._on_select_none = on_select_none
-        self.show_placement = show_placement
-        self._placement = ContinuationPlacement.FIRST
         
         self._setup_ui()
     
@@ -69,97 +66,68 @@ class ContinuationHeader(QWidget):
         label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
         layout.addWidget(label)
         
-        # All checkbox
-        self.all_checkbox = QCheckBox("All")
-        self.all_checkbox.setStyleSheet(f"""
-            QCheckBox {{
-                color: {Theme.TEXT};
+        # All button
+        self.all_btn = QPushButton("All")
+        self.all_btn.setFixedSize(40, 22)
+        self.all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.GREEN};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
                 font-size: 11px;
+                font-weight: bold;
             }}
-            QCheckBox::indicator:checked {{
+            QPushButton:hover {{
                 background-color: {Theme.GREEN};
+                color: {Theme.CRUST};
             }}
         """)
-        self.all_checkbox.stateChanged.connect(self._on_all_click)
-        layout.addWidget(self.all_checkbox)
+        self.all_btn.clicked.connect(self._on_all_click)
+        layout.addWidget(self.all_btn)
         
-        # None checkbox
-        self.none_checkbox = QCheckBox("None")
-        self.none_checkbox.setStyleSheet(f"""
-            QCheckBox {{
-                color: {Theme.TEXT};
+        # None button
+        self.none_btn = QPushButton("None")
+        self.none_btn.setFixedSize(48, 22)
+        self.none_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.RED};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
                 font-size: 11px;
+                font-weight: bold;
             }}
-            QCheckBox::indicator:checked {{
+            QPushButton:hover {{
                 background-color: {Theme.RED};
+                color: {Theme.CRUST};
             }}
         """)
-        self.none_checkbox.stateChanged.connect(self._on_none_click)
-        layout.addWidget(self.none_checkbox)
-        
-        # Placement selector (optional, for I2V/R2V)
-        if self.show_placement:
-            sep = QLabel("|")
-            sep.setStyleSheet(f"color: {Theme.BORDER};")
-            layout.addWidget(sep)
-            
-            self.first_btn = QPushButton("First")
-            self.first_btn.setFixedSize(40, 24)
-            self.first_btn.clicked.connect(lambda: self._set_placement(ContinuationPlacement.FIRST))
-            layout.addWidget(self.first_btn)
-            
-            self.last_btn = QPushButton("Last")
-            self.last_btn.setFixedSize(40, 24)
-            self.last_btn.setProperty("variant", "secondary")
-            self.last_btn.clicked.connect(lambda: self._set_placement(ContinuationPlacement.LAST))
-            layout.addWidget(self.last_btn)
-            
-            self._update_placement_buttons()
+        self.none_btn.clicked.connect(self._on_none_click)
+        layout.addWidget(self.none_btn)
         
         layout.addStretch()
     
-    def _on_all_click(self, state):
-        """Handle All checkbox click."""
-        if state == Qt.Checked:
-            self.none_checkbox.setChecked(False)
-            self.select_all.emit()
-            if self._on_select_all:
-                self._on_select_all()
+    def _on_all_click(self):
+        """Handle All button click."""
+        self.select_all.emit()
+        if self._on_select_all:
+            self._on_select_all()
     
-    def _on_none_click(self, state):
-        """Handle None checkbox click."""
-        if state == Qt.Checked:
-            self.all_checkbox.setChecked(False)
-            self.select_none.emit()
-            if self._on_select_none:
-                self._on_select_none()
-    
-    def _set_placement(self, placement: ContinuationPlacement):
-        """Set placement and update button states."""
-        self._placement = placement
-        self._update_placement_buttons()
-        self.placement_changed.emit(placement)
-    
-    def _update_placement_buttons(self):
-        """Update placement button styles."""
-        if not self.show_placement:
-            return
-        
-        if self._placement == ContinuationPlacement.FIRST:
-            self.first_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
-            self.last_btn.setStyleSheet(f"background-color: {Theme.SURFACE2};")
-        else:
-            self.first_btn.setStyleSheet(f"background-color: {Theme.SURFACE2};")
-            self.last_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
-    
-    def get_placement(self) -> ContinuationPlacement:
-        """Get current placement."""
-        return self._placement
+    def _on_none_click(self):
+        """Handle None button click."""
+        self.select_none.emit()
+        if self._on_select_none:
+            self._on_select_none()
     
     def reset_checkboxes(self):
-        """Reset All/None checkboxes to unchecked."""
-        self.all_checkbox.setChecked(False)
-        self.none_checkbox.setChecked(False)
+        """Reset All/None buttons (no-op for buttons, kept for backward compat)."""
+        pass
+    
+    def set_cont_enabled(self, enabled: bool):
+        """Enable or disable all continuation controls."""
+        self.all_btn.setEnabled(enabled)
+        self.none_btn.setEnabled(enabled)
 
 
 class ContinuationCheckbox(QCheckBox):

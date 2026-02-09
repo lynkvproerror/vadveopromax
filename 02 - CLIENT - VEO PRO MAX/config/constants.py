@@ -36,7 +36,7 @@ class APIEndpoints:
     STATUS = "/v1/video:batchCheckAsyncVideoGenerationStatus"
     UPLOAD = "/v1:uploadUserImage"
     UPSCALE_VIDEO = "/v1/video:batchAsyncGenerateVideoUpsampleVideo"
-    UPSCALE_IMAGE = "/v1/flowMedia:batchUpscaleImages"
+    UPSCALE_IMAGE = "/v1/flow/upsampleImage"  # Doc §3.3: correct path
     
     # Additional endpoints from HAR analysis
     GIF = "/v1/video:generatePinholeGif"
@@ -44,6 +44,9 @@ class APIEndpoints:
     APP_STATUS = "/v1:checkAppAvailability"
     RECOMMENDATIONS = "/v1:fetchUserRecommendations"
     IMAGE_UPSCALE_FLOW = "/v1/flow/upsampleImage"
+    
+    # API Keys (Doc §2.1)
+    API_KEY = "AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY"
 
 
 # === ASPECT RATIOS ===
@@ -91,7 +94,7 @@ class VideoResolution(str, Enum):
 class GenerationStatus(str, Enum):
     """Status of generation operation."""
     PENDING = "MEDIA_GENERATION_STATUS_PENDING"
-    IN_PROGRESS = "MEDIA_GENERATION_STATUS_IN_PROGRESS"
+    ACTIVE = "MEDIA_GENERATION_STATUS_ACTIVE"  # Doc §6.20: was IN_PROGRESS
     SUCCESSFUL = "MEDIA_GENERATION_STATUS_SUCCESSFUL"
     FAILED = "MEDIA_GENERATION_STATUS_FAILED"
 

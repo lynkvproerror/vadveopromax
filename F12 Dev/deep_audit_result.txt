@@ -1,0 +1,1201 @@
+====================================================================================================
+DEEP AUDIT: All Python Files - Protocol-Related Patterns
+====================================================================================================
+Files scanned: 79
+Files with protocol patterns: 57
+
+--- SUMMARY TABLE ---
+File                                           Lines   Auth  reCap  CType   Poll  Heads
+config\constants.py                              190      0      0      0      4      0
+config\settings.py                               100      0      0      0      0      0
+core\__init__.py                                 186      0      0      0      0      0
+core\account_manager.py                          198      1      0      1      0      0
+core\api_client.py                               736      2      1      1      4     10
+core\app_controller.py                           551      0      0      0      0      0
+core\auth_manager.py                             276      2      0      0      0      2
+core\browser_integration.py                      271      0      0      0      0      0
+core\browser_manager.py                          326      0      0      0      0      0
+core\cookie_validator.py                         246      0      0      0      0      0
+core\credentials_manager.py                      165      0      0      0      0      0
+core\dispatcher.py                               345      0      0      0      2      0
+core\download_manager.py                         251      0      0      0      0      0
+core\engine.py                                   373      0      0      0     16      0
+core\event_manager.py                            285      0      0      0      0      0
+core\frame_extractor.py                          217      0      0      0      0      0
+core\generation_controller.py                    279      0      0      0      0      0
+core\media_handler.py                            263      0      0      0      0      0
+core\oauth_server.py                             560     10      0      0      0      0
+core\profiles_controller.py                     1638      4      0      0      0      2
+core\project_manager.py                          101      1      0      0      0      0
+core\queue_controller.py                         277      0      0      0      0      0
+core\recaptcha_handler.py                        268      0      0      0      0      0
+core\refresh_manager.py                          250      0      0      0      0      0
+core\session.py                                  175      0      0      0      0      0
+core\settings_controller.py                      278      0      0      0      0      0
+core\token_extractor.py                          460      0      0      0      0     15
+core\token_manager.py                            240      0      0      0      0      0
+core\transfer_handler.py                         276      0      0      0      0      0
+core\upscale_handler.py                          204      1      0      0     13      0
+core\veo_automation.py                           400      0      0      0     10      0
+core\worker.py                                   282      0      0      0      0      0
+security\_encrypted_api_keys.py                  148      0      0      0      0      0
+security\_encrypted_keys.py                        7      0      0      0      0      0
+security\firebase_rest_client.py                 502      0      0      1      0      0
+security\license_client.py                       903      0      0      0      0      0
+security\license_request.py                      404      0      0      0      2      0
+security\permissions.py                           99      0      0      0      0      0
+security\trial_protection.py                     422      0      0      0      0      0
+services\firebase_rest_client.py                 327      0      0      0      0      0
+services\license_client.py                       303      0      0      0      0      0
+services\permissions.py                          277      0      0      0      0      0
+ui\components\__init__.py                         39      0      0      0      0      0
+ui\components\image_upload_box.py                235      0      0      0      0      0
+ui\components\queue_project_group.py             432      0      0      0      0      0
+ui\components\sidebar_base.py                    327      0      0      0      0      0
+ui\popups\complex_popups.py                      608      0      0      0      0      0
+ui\popups\popups.py                              373      0      0      0      0      0
+ui\popups\video_player.py                        192      0      0      0      0      0
+ui\tabs\tab_devconsole.py                        229      0      0      0      0      0
+ui\tabs\tab_i2i.py                               289      0      0      0      0      0
+ui\tabs\tab_i2v.py                               331      0      0      0      0      0
+ui\tabs\tab_license.py                           281      0      0      0      0      0
+ui\tabs\tab_settings.py                         1239      0      0      0      0      0
+ui\tabs\tab_t2i.py                               250      0      0      0      0      0
+ui\tabs\tab_t2v.py                               385      0      0      0      0      0
+utils\file_namer.py                              262      0      0      0      0      0
+
+================================================================================
+FILE: config\constants.py (190 lines)
+--------------------------------------------------------------------------------
+  [IN_PROGRESS] (1 hits):
+    L94: IN_PROGRESS = "MEDIA_GENERATION_STATUS_IN_PROGRESS"
+  [PINHOLE] (1 hits):
+    L42: GIF = "/v1/video:generatePinholeGif"
+  [access_token_param] (1 hits):
+    L158: ACCESS_TOKEN = 3600         # 1 hour
+  [base_url_ref] (1 hits):
+    L24: BASE_URL = "https://aisandbox-pa.googleapis.com"
+  [cookie_ref] (2 hits):
+    L161: SESSION_COOKIE = 604800     # 7 days
+    L184: TRIAL_MAX_COOKIES = 1
+  [credits_ref] (1 hits):
+    L43: CREDITS = "/v1/credits"
+  [download_ref] (4 hits):
+    L106: DOWNLOADING = "downloading"
+    L175: # Download limits
+    L176: MAX_PARALLEL_DOWNLOADS = 3
+    L177: DOWNLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
+  [generate_ref] (7 hits):
+    L27: T2V = "/v1/video:batchAsyncGenerateVideoText"
+    L28: I2V_SINGLE = "/v1/video:batchAsyncGenerateVideoStartImage"
+    L29: I2V_DUAL = "/v1/video:batchAsyncGenerateVideoStartAndEndImage"
+    L30: R2V = "/v1/video:batchAsyncGenerateVideoReferenceImages"
+    L33: T2I = "/v1/flowMedia:batchGenerateImages"
+    ... and 2 more
+  [model_key_ref] (6 hits):
+    L71: VEO_FAST_31 = "veo_3_1_t2v_fast_landscape_ultra"
+    L72: VEO_FAST_31_PORTRAIT = "veo_3_1_t2v_fast_portrait_ultra"
+    L75: VEO_30 = "veo_3_0_t2v_landscape_ultra"
+    L76: VEO_30_PORTRAIT = "veo_3_0_t2v_portrait_ultra"
+    L79: VEO_I2V = "veo_3_1_i2v_fast_landscape_ultra"
+    ... and 1 more
+  [polling_ref] (4 hits):
+    L36: STATUS = "/v1/video:batchCheckAsyncVideoGenerationStatus"
+    L179: # Polling
+    L180: POLL_INTERVAL = 5          # seconds
+    L181: MAX_POLL_TIME = 600        # 10 minutes
+  [recaptcha_token_param] (1 hits):
+    L159: RECAPTCHA_TOKEN = 90        # ~90 seconds
+  [seed_ref] (1 hits):
+    L68: Reference: SEED_MANAGEMENT.md, HAR analysis
+  [upload_ref] (1 hits):
+    L37: UPLOAD = "/v1:uploadUserImage"
+  [upscale_ref] (4 hits):
+    L38: UPSCALE_VIDEO = "/v1/video:batchAsyncGenerateVideoUpsampleVideo"
+    L39: UPSCALE_IMAGE = "/v1/flowMedia:batchUpscaleImages"
+    L46: IMAGE_UPSCALE_FLOW = "/v1/flow/upsampleImage"
+    L85: """Video resolution for upscale requests."""
+
+================================================================================
+FILE: config\settings.py (100 lines)
+--------------------------------------------------------------------------------
+  [model_key_ref] (1 hits):
+    L27: default_model: str = "veo_3_1"
+
+================================================================================
+FILE: core\__init__.py (186 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (8 hits):
+    L49: from .cookie_validator import CookieValidator, CookieStatus, CookieValidationResult
+    L53: from .refresh_manager import CookieRefreshManager, RefreshRequest, RefreshStatus
+    L54: from .transfer_handler import ExpiredCookieTransferHandler, TransferResult, PendingWork
+    L133: "CookieValidator",
+    L134: "CookieStatus",
+    ... and 3 more
+  [download_ref] (6 hits):
+    L30: # Downloads & Upscale
+    L31: from .download_manager import DownloadManager, DownloadProgress, DownloadResult
+    L109: # Downloads
+    L110: "DownloadManager",
+    L111: "DownloadProgress",
+    ... and 1 more
+  [paygate_ref] (2 hits):
+    L7: from .session import AccountSession, SubscriptionType, PaygateTier
+    L74: "PaygateTier",
+  [upscale_ref] (4 hits):
+    L30: # Downloads & Upscale
+    L32: from .upscale_handler import UpscaleHandler, UpscaleResult
+    L113: "UpscaleHandler",
+    L114: "UpscaleResult",
+
+================================================================================
+FILE: core\account_manager.py (198 lines)
+--------------------------------------------------------------------------------
+  [Authorization] (1 hits):
+    L179: "Authorization": f"Bearer {access_token}",
+  [Content-Type-json] (1 hits):
+    L180: "Content-Type": "application/json",
+  [access_token_param] (8 hits):
+    L25: - Session management (email, access_token, recaptcha)
+    L104: def get_access_token(self) -> Optional[str]:
+    L123: return self._session.access_token
+    L138: def update_access_token(self, token: str, expires_in: int = TokenLifetime.ACCESS_TOKEN):
+    L146: self._session.access_token = token
+    ... and 3 more
+  [content_type_override] (1 hits):
+    L180: "Content-Type": "application/json",
+  [paygate_ref] (2 hits):
+    L17: from core.session import AccountSession, SubscriptionType, PaygateTier
+    L189: "paygate_tier": self._session.paygate_tier.value,
+  [project_ref] (6 hits):
+    L43: self._project_id: Optional[str] = None
+    L71: def project_id(self) -> Optional[str]:
+    L73: return self._project_id
+    L75: def set_project_id(self, project_id: str):
+    L77: self._project_id = project_id
+    ... and 1 more
+  [recaptcha_token_param] (6 hits):
+    L125: def get_recaptcha_token(self) -> Optional[str]:
+    L136: return self._session.recaptcha_token
+    L149: def update_recaptcha_token(self, token: str):
+    L173: recaptcha_token = self.get_recaptcha_token()
+    L175: if not access_token or not recaptcha_token:
+    ... and 1 more
+  [signed_url_ref] (4 hits):
+    L118: if datetime.now() >= (self._session.token_expires - buffer_check):
+    L138: def update_access_token(self, token: str, expires_in: int = TokenLifetime.ACCESS_TOKEN):
+    L143: expires_in: Token lifetime in seconds.
+    L147: self._session.token_expires = datetime.now() + timedelta(seconds=expires_in)
+
+================================================================================
+FILE: core\api_client.py (736 lines)
+--------------------------------------------------------------------------------
+  [ASSET_MANAGER] (3 hits):
+    L195: - tool: "PINHOLE" for video, "ASSET_MANAGER" for uploads
+    L266: HAR verified: uses "imageInput" nested object, tool="ASSET_MANAGER"
+    L279: tool="ASSET_MANAGER",
+  [Authorization] (2 hits):
+    L112: - access_token: Bearer token from Google auth
+    L173: "Authorization": f"Bearer {access_token}",
+  [Content-Type-json] (1 hits):
+    L174: "Content-Type": "application/json",
+  [PINHOLE] (3 hits):
+    L189: tool: str = "PINHOLE",
+    L195: - tool: "PINHOLE" for video, "ASSET_MANAGER" for uploads
+    L662: Endpoint: /v1/video:generatePinholeGif (Sync)
+  [access_token_param] (29 hits):
+    L112: - access_token: Bearer token from Google auth
+    L166: access_token: str,
+    L173: "Authorization": f"Bearer {access_token}",
+    L221: access_token: str,
+    L227: headers = self._build_headers(access_token, recaptcha_token)
+    ... and 24 more
+  [base_url_ref] (1 hits):
+    L81: if 'googleapis.com' not in req.get('url', ''):
+  [browser_headers_ref] (10 hits):
+    L45: All x-browser-* headers are MANDATORY to avoid 403 Forbidden.
+    L50: "x-browser-channel": "stable",
+    L51: "x-browser-copyright": "Copyright 2026 Google LLC. All Rights reserved.",
+    L52: "x-browser-year": "2026"
+    L68: headers["x-browser-validation"] = self._validation
+    ... and 5 more
+  [client_data_ref] (11 hits):
+    L57: self._client_data: Optional[str] = None
+    L59: def set_dynamic_headers(self, validation: str, client_data: str = None):
+    L62: self._client_data = client_data
+    L69: if self._client_data:
+    L70: headers["x-client-data"] = self._client_data
+    ... and 6 more
+  [close_session] (3 hits):
+    L126: if self._session is None or self._session.closed:
+    L132: if self._session and not self._session.closed:
+    L133: await self._session.close()
+  [content_type_override] (1 hits):
+    L174: "Content-Type": "application/json",
+  [credits_ref] (2 hits):
+    L636: async def get_credits(
+    L643: Endpoint: /v1/credits (GET)
+  [generate_ref] (24 hits):
+    L28: def generate_random_seed() -> int:
+    L29: """Generate a random seed in valid range (0-32767)."""
+    L294: async def generate_video_t2v(
+    L308: Endpoint: /v1/video:batchAsyncGenerateVideoText (Async)
+    L318: actual_seed = seed if seed is not None else generate_random_seed()
+    ... and 19 more
+  [model_key_ref] (18 hits):
+    L301: model: str = "veo_3_1_t2v_fast_landscape_ultra",
+    L323: "videoModelKey": model,
+    L350: model: str = "veo_3_1_i2v_s_fast_ultra_relaxed",
+    L369: "videoModelKey": model,
+    L398: model: str = "veo_3_1_i2v_s_fast_fl_ultra_relaxed",
+    ... and 13 more
+  [paygate_ref] (18 hits):
+    L188: paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+    L199: - userPaygateTier: account tier
+    L208: if paygate_tier:
+    L209: ctx["userPaygateTier"] = paygate_tier
+    L304: paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+    ... and 13 more
+  [polling_ref] (4 hits):
+    L196: - recaptchaContext: nested object (required for generation, NOT for polling)
+    L549: async def check_status(
+    L557: Endpoint: /v1/video:batchCheckAsyncVideoGenerationStatus
+    L559: No clientContext needed for polling.
+  [project_ref] (19 hits):
+    L187: project_id: str = "",
+    L198: - projectId: UUID
+    L206: if project_id:
+    L207: ctx["projectId"] = project_id
+    L299: project_id: str = "",
+    ... and 14 more
+  [recaptcha_body_ref] (2 hits):
+    L196: - recaptchaContext: nested object (required for generation, NOT for polling)
+    L211: ctx["recaptchaContext"] = {
+  [recaptcha_token_param] (40 hits):
+    L113: - recaptcha_token: reCAPTCHA v3 token
+    L167: recaptcha_token: str,
+    L175: "x-goog-recaptcha-token": recaptcha_token,
+    L186: recaptcha_token: str,
+    L210: if include_recaptcha and recaptcha_token:
+    ... and 35 more
+  [seed_ref] (35 hits):
+    L4: Reference: CORE_MODULES_SPEC.md, SEED_MANAGEMENT.md, BROWSER_HEADERS.md
+    L23: # === SEED CONSTANTS ===
+    L24: SEED_MIN = 0
+    L25: SEED_MAX = 32767
+    L28: def generate_random_seed() -> int:
+    ... and 30 more
+  [session_id_ref] (2 hits):
+    L197: - sessionId: ";{timestamp_ms}"
+    L203: "sessionId": f";{int(time.time() * 1000)}",
+  [upload_ref] (7 hits):
+    L195: - tool: "PINHOLE" for video, "ASSET_MANAGER" for uploads
+    L253: # ==================== IMAGE UPLOAD ====================
+    L255: async def upload_image(
+    L263: """Upload image to VEO.
+    L265: Endpoint: /v1:uploadUserImage (Sync)
+    ... and 2 more
+  [upscale_ref] (17 hits):
+    L579: # ==================== UPSCALE ====================
+    L581: async def upscale_video(
+    L592: """Upscale video resolution.
+    L594: Endpoint: /v1/video:batchAsyncGenerateVideoUpsampleVideo (Async)
+    L598: - VIDEO_RESOLUTION_1080P → model: veo_3_1_upsampler_1080p
+    ... and 12 more
+  [x-goog-recaptcha] (1 hits):
+    L175: "x-goog-recaptcha-token": recaptcha_token,
+
+================================================================================
+FILE: core\app_controller.py (551 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (3 hits):
+    L26: from core.refresh_manager import CookieRefreshManager
+    L74: self._refresh_manager = CookieRefreshManager()
+    L179: if not self._permissions.check_limit("max_cookies", len(self._multi_account._accounts)):
+  [download_ref] (2 hits):
+    L29: from core.download_manager import DownloadManager
+    L75: self._download_manager = DownloadManager()
+
+================================================================================
+FILE: core\auth_manager.py (276 lines)
+--------------------------------------------------------------------------------
+  [Authorization] (2 hits):
+    L25: - Bearer token expiry checks (60s buffer)
+    L107: """Get valid bearer token.
+  [access_token_param] (8 hits):
+    L116: return session.access_token
+    L136: def update_access_token(
+    L140: expires_in: int = TokenLifetime.ACCESS_TOKEN
+    L145: session.access_token = token
+    L176: access_token = user_data.get("accessToken", "")
+    ... and 3 more
+  [browser_headers_ref] (2 hits):
+    L230: - x-browser-validation header
+    L260: "x-browser-validation": tokens.browser_validation,
+  [client_data_ref] (2 hits):
+    L231: - x-client-data header
+    L261: "x-client-data": tokens.client_data,
+  [close_session] (1 hits):
+    L271: await extractor.close()
+  [paygate_ref] (6 hits):
+    L16: from core.session import AccountSession, SubscriptionType, PaygateTier
+    L192: def parse_sku_from_response(self, response_data: dict) -> tuple[SubscriptionType, PaygateTier, int]:
+    L195: Returns (subscription_type, paygate_tier, credits)
+    L198: tier = PaygateTier.UNKNOWN
+    L208: if "paygateTier" in response_data:
+    ... and 1 more
+  [recaptcha_token_param] (4 hits):
+    L118: def get_recaptcha_token(self, session: AccountSession) -> Optional[str]:
+    L126: return session.recaptcha_token
+    L149: def update_recaptcha_token(self, email: str, token: str):
+    L256: session.update_recaptcha(tokens.recaptcha_token)
+  [signed_url_ref] (6 hits):
+    L113: if datetime.now() >= (session.token_expires - buffer):
+    L140: expires_in: int = TokenLifetime.ACCESS_TOKEN
+    L146: session.token_expires = datetime.now() + timedelta(seconds=expires_in)
+    L179: token_expires = datetime.now() + timedelta(hours=1)
+    L187: token_expires=token_expires,
+    ... and 1 more
+
+================================================================================
+FILE: core\browser_integration.py (271 lines)
+--------------------------------------------------------------------------------
+  [close_session] (1 hits):
+    L91: await self._browser.close()
+  [generate_ref] (1 hits):
+    L199: result = await self._automation.generate(session, request)
+
+================================================================================
+FILE: core\browser_manager.py (326 lines)
+--------------------------------------------------------------------------------
+  [close_session] (2 hits):
+    L155: await self._browser.close()
+    L234: await session.context.close()
+  [generate_ref] (1 hits):
+    L78: VEO_URL = "https://aistudio.google.com/app/generate/video"
+
+================================================================================
+FILE: core\cookie_validator.py (246 lines)
+--------------------------------------------------------------------------------
+  [close_session] (3 hits):
+    L123: await browser.close()
+    L134: await browser.close()
+    L227: loop.close()
+  [cookie_ref] (47 hits):
+    L2: VEO Pro Max - Cookie Validator
+    L5: Role: Validate cookies before use
+    L19: class CookieStatus(str, Enum):
+    L20: """Cookie validation status."""
+    L21: VALID = "valid"         # Cookie works, VEO accessible
+    ... and 42 more
+  [generate_ref] (4 hits):
+    L57: "aistudio.google.com/app/generate",
+    L58: "Generate videos",
+    L69: "generate_button": "//button[contains(text(), 'Generate')]",
+    L118: "https://aistudio.google.com/app/generate/video",
+
+================================================================================
+FILE: core\credentials_manager.py (165 lines)
+--------------------------------------------------------------------------------
+  [generate_ref] (4 hits):
+    L36: # Generate encryption key from machine-specific data
+    L37: self._key = self._generate_key()
+    L40: def _generate_key(self) -> bytes:
+    L41: """Generate encryption key from machine-specific identifiers.
+
+================================================================================
+FILE: core\dispatcher.py (345 lines)
+--------------------------------------------------------------------------------
+  [model_key_ref] (1 hits):
+    L47: model: str = "veo_3_1_t2v_fast_landscape_ultra"  # Fixed: proper model key
+  [polling_ref] (2 hits):
+    L26: Flow: PENDING → READY → RUNNING → WAITING_POLL → COMPLETED/FAILED/CANCELLED
+    L32: WAITING_POLL = "waiting_poll" # Waiting for async result (polling)
+  [project_ref] (1 hits):
+    L74: project_id: Optional[str] = None
+  [seed_ref] (1 hits):
+    L50: seed: Optional[int] = None  # Seed for reproducibility (0-32767)
+
+================================================================================
+FILE: core\download_manager.py (251 lines)
+--------------------------------------------------------------------------------
+  [close_session] (5 hits):
+    L84: if self._session is None or self._session.closed:
+    L91: if self._session and not self._session.closed:
+    L92: await self._session.close()
+    L235: await self.close()
+    L250: await manager.close()
+  [download_ref] (67 hits):
+    L2: VEO Pro Max - Download Manager
+    L5: Role: Async file downloads with progress tracking
+    L20: class DownloadProgress:
+    L21: """Progress info for a download."""
+    L25: downloaded_bytes: int = 0
+    ... and 62 more
+
+================================================================================
+FILE: core\engine.py (373 lines)
+--------------------------------------------------------------------------------
+  [access_token_param] (3 hits):
+    L144: access_token=account.get_access_token(),
+    L206: access_token=account.get_access_token(),
+    L330: access_token=account.get_access_token(),
+  [create_project_call] (2 hits):
+    L40: 3. ProjectManager.get_or_create_project()  →  ensure project exists
+    L142: project_id = await self._project_manager.get_or_create_project(
+  [download_ref] (3 hits):
+    L272: """FFmpeg pipeline: download → extract → base64 → upload → mediaId.
+    L281: # 1. Download video to temp file
+    L288: log.error(f"Failed to download video: HTTP {resp.status}")
+  [generate_ref] (3 hits):
+    L261: for video in data.get("generatedVideos", []):
+    L264: for image in data.get("generatedImages", []):
+    L306: None,  # auto-generate output path
+  [polling_ref] (16 hits):
+    L164: # For async operations, start polling
+    L167: task.state = TaskState.WAITING_POLL
+    L168: # Poll for results
+    L169: await self._poll_operation(task, account)
+    L189: async def _poll_operation(self, task: Task, account: AccountManager):
+    ... and 11 more
+  [project_ref] (6 hits):
+    L40: 3. ProjectManager.get_or_create_project()  →  ensure project exists
+    L141: if not account.project_id:
+    L142: project_id = await self._project_manager.get_or_create_project(
+    L147: if project_id:
+    L148: account.set_project_id(project_id)
+    ... and 1 more
+  [recaptcha_token_param] (4 hits):
+    L207: recaptcha_token="",  # Not needed for polling (HAR verified)
+    L326: from core.recaptcha import get_recaptcha_token
+    L327: recaptcha_token = await get_recaptcha_token()
+    L331: recaptcha_token=recaptcha_token,
+  [upload_ref] (8 hits):
+    L272: """FFmpeg pipeline: download → extract → base64 → upload → mediaId.
+    L274: Returns uploaded mediaId (image URI) or None on error.
+    L325: # 4. Upload image to VEO API
+    L329: upload_resp = await self._api_client.upload_image(
+    L335: if upload_resp.success:
+    ... and 3 more
+
+================================================================================
+FILE: core\event_manager.py (285 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (5 hits):
+    L42: # Download events
+    L43: DOWNLOAD_STARTED = "download_started"
+    L44: DOWNLOAD_PROGRESS = "download_progress"
+    L45: DOWNLOAD_COMPLETED = "download_completed"
+    L46: DOWNLOAD_FAILED = "download_failed"
+
+================================================================================
+FILE: core\frame_extractor.py (217 lines)
+--------------------------------------------------------------------------------
+  [generate_ref] (1 hits):
+    L111: output_path: Where to save frame (auto-generated if None)
+
+================================================================================
+FILE: core\generation_controller.py (279 lines)
+--------------------------------------------------------------------------------
+  [upload_ref] (1 hits):
+    L116: """Prepare image for API upload.
+
+================================================================================
+FILE: core\media_handler.py (263 lines)
+--------------------------------------------------------------------------------
+  [close_session] (1 hits):
+    L236: await session.close()
+  [download_ref] (3 hits):
+    L39: - File downloading with streaming
+    L202: async def download_file(
+    L208: """Download file with streaming.
+
+================================================================================
+FILE: core\oauth_server.py (560 lines)
+--------------------------------------------------------------------------------
+  [Authorization] (10 hits):
+    L2: Google OAuth 2.0 Authorization Code Flow for VEO Pro Max.
+    L103: Generate Google OAuth authorization URL.
+    L110: Full authorization URL to open in browser
+    L129: Exchange authorization code for tokens.
+    L132: code: Authorization code from callback
+    ... and 5 more
+  [Content-Type-text] (1 hits):
+    L292: self.send_header("Content-Type", "text/plain")
+  [access_token_param] (13 hits):
+    L51: access_token: str
+    L136: TokenResponse with access_token and refresh_token
+    L154: access_token=result["access_token"],
+    L162: print(f"[OAuth] access_token: {token.access_token[:20]}...")
+    L174: def refresh_access_token(refresh_token: str) -> TokenResponse:
+    ... and 8 more
+  [base_url_ref] (7 hits):
+    L30: GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+    L31: GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+    L34: "https://www.googleapis.com/auth/cloud-platform",
+    L35: "https://www.googleapis.com/auth/userinfo.email",
+    L36: "https://www.googleapis.com/auth/userinfo.profile",
+    ... and 2 more
+  [close_session] (2 hits):
+    L339: <script>setTimeout(function() { window.close(); }, 3000);</script>
+    L468: self.server.server_close()
+  [content_type_override] (3 hits):
+    L292: self.send_header("Content-Type", "text/plain")
+    L344: self.send_header("Content-Type", "text/html; charset=utf-8")
+    L380: self.send_header("Content-Type", "text/html; charset=utf-8")
+  [generate_ref] (5 hits):
+    L103: Generate Google OAuth authorization URL.
+    L408: self.state = self._generate_state()
+    L430: def _generate_state(self) -> str:
+    L431: """Generate random state for CSRF protection."""
+    L485: 2. Generate and open OAuth URL
+  [signed_url_ref] (6 hits):
+    L52: expires_in: int
+    L58: def expires_at(self) -> datetime:
+    L60: return datetime.now().timestamp() + self.expires_in
+    L155: expires_in=result.get("expires_in", 3600),
+    L201: expires_in=result.get("expires_in", 3600),
+    ... and 1 more
+
+================================================================================
+FILE: core\profiles_controller.py (1638 lines)
+--------------------------------------------------------------------------------
+  [Authorization] (4 hits):
+    L437: # Step 3: Call credits API with Bearer token
+    L438: print(f"[ProfilesController] Fetching credits API with Bearer token...")
+    L444: 'Authorization': 'Bearer {access_token}'
+    L534: """Add new profile via Google OAuth Authorization Code flow.
+  [access_token_param] (14 hits):
+    L395: # Step 2: Fetch session API to get access_token
+    L423: access_token = session_result.get("accessToken") or session_result.get("access_token")
+    L427: if not access_token:
+    L435: print(f"[ProfilesController] ✅ Got access token: {access_token[:20]}...")
+    L444: 'Authorization': 'Bearer {access_token}'
+    ... and 9 more
+  [api_key] (3 hits):
+    L369: API_KEY = "AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY"
+    L370: CREDITS_URL = f"https://aisandbox-pa.googleapis.com/v1/credits?key={API_KEY}"
+    L442: const resp = await fetch('https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY', {
+  [base_url_ref] (2 hits):
+    L370: CREDITS_URL = f"https://aisandbox-pa.googleapis.com/v1/credits?key={API_KEY}"
+    L442: const resp = await fetch('https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY', {
+  [browser_headers_ref] (2 hits):
+    L347: Chrome/Chromium auto-injects x-browser-* headers for Google domains.
+    L640: - Full browser session with x-browser-* headers
+  [close_session] (9 hits):
+    L481: context.close()
+    L836: context.close()
+    L845: context.close()
+    L892: context.close()
+    L1031: context.close()
+    ... and 4 more
+  [cookie_ref] (15 hits):
+    L1313: """Extract email from browser profile cookies.
+    L1327: # Chrome/Edge store cookies in SQLite database
+    L1328: cookies_paths = [
+    L1329: profile_path / "Default" / "Cookies",
+    L1330: profile_path / "Default" / "Network" / "Cookies",
+    ... and 10 more
+  [credits_ref] (2 hits):
+    L370: CREDITS_URL = f"https://aisandbox-pa.googleapis.com/v1/credits?key={API_KEY}"
+    L442: const resp = await fetch('https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY', {
+  [generate_ref] (2 hits):
+    L557: # Generate unique profile folder for storing session data
+    L668: # Generate unique profile folder (first time login)
+  [paygate_ref] (5 hits):
+    L16: from core.session import AccountSession, SubscriptionType, PaygateTier
+    L27: paygate_tier: str = "PAYGATE_TIER_NOT_PAID"
+    L463: profile.paygate_tier = credits_result.get("userPaygateTier", "PAYGATE_TIER_NOT_PAID")
+    L514: if "userPaygateTier" in response:
+    L515: profile.paygate_tier = response["userPaygateTier"]
+  [signed_url_ref] (11 hits):
+    L36: token_expires_at: Optional[str] = None  # ISO datetime when token expires (for status display)
+    L77: if self.token_expires_at:
+    L79: expires = datetime.fromisoformat(self.token_expires_at)
+    L81: time_left = (expires - now).total_seconds()
+    L109: if "token_expires_at" not in data:
+    ... and 6 more
+  [trpc_ref] (16 hits):
+    L390: # Step 1: Navigate to labs.google to establish session
+    L391: print(f"[ProfilesController] Navigating to labs.google/fx...")
+    L392: page.goto("https://labs.google/fx", wait_until="networkidle", timeout=30000)
+    L400: const resp = await fetch('https://labs.google/fx/api/auth/session', {
+    L633: 3. Navigate to labs.google/fx
+    ... and 11 more
+
+================================================================================
+FILE: core\project_manager.py (101 lines)
+--------------------------------------------------------------------------------
+  [Authorization] (1 hits):
+    L40: access_token: Valid bearer token
+  [access_token_param] (5 hits):
+    L33: access_token: str,
+    L40: access_token: Valid bearer token
+    L59: project_id = await self._create_project(access_token, api_client)
+    L68: access_token: str,
+    L76: response = await api_client.create_project(access_token)
+  [create_project_call] (4 hits):
+    L30: async def get_or_create_project(
+    L59: project_id = await self._create_project(access_token, api_client)
+    L66: async def _create_project(
+    L76: response = await api_client.create_project(access_token)
+  [project_ref] (14 hits):
+    L19: Each account (CHỦ) needs a project_id for certain API calls (T2I, etc).
+    L27: self._project_cache: Dict[str, str] = {}  # email → project_id
+    L30: async def get_or_create_project(
+    L44: project_id string, or None if creation failed
+    L59: project_id = await self._create_project(access_token, api_client)
+    ... and 9 more
+
+================================================================================
+FILE: core\queue_controller.py (277 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (28 hits):
+    L16: from core.download_manager import DownloadManager, DownloadResult
+    L42: - Download management
+    L48: self._download_manager = DownloadManager()
+    L52: # Download tracking
+    L53: self._downloads: Dict[str, DownloadResult] = {}
+    ... and 23 more
+  [generate_ref] (1 hits):
+    L171: filename: Optional filename (auto-generated if None)
+  [upscale_ref] (5 hits):
+    L17: from core.upscale_handler import UpscaleHandler
+    L49: self._upscale_handler = UpscaleHandler()
+    L231: # === UPSCALE ===
+    L233: async def upscale_video(
+    L242: # This would integrate with VEO API upscale endpoint
+
+================================================================================
+FILE: core\recaptcha_handler.py (268 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (1 hits):
+    L199: Detects when cookie/token has expired and needs refresh.
+
+================================================================================
+FILE: core\refresh_manager.py (250 lines)
+--------------------------------------------------------------------------------
+  [IN_PROGRESS] (2 hits):
+    L24: IN_PROGRESS = "in_progress"
+    L123: request.status = RefreshStatus.IN_PROGRESS
+  [cookie_ref] (6 hits):
+    L2: VEO Pro Max - Cookie Refresh Manager
+    L5: Role: Manage cookie refresh flow
+    L32: """A cookie refresh request."""
+    L41: class CookieRefreshManager:
+    L42: """Manage cookie refresh operations.
+    ... and 1 more
+  [signed_url_ref] (2 hits):
+    L194: if session.token_expires:
+    L195: time_until_expiry = (session.token_expires - now).total_seconds()
+
+================================================================================
+FILE: core\session.py (175 lines)
+--------------------------------------------------------------------------------
+  [access_token_param] (3 hits):
+    L47: access_token: str
+    L153: "access_token": self.access_token,
+    L167: access_token=data["access_token"],
+  [paygate_ref] (12 hits):
+    L26: class PaygateTier(str, Enum):
+    L27: """Payment gate tiers (from F12 HAR: userPaygateTier)."""
+    L28: PAYGATE_TIER_TWO = "PAYGATE_TIER_TWO"       # Premium (Ultra)
+    L29: PAYGATE_TIER_ONE = "PAYGATE_TIER_ONE"       # Standard (Pro)
+    L30: PAYGATE_TIER_NOT_PAID = "PAYGATE_TIER_NOT_PAID"  # Free
+    ... and 7 more
+  [recaptcha_token_param] (5 hits):
+    L56: recaptcha_token: str = ""
+    L79: if not self.recaptcha_token or self.recaptcha_fetched_at == datetime.min:
+    L121: self.recaptcha_token = token
+    L158: "recaptcha_token": self.recaptcha_token,
+    L172: recaptcha_token=data.get("recaptcha_token", ""),
+  [signed_url_ref] (4 hits):
+    L48: token_expires: datetime
+    L74: return datetime.now() >= (self.token_expires - buffer)
+    L154: "token_expires": self.token_expires.isoformat(),
+    L168: token_expires=datetime.fromisoformat(data["token_expires"]),
+
+================================================================================
+FILE: core\settings_controller.py (278 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (1 hits):
+    L205: "total_downloads": usage.total_downloads,
+
+================================================================================
+FILE: core\token_extractor.py (460 lines)
+--------------------------------------------------------------------------------
+  [access_token_param] (18 hits):
+    L33: access_token: str
+    L38: expires_in: int = TokenLifetime.ACCESS_TOKEN
+    L43: return bool(self.access_token and self.recaptcha_token and self.browser_validation)
+    L49: if not self.access_token:
+    L50: missing.append("access_token")
+    ... and 13 more
+  [base_url_ref] (3 hits):
+    L224: # Capture headers from googleapis.com requests
+    L225: if "googleapis.com" in url or "aisandbox" in url:
+    L440: if 'googleapis.com' not in url and 'aisandbox' not in url:
+  [browser_headers_ref] (15 hits):
+    L11: 3. x-browser-validation - from intercepted API request
+    L79: 3. x-browser-validation - from intercepted API request
+    L166: # Set up request interception for x-browser headers
+    L187: # 3. Get captured x-browser headers
+    L188: browser_validation = self._captured_headers.get("x-browser-validation", "")
+    ... and 10 more
+  [client_data_ref] (12 hits):
+    L12: 4. x-client-data - from intercepted API request
+    L36: client_data: str = ""
+    L64: "client_data": self.client_data,
+    L80: 4. x-client-data - from intercepted API request
+    L189: client_data = self._captured_headers.get("x-client-data", "")
+    ... and 7 more
+  [close_session] (5 hits):
+    L86: await extractor.close()
+    L118: await self._browser.close()
+    L215: await self._browser.close()
+    L370: await self.close()
+    L399: await extractor.close()
+  [generate_ref] (4 hits):
+    L94: VEO_FALLBACK_URL = "https://aistudio.google.com/app/generate/video"
+    L327: return await grecaptcha.execute(siteKey, {action: 'generate'});
+    L349: await page.click('button:has-text("Generate")', timeout=3000)
+    L354: await page.click('[aria-label="Generate"]', timeout=2000)
+  [recaptcha_token_param] (9 hits):
+    L34: recaptcha_token: str = ""
+    L43: return bool(self.access_token and self.recaptcha_token and self.browser_validation)
+    L51: if not self.recaptcha_token:
+    L52: missing.append("recaptcha_token")
+    L62: "recaptcha_token": self.recaptcha_token,
+    ... and 4 more
+  [signed_url_ref] (2 hits):
+    L38: expires_in: int = TokenLifetime.ACCESS_TOKEN
+    L66: "expires_in": self.expires_in,
+  [trpc_ref] (1 hits):
+    L93: VEO_URL = "https://labs.google/fx/tools/flow"
+
+================================================================================
+FILE: core\token_manager.py (240 lines)
+--------------------------------------------------------------------------------
+  [access_token_param] (9 hits):
+    L15: from core.oauth_server import refresh_access_token, TokenResponse
+    L106: new_token = refresh_access_token(refresh_token)
+    L109: token_data["access_token"] = new_token.access_token
+    L160: Valid access_token or None if not available
+    L169: access_token = token_data.get("access_token", "")
+    ... and 4 more
+  [signed_url_ref] (6 hits):
+    L97: expires_at = token_data.get("expires_at", 0)
+    L101: if expires_at - now < self.REFRESH_BUFFER_SECONDS:
+    L110: token_data["expires_at"] = new_token.expires_at
+    L170: expires_at = token_data.get("expires_at", 0)
+    L176: if expires_at - now > self.REFRESH_BUFFER_SECONDS:
+    ... and 1 more
+
+================================================================================
+FILE: core\transfer_handler.py (276 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (15 hits):
+    L5: Role: Transfer work from expired cookie to healthy one
+    L25: NO_HEALTHY_COOKIE = "no_healthy_cookie"
+    L41: """Pending work from an expired cookie."""
+    L48: class ExpiredCookieTransferHandler:
+    L49: """Handle work transfer when cookie expires.
+    ... and 10 more
+  [signed_url_ref] (1 hits):
+    L49: """Handle work transfer when cookie expires.
+
+================================================================================
+FILE: core\upscale_handler.py (204 lines)
+--------------------------------------------------------------------------------
+  [Authorization] (1 hits):
+    L69: access_token: Bearer token
+  [access_token_param] (8 hits):
+    L61: access_token: str,
+    L69: access_token: Bearer token
+    L81: access_token=access_token,
+    L103: access_token,
+    L115: access_token: str,
+    ... and 3 more
+  [polling_ref] (13 hits):
+    L5: Role: Video upscaling with polling
+    L33: - Poll until complete (5s interval)
+    L37: DEFAULT_POLL_INTERVAL = 5.0  # seconds
+    L43: poll_interval: float = DEFAULT_POLL_INTERVAL,
+    L47: self._poll_interval = poll_interval
+    ... and 8 more
+  [recaptcha_token_param] (8 hits):
+    L62: recaptcha_token: str,
+    L70: recaptcha_token: reCAPTCHA token
+    L82: recaptcha_token=recaptcha_token,
+    L104: recaptcha_token,
+    L116: recaptcha_token: str,
+    ... and 3 more
+  [upscale_ref] (25 hits):
+    L2: VEO Pro Max - Upscale Handler
+    L20: class UpscaleResult:
+    L21: """Result of upscale operation."""
+    L28: class UpscaleHandler:
+    L32: - Upscale 720p → 1080p/4K
+    ... and 20 more
+
+================================================================================
+FILE: core\veo_automation.py (400 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (23 hits):
+    L61: # Download buttons
+    L62: DOWNLOAD_BUTTON = 'button:has-text("Download"), button[aria-label*="Download"]'
+    L63: DOWNLOAD_720P = 'button:has-text("720p")'
+    L64: DOWNLOAD_1080P = 'button:has-text("1080p")'
+    L78: DOWNLOADING = "downloading"
+    ... and 18 more
+  [generate_ref] (9 hits):
+    L37: # Generate button
+    L38: GENERATE_BUTTON = 'button:has-text("Generate"), button[aria-label*="Generate"]'
+    L150: async def generate(
+    L191: # Click generate
+    L193: await self._click_generate(page)
+    ... and 4 more
+  [polling_ref] (10 hits):
+    L77: POLLING = "polling"
+    L116: - Generation polling
+    L120: POLL_INTERVAL_SEC = 5
+    L195: # Poll for completion
+    L196: self._set_state(VEOState.POLLING)
+    ... and 5 more
+  [upload_ref] (22 hits):
+    L40: # Image upload
+    L41: IMAGE_UPLOAD_INPUT = 'input[type="file"][accept*="image"]'
+    L42: IMAGE_UPLOAD_BUTTON = 'button:has-text("Upload"), button[aria-label*="Upload image"]'
+    L44: # Video upload
+    L45: VIDEO_UPLOAD_INPUT = 'input[type="file"][accept*="video"]'
+    ... and 17 more
+
+================================================================================
+FILE: core\worker.py (282 lines)
+--------------------------------------------------------------------------------
+  [access_token_param] (10 hits):
+    L97: access_token = account.get_access_token()
+    L100: if not access_token or not recaptcha_token:
+    L112: access_token,
+    L132: access_token: str,
+    L142: access_token=access_token,
+    ... and 5 more
+  [generate_ref] (8 hits):
+    L141: response = await self._api_client.generate_video_t2v(
+    L155: response = await self._api_client.generate_video_i2v_dual(
+    L169: response = await self._api_client.generate_video_i2v_single(
+    L187: response = await self._api_client.generate_video_r2v(
+    L203: response = await self._api_client.generate_image(
+    ... and 3 more
+  [project_ref] (11 hits):
+    L49: Receives: task + account + project_id
+    L114: account.project_id
+    L134: project_id: Optional[str],
+    L149: project_id=project_id or "",
+    L165: project_id=project_id or "",
+    ... and 6 more
+  [recaptcha_token_param] (10 hits):
+    L98: recaptcha_token = account.get_recaptcha_token()
+    L100: if not access_token or not recaptcha_token:
+    L113: recaptcha_token,
+    L133: recaptcha_token: str,
+    L143: recaptcha_token=recaptcha_token,
+    ... and 5 more
+  [seed_ref] (5 hits):
+    L148: seed=task.seed,  # Pass seed for reproducibility
+    L164: seed=task.seed,  # Pass seed for reproducibility
+    L177: seed=task.seed,  # Pass seed for reproducibility
+    L195: seed=task.seed,  # Pass seed for reproducibility
+    L227: seed=task.seed,  # Pass seed for reproducibility
+
+================================================================================
+FILE: security\_encrypted_api_keys.py (148 lines)
+--------------------------------------------------------------------------------
+  [api_key] (9 hits):
+    L13: from _encrypted_api_keys import set_runtime_keys
+    L34: _RAW_PRIMARY = 'AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w'
+    L35: _RAW_BACKUP = 'AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8'
+    L121: print(f"Primary: {primary['api_key'][:15]}..." if primary['api_key'] else "Primary: FAILED")
+    L122: print(f"Backup: {backup['api_key'][:15]}..." if backup['api_key'] else "Backup: FAILED")
+    ... and 4 more
+  [generate_ref] (1 hits):
+    L9: Generated: 2026-02-04
+
+================================================================================
+FILE: security\_encrypted_keys.py (7 lines)
+--------------------------------------------------------------------------------
+  [generate_ref] (1 hits):
+    L2: # Generated: 2026-02-04
+
+================================================================================
+FILE: security\firebase_rest_client.py (502 lines)
+--------------------------------------------------------------------------------
+  [Content-Type-json] (1 hits):
+    L261: "Content-Type": "application/json"
+  [api_key] (13 hits):
+    L214: "api_key": self._decrypt_key(self._PRIMARY_KEY_ENCRYPTED) if self._PRIMARY_KEY_ENCRYPTED else None
+    L222: "api_key": self._decrypt_key(self._BACKUP_KEY_ENCRYPTED) if self._BACKUP_KEY_ENCRYPTED else None
+    L294: def query_license(self, project_id: str, api_key: str, license_key: str) -> Optional[dict]:
+    L300: api_key: Web API key (read-only)
+    L306: if not api_key:
+    ... and 8 more
+  [base_url_ref] (2 hits):
+    L161: # Obfuscated: "https://firestore.googleapis.com/v1"
+    L162: return "https://firestore.googleapis.com/v1"
+  [content_type_override] (1 hits):
+    L261: "Content-Type": "application/json"
+  [generate_ref] (7 hits):
+    L104: """Generate machine-specific key for encryption."""
+    L442: def generate_obfuscated_code(primary_key: str, backup_key: str) -> str:
+    L444: Generate Python code with embedded encrypted keys.
+    L446: This generates code that can be copied into the client module.
+    L457: # === AUTO-GENERATED ENCRYPTED KEYS ===
+    ... and 2 more
+  [project_ref] (11 hits):
+    L212: "project_id": _ConfigParts._get_primary_project(),
+    L220: "project_id": _ConfigParts._get_backup_project(),
+    L264: def _build_url(self, project_id: str, document_id: str) -> str:
+    L267: return f"{base}/projects/{project_id}/databases/(default)/documents/{self.COLLECTION}/{document_id}"
+    L294: def query_license(self, project_id: str, api_key: str, license_key: str) -> Optional[dict]:
+    ... and 6 more
+  [signed_url_ref] (5 hits):
+    L389: critical_fields = ["key", "tier", "machine_id", "revoked", "expires"]
+    L405: expires = primary.get("expires")
+    L406: if expires:
+    L409: if isinstance(expires, str):
+    L410: exp_date = datetime.fromisoformat(expires.replace('Z', '+00:00'))
+
+================================================================================
+FILE: security\license_client.py (903 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (2 hits):
+    L13: - TRIAL (0): Limited (1 cookie, 2 threads, 10 prompts)
+    L88: TRIAL = 0       # 1 cookie, 2 threads, 10 prompts
+  [generate_ref] (11 hits):
+    L118: Generate unique machine identifier from STABLE hardware sources.
+    L190: """Generate unique machine fingerprint hash"""
+    L223: SALT = b"veo_license_salt_2026"  # Static salt (machine-bound key generated at runtime)
+    L252: def _generate_signature(self, data: dict) -> str:
+    L254: Generate HMAC-SHA256 signature from MULTIPLE fields.
+    ... and 6 more
+  [signed_url_ref] (40 hits):
+    L111: expires: Optional[datetime] = None
+    L218: - HMAC-SHA256 signature (tamper detection)
+    L219: - Multiple fields in signature (hard to forge)
+    L225: APP_VERSION = "2.4.0"  # Include in signature to detect version mismatch
+    L231: # Cache hardware components for signature
+    ... and 35 more
+
+================================================================================
+FILE: security\license_request.py (404 lines)
+--------------------------------------------------------------------------------
+  [polling_ref] (2 hits):
+    L320: def poll_result(self) -> RequestResult:
+    L322: Poll for request result (called periodically by client).
+
+================================================================================
+FILE: security\permissions.py (99 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (2 hits):
+    L68: def get_max_cookies(self) -> int:
+    L69: """Max browser cookies allowed"""
+
+================================================================================
+FILE: security\trial_protection.py (422 lines)
+--------------------------------------------------------------------------------
+  [generate_ref] (5 hits):
+    L126: self._marker_hash = self._generate_marker_hash()
+    L129: def _generate_marker_hash(self) -> str:
+    L130: """Generate unique marker based on machine ID."""
+    L273: Called when admin generates a trial key.
+    L387: Trial key format: TRIAL-XXXX-XXXX (generated by admin)
+  [signed_url_ref] (7 hits):
+    L31: expires: Optional[datetime] = None
+    L302: expires = now + timedelta(days=self.TRIAL_DAYS)
+    L308: expires=expires
+    L356: expires = start + timedelta(days=self.TRIAL_DAYS)
+    L357: remaining = (expires - now).days
+    ... and 2 more
+
+================================================================================
+FILE: services\firebase_rest_client.py (327 lines)
+--------------------------------------------------------------------------------
+  [api_key] (2 hits):
+    L35: api_key: str
+    L218: params = {"auth": self._config.api_key}
+  [close_session] (3 hits):
+    L89: if self._session is None or self._session.closed:
+    L95: if self._session and not self._session.closed:
+    L96: await self._session.close()
+  [generate_ref] (1 hits):
+    L77: """Generate unique machine ID."""
+  [signed_url_ref] (5 hits):
+    L48: expires_at: Optional[datetime] = None
+    L265: expires_at = None
+    L273: if data.get("expires_at"):
+    L275: expires_at = datetime.fromisoformat(data["expires_at"])
+    L285: expires_at=expires_at,
+
+================================================================================
+FILE: services\license_client.py (303 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (6 hits):
+    L56: total_downloads: int = 0
+    L262: total_downloads=data.get("total_downloads", 0),
+    L280: "total_downloads": self._usage.total_downloads,
+    L293: def log_download(self):
+    L294: """Log a download event."""
+    ... and 1 more
+  [generate_ref] (1 hits):
+    L108: """Generate unique machine ID (HWID)."""
+  [signed_url_ref] (7 hits):
+    L31: expires_at: Optional[datetime] = None
+    L39: if self.expires_at and datetime.now() >= self.expires_at:
+    L45: if not self.expires_at:
+    L47: delta = self.expires_at - datetime.now()
+    L164: expires_at=None if tier == LicenseTier.LIFETIME else datetime.now() + timedelta(days=30),
+    ... and 2 more
+
+================================================================================
+FILE: services\permissions.py (277 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (9 hits):
+    L57: max_cookies: int = 1
+    L77: max_cookies=1,
+    L88: max_cookies=2,
+    L102: max_cookies=5,
+    L123: max_cookies=10,
+    ... and 4 more
+  [download_ref] (2 hits):
+    L42: DOWNLOAD_4K = "download_4k"
+    L138: Feature.DOWNLOAD_4K,
+  [upscale_ref] (2 hits):
+    L41: AUTO_UPSCALE = "auto_upscale"
+    L137: Feature.AUTO_UPSCALE,
+
+================================================================================
+FILE: ui\components\__init__.py (39 lines)
+--------------------------------------------------------------------------------
+  [upload_ref] (4 hits):
+    L7: from .image_upload_box import ImageUploadBox, UploadBoxState
+    L23: # Upload
+    L24: "ImageUploadBox",
+    L25: "UploadBoxState",
+
+================================================================================
+FILE: ui\components\image_upload_box.py (235 lines)
+--------------------------------------------------------------------------------
+  [upload_ref] (26 hits):
+    L2: VEO Pro Max - Image Upload Box Component (PySide6)
+    L4: Reference: TAB_02_IMAGE_TO_VIDEO.md → Upload Areas
+    L23: class UploadBoxState(Enum):
+    L24: """States for the upload box."""
+    L31: class ImageUploadBox(QWidget):
+    ... and 21 more
+
+================================================================================
+FILE: ui\components\queue_project_group.py (432 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (4 hits):
+    L31: DOWNLOADING = "downloading"
+    L72: elif self.status == QueueStatus.DOWNLOADING:
+    L73: return f"⬇️ {self.progress}% Downloading"
+    L393: QueueStatus.DOWNLOADING: Theme.BLUE,
+
+================================================================================
+FILE: ui\components\sidebar_base.py (327 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (12 hits):
+    L186: Additional widgets: Outputs/Prompt, AI Model, Download Quality
+    L221: # === DOWNLOAD QUALITY ===
+    L222: self._create_section_label("📹 Download Quality")
+    L224: self.download_quality = QComboBox()
+    L225: self.download_quality.addItems(["720p", "1080p", "4K"])
+    ... and 7 more
+
+================================================================================
+FILE: ui\popups\complex_popups.py (608 lines)
+--------------------------------------------------------------------------------
+  [close_session] (3 hits):
+    L594: self._on_close()
+    L599: self._on_close()
+    L607: return dialog.wait_for_close()
+
+================================================================================
+FILE: ui\popups\popups.py (373 lines)
+--------------------------------------------------------------------------------
+  [close_session] (3 hits):
+    L357: self._on_close()
+    L365: return dialog.wait_for_close() or False
+    L372: dialog.wait_for_close()
+
+================================================================================
+FILE: ui\popups\video_player.py (192 lines)
+--------------------------------------------------------------------------------
+  [generate_ref] (1 hits):
+    L5: Simple video player popup for previewing generated videos.
+
+================================================================================
+FILE: ui\tabs\tab_devconsole.py (229 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (1 hits):
+    L186: Downloads: 0
+
+================================================================================
+FILE: ui\tabs\tab_i2i.py (289 lines)
+--------------------------------------------------------------------------------
+  [upload_ref] (2 hits):
+    L8: Note: No manual image upload UI per TAB_05_IMAGE_TO_IMAGE.md line 86-87.
+    L35: NOTE: NO ImageUploadBox - images sourced via [tag] in prompts or Continuation.
+
+================================================================================
+FILE: ui\tabs\tab_i2v.py (331 lines)
+--------------------------------------------------------------------------------
+  [upload_ref] (2 hits):
+    L41: Image source: Library [tag] only (no manual upload)
+    L283: Note: No manual image upload. All images come from
+
+================================================================================
+FILE: ui\tabs\tab_license.py (281 lines)
+--------------------------------------------------------------------------------
+  [cookie_ref] (3 hits):
+    L94: ("Cookies", "1 / 1"),
+    L175: ("1 Tháng", "300,000đ", ["5 Cookies", "5 Threads", "100 prompts/day"], Theme.SURFACE2),
+    L176: ("3 Tháng", "500,000đ", ["-44%/tháng", "Unlimited Cookies", "10 Threads"], Theme.BLUE),
+
+================================================================================
+FILE: ui\tabs\tab_settings.py (1239 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (4 hits):
+    L537: ("Download Quality", ["720p", "1080p", "4K"]),
+    L874: if "download_quality" in settings and "Download Quality" in self.setting_combos:
+    L875: self.setting_combos["Download Quality"].setCurrentText(settings["download_quality"])
+    L1217: "download_quality": self.setting_combos.get("Download Quality").currentText() if "Download Quality" in self.setting_comb
+
+================================================================================
+FILE: ui\tabs\tab_t2i.py (250 lines)
+--------------------------------------------------------------------------------
+  [generate_ref] (1 hits):
+    L200: 2. Each prompt generates multiple image variations
+
+================================================================================
+FILE: ui\tabs\tab_t2v.py (385 lines)
+--------------------------------------------------------------------------------
+  [download_ref] (1 hits):
+    L268: - Download Quality: 1080p or 720p
+
+================================================================================
+FILE: utils\file_namer.py (262 lines)
+--------------------------------------------------------------------------------
+  [generate_ref] (7 hits):
+    L5: Role: Generate consistent file names for outputs
+    L18: """Generate consistent file names for VEO outputs.
+    L73: """Generate timestamp string."""
+    L84: """Generate video filename.
+    L111: """Generate image filename.
+    ... and 2 more
+  [upscale_ref] (4 hits):
+    L149: def upscaled_name(
+    L154: """Generate upscaled video filename.
+    L156: Format: {original_base}_{quality}_upscaled.mp4
+    L172: return f"{base}_{target_quality}_upscaled{ext}"

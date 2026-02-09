@@ -79,12 +79,14 @@ class Worker:
         self,
         task: Task,
         account: AccountManager,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
     ) -> WorkerResult:
         """Execute a task using the assigned account.
         
         Args:
             task: The task to execute
             account: Account manager with valid tokens
+            paygate_tier: Auto-detected from /v1/credits
         
         Returns:
             WorkerResult with success/failure info
@@ -93,15 +95,25 @@ class Worker:
         self._current_task = task
         
         try:
-            # Get tokens
+            # Get tokens (B1: access_token is passed for signature compat
+            # but NOT used in REST headers per Protocol Analysis §1.4C)
             access_token = account.get_access_token()
             recaptcha_token = account.get_recaptcha_token()
             
-            if not access_token or not recaptcha_token:
-                return WorkerResult(
-                    success=False,
-                    error="Invalid tokens - refresh required"
-                )
+            # B5: Get fresh reCAPTCHA if needed — per Protocol Analysis,
+            # reCAPTCHA token is fetched BEFORE each generate request
+            # (Workflow step 7→8). Token expires in ~80s.
+            # FIX: await refresh from persistent browser instead of fire-and-forget
+            if not recaptcha_token or account.session.needs_recaptcha_refresh:
+                recaptcha_token = await account.refresh_recaptcha()
+                if not recaptcha_token:
+                    return WorkerResult(
+                        success=False,
+                        error="reCAPTCHA token expired and refresh failed"
+                    )
+            
+            # Get per-account x-browser-* headers
+            account_headers = account.get_api_headers()
             
             # Report starting
             self._report_progress(task.id, 10)
@@ -109,9 +121,11 @@ class Worker:
             # Route to appropriate API method
             result = await self._execute_workflow(
                 task,
-                access_token,
+                access_token or "",
                 recaptcha_token,
-                account.project_id
+                account.project_id,
+                account_headers=account_headers,
+                paygate_tier=paygate_tier,
             )
             
             # Report completion
@@ -132,10 +146,17 @@ class Worker:
         access_token: str,
         recaptcha_token: str,
         project_id: Optional[str],
+        account_headers: Optional[dict] = None,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
     ) -> WorkerResult:
         """Execute the appropriate workflow based on task type."""
         
-        workflow = task.workflow_type
+        # workflow_type is stored as name string ("T2V"), convert to enum
+        wt = task.workflow_type
+        try:
+            workflow = WorkflowType[wt] if isinstance(wt, str) else wt
+        except (KeyError, TypeError):
+            workflow = wt  # fallback: leave as-is
         
         if workflow == WorkflowType.T2V:
             response = await self._api_client.generate_video_t2v(
@@ -143,10 +164,12 @@ class Worker:
                 recaptcha_token=recaptcha_token,
                 prompt=task.prompt,
                 aspect_ratio=task.aspect_ratio,
-                duration_seconds=task.duration_seconds,
                 model=task.model,
                 output_count=task.output_count,
-                seed=task.seed,  # Pass seed for reproducibility
+                seed=task.seed,
+                project_id=project_id or "",
+                paygate_tier=paygate_tier,
+                account_headers=account_headers,
             )
             
         elif workflow == WorkflowType.I2V:
@@ -156,13 +179,15 @@ class Worker:
                     access_token=access_token,
                     recaptcha_token=recaptcha_token,
                     prompt=task.prompt,
-                    start_image_uri=task.image_uris[0],
-                    end_image_uri=task.image_uris[1],
+                    start_image_media_id=task.image_uris[0],
+                    end_image_media_id=task.image_uris[1],
                     aspect_ratio=task.aspect_ratio,
-                    duration_seconds=task.duration_seconds,
                     model=task.model,
                     output_count=task.output_count,
-                    seed=task.seed,  # Pass seed for reproducibility
+                    seed=task.seed,
+                    project_id=project_id or "",
+                    paygate_tier=paygate_tier,
+                    account_headers=account_headers,
                 )
             elif len(task.image_uris) == 1:
                 # Single frame
@@ -170,12 +195,14 @@ class Worker:
                     access_token=access_token,
                     recaptcha_token=recaptcha_token,
                     prompt=task.prompt,
-                    image_uri=task.image_uris[0],
+                    image_media_id=task.image_uris[0],
                     aspect_ratio=task.aspect_ratio,
-                    duration_seconds=task.duration_seconds,
                     model=task.model,
                     output_count=task.output_count,
-                    seed=task.seed,  # Pass seed for reproducibility
+                    seed=task.seed,
+                    project_id=project_id or "",
+                    paygate_tier=paygate_tier,
+                    account_headers=account_headers,
                 )
             else:
                 return WorkerResult(success=False, error="I2V requires at least 1 image")
@@ -188,12 +215,14 @@ class Worker:
                 access_token=access_token,
                 recaptcha_token=recaptcha_token,
                 prompt=task.prompt,
-                reference_image_uris=task.image_uris[:3],
+                reference_image_media_ids=task.image_uris[:3],
                 aspect_ratio=task.aspect_ratio,
-                duration_seconds=task.duration_seconds,
                 model=task.model,
                 output_count=task.output_count,
-                seed=task.seed,  # Pass seed for reproducibility
+                seed=task.seed,
+                project_id=project_id or "",
+                paygate_tier=paygate_tier,
+                account_headers=account_headers,
             )
             
         elif workflow == WorkflowType.T2I:
@@ -207,22 +236,28 @@ class Worker:
                 prompt=task.prompt,
                 aspect_ratio=task.aspect_ratio,
                 output_count=task.output_count,
+                paygate_tier=paygate_tier,
+                account_headers=account_headers,
             )
             
         elif workflow == WorkflowType.F2V:
             # Frames to Video (continuation)
             if len(task.image_uris) >= 1:
+                # VEO uses continuation frame as START frame (always)
+                # Extracted from end of previous video → start of next
+                frame_pos = "START"
                 response = await self._api_client.generate_video_i2v_single(
                     access_token=access_token,
                     recaptcha_token=recaptcha_token,
                     prompt=task.prompt,
-                    image_uri=task.image_uris[0],
-                    frame_position="START",
+                    image_media_id=task.image_uris[0],
                     aspect_ratio=task.aspect_ratio,
-                    duration_seconds=task.duration_seconds,
                     model=task.model,
                     output_count=task.output_count,
-                    seed=task.seed,  # Pass seed for reproducibility
+                    seed=task.seed,
+                    project_id=project_id or "",
+                    paygate_tier=paygate_tier,
+                    account_headers=account_headers,
                 )
             else:
                 return WorkerResult(success=False, error="F2V requires continuation frame")

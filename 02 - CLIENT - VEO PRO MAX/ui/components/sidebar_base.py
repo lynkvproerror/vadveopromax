@@ -178,6 +178,19 @@ class SidebarBase(QWidget):
             "output_folder": self.get_output_folder(),
             "aspect_ratio": self.get_aspect_ratio(),
         }
+    
+    def set_values(self, data: dict):
+        """Restore sidebar values from a dictionary."""
+        if "project_name" in data:
+            self.project_name.setText(data["project_name"])
+        if "output_folder" in data:
+            self.output_folder.setText(data["output_folder"])
+        if "aspect_ratio" in data:
+            ar = data["aspect_ratio"]
+            for i in range(self.aspect_ratio.count()):
+                if ar in self.aspect_ratio.itemText(i):
+                    self.aspect_ratio.setCurrentIndex(i)
+                    break
 
 
 class VideoSidebar(SidebarBase):
@@ -261,6 +274,24 @@ class VideoSidebar(SidebarBase):
             "download_quality": self.get_download_quality(),
         })
         return values
+    
+    def set_values(self, data: dict):
+        """Restore video sidebar values from a dictionary."""
+        super().set_values(data)
+        if "outputs_per_prompt" in data:
+            target = f"{data['outputs_per_prompt']} video"
+            for i in range(self.outputs_per_prompt.count()):
+                if self.outputs_per_prompt.itemText(i).startswith(str(data['outputs_per_prompt'])):
+                    self.outputs_per_prompt.setCurrentIndex(i)
+                    break
+        if "model" in data:
+            idx = self.model.findText(data["model"])
+            if idx >= 0:
+                self.model.setCurrentIndex(idx)
+        if "download_quality" in data:
+            idx = self.download_quality.findText(data["download_quality"])
+            if idx >= 0:
+                self.download_quality.setCurrentIndex(idx)
 
 
 class ImageSidebar(SidebarBase):
@@ -324,3 +355,21 @@ class ImageSidebar(SidebarBase):
         """Get number of outputs per prompt."""
         value = self.outputs_per_prompt.currentText()
         return int(value.split()[0])
+    
+    def get_values(self) -> dict:
+        """Get all sidebar values as a dictionary (includes image-specific fields)."""
+        values = super().get_values()
+        values.update({
+            "outputs_per_prompt": self.get_outputs_count(),
+            "model": "GEM_PIX_2",  # Image model
+        })
+        return values
+    
+    def set_values(self, data: dict):
+        """Restore image sidebar values from a dictionary."""
+        super().set_values(data)
+        if "outputs_per_prompt" in data:
+            for i in range(self.outputs_per_prompt.count()):
+                if self.outputs_per_prompt.itemText(i).startswith(str(data['outputs_per_prompt'])):
+                    self.outputs_per_prompt.setCurrentIndex(i)
+                    break

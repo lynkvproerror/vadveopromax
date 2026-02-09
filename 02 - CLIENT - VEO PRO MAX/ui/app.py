@@ -79,6 +79,9 @@ class MainWindow(QMainWindow):
         self._create_widgets()
         self._bind_hotkeys()
         self._connect_controller()
+        
+        # Restore previous session
+        self._restore_session()
     
     def _setup_window(self):
         """Configure window properties."""
@@ -223,31 +226,8 @@ class MainWindow(QMainWindow):
     
     def _connect_tab_signals(self):
         """Connect signals from tabs to controller methods."""
-        from config.constants import WorkflowType
-        
-        # T2V Tab
-        if 't2v' in self.tab_instances and hasattr(self.tab_instances['t2v'], 'add_to_queue'):
-            self.tab_instances['t2v'].add_to_queue.connect(
-                lambda prompts: self._submit_prompts(prompts, WorkflowType.T2V)
-            )
-        
-        # I2V Tab
-        if 'i2v' in self.tab_instances and hasattr(self.tab_instances['i2v'], 'add_to_queue'):
-            self.tab_instances['i2v'].add_to_queue.connect(
-                lambda prompts: self._submit_prompts(prompts, WorkflowType.I2V)
-            )
-        
-        # R2V Tab
-        if 'r2v' in self.tab_instances and hasattr(self.tab_instances['r2v'], 'add_to_queue'):
-            self.tab_instances['r2v'].add_to_queue.connect(
-                lambda prompts: self._submit_prompts(prompts, WorkflowType.R2V)
-            )
-        
-        # T2I Tab
-        if 't2i' in self.tab_instances and hasattr(self.tab_instances['t2i'], 'add_to_queue'):
-            self.tab_instances['t2i'].add_to_queue.connect(
-                lambda prompts: self._submit_prompts(prompts, WorkflowType.T2I)
-            )
+        # NOTE: Generation tabs (T2V, I2V, R2V, T2I, I2I) submit directly 
+        # to controller via add_xxx_batch() — no signal wiring needed here.
         
         # Queue Tab
         if 'queue' in self.tab_instances:
@@ -262,21 +242,6 @@ class MainWindow(QMainWindow):
         # Settings Tab
         if 'settings' in self.tab_instances and hasattr(self.tab_instances['settings'], 'settings_changed'):
             self.tab_instances['settings'].settings_changed.connect(self._on_settings_changed)
-    
-    def _submit_prompts(self, prompts: list, workflow_type):
-        """Submit prompts to controller."""
-        if not self.controller or not prompts:
-            return
-        
-        # Get settings from active sidebar if available
-        settings = {}
-        
-        # Extract prompt texts
-        prompt_texts = [p.text if hasattr(p, 'text') else str(p) for p in prompts]
-        
-        # Submit to controller
-        group_id = self.controller.submit_prompts(prompt_texts, workflow_type, settings=settings)
-        self.set_status(f"Submitted {len(prompts)} prompts (Group: {group_id})")
     
     @Slot(str, int)
     def _on_progress(self, task_id: str, progress: int):
@@ -340,6 +305,48 @@ class MainWindow(QMainWindow):
         except RuntimeError:
             # Widget may have been destroyed during shutdown
             pass
+    
+    # ── Session Persistence ─────────────────────────────────────
+    
+    def closeEvent(self, event):
+        """Save session state before closing."""
+        if self.controller:
+            try:
+                tabs_data = {}
+                gen_tabs = ["t2v", "i2v", "r2v", "t2i", "i2i"]
+                for key in gen_tabs:
+                    tab = self.tab_instances.get(key)
+                    if tab and hasattr(tab, 'save_state'):
+                        tabs_data[key] = tab.save_state()
+                
+                self.controller.save_full_session(tabs_data)
+                print(f"[App] Session saved ({len(tabs_data)} tabs)")
+            except Exception as e:
+                print(f"[App] Session save failed: {e}")
+        
+        super().closeEvent(event)
+    
+    def _restore_session(self):
+        """Restore session state on startup."""
+        if not self.controller:
+            return
+        
+        try:
+            data = self.controller.restore_session()
+            if not data:
+                return
+            
+            tabs_data = data.get("tabs", {})
+            for key, tab_data in tabs_data.items():
+                tab = self.tab_instances.get(key)
+                if tab and hasattr(tab, 'restore_state'):
+                    tab.restore_state(tab_data)
+            
+            queue_count = data.get("queue", {}).get("task_count", 0)
+            saved_at = data.get("saved_at", "unknown")
+            print(f"[App] Session restored: {len(tabs_data)} tabs, {queue_count} queue tasks (from {saved_at})")
+        except Exception as e:
+            print(f"[App] Session restore failed: {e}")
 
 
 # For testing

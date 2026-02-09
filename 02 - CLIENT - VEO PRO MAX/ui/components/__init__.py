@@ -10,7 +10,6 @@ from .continuation_toggle import (
     ContinuationHeader,
     ContinuationCheckbox,
     ContinuationMode,
-    ContinuationPlacement,
     ContinuationToggle,  # Backward compat alias
 )
 
@@ -33,6 +32,6 @@ __all__ = [
     "ContinuationHeader",
     "ContinuationCheckbox",
     "ContinuationMode",
-    "ContinuationPlacement",
     "ContinuationToggle",  # Backward compat
 ]
+

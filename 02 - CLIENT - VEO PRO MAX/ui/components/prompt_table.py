@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QHeaderView, QAbstractItemView
+    QPushButton, QHeaderView, QAbstractItemView, QLabel, QCheckBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
@@ -80,6 +80,7 @@ class PromptTable(QWidget):
     # Signals
     edit_clicked = Signal(int)  # index
     delete_clicked = Signal(int)  # index
+    continuation_toggled = Signal(int, bool)  # row_index, is_checked
     
     def __init__(
         self,
@@ -92,6 +93,7 @@ class PromptTable(QWidget):
         self.on_edit = on_edit
         self.on_delete = on_delete
         self._rows: List[PromptRow] = []
+        self._refreshing = False  # Guard against re-entrance
         
         self._setup_ui()
     
@@ -129,9 +131,9 @@ class PromptTable(QWidget):
         header.setSectionResizeMode(4, QHeaderView.Fixed)  # Actions
         
         self.table.setColumnWidth(0, 40)
-        self.table.setColumnWidth(2, 80)
+        self.table.setColumnWidth(2, 100)
         self.table.setColumnWidth(3, 70)
-        self.table.setColumnWidth(4, 80)
+        self.table.setColumnWidth(4, 90)
         
         # Selection behavior
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -160,9 +162,11 @@ class PromptTable(QWidget):
     
     def _refresh_table(self):
         """Refresh table with current rows."""
+        self._refreshing = True
         self.table.setRowCount(0)
         for row in self._rows:
             self._add_row_to_table(row)
+        self._refreshing = False
     
     def _add_row_to_table(self, row: PromptRow):
         """Add a single row to the table."""
@@ -182,12 +186,62 @@ class PromptTable(QWidget):
         prompt_item.setForeground(QColor(Theme.TEXT))
         self.table.setItem(row_idx, 1, prompt_item)
         
-        # Continuation
-        cont_item = QTableWidgetItem(row.continuation_label)
-        cont_item.setTextAlignment(Qt.AlignCenter)
-        cont_color = Theme.GREEN if row.is_continuation else Theme.SUBTEXT1
-        cont_item.setForeground(QColor(cont_color))
-        self.table.setItem(row_idx, 2, cont_item)
+        # Continuation — interactive checkbox
+        cont_widget = QWidget()
+        cont_layout = QHBoxLayout(cont_widget)
+        cont_layout.setContentsMargins(4, 0, 4, 0)
+        cont_layout.setSpacing(4)
+        cont_layout.setAlignment(Qt.AlignCenter)
+        
+        cont_cb = QCheckBox()
+        cont_cb.setObjectName(f"cont_cb_{row_idx}")
+        cont_cb.setStyleSheet(f"""
+            QCheckBox::indicator {{
+                width: 16px;
+                height: 16px;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {Theme.GREEN};
+                border: 1px solid {Theme.GREEN};
+                border-radius: 3px;
+            }}
+            QCheckBox::indicator:unchecked {{
+                background-color: {Theme.SURFACE1};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 3px;
+            }}
+            QCheckBox::indicator:disabled {{
+                background-color: {Theme.SURFACE0};
+                border: 1px solid {Theme.SURFACE1};
+            }}
+        """)
+        
+        cont_label = QLabel()
+        cont_label.setObjectName(f"cont_label_{row_idx}")
+        
+        # Set initial state BEFORE connecting signal (no spurious triggers)
+        if row_idx == 0:
+            cont_cb.setChecked(False)
+            cont_cb.setEnabled(False)
+            cont_label.setText("Start")
+            cont_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        elif row.is_continuation:
+            cont_cb.setChecked(True)
+            cont_label.setText(f"← #{row.continuation_from}")
+            cont_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 11px;")
+        else:
+            cont_cb.setChecked(False)
+            cont_label.setText("Start")
+            cont_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        
+        # Connect signal AFTER setting initial state
+        cont_cb.stateChanged.connect(
+            lambda state, idx=row_idx: self._on_cont_toggle(idx, state == Qt.Checked)
+        )
+        
+        cont_layout.addWidget(cont_cb)
+        cont_layout.addWidget(cont_label)
+        self.table.setCellWidget(row_idx, 2, cont_widget)
         
         # Status
         status_item = QTableWidgetItem(row.status.value.capitalize())
@@ -195,22 +249,46 @@ class PromptTable(QWidget):
         status_item.setForeground(QColor(self._get_status_color(row.status)))
         self.table.setItem(row_idx, 3, status_item)
         
-        # Actions
+        # Actions — visible styled buttons
         actions_widget = QWidget()
         actions_layout = QHBoxLayout(actions_widget)
-        actions_layout.setContentsMargins(2, 2, 2, 2)
-        actions_layout.setSpacing(2)
+        actions_layout.setContentsMargins(4, 2, 4, 2)
+        actions_layout.setSpacing(4)
         
         edit_btn = QPushButton("✏")
-        edit_btn.setFixedSize(24, 24)
-        edit_btn.setProperty("variant", "secondary")
-        edit_btn.clicked.connect(lambda checked, idx=row.index: self._on_edit(idx))
+        edit_btn.setFixedSize(28, 28)
+        edit_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE2};
+                color: {Theme.BLUE};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.BLUE};
+                color: {Theme.CRUST};
+            }}
+        """)
+        edit_btn.clicked.connect(lambda checked, idx=row_idx: self._on_edit(idx))
         actions_layout.addWidget(edit_btn)
         
         delete_btn = QPushButton("🗑")
-        delete_btn.setFixedSize(24, 24)
-        delete_btn.setProperty("variant", "secondary")
-        delete_btn.clicked.connect(lambda checked, idx=row.index: self._on_delete(idx))
+        delete_btn.setFixedSize(28, 28)
+        delete_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE2};
+                color: {Theme.RED};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.RED};
+                color: {Theme.CRUST};
+            }}
+        """)
+        delete_btn.clicked.connect(lambda checked, idx=row_idx: self._on_delete(idx))
         actions_layout.addWidget(delete_btn)
         
         self.table.setCellWidget(row_idx, 4, actions_widget)
@@ -225,6 +303,37 @@ class PromptTable(QWidget):
             PromptStatus.FAILED: Theme.RED,
         }
         return colors.get(status, Theme.SUBTEXT1)
+    
+    def _on_cont_toggle(self, row_idx: int, checked: bool):
+        """Handle per-row continuation checkbox toggle.
+        
+        Updates data and label IN-PLACE without rebuilding the table.
+        """
+        if self._refreshing:
+            return
+        if not (0 <= row_idx < len(self._rows)):
+            return
+        
+        # Update data
+        if checked and row_idx > 0:
+            self._rows[row_idx].continuation_from = self._rows[row_idx - 1].index
+        else:
+            self._rows[row_idx].continuation_from = None
+        
+        # Update label in-place (no table rebuild)
+        cont_widget = self.table.cellWidget(row_idx, 2)
+        if cont_widget:
+            cont_label = cont_widget.findChild(QLabel)
+            if cont_label:
+                if checked and row_idx > 0:
+                    cont_label.setText(f"← #{self._rows[row_idx - 1].index}")
+                    cont_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 11px;")
+                else:
+                    cont_label.setText("Start")
+                    cont_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        
+        # Emit signal for tab handlers
+        self.continuation_toggled.emit(row_idx, checked)
     
     def _on_edit(self, index: int):
         """Handle edit button click."""

@@ -215,7 +215,7 @@ Content-Type: application/json
 ### 4️⃣ Generate GIF Preview
 
 ```http
-POST /v1/video:generatePinholeGif?key={API_KEY}&clientContext.tool=PINHOLE
+POST /v1/video:generatePinholeGif
 Content-Type: application/json
 ```
 
@@ -229,7 +229,7 @@ Content-Type: application/json
 **Response:**
 ```json
 {
-  "pinholeGif": "R0lGODlh..."  // Base64 GIF (>10MB)
+  "encodedGif": "R0lGODlh..."  // Base64 GIF (>10MB)
 }
 ```
 
@@ -293,8 +293,14 @@ Content-Type: application/json
 **Payload:**
 ```json
 {
-  "mediaGenerationId": "CAM...",
-  "targetResolution": "IMAGE_RESOLUTION_4K"
+  "mediaId": "CAM...",
+  "targetResolution": "UPSAMPLE_IMAGE_RESOLUTION_4K",
+  "clientContext": {
+    "recaptchaContext": {"token": "...", "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"},
+    "sessionId": ";{timestamp_ms}",
+    "projectId": "uuid",
+    "tool": "PINHOLE"
+  }
 }
 ```
 

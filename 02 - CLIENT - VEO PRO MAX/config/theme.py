@@ -313,7 +313,84 @@ QSpinBox, QDoubleSpinBox {{
     color: {cls.TEXT};
     border: 1px solid {cls.BORDER};
     border-radius: 4px;
-    padding: 8px;
+    padding: 4px 8px;
+    padding-right: 20px;  /* Space for buttons on right */
+    selection-background-color: {cls.BLUE};
+}}
+
+QSpinBox:focus, QDoubleSpinBox:focus {{
+    border-color: {cls.BORDER_FOCUS};
+}}
+
+QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    background-color: {cls.SURFACE1};
+    color: {cls.OVERLAY0};
+}}
+
+/* Up button — top right */
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 18px;
+    border-left: 1px solid {cls.BORDER};
+    border-bottom: 1px solid {cls.BORDER};
+    border-top-right-radius: 3px;
+    background-color: {cls.SURFACE1};
+}}
+
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{
+    background-color: {cls.SURFACE2};
+}}
+
+QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed {{
+    background-color: {cls.BLUE};
+}}
+
+/* Down button — bottom right */
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 18px;
+    border-left: 1px solid {cls.BORDER};
+    border-top: 1px solid {cls.BORDER};
+    border-bottom-right-radius: 3px;
+    background-color: {cls.SURFACE1};
+}}
+
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
+    background-color: {cls.SURFACE2};
+}}
+
+QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {{
+    background-color: {cls.BLUE};
+}}
+
+/* Up arrow — triangle pointing up */
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid {cls.TEXT};
+}}
+
+QSpinBox::up-arrow:disabled, QDoubleSpinBox::up-arrow:disabled,
+QSpinBox::up-arrow:off, QDoubleSpinBox::up-arrow:off {{
+    border-bottom-color: {cls.OVERLAY0};
+}}
+
+/* Down arrow — triangle pointing down */
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid {cls.TEXT};
+}}
+
+QSpinBox::down-arrow:disabled, QDoubleSpinBox::down-arrow:disabled,
+QSpinBox::down-arrow:off, QDoubleSpinBox::down-arrow:off {{
+    border-top-color: {cls.OVERLAY0};
 }}
 
 /* === CHECK BOX === */

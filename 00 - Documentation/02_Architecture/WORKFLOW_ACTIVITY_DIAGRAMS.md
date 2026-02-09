@@ -34,19 +34,19 @@ graph TD
         %% 2. Image-to-Video Single Frame (I2V)
         B -->|2. Image-to-Video<br/>Single Frame| I2V1[CMD_UPLOAD_IMAGE<br/>+ Headers Only]
         I2V1 --> I2V2[Get reCAPTCHA Token]
-        I2V2 --> I2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_i2v_s_*<br/>+ imageInputMediaId]
+        I2V2 --> I2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_i2v_s_*<br/>+ startImage.mediaId]
         I2V3 --> POLL
         
         %% 3. Frames-to-Video (Start + End Image)
         B -->|3. Frames-to-Video<br/>Start + End| F2V1[CMD_UPLOAD_IMAGE x2<br/>+ Headers Only]
         F2V1 --> F2V2[Get reCAPTCHA Token]
-        F2V2 --> F2V3[CMD_GENERATE_VIDEO_START_END<br/>model: veo_3_1_i2v_s_fast_fl_*<br/>+ startImageId + endImageId]
+        F2V2 --> F2V3[CMD_GENERATE_VIDEO_START_END<br/>model: veo_3_1_i2v_s_fast_fl_*<br/>+ startImage.mediaId + endImage.mediaId]
         F2V3 --> POLL
         
         %% 4. Ingredients-to-Video (R2V)
         B -->|4. Ingredients<br/>1-3 Reference Images| R2V1[CMD_UPLOAD_IMAGE x1-3<br/>+ Headers Only]
         R2V1 --> R2V2[Get reCAPTCHA Token]
-        R2V2 --> R2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_r2v_*<br/>+ referenceImageIds array]
+        R2V2 --> R2V3[CMD_GENERATE_VIDEO<br/>model: veo_3_1_r2v_*<br/>+ referenceImages array]
         R2V3 --> POLL
     end
     

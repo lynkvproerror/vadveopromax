@@ -97,7 +97,7 @@ class QueueController:
             item = QueueItemView(
                 id=task.id,
                 prompt=task.prompt[:50] + "..." if len(task.prompt) > 50 else task.prompt,
-                workflow=task.workflow_type.value if task.workflow_type else "unknown",
+                workflow=str(task.workflow_type) if task.workflow_type else "unknown",
                 status=task.state.value,
                 progress=task.progress,
                 outputs=task.output_uris or [],

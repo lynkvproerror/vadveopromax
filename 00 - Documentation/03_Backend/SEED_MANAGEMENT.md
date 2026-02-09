@@ -39,14 +39,14 @@ interface VideoGenerationRequest {
 {
   "seed": 25325,
   "textInput": {"prompt": "Kết hợp khung cảnh u buồn"},
-  "videoModelKey": "veo_3_1_r2v_fast_landscape_ultra"
+  "videoModelKey": "veo_3_1_r2v_fast_landscape_ultra_relaxed"
 }
 
 // Request 2 (cùng prompt, seed khác)
 {
   "seed": 7374,
   "textInput": {"prompt": "Kết hợp khung cảnh u buồn"},
-  "videoModelKey": "veo_3_1_r2v_fast_landscape_ultra"
+  "videoModelKey": "veo_3_1_r2v_fast_landscape_ultra_relaxed"
 }
 
 // Kết quả: 2 videos khác nhau từ cùng prompt

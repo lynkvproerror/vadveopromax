@@ -350,6 +350,34 @@ flowchart TD
 | TIMEOUT | Button not enabled in 6s | Reload page, retry (max 3) |
 | NETWORK | Tab closed/navigation error | Stop queue |
 
+## 🔄 Continuation Mode (Frame Chaining)
+
+Khi continuation mode được bật (per-prompt toggle), worker tự chuyển sang F2V workflow:
+
+```mermaid
+flowchart LR
+    A[Video #1 complete] --> B[Download 720p]
+    B --> C[FFmpeg Extract Frame]
+    C --> D[Base64 Encode]
+    D --> E[Upload Image API]
+    E --> F[Get mediaId]
+    F --> G[Generate Video #2 via F2V]
+```
+
+### T2V + Continuation Logic
+
+| Prompt | CONT | Workflow thực tế | Image Source |
+|--------|------|-----------------|-------------|
+| #1 | OFF | T2V | — |
+| #2 | ON | **F2V** | Extracted frame từ #1 |
+| #3 | ON | **F2V** | Extracted frame từ #2 |
+| #4 | OFF | T2V | — (new chain) |
+
+> [!NOTE]
+> T2V + CONT ON = Worker tự động chuyển workflow thành F2V, dùng extracted frame làm `startImage` (hoặc `endImage` nếu `frame_source=FIRST`).
+
+Xem chi tiết matrix: [FRAME_CONTINUATION_WORKFLOW.md](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md)
+
 ---
 
 ## 🔗 Related Files
@@ -357,3 +385,4 @@ flowchart TD
 | File | Description |
 |------|-------------|
 | [TAB_01_TEXT_TO_VIDEO.md](../01_UI_UX/TAB_01_TEXT_TO_VIDEO.md) | UI Layout & Widgets |
+| [FRAME_CONTINUATION_WORKFLOW.md](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md) | Full continuation workflow & terminology |

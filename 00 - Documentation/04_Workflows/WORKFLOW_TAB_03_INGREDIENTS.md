@@ -211,24 +211,32 @@ SLOT_STYLE_XPATH = "//div[contains(@class, 'style-slot')]"
 
 ---
 
-## 🔄 continuation Mode Behavior
+## 🔄 Continuation Mode (Frame Chaining)
 
-Ingredients mode giữ nguyên library images khi dùng continuation:
+R2V + CONT ON: Worker tự chuyển sang F2V, extracted frame thay thế slot 1.
 
 ```mermaid
-flowchart TD
-    A{continuation enabled?} -->|No| B[Use all 3 user images from library]
-    A -->|Yes| C[Extract frame from prev video]
-    C --> D[Insert frame as SLOT 1]
-    D --> E[Keep up to 2 remaining library images]
-    E --> F[Total: max 3 images - 1 cont + 2 library]
+flowchart LR
+    A[Video #1 complete] --> B[Download 720p]
+    B --> C[FFmpeg Extract Frame]
+    C --> D[Base64 Encode]
+    D --> E[Upload Image API]
+    E --> F[Get mediaId]
+    F --> G[Generate Video #2 via F2V]
 ```
 
-> ✅ **Behavior**: Khi continuation ON:
-> - Extracted frame → Slot 1 (Subject/Character position)
-> - Remaining library images (max 2) → Slot 2, 3
-> - Tổng: max 3 images = 1 cont frame + 2 library images
-> - Ví dụ: `[cont_frame] + [bg_castle] + [style_anime]`
+### R2V + Continuation Logic
+
+| CONT | Slot 1 | Slot 2 | Slot 3 |
+|------|--------|--------|--------|
+| OFF | Library char | Library bg | Library style |
+| ON | 🔗 **Extracted frame** | Library bg | Library style |
+
+> [!NOTE]
+> Khi CONT ON, extracted frame thay thế Slot 1 (Subject). Còn lại 2 slot giữ nguyên library images.
+> Tổng: max 3 images = 1 cont frame + 2 library images.
+
+Xem chi tiết matrix: [FRAME_CONTINUATION_WORKFLOW.md](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md)
 
 ---
 
@@ -249,3 +257,4 @@ flowchart TD
 |------|-------------|
 | [TAB_03_INGREDIENTS.md](../01_UI_UX/TAB_03_INGREDIENTS.md) | UI Layout & Widgets |
 | [WORKFLOW_TAB_02_IMAGE_TO_VIDEO.md](./WORKFLOW_TAB_02_IMAGE_TO_VIDEO.md) | Single image upload flow |
+| [FRAME_CONTINUATION_WORKFLOW.md](../02_Architecture/FRAME_CONTINUATION_WORKFLOW.md) | Full continuation workflow & terminology |

@@ -15,6 +15,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.constants import TokenLifetime
 
 
+class AccountState(str, Enum):
+    """Account connection state machine.
+    
+    Reference: MULTITHREADING_ARCHITECTURE.md §5.2
+    Flow: DISCONNECTED → CONNECTING → CONNECTED → READY → ACTIVE
+    """
+    DISCONNECTED = "disconnected"   # No session
+    CONNECTING = "connecting"       # Loading browser context
+    CONNECTED = "connected"         # Has session, no project yet
+    READY = "ready"                 # Has session + project, can accept tasks
+    ACTIVE = "active"               # Processing tasks
+
+
 class SubscriptionType(str, Enum):
     """Google AI Studio subscription types (SKU)."""
     WS_ULTRA = "WS_ULTRA"           # Highest tier
@@ -56,11 +69,26 @@ class AccountSession:
     recaptcha_token: str = ""
     recaptcha_fetched_at: Optional[datetime] = None
     
+    # === x-browser-* Headers (per-account, from browser context) ===
+    # Per Protocol Analysis §1.4: these are MANDATORY for REST endpoints
+    browser_validation: str = ""    # x-browser-validation header
+    client_data: str = ""           # x-client-data header
+    browser_channel: str = "stable" # x-browser-channel header
+    browser_copyright: str = ""     # x-browser-copyright header
+    browser_year: str = ""          # x-browser-year header
+    
     # === Internal State ===
-    is_connected: bool = False
+    state: AccountState = AccountState.DISCONNECTED
     active_slots: int = 0
     max_slots: int = 4
     last_activity: Optional[datetime] = None
+    
+    # === Per-Account Worker Settings ===
+    retry_count: int = 3       # Max retries on non-auth errors
+    request_timeout: int = 120  # Seconds before API call times out
+    
+    # === Browser Profile ===
+    profile_path: str = ""  # Chrome profile directory for persistent browser
     
     def __post_init__(self):
         """Initialize computed fields."""
@@ -95,12 +123,18 @@ class AccountSession:
         return max(0, self.max_slots - self.active_slots)
     
     @property
+    def is_connected(self) -> bool:
+        """Backwards-compatible check (deprecated, use state instead)."""
+        return self.state not in (AccountState.DISCONNECTED, AccountState.CONNECTING)
+    
+    @property
     def is_ready(self) -> bool:
         """Check if account is ready for API calls."""
         return (
             not self.is_token_expired
             and not self.needs_recaptcha_refresh
             and self.available_slots > 0
+            and self.browser_validation != ""  # Must have browser headers
         )
     
     def acquire_slot(self) -> bool:
@@ -120,6 +154,38 @@ class AccountSession:
         """Update reCAPTCHA token."""
         self.recaptcha_token = token
         self.recaptcha_fetched_at = datetime.now()
+    
+    def update_browser_headers(
+        self,
+        browser_validation: str,
+        client_data: str,
+        browser_channel: str = "stable",
+        browser_copyright: str = "",
+        browser_year: str = "",
+    ):
+        """Update x-browser-* headers for this account.
+        
+        Per Protocol Analysis §1.4: these are extracted from
+        each account's browser context and are MANDATORY for REST endpoints.
+        """
+        self.browser_validation = browser_validation
+        self.client_data = client_data
+        self.browser_channel = browser_channel
+        self.browser_copyright = browser_copyright
+        self.browser_year = browser_year
+    
+    def get_browser_headers(self) -> dict:
+        """Get all x-browser-* headers for API calls."""
+        headers = {
+            "x-browser-channel": self.browser_channel,
+            "x-browser-validation": self.browser_validation,
+            "x-client-data": self.client_data,
+        }
+        if self.browser_copyright:
+            headers["x-browser-copyright"] = self.browser_copyright
+        if self.browser_year:
+            headers["x-browser-year"] = self.browser_year
+        return headers
     
     def update_from_api_response(self, response: dict):
         """Update SKU/tier info from API response.
@@ -147,7 +213,11 @@ class AccountSession:
             self.credits = int(response["credits"])
     
     def to_dict(self) -> dict:
-        """Convert to dictionary for serialization."""
+        """Convert to dictionary for serialization.
+        
+        Persists x-browser-* headers so account can be recovered
+        without re-extracting from browser.
+        """
         return {
             "email": self.email,
             "access_token": self.access_token,
@@ -157,12 +227,26 @@ class AccountSession:
             "credits": self.credits,
             "recaptcha_token": self.recaptcha_token,
             "recaptcha_fetched_at": self.recaptcha_fetched_at.isoformat() if self.recaptcha_fetched_at else None,
+            # x-browser-* headers (B3+B4: per-account, persisted)
+            "browser_validation": self.browser_validation,
+            "client_data": self.client_data,
+            "browser_channel": self.browser_channel,
+            "browser_copyright": self.browser_copyright,
+            "browser_year": self.browser_year,
+            # Account state
+            "state": self.state.value,
+            # Per-account worker settings
+            "max_slots": self.max_slots,
+            "retry_count": self.retry_count,
+            "request_timeout": self.request_timeout,
+            # Browser profile
+            "profile_path": self.profile_path,
         }
     
     @classmethod
     def from_dict(cls, data: dict) -> "AccountSession":
         """Create from dictionary."""
-        return cls(
+        session = cls(
             email=data["email"],
             access_token=data["access_token"],
             token_expires=datetime.fromisoformat(data["token_expires"]),
@@ -171,4 +255,24 @@ class AccountSession:
             credits=data.get("credits", 0),
             recaptcha_token=data.get("recaptcha_token", ""),
             recaptcha_fetched_at=datetime.fromisoformat(data["recaptcha_fetched_at"]) if data.get("recaptcha_fetched_at") else None,
+            # Restore browser headers
+            browser_validation=data.get("browser_validation", ""),
+            client_data=data.get("client_data", ""),
+            browser_channel=data.get("browser_channel", "stable"),
+            browser_copyright=data.get("browser_copyright", ""),
+            browser_year=data.get("browser_year", ""),
+            # Restore profile path
+            profile_path=data.get("profile_path", ""),
         )
+        # Restore account state
+        state_val = data.get("state")
+        if state_val:
+            try:
+                session.state = AccountState(state_val)
+            except ValueError:
+                session.state = AccountState.DISCONNECTED
+        # Restore per-account worker settings
+        session.max_slots = data.get("max_slots", 4)
+        session.retry_count = data.get("retry_count", 3)
+        session.request_timeout = data.get("request_timeout", 120)
+        return session

@@ -21,18 +21,23 @@
 
 ## Model Key Mapping
 
-| UI Display | VEO Model Key | Aspect Ratio |
-|------------|---------------|--------------|
-| Veo 3.1 Fast (Landscape) | `veo_3_1_t2v_fast_landscape_ultra` | 16:9 |
-| Veo 3.1 Fast (Portrait) | `veo_3_1_t2v_fast_portrait` | 9:16 |
-| Veo 3.1 Fast [Relaxed] | `veo_3_1_t2v_fast_landscape_ultra_relaxed` | 16:9 |
-| I2V Single Frame | `veo_3_1_i2v_s_fast_ultra_relaxed` | Auto |
-| F2V (Start+End Frames) | `veo_3_1_i2v_s_fast_fl_ultra_relaxed` | Auto |
-| R2V Ingredients | `veo_3_1_r2v_fast_landscape_ultra` | 16:9 |
-| Upscale 1080p | `veo_3_1_upsampler_1080p` | Same |
-| Upscale 4K | `veo_3_1_upsampler_4k` | Same |
-| Image: IMAGEN_3_5 | `IMAGEN_3_5_DEFAULT` | Varies |
-| Image: Nanobanana Pro | `GEM_PIX_2` | Varies |
+> [!IMPORTANT]
+> Model keys below verified against F12 HAR captures (2026-02-07). Keys with `⚠️` were NOT directly observed but documented from code.
+
+| UI Display | VEO Model Key | Aspect Ratio | HAR Verified |
+|------------|---------------|--------------|:-----------:|
+| Veo 3.1 Fast (Landscape) | `veo_3_1_t2v_fast_landscape_ultra` | 16:9 | ⚠️ |
+| Veo 3.1 Fast (Portrait) | `veo_3_1_t2v_fast_portrait` | 9:16 | ⚠️ |
+| Veo 3.1 Fast [Relaxed] | `veo_3_1_t2v_fast_landscape_ultra_relaxed` | 16:9 | ⚠️ |
+| I2V Single (Landscape) | `veo_3_1_i2v_s_fast_ultra_relaxed` | 16:9 | ✅ |
+| F2V Start+End (Portrait) | `veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed` | 9:16 | ✅ |
+| F2V Start+End (Landscape) | `veo_3_1_i2v_s_fast_fl_ultra_relaxed` | 16:9 | ⚠️ |
+| R2V Ingredients (Portrait) | `veo_3_1_r2v_fast_portrait_ultra_relaxed` | 9:16 | ✅ |
+| R2V Ingredients (Landscape) | `veo_3_1_r2v_fast_landscape_ultra_relaxed` | 16:9 | ⚠️ |
+| Upscale 1080p | `veo_3_1_upsampler_1080p` | Same | ✅ |
+| Upscale 4K | `veo_3_1_upsampler_4k` | Same | ✅ |
+| Image: IMAGEN_3_5 | `IMAGEN_3_5` | Varies | ✅ |
+| Image: Nanobanana Pro | `GEM_PIX_2` | Varies | ✅ |
 
 ---
 
@@ -56,4 +61,4 @@
 
 ---
 
-**Last Updated**: 2026-02-04
+**Last Updated**: 2026-02-07 (HAR audit verified)

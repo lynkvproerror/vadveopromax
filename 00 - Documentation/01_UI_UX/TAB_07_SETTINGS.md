@@ -45,8 +45,8 @@
 │ │ ☑️ Enable continuation auto-extraction                                                      │ │
 │ │ Extract Point: [○ 500ms] [● 750ms] [○ 1000ms] [○ Custom: [____]ms]                          │ │
 │ │                                                                                              │ │
-│ │ ─── TAB_02 (I2V/F2V) ───                                                                    │ │
-│ │ Use extracted frame as: [● First Frame] [○ Last Frame]                                      │ │
+│ │ Frame Source: [● Last Frame 🔒] [○ First Frame]   ← 🔒 Disabled for normal users            │ │
+│ │ ⚠️ Tester only: enable via Settings > Access Level                                          │ │
 │ └─────────────────────────────────────────────────────────────────────────────────────────────┘ │
 │                                                                                                  │
 │ ┌─────────────────────────────────────────────────────────────────────────────────────────────┐ │
@@ -127,12 +127,19 @@
 
 ### Continuation Settings
 
-| Widget | Type | Properties |
-|--------|------|------------|
-| `cont_enabled` | `QCheckBox` | "Enable continuation auto-extraction" |
-| `extract_point` | `QButtonGroup` + `QRadioButton` | 500ms/750ms/1000ms/Custom |
-| `custom_ms` | `QSpinBox` | Range: 100-2000ms |
-| `frame_placement` | `QButtonGroup` + `QRadioButton` | First Frame / Last Frame |
+| Widget | Type | Properties | `get_settings()` key |
+|--------|------|------------|---------------------|
+| `cont_enabled` | `QCheckBox` | "Enable continuation auto-extraction" | `continuation_enabled` (bool) |
+| `extract_point` | `QButtonGroup` + `QRadioButton` | 500ms/750ms/1000ms/Custom | `extract_point_ms` (int, parsed) |
+| `custom_ms` | `QSpinBox` | Range: 100-2000ms | — (part of extract_point) |
+| `frame_source` | `QButtonGroup` + `QRadioButton` | Last Frame (default) / First Frame | `frame_source` (`"LAST"` \| `"FIRST"`) |
+
+> [!IMPORTANT]
+> **Frame Source** toggle: `Last Frame` = default, `First Frame` = tester only.
+> - Normal user: toggle **disabled** (locked to "Last Frame")
+> - Tester: toggle **enabled** (can switch)
+> 
+> "Last/First Frame" = **nguồn trích xuất** (lấy từ cuối/đầu video trước), KHÔNG phải vị trí đặt.
 
 ---
 
@@ -227,18 +234,27 @@ class SettingsTab(QWidget):
         extract_layout.addStretch()
         cont_layout.addLayout(extract_layout)
         
-        placement_layout = QHBoxLayout()
-        placement_layout.addWidget(QLabel("Use extracted frame as:"))
-        self.placement_group = QButtonGroup(self)
-        self.first_frame_radio = QRadioButton("First Frame")
-        self.first_frame_radio.setChecked(True)
+        # Frame Source (Last Frame = default, First Frame = tester only)
+        source_layout = QHBoxLayout()
+        source_layout.addWidget(QLabel("Frame Source:"))
+        self.frame_source_group = QButtonGroup(self)
         self.last_frame_radio = QRadioButton("Last Frame")
-        self.placement_group.addButton(self.first_frame_radio, id=0)
-        self.placement_group.addButton(self.last_frame_radio, id=1)
-        placement_layout.addWidget(self.first_frame_radio)
-        placement_layout.addWidget(self.last_frame_radio)
-        placement_layout.addStretch()
-        cont_layout.addLayout(placement_layout)
+        self.last_frame_radio.setChecked(True)  # Default
+        self.first_frame_radio = QRadioButton("First Frame")
+        self.frame_source_group.addButton(self.last_frame_radio, id=0)
+        self.frame_source_group.addButton(self.first_frame_radio, id=1)
+        source_layout.addWidget(self.last_frame_radio)
+        source_layout.addWidget(self.first_frame_radio)
+        
+        # Tester-only access control
+        # Normal users: disabled (locked to Last Frame)
+        # Testers: enabled
+        is_tester = False  # TODO: Check user access level
+        self.last_frame_radio.setEnabled(is_tester)
+        self.first_frame_radio.setEnabled(is_tester)
+        
+        source_layout.addStretch()
+        cont_layout.addLayout(source_layout)
         
         layout.addWidget(cont_group)
         

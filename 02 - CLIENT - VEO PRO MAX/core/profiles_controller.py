@@ -30,11 +30,12 @@ class ChromeProfile:
     last_used: Optional[str] = None
     created_at: Optional[str] = None
     # New fields for dual login
-    login_method: str = "oauth"  # "oauth" or "browser"
+    login_method: str = "browser"  # Always browser login
     browser_profile_path: str = ""  # Path to saved Chromium profile for browser login
     subscription_fetched: bool = False  # True if subscription was successfully fetched
     token_expires_at: Optional[str] = None  # ISO datetime when token expires (for status display)
     is_enabled: bool = True  # Account participates in rotation when generating
+    max_slots: int = 4  # Per-account concurrent worker limit (0-4)
     
     def __post_init__(self):
         if not self.created_at:
@@ -45,8 +46,8 @@ class ChromeProfile:
     @property
     def tier_display(self) -> str:
         """Get display name for tier."""
-        # OAuth login without fetched subscription shows Wait
-        if self.login_method == "oauth" and not self.subscription_fetched:
+        # Not yet fetched subscription
+        if not self.subscription_fetched:
             return "⏳ Wait"
         
         tier_map = {
@@ -59,7 +60,7 @@ class ChromeProfile:
     @property
     def credits_display(self) -> str:
         """Get display for credits."""
-        if self.login_method == "oauth" and not self.subscription_fetched:
+        if not self.subscription_fetched:
             return "N/A"
         return str(self.credits)
     
@@ -101,7 +102,7 @@ class ChromeProfile:
         """Create from dictionary."""
         # Handle legacy profiles without new fields
         if "login_method" not in data:
-            data["login_method"] = "oauth"
+            data["login_method"] = "browser"
         if "browser_profile_path" not in data:
             data["browser_profile_path"] = ""
         if "subscription_fetched" not in data:
@@ -168,11 +169,13 @@ class ProfilesController:
                 "email": p.email,
                 "display_name": p.display_name,
                 "tier": p.tier_display,
-                "credits": p.credits_display,  # Use display property (shows N/A for OAuth)
+                "credits": p.credits_display,
                 "status": p.status_display,
                 "is_ready": p.is_ready,
+                "is_enabled": p.is_enabled,  # Issue B: expose toggle state to UI
                 "profile_path": p.profile_path,
-                "login_method": p.login_method,  # "oauth" or "browser"
+                "login_method": p.login_method,
+                "max_slots": p.max_slots,  # Per-account slot limit (0-4)
             }
             for p in self._profiles
         ]
@@ -220,11 +223,33 @@ class ProfilesController:
     def remove_profile(self, email: str) -> bool:
         """Remove profile by email.
         
+        Also cleans up:
+        - Browser profile folder on disk
+        - Stored credentials for this email
+        
         Returns:
             True if removed successfully
         """
         for i, p in enumerate(self._profiles):
             if p.email == email:
+                # Cleanup browser profile folder
+                if p.browser_profile_path:
+                    import shutil
+                    profile_dir = Path(p.browser_profile_path)
+                    if profile_dir.exists():
+                        try:
+                            shutil.rmtree(profile_dir, ignore_errors=True)
+                            print(f"[ProfilesController] 🗑️ Deleted browser profile: {profile_dir}")
+                        except Exception as e:
+                            print(f"[ProfilesController] ⚠️ Could not delete browser profile: {e}")
+                
+                # Cleanup stored credentials
+                try:
+                    from core.credentials_manager import get_credentials_manager
+                    get_credentials_manager().delete_credentials_for(email)
+                except Exception:
+                    pass
+                
                 self._profiles.pop(i)
                 self.save_profiles()
                 self._notify("profiles_changed")
@@ -258,7 +283,7 @@ class ProfilesController:
         return True
     
     def refresh_session(self, email: str) -> bool:
-        """Refresh OAuth tokens for a profile.
+        """Refresh access token for a profile via browser session.
         
         Uses TokenManager to refresh the access token.
         
@@ -303,48 +328,45 @@ class ProfilesController:
             self.save_profiles()
             return False
     
-    def fetch_subscription_info(self, email: str) -> bool:
+    def fetch_subscription_info(self, email: str) -> dict:
         """Fetch subscription info based on login method.
         
-        OAuth Login:
-        - Sets placeholder values (subscription_fetched=False)
-        - Will be updated after first video render
-        
-        Browser Login:
-        - Fetches real-time from Credits API using saved browser profile
-        
-        Args:
-            email: Profile email
-            
-        Returns:
-            True if successful
+        Returns dict with:
+        - success: bool
+        - reason: str ("ok", "profile_missing", "session_expired", 
+                       "not_logged_in", "credits_api_failed")
+        - can_auto_login: bool (True if stored credentials exist for this email)
         """
         profile = self.get_profile(email)
         if not profile:
             print(f"[ProfilesController] Profile not found: {email}")
-            return False
+            return {"success": False, "reason": "profile_not_found", "can_auto_login": False}
         
-        print(f"[ProfilesController] Fetching subscription for {email} (method: {profile.login_method})")
+        # Check if auto-login is possible
+        can_auto_login = False
+        try:
+            from core.credentials_manager import get_credentials_manager
+            creds_manager = get_credentials_manager()
+            can_auto_login = creds_manager.has_credentials_for(email)
+        except Exception:
+            pass
         
-        if profile.login_method == "browser" and profile.browser_profile_path:
+        print(f"[ProfilesController] Fetching subscription for {email}")
+        
+        if profile.browser_profile_path:
             # Browser login → Fetch real-time
-            return self._fetch_subscription_via_browser(profile)
+            result = self._fetch_subscription_via_browser(profile)
+            result["can_auto_login"] = can_auto_login
+            return result
         else:
-            # OAuth login → Placeholder, will update after first render
-            print(f"[ProfilesController] ℹ️ OAuth login - subscription will update after first video")
-            from datetime import datetime
-            profile.is_ready = True
-            profile.subscription_fetched = False  # Will be True after first render
-            profile.last_used = datetime.now().isoformat()
-            self.save_profiles()
-            print(f"[ProfilesController] ✅ Profile ready (Plan: {profile.tier_display})")
-            return True
+            # No browser profile path → needs login first
+            print(f"[ProfilesController] ❌ No browser profile — needs login")
+            return {"success": False, "reason": "not_logged_in", "can_auto_login": can_auto_login}
     
-    def _fetch_subscription_via_browser(self, profile: "ChromeProfile") -> bool:
+    def _fetch_subscription_via_browser(self, profile: "ChromeProfile") -> dict:
         """Fetch subscription using saved browser profile (for browser login).
         
-        Uses Chromium with the saved profile to call Credits API.
-        Chrome/Chromium auto-injects x-browser-* headers for Google domains.
+        Returns dict with {success, reason} instead of bool.
         """
         try:
             # Check if we're inside an asyncio loop
@@ -354,7 +376,7 @@ class ProfilesController:
                 if loop:
                     print(f"[ProfilesController] ⚠️ Inside asyncio loop - skipping sync subscription fetch")
                     print(f"[ProfilesController] Subscription will be fetched on next refresh")
-                    return True  # Return success, subscription will be fetched later
+                    return {"success": True, "reason": "deferred"}
             except RuntimeError:
                 pass  # No running loop, safe to use sync API
             
@@ -363,8 +385,11 @@ class ProfilesController:
             import os
             
             if not profile.browser_profile_path or not os.path.exists(profile.browser_profile_path):
-                print(f"[ProfilesController] Browser profile path not found: {profile.browser_profile_path}")
-                return False
+                print(f"[ProfilesController] ❌ Browser profile path not found: {profile.browser_profile_path}")
+                print(f"[ProfilesController] 🔑 Account needs re-login")
+                profile.is_ready = False
+                self.save_profiles()
+                return {"success": False, "reason": "profile_missing"}
             
             API_KEY = "AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY"
             CREDITS_URL = f"https://aisandbox-pa.googleapis.com/v1/credits?key={API_KEY}"
@@ -387,50 +412,78 @@ class ProfilesController:
                 page = context.new_page()
                 
                 try:
-                    # Step 1: Navigate to labs.google to establish session
-                    print(f"[ProfilesController] Navigating to labs.google/fx...")
-                    page.goto("https://labs.google/fx", wait_until="networkidle", timeout=30000)
-                    page.wait_for_timeout(2000)
+                    # Step 1: Navigate to labs.google/fx/tools/flow (needs full page for __NEXT_DATA__)
+                    print(f"[ProfilesController] Navigating to labs.google/fx/tools/flow...")
+                    page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(5000)
                     
-                    # Step 2: Fetch session API to get access_token
-                    print(f"[ProfilesController] Fetching session API...")
-                    session_result = page.evaluate("""
-                        async () => {
-                            try {
-                                const resp = await fetch('https://labs.google/fx/api/auth/session', {
-                                    credentials: 'include'
-                                });
-                                if (resp.ok) {
-                                    return await resp.json();
+                    # Click "Create with Flow" button if present (activates VEO Flow)
+                    try:
+                        create_btn = page.locator("button:has-text('Create with Flow')")
+                        if create_btn.count() > 0 and create_btn.first.is_visible():
+                            print("[ProfilesController] Clicking 'Create with Flow' button...")
+                            create_btn.first.click()
+                            page.wait_for_timeout(3000)
+                    except Exception:
+                        pass
+                    
+                    # Step 2: Extract session from __NEXT_DATA__ (per docs Section 7.2)
+                    access_token = None
+                    session_result = {}
+                    
+                    for attempt in range(3):
+                        print(f"[ProfilesController] Extracting __NEXT_DATA__ (attempt {attempt+1}/3)...")
+                        try:
+                            session_result = page.evaluate("""
+                                () => {
+                                    const script = document.getElementById('__NEXT_DATA__');
+                                    if (!script) return { error: 'no_next_data' };
+                                    
+                                    try {
+                                        const data = JSON.parse(script.textContent);
+                                        const session = data?.props?.pageProps?.session;
+                                        
+                                        if (!session) return { error: 'no_session_in_next_data' };
+                                        
+                                        return {
+                                            access_token: session.access_token || session.accessToken || '',
+                                            expires: session.expires || '',
+                                            user: {
+                                                email: session.user?.email || '',
+                                                name: session.user?.name || '',
+                                                image: session.user?.image || ''
+                                            }
+                                        };
+                                    } catch(e) {
+                                        return { error: e.message };
+                                    }
                                 }
-                                return { error: resp.status };
-                            } catch (e) {
-                                return { error: e.message };
-                            }
-                        }
-                    """)
-                    
-                    print(f"[ProfilesController] Session result: {session_result}")
+                            """)
+                        except Exception as eval_err:
+                            print(f"[ProfilesController] ⚠️ Evaluate failed: {eval_err}")
+                            session_result = {"error": str(eval_err)}
+                            page.wait_for_timeout(3000)
+                            continue
+                        
+                        print(f"[ProfilesController] __NEXT_DATA__ result: {session_result}")
+                        
+                        if session_result and "error" not in session_result:
+                            access_token = session_result.get("access_token") or session_result.get("accessToken")
+                            if access_token:
+                                print(f"[ProfilesController] ✅ Got access token on attempt {attempt+1}")
+                                break
+                        
+                        if attempt < 2:
+                            print(f"[ProfilesController] ⚠️ No token yet, waiting 3s before retry...")
+                            page.wait_for_timeout(3000)
                     
                     # Check for error or empty session (not logged in)
-                    if not session_result or "error" in session_result:
-                        print(f"[ProfilesController] ⚠️ Session API error: {session_result}")
-                        profile.is_ready = True
-                        profile.subscription_fetched = False
-                        self.save_profiles()
-                        return False
-                    
-                    access_token = session_result.get("accessToken") or session_result.get("access_token")
-                    user_info = session_result.get("user", {})
-                    
-                    # Empty session = not logged in
                     if not access_token:
-                        print(f"[ProfilesController] ⚠️ Not logged in - no accessToken in session")
-                        print(f"[ProfilesController] ℹ️ Please login first using Browser button")
-                        profile.is_ready = True
+                        print(f"[ProfilesController] ⚠️ __NEXT_DATA__ extraction failed after 3 attempts: {session_result}")
+                        profile.is_ready = False
                         profile.subscription_fetched = False
                         self.save_profiles()
-                        return False
+                        return {"success": False, "reason": "session_expired"}
                     
                     print(f"[ProfilesController] ✅ Got access token: {access_token[:20]}...")
                     
@@ -467,7 +520,7 @@ class ProfilesController:
                         self.save_profiles()
                         
                         print(f"[ProfilesController] ✅ Success: {profile.tier_display}, Credits: {profile.credits}")
-                        return True
+                        return {"success": True, "reason": "ok"}
                     else:
                         # Still have session, just no credits info
                         print(f"[ProfilesController] ⚠️ Credits API failed: {credits_result}")
@@ -475,7 +528,7 @@ class ProfilesController:
                         profile.subscription_fetched = False
                         profile.last_used = datetime.now().isoformat()
                         self.save_profiles()
-                        return False
+                        return {"success": False, "reason": "credits_api_failed"}
                         
                 finally:
                     context.close()
@@ -484,7 +537,7 @@ class ProfilesController:
             import traceback
             print(f"[ProfilesController] Subscription fetch error: {e}")
             traceback.print_exc()
-            return False
+            return {"success": False, "reason": "exception"}
     
     def update_subscription_from_response(self, email: str, response: dict) -> bool:
         """Update subscription info from VEO API response.
@@ -527,99 +580,7 @@ class ProfilesController:
     # Browser Operations
     # =========================================================================
     
-    def add_profile_via_browser(
-        self, 
-        timeout_seconds: int = 300
-    ) -> Optional[str]:
-        """Add new profile via Google OAuth Authorization Code flow.
-        
-        Mirrors Antigravity-Manager approach:
-        1. Start localhost callback server
-        2. Open Google OAuth URL in browser
-        3. User logs in with Google account
-        4. Google redirects to localhost with auth code
-        5. Exchange code for access_token + refresh_token
-        6. Get user info (email)
-        7. Save profile with tokens
-        
-        Args:
-            timeout_seconds: Max time to wait for login
-            
-        Returns:
-            Email of created profile, or None if cancelled/failed
-        """
-        import uuid
-        
-        from core.oauth_server import run_oauth_flow, OAuthResult
-        
-        print("[ProfilesController] Starting Google OAuth flow...")
-        
-        # Generate unique profile folder for storing session data
-        profile_folder = f"profile_{uuid.uuid4().hex[:8]}"
-        profile_path = self.storage_path.parent / "browser_profiles" / profile_folder
-        profile_path.mkdir(parents=True, exist_ok=True)
-        
-        print(f"[ProfilesController] Profile path: {profile_path}")
-        
-        try:
-            # Run the complete OAuth flow
-            result: OAuthResult = run_oauth_flow(timeout=timeout_seconds)
-            
-            if not result.success:
-                print(f"[ProfilesController] OAuth failed: {result.error}")
-                return None
-            
-            # Extract data from result
-            email = result.user_info.email
-            display_name = result.user_info.display_name
-            access_token = result.token_response.access_token
-            refresh_token = result.token_response.refresh_token
-            expires_at = result.token_response.expires_at
-            
-            print(f"[ProfilesController] Logged in as: {email}")
-            
-            # Check if profile already exists
-            existing = self.get_profile(email)
-            if existing:
-                # Update existing profile with new tokens
-                print(f"[ProfilesController] Updating existing profile: {email}")
-                existing.is_ready = True
-                existing.last_used = datetime.now().isoformat()
-                # Store tokens (will add token fields to ChromeProfile)
-                self.save_profiles()
-                # DO NOT call _notify here - we're in background thread!
-                # UI will be refreshed via invokeMethod in tab_settings.py
-                
-                # Save tokens to separate secure storage
-                self._save_tokens(email, access_token, refresh_token, expires_at)
-                
-                return email
-            
-            # Add new profile (notify=False because we're in background thread)
-            success = self.add_profile(
-                email=email,
-                profile_path=str(profile_path),
-                display_name=display_name,
-                is_ready=True,
-                notify=False  # Don't notify from background thread!
-            )
-            
-            if success:
-                print(f"[ProfilesController] ✅ Profile added: {email}")
-                
-                # Save tokens to separate secure storage
-                self._save_tokens(email, access_token, refresh_token, expires_at)
-                
-                return email
-            else:
-                print(f"[ProfilesController] Failed to add profile: {email}")
-                return None
-                
-        except Exception as e:
-            print(f"[ProfilesController] OAuth flow error: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
+    # add_profile_via_browser (OAuth) — REMOVED. Use add_profile_via_browser_login instead.
     
     def add_profile_via_browser_login(
         self, 
@@ -898,11 +859,76 @@ class ProfilesController:
             traceback.print_exc()
             return None
     
+    def open_browser_for_debug(self, email: str) -> bool:
+        """Open browser with saved profile for manual debugging.
+        
+        Launches Chrome with the saved browser profile and navigates to
+        labs.google/fx/tools/flow so user can manually inspect session state.
+        Browser stays open until user closes it manually.
+        
+        Args:
+            email: Account email to open browser for
+            
+        Returns:
+            True if browser launched successfully, False otherwise
+        """
+        profile = self.get_profile(email)
+        if not profile or not profile.browser_profile_path:
+            print(f"[ProfilesController] No browser profile found for {email}")
+            return False
+        
+        profile_path = Path(profile.browser_profile_path)
+        if not profile_path.exists():
+            print(f"[ProfilesController] Browser profile path missing: {profile_path}")
+            return False
+        
+        print(f"[ProfilesController] 🌐 Opening debug browser for {email}...")
+        
+        try:
+            from playwright.sync_api import sync_playwright
+            
+            pw = sync_playwright().start()
+            context = pw.chromium.launch_persistent_context(
+                user_data_dir=str(profile_path),
+                channel="chrome",
+                headless=False,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ]
+            )
+            
+            page = context.new_page()
+            page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)
+            
+            # Click "Create with Flow" button if present (activates VEO Flow)
+            try:
+                create_btn = page.locator("button:has-text('Create with Flow')")
+                if create_btn.count() > 0 and create_btn.first.is_visible():
+                    print("[ProfilesController] Clicking 'Create with Flow' button...")
+                    create_btn.first.click()
+                    page.wait_for_timeout(3000)
+            except Exception:
+                pass
+            
+            print(f"[ProfilesController] ✅ Debug browser opened. Close browser manually when done.")
+            return True
+            
+        except Exception as e:
+            print(f"[ProfilesController] Debug browser error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     def auto_login_with_credentials(
         self, 
         email: str,
         password: str,
-        timeout_seconds: int = 120
+        timeout_seconds: int = 120,
+        headless: bool = False,
+        keep_browser_open: bool = False
     ) -> Optional[str]:
         """Auto-login with email/password credentials.
         
@@ -918,11 +944,13 @@ class ProfilesController:
             email: Google account email
             password: Google account password
             timeout_seconds: Max time to wait for login completion
+            headless: If True, hide browser window (for engine auto re-login)
+                      If False, show browser (for user-initiated login, CAPTCHA)
             
         Returns:
             Email of created/updated profile, or None if failed
         """
-        print(f"[ProfilesController] Starting Auto-Login for {email}...")
+        print(f"[ProfilesController] Starting Auto-Login for {email} (headless={headless})...")
         
         # Get or create browser profile path
         profile_path = None
@@ -946,11 +974,10 @@ class ProfilesController:
             from playwright.sync_api import sync_playwright
             
             with sync_playwright() as p:
-                # Launch visible browser (for CAPTCHA handling if needed)
                 context = p.chromium.launch_persistent_context(
                     user_data_dir=str(profile_path),
-                    channel="chrome",  # Use real Chrome instead of Chromium
-                    headless=False,  # Visible for CAPTCHA/2FA
+                    channel="chrome",
+                    headless=headless,
                     args=[
                         "--disable-blink-features=AutomationControlled",
                         "--no-first-run",
@@ -964,22 +991,38 @@ class ProfilesController:
                 try:
                     # Step 1: Navigate to Google login
                     print("[ProfilesController] Navigating to accounts.google.com...")
-                    page.goto("https://accounts.google.com", wait_until="networkidle", timeout=30000)
-                    page.wait_for_timeout(2000)
+                    page.goto("https://accounts.google.com", wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(3000)
                     
-                    # Step 2: Fill email
-                    print("[ProfilesController] Filling email...")
-                    email_input = page.locator("#identifierId")
-                    if email_input.count() > 0:
-                        email_input.fill(email)
-                        page.wait_for_timeout(500)
-                        page.keyboard.press("Enter")
-                        print("[ProfilesController] ✅ Email entered")
+                    # Check if already logged in (browser has session cookies)
+                    current_url = page.url
+                    if "accounts.google.com" not in current_url or "myaccount.google.com" in current_url:
+                        print(f"[ProfilesController] ✅ Already logged in! URL: {current_url[:50]}...")
+                        # Skip login, go directly to labs.google
                     else:
-                        print("[ProfilesController] ⚠️ Email input not found, trying alternative...")
-                        # Try alternative selector
-                        page.locator("input[type='email']").first.fill(email)
-                        page.keyboard.press("Enter")
+                        # Step 2: Fill email
+                        print("[ProfilesController] Filling email...")
+                        email_input = page.locator("#identifierId")
+                        if email_input.count() > 0 and email_input.is_visible():
+                            email_input.fill(email)
+                            page.wait_for_timeout(500)
+                            page.keyboard.press("Enter")
+                            print("[ProfilesController] ✅ Email entered")
+                        else:
+                            # Maybe already past email step or different page
+                            print("[ProfilesController] ⚠️ Email input not found — may already be logged in")
+                            # Check if we're on a chooser or different Google page
+                            if "myaccount.google" in current_url or "SignOutOptions" in current_url:
+                                print("[ProfilesController] ✅ Already logged in, skipping...")
+                            else:
+                                print(f"[ProfilesController] Current URL: {current_url[:80]}")
+                                # Try alternative selector as last resort
+                                alt_input = page.locator("input[type='email']")
+                                if alt_input.count() > 0:
+                                    alt_input.first.fill(email)
+                                    page.keyboard.press("Enter")
+                                else:
+                                    print("[ProfilesController] ⚠️ No email field found at all")
                     
                     # Wait for password page
                     page.wait_for_timeout(3000)
@@ -1031,47 +1074,120 @@ class ProfilesController:
                         context.close()
                         return None
                     
-                    # Step 5: Navigate to labs.google/fx/tools/flow and fetch session
+                    # Step 5: Navigate to labs.google and extract session from __NEXT_DATA__
+                    # Per docs (ACCOUNT_SESSION_MANAGEMENT.md Section 7.2):
+                    # Server-side renders session data into __NEXT_DATA__ when Google cookies are present
                     print("[ProfilesController] Navigating to labs.google/fx/tools/flow...")
-                    page.goto("https://labs.google/fx/tools/flow", wait_until="networkidle", timeout=30000)
-                    page.wait_for_timeout(3000)
+                    page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(5000)
                     
-                    # Step 6: Fetch session API
-                    print("[ProfilesController] Fetching session API...")
-                    session_result = page.evaluate("""
-                        async () => {
-                            try {
-                                const resp = await fetch('https://labs.google/fx/api/auth/session', {
-                                    credentials: 'include'
-                                });
-                                if (resp.ok) {
-                                    return await resp.json();
+                    # Click "Create with Flow" button if present (activates VEO Flow)
+                    try:
+                        create_btn = page.locator("button:has-text('Create with Flow')")
+                        if create_btn.count() > 0 and create_btn.first.is_visible():
+                            print("[ProfilesController] Clicking 'Create with Flow' button...")
+                            create_btn.first.click()
+                            page.wait_for_timeout(3000)
+                    except Exception:
+                        pass
+                    
+                    # Step 6: Extract session from __NEXT_DATA__
+                    access_token = None
+                    session_result = {}
+                    user_info = {}
+                    session_email = email
+                    
+                    for attempt in range(3):
+                        print(f"[ProfilesController] Extracting __NEXT_DATA__ (attempt {attempt+1}/3)...")
+                        try:
+                            session_result = page.evaluate("""
+                                () => {
+                                    const script = document.getElementById('__NEXT_DATA__');
+                                    if (!script) return { error: 'no_next_data' };
+                                    
+                                    try {
+                                        const data = JSON.parse(script.textContent);
+                                        const session = data?.props?.pageProps?.session;
+                                        
+                                        if (!session) return { error: 'no_session_in_next_data' };
+                                        
+                                        return {
+                                            access_token: session.access_token || session.accessToken || '',
+                                            expires: session.expires || '',
+                                            user: {
+                                                email: session.user?.email || '',
+                                                name: session.user?.name || '',
+                                                image: session.user?.image || ''
+                                            }
+                                        };
+                                    } catch(e) {
+                                        return { error: e.message };
+                                    }
                                 }
-                                return { error: resp.status };
-                            } catch (e) {
-                                return { error: e.message };
-                            }
-                        }
-                    """)
-                    
-                    print(f"[ProfilesController] Session result: {session_result}")
-                    
-                    # Get access token
-                    access_token = session_result.get("accessToken") or session_result.get("access_token")
-                    user_info = session_result.get("user", {})
-                    session_email = user_info.get("email", email)
+                            """)
+                        except Exception as eval_err:
+                            print(f"[ProfilesController] ⚠️ Evaluate failed: {eval_err}")
+                            session_result = {"error": str(eval_err)}
+                            page.wait_for_timeout(3000)
+                            continue
+                        
+                        print(f"[ProfilesController] __NEXT_DATA__ result: {session_result}")
+                        
+                        access_token = session_result.get("access_token") or session_result.get("accessToken")
+                        user_info = session_result.get("user", {})
+                        session_email = user_info.get("email", email)
+                        
+                        if access_token:
+                            print(f"[ProfilesController] ✅ Got access token on attempt {attempt+1}")
+                            break
+                        
+                        if attempt < 2:
+                            print(f"[ProfilesController] ⚠️ No token yet, waiting 3s...")
+                            page.wait_for_timeout(3000)
                     
                     if not access_token:
-                        print("[ProfilesController] ⚠️ No access token - session may not be valid")
+                        print("[ProfilesController] ⚠️ No access token from __NEXT_DATA__ - profile saved without token")
+                    
+                    # Step 7: Fetch credits/subscription on the SAME page (no second browser needed)
+                    credits_data = {}
+                    if access_token:
+                        print(f"[ProfilesController] Fetching credits API with token...")
+                        try:
+                            credits_data = page.evaluate(f"""
+                                async () => {{
+                                    try {{
+                                        const resp = await fetch('https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY', {{
+                                            headers: {{
+                                                'Authorization': 'Bearer {access_token}'
+                                            }},
+                                            credentials: 'include'
+                                        }});
+                                        if (resp.ok) {{
+                                            return await resp.json();
+                                        }}
+                                        return {{ error: resp.status }};
+                                    }} catch (e) {{
+                                        return {{ error: e.message }};
+                                    }}
+                                }}
+                            """)
+                        except Exception as e:
+                            print(f"[ProfilesController] Credits API error: {e}")
+                            credits_data = {"error": str(e)}
+                        
+                        print(f"[ProfilesController] Credits result: {credits_data}")
                     
                     # Sync storage before close
                     print("[ProfilesController] Syncing browser storage...")
                     page.wait_for_timeout(2000)
                     
-                    # Close browser
-                    context.close()
+                    # Close browser (unless keep_browser_open for debugging)
+                    if keep_browser_open:
+                        print("[ProfilesController] 🔓 Browser kept open for debugging. Close manually when done.")
+                    else:
+                        context.close()
                     
-                    # Step 7: Save/update profile
+                    # Step 8: Save/update profile with ALL data (token + credits)
                     existing = self.get_profile(session_email)
                     if existing:
                         print(f"[ProfilesController] Updating existing profile: {session_email}")
@@ -1079,10 +1195,13 @@ class ProfilesController:
                         existing.browser_profile_path = str(profile_path)
                         existing.is_ready = True
                         existing.last_used = datetime.now().isoformat()
+                        if credits_data and "error" not in credits_data:
+                            existing.sku = credits_data.get("sku", "WS_FREEMIUM")
+                            existing.credits = credits_data.get("credits", 0)
+                            existing.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_NOT_PAID")
+                            existing.subscription_fetched = True
+                            print(f"[ProfilesController] ✅ {existing.tier_display}, Credits: {existing.credits}")
                         self.save_profiles()
-                        
-                        # Fetch subscription
-                        self._fetch_subscription_via_browser(existing)
                         return session_email
                     
                     # Add new profile
@@ -1099,11 +1218,13 @@ class ProfilesController:
                         if profile:
                             profile.login_method = "browser"
                             profile.browser_profile_path = str(profile_path)
+                            if credits_data and "error" not in credits_data:
+                                profile.sku = credits_data.get("sku", "WS_FREEMIUM")
+                                profile.credits = credits_data.get("credits", 0)
+                                profile.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_NOT_PAID")
+                                profile.subscription_fetched = True
+                                print(f"[ProfilesController] ✅ {profile.tier_display}, Credits: {profile.credits}")
                             self.save_profiles()
-                            
-                            # Fetch subscription
-                            print("[ProfilesController] Fetching subscription...")
-                            self._fetch_subscription_via_browser(profile)
                         
                         print(f"[ProfilesController] ✅ Auto-login successful: {session_email}")
                         return session_email
@@ -1124,37 +1245,49 @@ class ProfilesController:
             traceback.print_exc()
             return None
 
-    
-    def _save_tokens(self, email: str, access_token: str, refresh_token: str, expires_at: float):
-        """Save OAuth tokens for a profile.
+    def auto_relogin(self, email: str) -> Optional[str]:
+        """Auto re-login using stored credentials.
         
-        Stores tokens in tokens.json for auto-refresh capability.
+        Called when browser profile is missing or session expires.
+        Loads encrypted credentials from CredentialsManager and runs auto_login_with_credentials.
+        
+        Args:
+            email: Account email to re-login
+            
+        Returns:
+            Email if successful, None if failed or no credentials stored
         """
-        tokens_path = self.storage_path.parent / "tokens.json"
-        
-        # Load existing tokens
-        tokens = {}
-        if tokens_path.exists():
-            try:
-                with open(tokens_path, 'r', encoding='utf-8') as f:
-                    tokens = json.load(f)
-            except:
-                tokens = {}
-        
-        # Update tokens for this email
-        tokens[email] = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_at": expires_at,
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        # Save
-        with open(tokens_path, 'w', encoding='utf-8') as f:
-            json.dump(tokens, f, indent=2, ensure_ascii=False)
-        
-        print(f"[ProfilesController] Tokens saved for {email}")
+        try:
+            from core.credentials_manager import get_credentials_manager
+            creds_manager = get_credentials_manager()
+            
+            creds = creds_manager.load_credentials_for(email)
+            if not creds:
+                print(f"[ProfilesController] ❌ No stored credentials for {email}")
+                return None
+            
+            print(f"[ProfilesController] 🔑 Auto re-login for {email} using stored credentials...")
+            result = self.auto_login_with_credentials(
+                email=creds["email"],
+                password=creds["password"],
+                timeout_seconds=120,
+                headless=False  # Show browser — may need 2FA/CAPTCHA interaction
+            )
+            
+            if result:
+                print(f"[ProfilesController] ✅ Auto re-login successful for {email}")
+            else:
+                print(f"[ProfilesController] ❌ Auto re-login failed for {email}")
+            
+            return result
+            
+        except Exception as e:
+            print(f"[ProfilesController] Auto re-login error: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
+
     def get_tokens(self, email: str) -> Optional[dict]:
         """Get stored tokens for an email."""
         tokens_path = self.storage_path.parent / "tokens.json"
@@ -1169,104 +1302,7 @@ class ProfilesController:
         except:
             return None
     
-    def _create_oauth_landing_page(self, callback_url: str, profile_path: str) -> str:
-        """Create OAuth landing page that guides user through login.
-        
-        Returns file:// URL to the landing page.
-        """
-        import tempfile
-        import urllib.parse
-        
-        html_content = f'''<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>VEO Pro Max - Đăng nhập Google</title>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-        }}
-        .container {{
-            text-align: center;
-            padding: 50px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 24px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
-            max-width: 500px;
-        }}
-        .icon {{ font-size: 72px; margin-bottom: 24px; }}
-        h1 {{ font-size: 28px; margin-bottom: 16px; color: #60a5fa; }}
-        .subtitle {{ color: #94a3b8; margin-bottom: 32px; font-size: 16px; }}
-        .btn {{
-            display: inline-block;
-            padding: 16px 48px;
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            color: white;
-            font-size: 18px;
-            font-weight: 600;
-            text-decoration: none;
-            border-radius: 12px;
-            margin: 10px;
-            transition: all 0.3s;
-            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
-        }}
-        .btn:hover {{ transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5); }}
-        .btn-success {{
-            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
-        }}
-        .btn-success:hover {{ box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5); }}
-        .steps {{ text-align: left; margin: 24px 0; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 12px; }}
-        .step {{ padding: 8px 0; color: #e2e8f0; }}
-        .step-num {{ color: #22c55e; font-weight: bold; margin-right: 8px; }}
-        .divider {{ height: 1px; background: rgba(255,255,255,0.1); margin: 24px 0; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="icon">🔐</div>
-        <h1>Thêm tài khoản Google</h1>
-        <div class="subtitle">Đăng nhập để sử dụng VEO Pro Max</div>
-        
-        <a href="https://aistudio.google.com/prompts/new_chat" target="_blank" class="btn" onclick="showStep2()">
-            🚀 Mở AI Studio để đăng nhập
-        </a>
-        
-        <div class="steps">
-            <div class="step"><span class="step-num">1.</span> Nhấn nút trên để mở AI Studio</div>
-            <div class="step"><span class="step-num">2.</span> Đăng nhập với tài khoản Google</div>
-            <div class="step"><span class="step-num">3.</span> Quay lại tab này và nhấn "Hoàn tất"</div>
-        </div>
-        
-        <div class="divider"></div>
-        
-        <a href="{callback_url}?profile_path={urllib.parse.quote(profile_path)}" class="btn btn-success">
-            ✅ Tôi đã đăng nhập xong - Hoàn tất
-        </a>
-    </div>
-    
-    <script>
-        function showStep2() {{
-            // Optional: Show visual feedback
-        }}
-    </script>
-</body>
-</html>'''
-        
-        # Save to temp file
-        html_path = Path(tempfile.gettempdir()) / f"veo_oauth_{profile_path.split('_')[-1]}.html"
-        html_path.write_text(html_content, encoding='utf-8')
-        
-        return f"file:///{html_path}".replace("\\", "/")
-    
+
     def _find_browser(self, preference: str = "auto") -> Optional[str]:
         """Find real browser executable.
         

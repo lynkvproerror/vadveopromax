@@ -1,0 +1,789 @@
+====================================================================================================
+DEEP PAYLOAD STRUCTURE ANALYSIS — ALL GENERATION MODES
+Total HAR files scanned: 51 (from 2 directories)
+Total entries scanned: 3298
+====================================================================================================
+
+
+====================================================================================================
+### Text-to-Video
+    Endpoint: POST batchAsyncGenerateVideoText
+    Total calls: 0
+    ⚠️ KHÔNG CÓ TRONG HAR DATA — Endpoint tồn tại nhưng chưa ghi nhận request
+    (Showing expected structure from documentation)
+
+
+====================================================================================================
+### Image-to-Video (Start Image Only)
+    Endpoint: POST batchAsyncGenerateVideoStartImage
+    Total calls: 1
+    Files: 1
+      - New/tao video vs anh first frame.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/tao video vs anh first frame.har
+    Path: /v1/video:batchAsyncGenerateVideoStartImage
+    Body size: 3414 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "<string, 1742 chars> = \"0cAFcWeA5T6Org6AwgoyLF0KhUfAkAJJO8XEfnSuv-McDNEn3VucpO35FykS...\"",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769822770783",
+        "projectId": "f5db1342-c676-437b-b763-d97ae2d7cd16",
+        "tool": "PINHOLE",
+        "userPaygateTier": "PAYGATE_TIER_TWO"
+    },
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+            "seed": 15456,
+            "textInput": {
+                "prompt": "Tạo hiệu ứng intro"
+            },
+            "videoModelKey": "veo_3_1_i2v_s_fast_ultra_relaxed",
+            "startImage": {
+                "mediaId": "<string, 111 chars> = \"CAMaJDY2NGQ2Y2VkLTllMmUtNDUyOS04ZGM4LTcwMjhjZTM2OWRiZCIDQ0FF...\""
+            },
+            "metadata": {
+                "sceneId": "0dc07a5e-16e5-46e4-a8c1-2a17107d536b"
+            }
+        }
+    ]
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "0cAFcWeA5T6Org6AwgoyLF0KhUfAkAJJO8XEfnSuv-McDNEn3VucpO35FykSqJ7rwNKqedtWkpj1Mgk6... (1742 chars)",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769822770783",
+        "projectId": "f5db1342-c676-437b-b763-d97ae2d7cd16",
+        "tool": "PINHOLE",
+        "userPaygateTier": "PAYGATE_TIER_TWO"
+    },
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+            "seed": 15456,
+            "textInput": {
+                "prompt": "Tạo hiệu ứng intro"
+            },
+            "videoModelKey": "veo_3_1_i2v_s_fast_ultra_relaxed",
+            "startImage": {
+                "mediaId": "CAMaJDY2NGQ2Y2VkLTllMmUtNDUyOS04ZGM4LTcwMjhjZTM2OWRiZCIDQ0FFKiRlYzBkMTBlOC05ZTRh... (111 chars)"
+            },
+            "metadata": {
+                "sceneId": "0dc07a5e-16e5-46e4-a8c1-2a17107d536b"
+            }
+        },
+        "... (4 items total)"
+    ]
+}
+
+    --- RESPONSE STRUCTURE ---
+{
+    "operations": [
+        {
+            "operation": {
+                "name": "0b4c004e3adb478c4ad3e576580dbabe"
+            },
+            "sceneId": "0dc07a5e-16e5-46e4-a8c1-2a17107d536b",
+            "status": "MEDIA_GENERATION_STATUS_PENDING"
+        }
+    ],
+    "remainingCredits": 44130
+}
+
+
+====================================================================================================
+### Image-to-Video (Start + End Image = F2V)
+    Endpoint: POST batchAsyncGenerateVideoStartAndEndImage
+    Total calls: 8
+    Files: 8
+      - New/916 frame to video submit 4 video prompt - done.har
+      - New/916 frame to video submit 4 video prompt - start.har
+      - New/chon firt va last bắt đầu 10.har
+      - New/chon firt va last bắt đầu 25.har
+      - New/chon firt va last bắt đầu 50 2video dau xong 2 video sau 65.har
+      - New/chon firt va last bắt đầu 50 4video done.har
+      - New/chon firt va last bắt đầu 50.har
+      - New/chon firt va last bắt đầu.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/916 frame to video submit 4 video prompt - done.har
+    Path: /v1/video:batchAsyncGenerateVideoStartAndEndImage
+    Body size: 3970 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "<string, 1678 chars> = \"0cAFcWeA6z7psF_IX4vu02Mh50e7PtGdtIqez16qZpLJR1IEjVhLDr-Cnh7S...\"",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769969107327",
+        "projectId": "4fd7fb72-790b-4c3e-8cc1-2bfc3b4245e3",
+        "tool": "PINHOLE",
+        "userPaygateTier": "PAYGATE_TIER_TWO"
+    },
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+            "seed": 16913,
+            "textInput": {
+                "prompt": "Đội quân đến từ tương lai"
+            },
+            "videoModelKey": "veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed",
+            "startImage": {
+                "mediaId": "<string, 111 chars> = \"CAMaJGM3ZTdkODY4LWI2NDgtNGQyMi1hZjUyLTM0M2ZmMjA5YjhhMSIDQ0FF...\""
+            },
+            "endImage": {
+                "mediaId": "<string, 111 chars> = \"CAMaJDMzODBkZTVjLTE4MTEtNDJhYS1iMmU0LTRlZjFiYzYzYTMyYyIDQ0FF...\""
+            },
+            "metadata": {
+                "sceneId": "a85c142f-561d-48ea-849b-8a3a32e1664b"
+            }
+        }
+    ]
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "0cAFcWeA6z7psF_IX4vu02Mh50e7PtGdtIqez16qZpLJR1IEjVhLDr-Cnh7SwBNw6K33x3251UQnSnJ1... (1678 chars)",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769969107327",
+        "projectId": "4fd7fb72-790b-4c3e-8cc1-2bfc3b4245e3",
+        "tool": "PINHOLE",
+        "userPaygateTier": "PAYGATE_TIER_TWO"
+    },
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+            "seed": 16913,
+            "textInput": {
+                "prompt": "Đội quân đến từ tương lai"
+            },
+            "videoModelKey": "veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed",
+            "startImage": {
+                "mediaId": "CAMaJGM3ZTdkODY4LWI2NDgtNGQyMi1hZjUyLTM0M2ZmMjA5YjhhMSIDQ0FFKiRkNzVkZjc4OS1lZDMy... (111 chars)"
+            },
+            "endImage": {
+                "mediaId": "CAMaJDMzODBkZTVjLTE4MTEtNDJhYS1iMmU0LTRlZjFiYzYzYTMyYyIDQ0FFKiQ3NzdhYWY3Ny0wNmJh... (111 chars)"
+            },
+            "metadata": {
+                "sceneId": "a85c142f-561d-48ea-849b-8a3a32e1664b"
+            }
+        },
+        "... (4 items total)"
+    ]
+}
+
+    --- FIELD COMPARISON ACROSS 8 CALLS ---
+    clientContext                  = CONSTANT: <dict 5 keys>
+    requests                       = CONSTANT: <list 4 items>
+
+    --- RESPONSE STRUCTURE ---
+{
+    "operations": [
+        {
+            "operation": {
+                "name": "cf0c9bf1a56eb27990f00cc5156ebb30"
+            },
+            "sceneId": "a85c142f-561d-48ea-849b-8a3a32e1664b",
+            "status": "MEDIA_GENERATION_STATUS_PENDING"
+        }
+    ],
+    "remainingCredits": 44990
+}
+
+
+====================================================================================================
+### Reference-to-Video (Ingredients)
+    Endpoint: POST batchAsyncGenerateVideoReferenceImages
+    Total calls: 5
+    Files: 5
+      - New/01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+      - New/01.2 169 ingedients to video done 4 video prompt 3 anh.har
+      - New/01.3 169 ingedients to video done 4 video prompt 3 anh.har
+      - New/01.3 169 ingedients to video submit 4 video prompt 3 anh.har
+      - New/916 ingre to video submit 4 video prompt - done.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+    Path: /v1/video:batchAsyncGenerateVideoReferenceImages
+    Body size: 4960 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "<string, 1700 chars> = \"0cAFcWeA57uAL6OvX4ROdTu2oBZKnkRD8Y54oALkXSEebCjQzmarnUqki9tn...\"",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769888782642",
+        "projectId": "daba1978-e588-4d76-a4fd-6c3126074187",
+        "tool": "PINHOLE",
+        "userPaygateTier": "PAYGATE_TIER_TWO"
+    },
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+            "metadata": {
+                "sceneId": "1088d16f-b395-44e0-8aa8-be1df603b0a9"
+            },
+            "referenceImages": [
+                {
+                    "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                    "mediaId": "<string, 111 chars> = \"CAMaJGM3ZTdkODY4LWI2NDgtNGQyMi1hZjUyLTM0M2ZmMjA5YjhhMSIDQ0FF...\""
+                }
+            ],
+            "seed": 7393,
+            "textInput": {
+                "prompt": "Kết hợp khung cảnh u buồn"
+            },
+            "videoModelKey": "veo_3_1_r2v_fast_portrait_ultra_relaxed"
+        }
+    ]
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "0cAFcWeA57uAL6OvX4ROdTu2oBZKnkRD8Y54oALkXSEebCjQzmarnUqki9tnh0jtkxtDBaKnORCTY_2X... (1700 chars)",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769888782642",
+        "projectId": "daba1978-e588-4d76-a4fd-6c3126074187",
+        "tool": "PINHOLE",
+        "userPaygateTier": "PAYGATE_TIER_TWO"
+    },
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+            "metadata": {
+                "sceneId": "1088d16f-b395-44e0-8aa8-be1df603b0a9"
+            },
+            "referenceImages": [
+                {
+                    "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                    "mediaId": "CAMaJGM3ZTdkODY4LWI2NDgtNGQyMi1hZjUyLTM0M2ZmMjA5YjhhMSIDQ0FFKiRkNzVkZjc4OS1lZDMy... (111 chars)"
+                },
+                {
+                    "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                    "mediaId": "CAMaJDk4NTVmY2NhLTRkYWEtNDkyMy05MGMzLTNhYTE0YmExYjRkNyIDQ0FFKiQ2MmEyYmVhYy03ODUy... (111 chars)"
+                },
+                {
+                    "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                    "mediaId": "CAMaJDI0YzU0M2EwLTM5MGEtNDJhNi1iNDU1LTFjYTljMmExYzNkNyIDQ0FFKiQ0OTVjYWIxZS1lZWI2... (111 chars)"
+                }
+            ],
+            "seed": 7393,
+            "textInput": {
+                "prompt": "Kết hợp khung cảnh u buồn"
+            },
+            "videoModelKey": "veo_3_1_r2v_fast_portrait_ultra_relaxed"
+        },
+        "... (4 items total)"
+    ]
+}
+
+    --- FIELD COMPARISON ACROSS 5 CALLS ---
+    clientContext                  = CONSTANT: <dict 5 keys>
+    requests                       = CONSTANT: <list 4 items>
+
+    --- RESPONSE STRUCTURE ---
+{
+    "operations": [
+        {
+            "operation": {
+                "name": "92cea5b7-0bdf-4b66-8d99-442c5cb21108"
+            },
+            "sceneId": "1088d16f-b395-44e0-8aa8-be1df603b0a9",
+            "status": "MEDIA_GENERATION_STATUS_PENDING"
+        }
+    ],
+    "remainingCredits": 43930,
+    "workflows": [
+        {
+            "name": "d9c37290-c650-41c6-8eea-54486d4cbb3b",
+            "metadata": {
+                "createTime": "2026-01-31T20:11:09.517358Z",
+                "primaryMediaId": "92cea5b7-0bdf-4b66-8d99-442c5cb21108",
+                "batchId": "95450273-d938-4780-82ea-002fb40aae9c"
+            },
+            "projectId": "daba1978-e588-4d76-a4fd-6c3126074187"
+        }
+    ],
+    "media": [
+        {
+            "name": "92cea5b7-0bdf-4b66-8d99-442c5cb21108",
+            "workflowId": "d9c37290-c650-41c6-8eea-54486d4cbb3b",
+            "workflowStepId": "CAE",
+            "mediaMetadata": {
+                "mediaStatus": {
+                    "mediaGenerationStatus": "MEDIA_GENERATION_STATUS_PENDING"
+                }
+            },
+            "sceneId": "1088d16f-b395-44e0-8aa8-be1df603b0a9"
+        }
+    ]
+}
+
+
+====================================================================================================
+### Video Upscale
+    Endpoint: POST batchAsyncGenerateVideoUpsampleVideo
+    Total calls: 32
+    Files: 8
+      - New/916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+      - New/916 frame to video submit 4 video prompt - Upscale all done.har
+      - New/916 frame to video submit 4 video prompt - Upscale start.har
+      - New/Download upscale 1080p 4 vid done.har
+      - New/Download upscale 1080p 4 vid.har
+      - New/Download upscale 4k 4 vid done.har
+      - New/Download upscale 4k 4 vid processing.har
+      - New/Download upscale 4k 4 vid start.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/916 frame to video submit 4 video prompt - Upscale 1080 done 4k processingt.har
+    Path: /v1/video:batchAsyncGenerateVideoUpsampleVideo
+    Body size: 2256 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+            "resolution": "VIDEO_RESOLUTION_1080P",
+            "seed": 18779,
+            "videoInput": {
+                "mediaId": "<string, 162 chars> = \"CAUSJDRmZDdmYjcyLTc5MGItNGMzZS04Y2MxLTJiZmMzYjQyNDVlMxokNWFi...\""
+            },
+            "videoModelKey": "veo_3_1_upsampler_1080p",
+            "metadata": {
+                "sceneId": "09f1cc82-6925-41fd-860f-4e264abcc886"
+            }
+        }
+    ],
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "<string, 1721 chars> = \"0cAFcWeA71jcHG4-m3eyQtY-smwU5xo6WnjPLQDwHkVq1lR036MUxh8_PvjH...\"",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769969107327"
+    }
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "requests": [
+        {
+            "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+            "resolution": "VIDEO_RESOLUTION_1080P",
+            "seed": 18779,
+            "videoInput": {
+                "mediaId": "CAUSJDRmZDdmYjcyLTc5MGItNGMzZS04Y2MxLTJiZmMzYjQyNDVlMxokNWFiNzk4YzEtNTA4MS00MWVk... (162 chars)"
+            },
+            "videoModelKey": "veo_3_1_upsampler_1080p",
+            "metadata": {
+                "sceneId": "09f1cc82-6925-41fd-860f-4e264abcc886"
+            }
+        }
+    ],
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "0cAFcWeA71jcHG4-m3eyQtY-smwU5xo6WnjPLQDwHkVq1lR036MUxh8_PvjHO5DQbaw15FFN0_50kwcc... (1721 chars)",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769969107327"
+    }
+}
+
+    --- FIELD COMPARISON ACROSS 32 CALLS ---
+    clientContext                  = CONSTANT: <dict 2 keys>
+    requests                       = CONSTANT: <list 1 items>
+
+    --- RESPONSE STRUCTURE ---
+{
+    "operations": [
+        {
+            "operation": {
+                "name": "7a014236-d4ba-448b-8d5e-315db0fad407_upsampled"
+            },
+            "sceneId": "09f1cc82-6925-41fd-860f-4e264abcc886",
+            "status": "MEDIA_GENERATION_STATUS_PENDING"
+        }
+    ],
+    "remainingCredits": 44990,
+    "workflows": [
+        {
+            "metadata": {
+                "createTime": "2026-02-01T23:23:14.782856Z",
+                "primaryMediaId": "7a014236-d4ba-448b-8d5e-315db0fad407_upsampled",
+                "batchId": "3d4c0475-7124-4d52-b660-1ce8a09e48b8"
+            },
+            "projectId": "4fd7fb72-790b-4c3e-8cc1-2bfc3b4245e3"
+        }
+    ],
+    "media": [
+        {
+            "name": "7a014236-d4ba-448b-8d5e-315db0fad407_upsampled",
+            "workflowStepId": "CAE",
+            "mediaMetadata": {
+                "mediaStatus": {
+                    "mediaGenerationStatus": "MEDIA_GENERATION_STATUS_PENDING"
+                }
+            },
+            "sceneId": "09f1cc82-6925-41fd-860f-4e264abcc886"
+        }
+    ]
+}
+
+
+====================================================================================================
+### GIF Preview
+    Endpoint: POST generatePinholeGif
+    Total calls: 1
+    Files: 1
+      - New/Download gif 4 vid.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/Download gif 4 vid.har
+    Path: /v1/video:generatePinholeGif
+    Body size: 186 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "mediaGenerationId": "<string, 162 chars> = \"CAUSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokMzQ5...\""
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "mediaGenerationId": "CAUSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokMzQ5MjdkZjMtNjQ5Yi00N2Yx... (162 chars)"
+}
+
+    --- RESPONSE STRUCTURE ---
+{
+    "encodedGif": "<string, 11091104 chars> = \"R0lGODlh4AEOAfcfAAAAACQAAEgAAGwAAJAAALQAANgAAPwAAAAkACQkAEgk...\""
+}
+
+
+====================================================================================================
+### Text-to-Image
+    Endpoint: POST batchGenerateImages (no imageInputs)
+    Total calls: 0
+    ⚠️ KHÔNG CÓ TRONG HAR DATA — Endpoint tồn tại nhưng chưa ghi nhận request
+    (Showing expected structure from documentation)
+
+
+====================================================================================================
+### Image-to-Image
+    Endpoint: POST batchGenerateImages (with imageInputs)
+    Total calls: 8
+    Files: 5
+      - New/Full tạo ảnh.har
+      - New/Tao hinh image 4.har
+      - New/Tao hinh nanobanana pro.har
+      - New/Tao hinh nanobanana.har
+      - New/labs.google.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/Full tạo ảnh.har
+    Path: /v1/projects/daba1978-e588-4d76-a4fd-6c3126074187/flowMedia:batchGenerateImages
+    Body size: 10740 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "<string, 1700 chars> = \"0cAFcWeA5w_xpJmNPoQ65RcYOOnb5RX9Wsfa4H7jPzyQz7tKpW7L2vw1012H...\"",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769888782642",
+        "projectId": "daba1978-e588-4d76-a4fd-6c3126074187",
+        "tool": "PINHOLE"
+    },
+    "requests": [
+        {
+            "clientContext": {
+                "recaptchaContext": {
+                    "token": "<string, 1700 chars> = \"0cAFcWeA5w_xpJmNPoQ65RcYOOnb5RX9Wsfa4H7jPzyQz7tKpW7L2vw1012H...\"",
+                    "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                },
+                "sessionId": ";1769888782642",
+                "projectId": "daba1978-e588-4d76-a4fd-6c3126074187",
+                "tool": "PINHOLE"
+            },
+            "seed": 651946,
+            "imageModelName": "GEM_PIX_2",
+            "imageAspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+            "prompt": "thế giới hiện đại",
+            "imageInputs": [
+                {
+                    "name": "<string, 111 chars> = \"CAMaJDcxZDVlMGY4LTk3ZjAtNDUxYS1iZjNhLTRiYzQxYTk0NjkyNSIDQ0FF...\"",
+                    "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
+                }
+            ]
+        }
+    ]
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "0cAFcWeA5w_xpJmNPoQ65RcYOOnb5RX9Wsfa4H7jPzyQz7tKpW7L2vw1012HXLCuZIAItAow2iIg6CRk... (1700 chars)",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769888782642",
+        "projectId": "daba1978-e588-4d76-a4fd-6c3126074187",
+        "tool": "PINHOLE"
+    },
+    "requests": [
+        {
+            "clientContext": {
+                "recaptchaContext": {
+                    "token": "0cAFcWeA5w_xpJmNPoQ65RcYOOnb5RX9Wsfa4H7jPzyQz7tKpW7L2vw1012HXLCuZIAItAow2iIg6CRk... (1700 chars)",
+                    "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+                },
+                "sessionId": ";1769888782642",
+                "projectId": "daba1978-e588-4d76-a4fd-6c3126074187",
+                "tool": "PINHOLE"
+            },
+            "seed": 651946,
+            "imageModelName": "GEM_PIX_2",
+            "imageAspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+            "prompt": "thế giới hiện đại",
+            "imageInputs": [
+                {
+                    "name": "CAMaJDcxZDVlMGY4LTk3ZjAtNDUxYS1iZjNhLTRiYzQxYTk0NjkyNSIDQ0FFKiRkMzYxNzMwNS0wMTJi... (111 chars)",
+                    "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
+                }
+            ]
+        },
+        "... (4 items total)"
+    ]
+}
+
+    --- FIELD COMPARISON ACROSS 8 CALLS ---
+    clientContext                  = CONSTANT: <dict 4 keys>
+    requests                       = VARIES:
+      call[0]: <list 4 items>
+      call[1]: <list 4 items>
+      call[2]: <list 4 items>
+      call[3]: <list 4 items>
+      call[4]: <list 4 items>
+      ... (3 more)
+
+    --- RESPONSE STRUCTURE ---
+{
+    "media": [
+        {
+            "name": "<string, 162 chars> = \"CAMSJGRhYmExOTc4LWU1ODgtNGQ3Ni1hNGZkLTZjMzEyNjA3NDE4NxokYWIz...\"",
+            "workflowId": "ab3f1b1a-8028-4f39-a504-488bac86024b",
+            "image": {
+                "generatedImage": {
+                    "seed": 651946,
+                    "mediaGenerationId": "<string, 162 chars> = \"CAMSJGRhYmExOTc4LWU1ODgtNGQ3Ni1hNGZkLTZjMzEyNjA3NDE4NxokYWIz...\"",
+                    "mediaVisibility": "PRIVATE",
+                    "prompt": "modern world",
+                    "modelNameType": "GEM_PIX_2",
+                    "workflowId": "ab3f1b1a-8028-4f39-a504-488bac86024b",
+                    "fifeUrl": "<string, 573 chars> = \"https://storage.googleapis.com/ai-sandbox-videofx/image/08e3...\"",
+                    "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+                    "requestData": {
+                        "promptInputs": [
+                            {
+                                "textInput": "thế giới hiện đại"
+                            }
+                        ],
+                        "imageGenerationRequestData": {
+                            "imageGenerationImageInputs": [
+                                {
+                                    "mediaGenerationId": "<string, 111 chars> = \"CAMaJDcxZDVlMGY4LTk3ZjAtNDUxYS1iZjNhLTRiYzQxYTk0NjkyNSIDQ0FF...\"",
+                                    "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "dimensions": {
+                    "width": 1376,
+                    "height": 768
+                }
+            }
+        }
+    ],
+    "workflows": [
+        {
+            "name": "20f0ce30-e60d-4b30-97f1-f0ba0fbe3b3e",
+            "metadata": {
+                "createTime": "2026-01-31T22:23:17.558524Z",
+                "primaryMediaId": "08e32318-45c3-4d92-a8c4-860af933af44",
+                "batchId": "bf309e41-1bbb-465e-a5e3-76a7a0649a53"
+            },
+            "projectId": "daba1978-e588-4d76-a4fd-6c3126074187"
+        }
+    ]
+}
+
+
+====================================================================================================
+### Image Upscale
+    Endpoint: POST upsampleImage
+    Total calls: 4
+    Files: 4
+      - New/Download anh 2k.har
+      - New/Download anh 4k bat dau.har
+      - New/Download anh 4k hoan thanh.har
+      - New/download image 4k.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/Download anh 2k.har
+    Path: /v1/flow/upsampleImage
+    Body size: 2124 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "mediaId": "<string, 162 chars> = \"CAMSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokZjlk...\"",
+    "targetResolution": "UPSAMPLE_IMAGE_RESOLUTION_2K",
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "<string, 1700 chars> = \"0cAFcWeA5CltsPcEHcqy_iYXV0Syl3rDf7j86X4aj9dMHpFwZMxxDzfHTTe2...\"",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769880165773",
+        "projectId": "f5db1342-c676-437b-b763-d97ae2d7cd16",
+        "tool": "PINHOLE"
+    }
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "mediaId": "CAMSJGY1ZGIxMzQyLWM2NzYtNDM3Yi1iNzYzLWQ5N2FlMmQ3Y2QxNhokZjlkZjdjZjAtNjA5Zi00ODNm... (162 chars)",
+    "targetResolution": "UPSAMPLE_IMAGE_RESOLUTION_2K",
+    "clientContext": {
+        "recaptchaContext": {
+            "token": "0cAFcWeA5CltsPcEHcqy_iYXV0Syl3rDf7j86X4aj9dMHpFwZMxxDzfHTTe2hkpeGwWoRcOFtcMag6Cv... (1700 chars)",
+            "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+        },
+        "sessionId": ";1769880165773",
+        "projectId": "f5db1342-c676-437b-b763-d97ae2d7cd16",
+        "tool": "PINHOLE"
+    }
+}
+
+    --- FIELD COMPARISON ACROSS 4 CALLS ---
+    clientContext                  = CONSTANT: <dict 4 keys>
+    mediaId                        = CONSTANT: <162 chars>
+    targetResolution               = VARIES:
+      call[0]: UPSAMPLE_IMAGE_RESOLUTION_2K
+      call[1]: UPSAMPLE_IMAGE_RESOLUTION_4K
+      call[2]: UPSAMPLE_IMAGE_RESOLUTION_4K
+      call[3]: UPSAMPLE_IMAGE_RESOLUTION_4K
+
+    --- RESPONSE STRUCTURE ---
+{
+    "encodedImage": "<base64_image, 4310200 chars>"
+}
+
+
+====================================================================================================
+### Upload Image
+    Endpoint: POST uploadUserImage
+    Total calls: 23
+    Files: 12
+      - New/01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+      - New/01. ingedients to video submit prompt 3 anh.har
+      - New/Full tạo ảnh.har
+      - New/chon firt va last bắt đầu 1.har
+      - New/chon firt va last bắt đầu 10.har
+      - New/chon firt va last bắt đầu 25.har
+      - New/chon firt va last bắt đầu 50 2video dau xong 2 video sau 65.har
+      - New/chon firt va last bắt đầu 50 4video done.har
+      - New/chon firt va last bắt đầu 50.har
+      - New/chon firt va last bắt đầu.har
+      - New/labs.google.har
+      - New/upload anh first frame.har
+
+    --- REPRESENTATIVE REQUEST PAYLOAD (call #1) ---
+    File: New/01. ingedients to video hoan thanh 4 video prompt 3 anh.har
+    Path: /v1:uploadUserImage
+    Body size: 418232 bytes
+    Status: 200
+
+    Payload schema:
+{
+    "imageInput": {
+        "rawImageBytes": "<base64_image, 418036 chars>",
+        "mimeType": "image/jpeg",
+        "isUserUploaded": true,
+        "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE"
+    },
+    "clientContext": {
+        "sessionId": ";1769888782642",
+        "tool": "ASSET_MANAGER"
+    }
+}
+
+    --- SANITIZED FULL PAYLOAD ---
+{
+    "imageInput": {
+        "rawImageBytes": "/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZ... (418036 chars)",
+        "mimeType": "image/jpeg",
+        "isUserUploaded": true,
+        "aspectRatio": "IMAGE_ASPECT_RATIO_LANDSCAPE"
+    },
+    "clientContext": {
+        "sessionId": ";1769888782642",
+        "tool": "ASSET_MANAGER"
+    }
+}
+
+    --- FIELD COMPARISON ACROSS 23 CALLS ---
+    clientContext                  = CONSTANT: <dict 2 keys>
+    imageInput                     = CONSTANT: <dict 4 keys>
+
+    --- RESPONSE STRUCTURE ---
+{
+    "mediaGenerationId": {
+        "mediaGenerationId": "<string, 111 chars> = \"CAMaJGM3ZTdkODY4LWI2NDgtNGQyMi1hZjUyLTM0M2ZmMjA5YjhhMSIDQ0FF...\""
+    },
+    "width": 1920,
+    "height": 1080
+}
+
+
+====================================================================================================
+### TỔNG HỢP — PHÂN LOẠI THEO CẤU TRÚC GÓI TIN
+====================================================================================================
+
+Mode                      Endpoint                                                Calls Files Key Payload Fields
+----------------------------------------------------------------------------------------------------------------------------------
+Text-to-Video             batchAsyncGenerateVideoText                                 0     0 (no data)
+Image-to-Video (Start Image Only) batchAsyncGenerateVideoStartImage                           1     1 clientContext, requests
+Image-to-Video (Start + End Image = F2V) batchAsyncGenerateVideoStartAndEndImage                     8     8 clientContext, requests
+Reference-to-Video (Ingredients) batchAsyncGenerateVideoReferenceImages                      5     5 clientContext, requests
+Video Upscale             batchAsyncGenerateVideoUpsampleVideo                       32     8 clientContext, requests
+GIF Preview               generatePinholeGif                                          1     1 mediaGenerationId
+Text-to-Image             batchGenerateImages (no imageInputs)                        0     0 (no data)
+Image-to-Image            batchGenerateImages (with imageInputs)                      8     5 clientContext, requests
+Image Upscale             upsampleImage                                               4     4 clientContext, mediaId, targetResolution
+Upload Image              uploadUserImage                                            23    12 clientContext, imageInput

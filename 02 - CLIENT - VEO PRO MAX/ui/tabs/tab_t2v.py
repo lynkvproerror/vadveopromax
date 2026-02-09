@@ -67,12 +67,12 @@ class TabT2V(QWidget):
         # Section header
         mode_header = QFrame()
         mode_header.setFixedHeight(32)
-        mode_header.setStyleSheet(f"background-color: {Theme.SURFACE2};")
+        mode_header.setStyleSheet(f"background-color: {Theme.BLUE};")
         mode_layout = QHBoxLayout(mode_header)
         mode_layout.setContentsMargins(12, 0, 12, 0)
         
         mode_title = QLabel("📹 VIDEO MODE")
-        mode_title.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        mode_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
         mode_layout.addWidget(mode_title)
         
         mode_layout.addStretch()
@@ -120,12 +120,12 @@ class TabT2V(QWidget):
         # Header
         header = QFrame()
         header.setFixedHeight(32)
-        header.setStyleSheet(f"background-color: {Theme.SURFACE2};")
+        header.setStyleSheet(f"background-color: {Theme.BLUE};")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 12, 0)
         
         title = QLabel("📝 PROMPT INPUT")
-        title.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
         header_layout.addWidget(title)
         header_layout.addStretch()
         layout.addWidget(header)
@@ -178,12 +178,12 @@ class TabT2V(QWidget):
         # Header with continuation toggle
         header = QFrame()
         header.setFixedHeight(32)
-        header.setStyleSheet(f"background-color: {Theme.SURFACE2};")
+        header.setStyleSheet(f"background-color: {Theme.BLUE};")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 12, 0)
         
         self.parsed_title = QLabel("📊 PARSED PROMPTS (0)")
-        self.parsed_title.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        self.parsed_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
         header_layout.addWidget(self.parsed_title)
         
         self.chain_indicator = QLabel("")
@@ -203,51 +203,10 @@ class TabT2V(QWidget):
         self.prompt_table = PromptTable()
         self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
         self.prompt_table.delete_clicked.connect(self._on_delete_prompt)
+        self.prompt_table.continuation_toggled.connect(
+            lambda idx, checked: self._update_chain_indicator(self.prompt_table.get_prompts())
+        )
         layout.addWidget(self.prompt_table)
-        
-        # Sample prompts for preview
-        sample = [
-            PromptRow(1, "A sunset scene over mountains with golden light"),
-            PromptRow(2, "Camera pans across the valley revealing a river", continuation_from=1),
-            PromptRow(3, "Birds flying in formation against the orange sky", continuation_from=2),
-        ]
-        self.prompt_table.set_prompts(sample)
-        self._update_parsed_count(len(sample))
-        self._update_chain_indicator(sample)
-        
-        return frame
-    
-    def _create_queue_preview(self) -> QWidget:
-        """Create fixed 60px queue preview at bottom."""
-        frame = QFrame()
-        frame.setFixedHeight(60)
-        frame.setStyleSheet(f"background-color: {Theme.SURFACE0};")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # Header
-        header = QFrame()
-        header.setFixedHeight(24)
-        header.setStyleSheet(f"background-color: {Theme.SURFACE2};")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(8, 0, 8, 0)
-        
-        title = QLabel("📋 QUEUE PREVIEW")
-        title.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
-        header_layout.addWidget(title)
-        layout.addWidget(header)
-        
-        # Queue info
-        info_frame = QFrame()
-        info_layout = QHBoxLayout(info_frame)
-        info_layout.setContentsMargins(8, 4, 8, 4)
-        
-        self.queue_status_label = QLabel("0 jobs pending • Output: Not set")
-        self.queue_status_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 11px;")
-        info_layout.addWidget(self.queue_status_label)
-        
-        layout.addWidget(info_frame)
         
         return frame
     
@@ -274,20 +233,38 @@ Tips:
         HelpTooltipPopup(self, "T2V Workflow", help_text).exec()
     
     def _on_text_changed(self):
-        """Handle text input change."""
+        """Handle text input change — parse and update table."""
         text = self.prompt_input.toPlainText()
         lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
         self.prompt_count.setText(f"{len(lines)} prompts")
         self._parse_prompts()
     
     def _parse_prompts(self):
-        """Parse input text into prompt rows."""
+        """Parse input text into prompt rows, preserving continuation state."""
         text = self.prompt_input.toPlainText()
         lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
         
-        prompts = [PromptRow(i + 1, line) for i, line in enumerate(lines)]
+        # Preserve continuation state from existing rows
+        old_rows = self.prompt_table.get_prompts()
+        old_cont = {r.index: r.continuation_from for r in old_rows}
+        
+        prompts = []
+        for i, line in enumerate(lines):
+            idx = i + 1
+            row = PromptRow(idx, line, continuation_from=old_cont.get(idx))
+            prompts.append(row)
+        
         self.prompt_table.set_prompts(prompts)
         self._update_parsed_count(len(prompts))
+        self._update_chain_indicator(prompts)
+    
+    def _sync_to_input(self, prompts: List[PromptRow]):
+        """Sync prompt table changes back to text input (after edit/delete)."""
+        self.prompt_input.blockSignals(True)  # Prevent re-parse loop
+        text = '\n'.join(p.text for p in prompts)
+        self.prompt_input.setPlainText(text)
+        self.prompt_input.blockSignals(False)
+        self.prompt_count.setText(f"{len(prompts)} prompts")
     
     def _update_parsed_count(self, count: int):
         """Update parsed prompts count label."""
@@ -361,24 +338,62 @@ Tips:
             if ok and new_text:
                 prompts[row_index].text = new_text
                 self.prompt_table.set_prompts(prompts)
+                self._sync_to_input(prompts)
     
     def _on_delete_prompt(self, row_index: int):
         """Handle delete prompt action."""
         prompts = self.prompt_table.get_prompts()
         if 0 <= row_index < len(prompts):
             del prompts[row_index]
-            # Reindex remaining prompts
             for i, prompt in enumerate(prompts):
                 prompt.index = i + 1
             self.prompt_table.set_prompts(prompts)
             self._update_parsed_count(len(prompts))
+            self._sync_to_input(prompts)
     
     def _on_add_to_queue(self):
         """Collect prompts and settings, submit to controller."""
         prompts = self.prompt_table.get_prompts()
-        settings = self.sidebar.get_values()
+        if not prompts:
+            return
         
-        self.add_to_queue.emit(prompts)
+        settings = self.sidebar.get_values()
         
         if self.controller:
             self.controller.add_t2v_batch(prompts, settings)
+    
+    # ── Session Persistence ─────────────────────────────────────
+    
+    def save_state(self) -> dict:
+        """Save tab state for session persistence."""
+        prompts = self.prompt_table.get_prompts()
+        return {
+            "prompts": [
+                {
+                    "index": p.index,
+                    "text": p.text,
+                    "continuation_from": p.continuation_from,
+                    "image_path": p.image_path,
+                }
+                for p in prompts
+            ],
+            "sidebar": self.sidebar.get_values(),
+        }
+    
+    def restore_state(self, data: dict):
+        """Restore tab state from saved session data."""
+        from ui.components.prompt_table import PromptRow
+        
+        if "sidebar" in data:
+            self.sidebar.set_values(data["sidebar"])
+        
+        if "prompts" in data and data["prompts"]:
+            rows = []
+            for pd in data["prompts"]:
+                rows.append(PromptRow(
+                    index=pd.get("index", 0),
+                    text=pd.get("text", ""),
+                    continuation_from=pd.get("continuation_from"),
+                    image_path=pd.get("image_path"),
+                ))
+            self.prompt_table.set_prompts(rows)

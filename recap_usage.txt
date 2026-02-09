@@ -1,0 +1,13 @@
+﻿=== ENDPOINTS USING recaptchaContext IN PAYLOAD ===
+   32x  batchAsyncGenerateVideoUpsampleVideo
+   10x  batchGenerateImages
+    8x  batchAsyncGenerateVideoStartAndEndImage
+    5x  batchAsyncGenerateVideoReferenceImages
+    4x  upsampleImage
+    2x  batchAsyncGenerateVideoText
+    1x  batchAsyncGenerateVideoStartImage
+
+Total POST calls with recaptchaContext: 62
+Total recaptcha/enterprise/reload calls: 66
+
+Endpoints count: 7 distinct endpoints

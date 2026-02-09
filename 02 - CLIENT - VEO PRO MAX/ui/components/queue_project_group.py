@@ -277,7 +277,7 @@ class QueueProjectGroup(QWidget):
         self.prompts_table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {Theme.BASE};
-                gridline-color: {Theme.BORDER};
+                gridline-color: {Theme.SURFACE1};
                 border: none;
             }}
         """)

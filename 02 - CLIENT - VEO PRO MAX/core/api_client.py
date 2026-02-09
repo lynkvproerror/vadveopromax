@@ -108,10 +108,10 @@ class APIResponse:
 class VEOApiClient:
     """VEO API client for all generation endpoints.
     
-    All methods require:
-    - access_token: Bearer token from Google auth
-    - recaptcha_token: reCAPTCHA v3 token
-    - x-browser headers (via BrowserHeaders)
+    Auth per VEO_Web_Client_Protocol_Analysis.md:
+    - x-browser-* headers (via BrowserHeaders) — MANDATORY for all REST
+    - reCAPTCHA token in body clientContext (for generation only)
+    - NO Authorization: Bearer header (access_token NOT used in REST)
     
     Reference: CORE_MODULES_SPEC.md, SEED_MANAGEMENT.md
     """
@@ -163,42 +163,89 @@ class VEOApiClient:
 
     def _build_headers(
         self,
-        access_token: str,
-        recaptcha_token: str,
-        extra_headers: Optional[Dict[str, str]] = None
+        extra_headers: Optional[Dict[str, str]] = None,
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, str]:
-        """Build request headers including x-browser-* headers."""
-        # Core headers
+        """Build request headers for aisandbox-pa REST endpoints.
+        
+        Per VEO_Web_Client_Protocol_Analysis.md §3.3:
+        - Content-Type: text/plain;charset=UTF-8
+        - NO Authorization: Bearer header (access_token NOT used in REST)
+        - NO x-goog-recaptcha-token header (reCAPTCHA goes in body clientContext)
+        - x-browser-* headers are MANDATORY (per-account)
+        
+        Args:
+            extra_headers: Additional headers to merge.
+            account_headers: Per-account x-browser-* headers dict from
+                AccountSession.get_browser_headers(). When provided, overrides
+                the global BrowserHeaders singleton (critical for multi-account).
+        """
+        # Core headers — NO Bearer, NO reCAPTCHA header
         headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-            "x-goog-recaptcha-token": recaptcha_token,
+            "Content-Type": "text/plain;charset=UTF-8",
         }
         # Add x-browser-* headers (MANDATORY)
-        headers.update(self._browser_headers.get_all_headers())
+        # Per-account headers take priority over global singleton
+        if account_headers:
+            headers.update(account_headers)
+        else:
+            headers.update(self._browser_headers.get_all_headers())
         # Add extra headers if any
         if extra_headers:
             headers.update(extra_headers)
         return headers
     
-    def _build_client_context(self, recaptcha_token: str) -> Dict[str, Any]:
-        """Build clientContext for API requests."""
-        return {
-            "tool": "VEGA_WEB",
-            "recaptchaToken": recaptcha_token,
+    def _build_client_context(
+        self,
+        recaptcha_token: str,
+        project_id: str = "",
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        tool: str = "PINHOLE",
+        include_recaptcha: bool = True,
+    ) -> Dict[str, Any]:
+        """Build clientContext for API requests.
+        
+        HAR verified structure:
+        - tool: "PINHOLE" for video, "ASSET_MANAGER" for uploads
+        - recaptchaContext: nested object (required for generation, NOT for polling)
+        - sessionId: ";{timestamp_ms}"
+        - projectId: UUID
+        - userPaygateTier: account tier
+        """
+        import time
+        ctx: Dict[str, Any] = {
+            "sessionId": f";{int(time.time() * 1000)}",
+            "tool": tool,
         }
+        if project_id:
+            ctx["projectId"] = project_id
+        if paygate_tier:
+            ctx["userPaygateTier"] = paygate_tier
+        if include_recaptcha and recaptcha_token:
+            ctx["recaptchaContext"] = {
+                "token": recaptcha_token,
+                "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB",
+            }
+        return ctx
     
     async def _request(
         self,
         method: str,
         endpoint: str,
-        access_token: str,
-        recaptcha_token: str,
+        access_token: str = "",
+        recaptcha_token: str = "",
         data: Optional[Dict[str, Any]] = None,
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
-        """Make an API request."""
+        """Make an API request.
+        
+        Args:
+            access_token: Kept for signature compat, NOT used in REST (§1.4C).
+            recaptcha_token: Goes in body clientContext, not headers.
+            account_headers: Per-account x-browser-* headers dict.
+        """
         url = f"{self.base_url}{endpoint}"
-        headers = self._build_headers(access_token, recaptcha_token)
+        headers = self._build_headers(account_headers=account_headers)
         
         try:
             session = await self._get_session()
@@ -232,17 +279,28 @@ class VEOApiClient:
         recaptcha_token: str,
         image_base64: str,
         mime_type: str = "image/jpeg",
+        aspect_ratio: str = "IMAGE_ASPECT_RATIO_LANDSCAPE",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Upload image to VEO.
         
         Endpoint: /v1:uploadUserImage (Sync)
+        HAR verified: uses "imageInput" nested object, tool="ASSET_MANAGER"
         
-        Returns: {"imageId": "...", "imageUri": "..."}
+        Returns: {"mediaGenerationId": {"mediaGenerationId": "..."}, "width": N, "height": N}
         """
         data = {
-            "imageBytes": image_base64,
-            "mimeType": mime_type,
-            "clientContext": self._build_client_context(recaptcha_token),
+            "imageInput": {
+                "rawImageBytes": image_base64,
+                "mimeType": mime_type,
+                "isUserUploaded": True,
+                "aspectRatio": aspect_ratio,
+            },
+            "clientContext": self._build_client_context(
+                recaptcha_token,
+                tool="ASSET_MANAGER",
+                include_recaptcha=False,
+            ),
         }
         
         return await self._request(
@@ -250,7 +308,8 @@ class VEOApiClient:
             APIEndpoints.UPLOAD,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     # ==================== VIDEO GENERATION ====================
@@ -260,31 +319,40 @@ class VEOApiClient:
         access_token: str,
         recaptcha_token: str,
         prompt: str,
+        project_id: str = "",
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        duration_seconds: int = 8,
         model: str = "veo_3_1_t2v_fast_landscape_ultra",
         output_count: int = 4,
         seed: Optional[int] = None,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Text to Video generation.
         
         Endpoint: /v1/video:batchAsyncGenerateVideoText (Async)
+        HAR: T2V not directly captured, structure inferred from I2V/R2V patterns
         
         Reference: SEED_MANAGEMENT.md - seed is required, range 0-32767
+        Note: Uses multiple items in requests[] for multiple outputs (not numberOfVideos)
         """
-        # Generate seed if not provided
-        actual_seed = seed if seed is not None else generate_random_seed()
+        import uuid
+        
+        requests_list = []
+        for _ in range(min(output_count, 4)):
+            actual_seed = seed if seed is not None else generate_random_seed()
+            requests_list.append({
+                "aspectRatio": aspect_ratio,
+                "seed": validate_seed(actual_seed),
+                "textInput": {"prompt": prompt},
+                "videoModelKey": model,
+                "metadata": {"sceneId": str(uuid.uuid4())},
+            })
         
         data = {
-            "requests": [{
-                "textInput": {"prompt": prompt},
-                "aspectRatio": aspect_ratio,
-                "durationSeconds": duration_seconds,
-                "videoModelKey": model,
-                "numberOfVideos": output_count,
-                "seed": validate_seed(actual_seed),
-            }],
-            "clientContext": self._build_client_context(recaptcha_token),
+            "clientContext": self._build_client_context(
+                recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
+            ),
+            "requests": requests_list,
         }
         
         return await self._request(
@@ -292,7 +360,8 @@ class VEOApiClient:
             APIEndpoints.T2V,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     async def generate_video_i2v_single(
@@ -300,44 +369,48 @@ class VEOApiClient:
         access_token: str,
         recaptcha_token: str,
         prompt: str,
-        image_uri: str,
-        frame_position: str = "START",  # START or END
+        image_media_id: str,
+        project_id: str = "",
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        duration_seconds: int = 8,
-        model: str = "veo_3_1_i2v_s_fast_ultra",
+        model: str = "veo_3_1_i2v_s_fast_ultra_relaxed",
         output_count: int = 4,
         seed: Optional[int] = None,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
-        """Image to Video with single frame.
+        """Image to Video with single start frame.
         
         Endpoint: /v1/video:batchAsyncGenerateVideoStartImage (Async)
-        
-        Reference: SEED_MANAGEMENT.md - seed is required
+        HAR verified: uses startImage.mediaId (nested object)
         """
-        actual_seed = seed if seed is not None else generate_random_seed()
+        import uuid
+        
+        requests_list = []
+        for _ in range(min(output_count, 4)):
+            actual_seed = seed if seed is not None else generate_random_seed()
+            requests_list.append({
+                "aspectRatio": aspect_ratio,
+                "seed": validate_seed(actual_seed),
+                "textInput": {"prompt": prompt},
+                "videoModelKey": model,
+                "startImage": {"mediaId": image_media_id},
+                "metadata": {"sceneId": str(uuid.uuid4())},
+            })
         
         data = {
-            "requests": [{
-                "textInput": {"prompt": prompt},
-                "imageInputMediaId": image_uri,
-                "framePosition": frame_position,
-                "aspectRatio": aspect_ratio,
-                "durationSeconds": duration_seconds,
-                "videoModelKey": model,
-                "numberOfVideos": output_count,
-                "seed": validate_seed(actual_seed),
-            }],
-            "clientContext": self._build_client_context(recaptcha_token),
+            "clientContext": self._build_client_context(
+                recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
+            ),
+            "requests": requests_list,
         }
-        
-        endpoint = APIEndpoints.I2V_SINGLE
         
         return await self._request(
             "POST",
-            endpoint,
+            APIEndpoints.I2V_SINGLE,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     async def generate_video_i2v_dual(
@@ -345,35 +418,42 @@ class VEOApiClient:
         access_token: str,
         recaptcha_token: str,
         prompt: str,
-        start_image_uri: str,
-        end_image_uri: str,
+        start_image_media_id: str,
+        end_image_media_id: str,
+        project_id: str = "",
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        duration_seconds: int = 8,
-        model: str = "veo_3_1_i2v_s_fast_fl_ultra",
+        model: str = "veo_3_1_i2v_s_fast_fl_ultra_relaxed",
         output_count: int = 4,
         seed: Optional[int] = None,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
-        """Image to Video with start and end frames.
+        """Image to Video with start and end frames (F2V).
         
         Endpoint: /v1/video:batchAsyncGenerateVideoStartAndEndImage (Async)
-        
-        Reference: SEED_MANAGEMENT.md - seed is required
+        HAR verified: uses startImage.mediaId + endImage.mediaId (nested objects)
         Note: _fl_ = First+Last frame support
         """
-        actual_seed = seed if seed is not None else generate_random_seed()
+        import uuid
+        
+        requests_list = []
+        for _ in range(min(output_count, 4)):
+            actual_seed = seed if seed is not None else generate_random_seed()
+            requests_list.append({
+                "aspectRatio": aspect_ratio,
+                "seed": validate_seed(actual_seed),
+                "textInput": {"prompt": prompt},
+                "videoModelKey": model,
+                "startImage": {"mediaId": start_image_media_id},
+                "endImage": {"mediaId": end_image_media_id},
+                "metadata": {"sceneId": str(uuid.uuid4())},
+            })
         
         data = {
-            "requests": [{
-                "textInput": {"prompt": prompt},
-                "startImageId": start_image_uri,
-                "endImageId": end_image_uri,
-                "aspectRatio": aspect_ratio,
-                "durationSeconds": duration_seconds,
-                "videoModelKey": model,
-                "numberOfVideos": output_count,
-                "seed": validate_seed(actual_seed),
-            }],
-            "clientContext": self._build_client_context(recaptcha_token),
+            "clientContext": self._build_client_context(
+                recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
+            ),
+            "requests": requests_list,
         }
         
         return await self._request(
@@ -381,7 +461,8 @@ class VEOApiClient:
             APIEndpoints.I2V_DUAL,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     async def generate_video_r2v(
@@ -389,32 +470,45 @@ class VEOApiClient:
         access_token: str,
         recaptcha_token: str,
         prompt: str,
-        reference_image_uris: List[str],  # 1-3 images
+        reference_image_media_ids: List[str],  # 1-3 mediaIds
+        project_id: str = "",
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        duration_seconds: int = 8,
-        model: str = "veo_3_1_r2v_fast_landscape_ultra",
+        model: str = "veo_3_1_r2v_fast_landscape_ultra_relaxed",
         output_count: int = 4,
         seed: Optional[int] = None,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """References/Ingredients to Video.
         
         Endpoint: /v1/video:batchAsyncGenerateVideoReferenceImages (Async)
-        
-        Reference: SEED_MANAGEMENT.md - seed is required
+        HAR verified: uses referenceImages[] array of objects with imageUsageType + mediaId
         """
-        actual_seed = seed if seed is not None else generate_random_seed()
+        import uuid
+        
+        # Build referenceImages as array of objects (HAR verified)
+        ref_images = [
+            {"imageUsageType": "IMAGE_USAGE_TYPE_ASSET", "mediaId": mid}
+            for mid in reference_image_media_ids[:3]
+        ]
+        
+        requests_list = []
+        for _ in range(min(output_count, 4)):
+            actual_seed = seed if seed is not None else generate_random_seed()
+            requests_list.append({
+                "aspectRatio": aspect_ratio,
+                "seed": validate_seed(actual_seed),
+                "textInput": {"prompt": prompt},
+                "videoModelKey": model,
+                "referenceImages": ref_images,
+                "metadata": {"sceneId": str(uuid.uuid4())},
+            })
         
         data = {
-            "requests": [{
-                "textInput": {"prompt": prompt},
-                "referenceImageIds": reference_image_uris[:3],  # Max 3
-                "aspectRatio": aspect_ratio,
-                "durationSeconds": duration_seconds,
-                "videoModelKey": model,
-                "numberOfVideos": output_count,
-                "seed": validate_seed(actual_seed),
-            }],
-            "clientContext": self._build_client_context(recaptcha_token),
+            "clientContext": self._build_client_context(
+                recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
+            ),
+            "requests": requests_list,
         }
         
         return await self._request(
@@ -422,7 +516,8 @@ class VEOApiClient:
             APIEndpoints.R2V,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     # ==================== IMAGE GENERATION ====================
@@ -433,22 +528,45 @@ class VEOApiClient:
         recaptcha_token: str,
         project_id: str,
         prompt: str,
-        aspect_ratio: str = "LANDSCAPE",
+        aspect_ratio: str = "IMAGE_ASPECT_RATIO_LANDSCAPE",
+        model: str = "GEM_PIX_2",
         output_count: int = 4,
+        seed: Optional[int] = None,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Text to Image generation.
         
         Endpoint: /v1/projects/{id}/flowMedia:batchGenerateImages (Sync)
+        
+        HAR verified:
+        - clientContext appears BOTH at top-level AND inside each request item
+        - Each request item has: clientContext, seed, imageModelName, prompt
+        - Response: {"media": [{"image": {"generatedImage": {...}}}]}
         """
         endpoint = f"/v1/projects/{project_id}/flowMedia:batchGenerateImages"
         
-        data = {
-            "requests": [{
+        # Build shared clientContext
+        client_ctx = self._build_client_context(
+            recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
+        )
+        
+        # T2I HAR §3.3.2: each request item has its own clientContext + seed
+        # Field names: "prompt" (not "promptInputs"), "imageAspectRatio" (not "aspectRatio")
+        requests_list = []
+        for _ in range(min(output_count, 4)):
+            actual_seed = seed if seed is not None else generate_random_seed()
+            requests_list.append({
+                "clientContext": client_ctx,
+                "seed": actual_seed,
+                "imageModelName": model,
                 "prompt": prompt,
-                "aspectRatio": aspect_ratio,
-                "numberOfImages": output_count,
-            }],
-            "clientContext": self._build_client_context(recaptcha_token),
+                "imageAspectRatio": aspect_ratio,
+            })
+        
+        data = {
+            "clientContext": client_ctx,
+            "requests": requests_list,
         }
         
         return await self._request(
@@ -456,7 +574,8 @@ class VEOApiClient:
             endpoint,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     # ==================== STATUS CHECKING ====================
@@ -465,15 +584,23 @@ class VEOApiClient:
         self,
         access_token: str,
         recaptcha_token: str,
-        operation_names: List[str],
+        operations: List[Dict[str, Any]],
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Check status of async operations.
         
         Endpoint: /v1/video:batchCheckAsyncVideoGenerationStatus
+        HAR verified: uses operations[] array of objects (NOT operationNames)
+        No clientContext needed for polling.
+        
+        Args:
+            operations: List of operation dicts, each containing:
+                - operation.name: operation ID string
+                - sceneId: scene UUID
+                - status: current status string
         """
         data = {
-            "operationNames": operation_names,
-            "clientContext": self._build_client_context(recaptcha_token),
+            "operations": operations,
         }
         
         return await self._request(
@@ -481,7 +608,8 @@ class VEOApiClient:
             APIEndpoints.STATUS,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     # ==================== UPSCALE ====================
@@ -490,23 +618,48 @@ class VEOApiClient:
         self,
         access_token: str,
         recaptcha_token: str,
-        video_uri: str,
+        video_media_id: str,
+        project_id: str = "",
         target_resolution: str = "VIDEO_RESOLUTION_1080P",
+        aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        seed: Optional[int] = None,
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Upscale video resolution.
         
         Endpoint: /v1/video:batchAsyncGenerateVideoUpsampleVideo (Async)
+        HAR verified: requires seed, aspectRatio, videoModelKey, metadata
         
         Resolution options:
-        - VIDEO_RESOLUTION_1080P
-        - VIDEO_RESOLUTION_4K
+        - VIDEO_RESOLUTION_1080P → model: veo_3_1_upsampler_1080p
+        - VIDEO_RESOLUTION_4K → model: veo_3_1_upsampler_4k
         """
+        import uuid
+        
+        actual_seed = seed if seed is not None else generate_random_seed()
+        
+        # Map resolution to model key
+        model_map = {
+            "VIDEO_RESOLUTION_1080P": "veo_3_1_upsampler_1080p",
+            "VIDEO_RESOLUTION_4K": "veo_3_1_upsampler_4k",
+        }
+        model_key = model_map.get(target_resolution, "veo_3_1_upsampler_1080p")
+        
+        # Doc §6.13: Upscale clientContext = only sessionId + recaptchaContext
+        # NO projectId, NO userPaygateTier, NO tool (defaults to PINHOLE)
         data = {
+            "clientContext": self._build_client_context(
+                recaptcha_token, include_recaptcha=True,
+            ),
             "requests": [{
-                "videoInput": {"mediaId": video_uri},
+                "aspectRatio": aspect_ratio,
                 "resolution": target_resolution,
+                "seed": validate_seed(actual_seed),
+                "videoInput": {"mediaId": video_media_id},
+                "videoModelKey": model_key,
+                "metadata": {"sceneId": str(uuid.uuid4())},
             }],
-            "clientContext": self._build_client_context(recaptcha_token),
         }
         
         return await self._request(
@@ -514,7 +667,8 @@ class VEOApiClient:
             APIEndpoints.UPSCALE_VIDEO,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     # ==================== UTILITY ENDPOINTS (from HAR analysis) ====================
@@ -522,19 +676,24 @@ class VEOApiClient:
     async def get_credits(
         self,
         access_token: str,
-        recaptcha_token: str,
+        recaptcha_token: str = "",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Check account credits and subscription status.
         
-        Endpoint: /v1/credits (GET)
+        Endpoint: GET /v1/credits?key=API_KEY
         
-        Returns: {"credits": {"available": 100, "used": 50}, "subscription": {...}}
+        Per doc §3.3.1: GET request with API key as query param.
+        No body, no reCAPTCHA, no Authorization.
+        
+        Returns: {"credits": 45000, "userPaygateTier": "...", "sku": "...", "serviceTier": "..."}
         """
         return await self._request(
             "GET",
-            APIEndpoints.CREDITS,
+            f"{APIEndpoints.CREDITS}?key={APIEndpoints.API_KEY}",
             access_token,
             recaptcha_token,
+            account_headers=account_headers,
         )
     
     async def generate_gif(
@@ -542,16 +701,18 @@ class VEOApiClient:
         access_token: str,
         recaptcha_token: str,
         media_generation_id: str,
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Generate preview GIF for a video.
         
         Endpoint: /v1/video:generatePinholeGif (Sync)
         
-        Returns: {"pinholeGif": "base64_string..."} - Note: Can be >10MB
+        HAR verified:
+        - Request: {"mediaGenerationId": "..."} — NO clientContext
+        - Response: {"encodedGif": "base64_string..."} — Note: Can be >10MB
         """
         data = {
             "mediaGenerationId": media_generation_id,
-            "clientContext": self._build_client_context(recaptcha_token),
         }
         
         return await self._request(
@@ -559,13 +720,15 @@ class VEOApiClient:
             APIEndpoints.GIF,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
     
     async def check_app_status(
         self,
         access_token: str,
         recaptcha_token: str,
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Check if VEO API is available.
         
@@ -579,27 +742,38 @@ class VEOApiClient:
             access_token,
             recaptcha_token,
             {},
+            account_headers=account_headers,
         )
     
     async def upscale_image(
         self,
         access_token: str,
         recaptcha_token: str,
-        media_generation_id: str,
-        target_resolution: str = "IMAGE_RESOLUTION_4K",
+        media_id: str,
+        project_id: str = "",
+        target_resolution: str = "UPSAMPLE_IMAGE_RESOLUTION_4K",
+        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Upscale image resolution.
         
         Endpoint: /v1/flow/upsampleImage (POST)
         
+        HAR verified:
+        - Request: {mediaId, targetResolution, clientContext}
+        - Uses 'mediaId' (NOT mediaGenerationId)
+        - Response: {"encodedImage": "base64..."}
+        
         Resolution options:
-        - IMAGE_RESOLUTION_2K
-        - IMAGE_RESOLUTION_4K
+        - UPSAMPLE_IMAGE_RESOLUTION_2K
+        - UPSAMPLE_IMAGE_RESOLUTION_4K
         """
         data = {
-            "mediaGenerationId": media_generation_id,
+            "mediaId": media_id,
             "targetResolution": target_resolution,
-            "clientContext": self._build_client_context(recaptcha_token),
+            "clientContext": self._build_client_context(
+                recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
+            ),
         }
         
         return await self._request(
@@ -607,5 +781,6 @@ class VEOApiClient:
             APIEndpoints.IMAGE_UPSCALE_FLOW,
             access_token,
             recaptcha_token,
-            data
+            data,
+            account_headers=account_headers,
         )
