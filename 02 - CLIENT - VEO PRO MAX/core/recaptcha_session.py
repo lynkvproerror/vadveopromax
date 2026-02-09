@@ -140,6 +140,16 @@ class RecaptchaBrowserSession:
                 except Exception:
                     await self._page.goto(self.VEO_FALLBACK_URL, wait_until="networkidle", timeout=timeout_ms)
                 
+                # Click "Create with Flow" button if present (activates VEO workspace + loads grecaptcha)
+                try:
+                    create_btn = self._page.locator("button:has-text('Create with Flow')")
+                    if await create_btn.count() > 0 and await create_btn.first.is_visible():
+                        print("[RecaptchaBrowserSession] Clicking 'Create with Flow' button...")
+                        await create_btn.first.click()
+                        await self._page.wait_for_timeout(3000)
+                except Exception:
+                    pass
+                
                 self._ready = True
                 print(f"[RecaptchaBrowserSession] ✅ Browser ready for {Path(self._profile_path).name}")
                 

@@ -261,6 +261,9 @@ class AppController:
         Called by UI layer (TabSettings) to bridge persistence → runtime.
         """
         self._profiles_controller = profiles_controller
+        # Forward to engine so it can auto re-login on auth failures
+        if self._engine:
+            self._engine._profiles_controller = profiles_controller
     
     def sync_profiles_to_runtime(self):
         """Sync profiles from ProfilesController → MultiAccountManager.

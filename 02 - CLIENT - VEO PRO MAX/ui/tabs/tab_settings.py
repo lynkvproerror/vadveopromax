@@ -382,7 +382,6 @@ class TabSettings(QWidget):
                     border: 1px solid {Theme.OVERLAY0};
                     border-radius: 4px;
                     font-size: 16px;
-                    cursor: pointer;
                 }}
                 QPushButton:hover {{
                     background-color: {Theme.BLUE};
