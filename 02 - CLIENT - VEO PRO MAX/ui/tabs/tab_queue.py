@@ -15,7 +15,13 @@ from PySide6.QtWidgets import (
     QFrame, QScrollArea, QProgressBar, QComboBox, QLineEdit,
     QMessageBox
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QUrl
+from PySide6.QtGui import QPixmap, QCursor
+
+try:
+    from PySide6.QtGui import QDesktopServices
+except ImportError:
+    QDesktopServices = None
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
@@ -86,26 +92,44 @@ class TabQueue(QWidget):
         self._progress_signal.emit(task_id, progress, status_text)
     
     def _on_progress_update(self, task_id: str, progress: int, status_text: str = ""):
-        """Handle progress update from controller.
-        
-        Uses _task_widgets dict for O(1) lookup instead of scanning
-        nested group containers.
-        """
+        """Handle progress update — update inline thumbnail slot gradients."""
         widget = self._task_widgets.get(task_id)
-        if widget and hasattr(widget, 'progress_bar'):
-            widget.progress_bar.setValue(progress)
-            if status_text:
-                widget.progress_bar.setFormat(f"{status_text} {progress}%")
-            else:
-                widget.progress_bar.setFormat(f"{progress}%")
-            # Update status label dynamically
-            if hasattr(widget, 'status_label'):
-                if progress >= 100:
-                    widget.status_label.setText("✅ DONE")
-                    widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
-                elif progress > 0:
-                    widget.status_label.setText("🔥 PROCESSING")
-                    widget.status_label.setStyleSheet(f"color: {Theme.PEACH}; font-size: 10px; font-weight: bold; border: none;")
+        if not widget:
+            return
+        
+        # Update thumbnail slot gradients during generating phase
+        if hasattr(widget, 'thumb_slots'):
+            pct = max(0, min(100, progress)) / 100.0
+            for slot in widget.thumb_slots:
+                # Only update slots that don't have a thumbnail yet
+                if slot.pixmap() and not slot.pixmap().isNull():
+                    continue  # Already has thumbnail, skip
+                slot.setText(f"{progress}%")
+                slot.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: qlineargradient(
+                            x1:0, y1:1, x2:0, y2:0,
+                            stop:0 #1E3A5E,
+                            stop:{pct:.2f} {Theme.BLUE},
+                            stop:{min(pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
+                            stop:1 {Theme.SURFACE0}
+                        );
+                        border: 1px solid {Theme.BLUE};
+                        border-radius: 4px;
+                        color: {Theme.TEXT};
+                        font-size: 10px;
+                        font-weight: bold;
+                    }}
+                """)
+        
+        # Update status label
+        if hasattr(widget, 'status_label'):
+            if progress >= 100:
+                widget.status_label.setText("✅ DONE")
+                widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
+            elif progress > 0:
+                widget.status_label.setText("🔥 PROCESSING")
+                widget.status_label.setStyleSheet(f"color: {Theme.PEACH}; font-size: 10px; font-weight: bold; border: none;")
     
     def _on_queue_updated_from_thread(self, status: Dict):
         """Thread-safe bridge: emit signal from any thread → main thread."""
@@ -420,8 +444,8 @@ class TabQueue(QWidget):
         
         return container
     
-    def _create_queue_item_widget(self, item: QueueItem) -> QWidget:
-        """Create a queue item card aligned with column headers."""
+    def _create_queue_item_widget(self, item: QueueItem, task_data: dict = None) -> QWidget:
+        """Create a queue item card with inline thumbnail slots."""
         # Status-based styling
         status_config = {
             "pending":      {"icon": "⏳", "color": Theme.SUBTEXT0, "bg": Theme.SURFACE1},
@@ -453,9 +477,9 @@ class TabQueue(QWidget):
                 background-color: {Theme.SURFACE2};
             }}
         """)
-        widget.setFixedHeight(44)
+        widget.setFixedHeight(60)
         widget.setProperty("item_id", item.id)
-        widget.task_id = str(item.id)  # For progress update lookup
+        widget.task_id = str(item.id)
         
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(9, 4, 12, 4)
@@ -474,40 +498,36 @@ class TabQueue(QWidget):
         layout.addWidget(mode_label)
         
         # Col 3: Prompt — flex
-        prompt_text = item.prompt[:80] + "..." if len(item.prompt) > 80 else item.prompt
+        prompt_text = item.prompt[:60] + "..." if len(item.prompt) > 60 else item.prompt
         prompt_label = QLabel(prompt_text)
         prompt_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; border: none;")
         prompt_label.setToolTip(item.prompt)
         layout.addWidget(prompt_label, stretch=1)
         
-        # Col 4: Progress + Status Text — 180px
-        progress = QProgressBar()
-        progress.setFixedWidth(180)
-        progress.setFixedHeight(16)
-        progress.setValue(item.progress)
-        progress.setTextVisible(True)
-        # Show status_text if available
-        status_text = getattr(item, 'status_text', '') or ''
-        if status_text and item.progress > 0 and item.progress < 100:
-            progress.setFormat(f"{status_text} {item.progress}%")
-        else:
-            progress.setFormat(f"{item.progress}%")
-        progress.setStyleSheet(f"""
-            QProgressBar {{
-                background-color: {Theme.SURFACE0};
-                border: 1px solid {Theme.SURFACE2};
-                border-radius: 4px;
-                text-align: center;
-                font-size: 10px;
-                color: {Theme.TEXT};
-            }}
-            QProgressBar::chunk {{
-                background-color: {cfg['color']};
-                border-radius: 3px;
-            }}
-        """)
-        widget.progress_bar = progress  # Store reference for live updates
-        layout.addWidget(progress)
+        # Col 4: Thumbnail Slots (replaces QProgressBar)
+        output_count = task_data.get('output_count', 4) if task_data else 4
+        thumbnails = task_data.get('thumbnails', []) if task_data else []
+        output_files = task_data.get('output_files', []) if task_data else []
+        
+        thumb_container = QWidget()
+        thumb_container.setStyleSheet("border: none; background: transparent;")
+        thumb_layout = QHBoxLayout(thumb_container)
+        thumb_layout.setContentsMargins(0, 0, 0, 0)
+        thumb_layout.setSpacing(4)
+        
+        thumb_slots = []
+        for vi in range(output_count):
+            slot = self._create_thumb_slot(
+                vi, item.status, item.progress,
+                thumbnails[vi] if vi < len(thumbnails) else None,
+                output_files[vi] if vi < len(output_files) else None
+            )
+            thumb_layout.addWidget(slot)
+            thumb_slots.append(slot)
+        
+        widget.thumb_slots = thumb_slots
+        widget.thumb_container = thumb_container
+        layout.addWidget(thumb_container)
         
         # Col 5: Status badge — 80px
         status_label = QLabel(f"{cfg['icon']} {item.status.upper()}")
@@ -519,7 +539,7 @@ class TabQueue(QWidget):
             font-weight: bold;
             border: none;
         """)
-        widget.status_label = status_label  # Store reference for live updates
+        widget.status_label = status_label
         layout.addWidget(status_label)
         
         # Col 6: Actions — 70px
@@ -546,6 +566,126 @@ class TabQueue(QWidget):
         layout.addWidget(actions_widget)
         
         return widget
+    
+    def _create_thumb_slot(self, index: int, task_status: str, progress: int,
+                           thumb_path: str = None, video_path: str = None) -> QLabel:
+        """Create a single thumbnail slot with state-based styling."""
+        slot = QLabel()
+        slot.setFixedSize(40, 40)
+        slot.setAlignment(Qt.AlignCenter)
+        
+        has_thumb = thumb_path and Path(thumb_path).exists()
+        is_active = task_status in ('running', 'waiting_poll')
+        is_failed = task_status in ('failed', 'cancelled')
+        is_done = task_status == 'completed'
+        
+        if has_thumb:
+            # ✅ Downloaded — show thumbnail with green border
+            pixmap = QPixmap(thumb_path)
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio,
+                                       Qt.TransformationMode.SmoothTransformation)
+                slot.setPixmap(scaled)
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    border: 2px solid {Theme.GREEN};
+                    border-radius: 4px;
+                    background-color: {Theme.BASE};
+                    padding: 1px;
+                }}
+                QLabel:hover {{
+                    border-color: {Theme.LAVENDER};
+                }}
+            """)
+            if video_path and Path(video_path).exists():
+                slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                slot.setToolTip(f"Click to open: {Path(video_path).name}")
+                slot.mousePressEvent = lambda e, p=video_path: self._open_video(p)
+        elif is_failed:
+            # ❌ Failed — red border with X
+            slot.setText("❌")
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.RED_BG};
+                    border: 2px solid {Theme.RED};
+                    border-radius: 4px;
+                    color: {Theme.RED};
+                    font-size: 14px;
+                }}
+            """)
+        elif is_active:
+            # 🔄 Generating — gradient progress fill
+            pct = max(0, min(100, progress)) / 100.0
+            slot.setText(f"{progress}%")
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: qlineargradient(
+                        x1:0, y1:1, x2:0, y2:0,
+                        stop:0 #1E3A5E,
+                        stop:{pct:.2f} {Theme.BLUE},
+                        stop:{min(pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
+                        stop:1 {Theme.SURFACE0}
+                    );
+                    border: 1px solid {Theme.BLUE};
+                    border-radius: 4px;
+                    color: {Theme.TEXT};
+                    font-size: 10px;
+                    font-weight: bold;
+                }}
+            """)
+        else:
+            # ⏳ Pending — dark placeholder
+            slot.setText("⏳")
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.SURFACE0};
+                    border: 1px solid {Theme.BORDER};
+                    border-radius: 4px;
+                    color: {Theme.OVERLAY0};
+                    font-size: 14px;
+                }}
+            """)
+        
+        return slot
+    
+    def _open_video(self, video_path: str):
+        """Open video file with OS default player."""
+        try:
+            if QDesktopServices:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(video_path))
+            else:
+                import os
+                os.startfile(video_path)
+        except Exception as e:
+            print(f"[Queue] Failed to open video: {e}")
+    
+    def _update_thumb_slots(self, widget: QFrame, task_data: dict):
+        """Update thumbnail slots on an existing row widget during refresh."""
+        if not hasattr(widget, 'thumb_slots'):
+            return
+        
+        status = task_data.get('status', 'pending')
+        progress = task_data.get('progress', 0)
+        thumbnails = task_data.get('thumbnails', [])
+        output_files = task_data.get('output_files', [])
+        
+        for vi, slot in enumerate(widget.thumb_slots):
+            thumb = thumbnails[vi] if vi < len(thumbnails) else None
+            video = output_files[vi] if vi < len(output_files) else None
+            new_slot = self._create_thumb_slot(vi, status, progress, thumb, video)
+            # Copy styling and content from new slot
+            slot.setStyleSheet(new_slot.styleSheet())
+            if new_slot.pixmap() and not new_slot.pixmap().isNull():
+                slot.setPixmap(new_slot.pixmap())
+                slot.setText('')
+            else:
+                slot.setPixmap(QPixmap())
+                slot.setText(new_slot.text())
+            slot.setToolTip(new_slot.toolTip())
+            if video and Path(video).exists():
+                slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                slot.mousePressEvent = lambda e, p=video: self._open_video(p)
+            new_slot.deleteLater()
     
     def _create_group_widget(self, group_data: dict, expanded: bool = True) -> QWidget:
         """Create a collapsible group widget with header + child prompt rows."""
@@ -650,7 +790,7 @@ class TabQueue(QWidget):
                 status=td['status'], progress=td['progress'],
                 mode=td.get('mode', 'T2V'),
             )
-            row = self._create_queue_item_widget(item)
+            row = self._create_queue_item_widget(item, task_data=td)
             content_layout.addWidget(row)
             # Register for progress updates
             self._task_widgets[str(td['id'])] = row
@@ -718,7 +858,7 @@ class TabQueue(QWidget):
                 status=td['status'], progress=td['progress'],
                 mode=td.get('mode', 'T2V'),
             )
-            row = self._create_queue_item_widget(item)
+            row = self._create_queue_item_widget(item, task_data=td)
             layout.addWidget(row)
             # Register for progress updates
             self._task_widgets[str(td['id'])] = row

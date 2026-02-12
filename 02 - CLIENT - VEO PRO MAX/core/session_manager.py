@@ -138,6 +138,7 @@ class SessionManager:
                     "retry_attempts": task.retry_attempts,
                     "operation_name": task.operation_name,
                     "output_uris": list(task.output_uris),
+                    "thumbnail_paths": list(getattr(task, 'thumbnail_paths', [])),
                     "assigned_account": task.assigned_account,
                     "project_id": task.project_id,
                     "created_at": task.created_at.isoformat() if hasattr(task.created_at, 'isoformat') else None,

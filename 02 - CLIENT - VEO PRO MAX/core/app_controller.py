@@ -1303,6 +1303,9 @@ class AppController:
                         "has_continuation": t.parent_task_id is not None,
                         "parent_id": t.parent_task_id,
                         "error": t.error,
+                        "output_count": t.output_count,
+                        "output_files": list(t.output_uris) if t.output_uris else [],
+                        "thumbnails": list(t.thumbnail_paths) if hasattr(t, 'thumbnail_paths') else [],
                     }
                     for i, t in enumerate(group.tasks)
                 ],

@@ -13,13 +13,14 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QFrame, QStatusBar, QSizePolicy
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, Signal
 from PySide6.QtGui import QFont, QShortcut, QKeySequence
 
 # Add project root to path if needed
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.theme import Theme
+from ui.components.toast import ToastManager
 
 # Import PySide6 tabs
 from ui.tabs.tab_t2v import TabT2V
@@ -52,6 +53,9 @@ class MainWindow(QMainWindow):
     │ 📊 STATUS BAR (30px height)                                                  │
     └──────────────────────────────────────────────────────────────────────────────┘
     """
+    
+    # Thread-safe toast signal: (message, level, duration)
+    _toast_signal = Signal(str, str, int)
     
     def __init__(
         self,
@@ -141,6 +145,10 @@ class MainWindow(QMainWindow):
         
         # Status bar
         self._create_status_bar()
+        
+        # Toast notification manager
+        self._toast_manager = ToastManager(self)
+        self._toast_signal.connect(self._show_toast_on_main_thread)
     
     def _create_status_bar(self):
         """Create status bar at bottom."""
@@ -210,7 +218,7 @@ class MainWindow(QMainWindow):
                 self.controller._push_session_data()
             
             self._dev_console_visible = True
-            self.set_status("DevConsole visible (Ctrl+Shift+D to hide)")
+            self.show_toast("DevConsole visible (Ctrl+Shift+D to hide)", "info")
     
     def _connect_controller(self):
         """Connect controller callbacks for UI updates."""
@@ -255,27 +263,34 @@ class MainWindow(QMainWindow):
     
     @Slot(str, int)
     def _on_progress(self, task_id: str, progress: int, status_text: str = ""):
-        """Handle task progress update."""
+        """Handle task progress update — status bar + forward to queue tab."""
         if "progress" in self._status_widgets:
             if status_text:
                 self._status_widgets["progress"].setText(f"📊 {status_text} {progress}%")
             else:
                 self._status_widgets["progress"].setText(f"📊 {progress}%")
+        
+        # Forward to queue tab for thumbnail slot gradient updates
+        queue_tab = self.tab_instances.get('queue')
+        if queue_tab and hasattr(queue_tab, '_on_progress_update_from_thread'):
+            queue_tab._on_progress_update_from_thread(task_id, progress, status_text)
     
     @Slot(object)
     def _on_task_completed(self, task):
         """Handle task completion."""
         self.set_status(f"✅ Task completed: {task.id if hasattr(task, 'id') else task}")
+        self.show_toast(f"Task completed: {task.id if hasattr(task, 'id') else task}", "success")
     
     @Slot(object, str)
     def _on_task_failed(self, task, error: str):
         """Handle task failure."""
         self.set_status(f"❌ Task failed: {error}")
+        self.show_toast(f"Task failed: {error[:60]}", "error")
     
     @Slot()
     def _on_clear_failed(self):
         """Handle clear failed tasks."""
-        self.set_status("Cleared failed tasks")
+        self.show_toast("Cleared failed tasks", "info")
     
     @Slot(dict)
     def _on_settings_changed(self, settings: dict):
@@ -286,7 +301,7 @@ class MainWindow(QMainWindow):
                 if hasattr(self.settings, key):
                     setattr(self.settings, key, value)
             self.settings.save()
-            self.set_status("Settings updated")
+            self.show_toast("Settings updated", "success")
     
     @Slot(dict)
     def _update_queue_status(self, status: dict):
@@ -316,8 +331,26 @@ class MainWindow(QMainWindow):
         try:
             self.status_label.setText(message)
         except RuntimeError:
-            # Widget may have been destroyed during shutdown
             pass
+    
+    def show_toast(self, message: str, level: str = "info", duration: int = 4000):
+        """Show a floating toast notification (thread-safe).
+        
+        Emits signal to ensure toast is always created on the main thread.
+        QTimer and QPropertyAnimation require the main event loop.
+        """
+        try:
+            self._toast_signal.emit(message, level, duration)
+        except Exception as e:
+            print(f"[Toast] Failed to emit signal: {e}")
+    
+    @Slot(str, str, int)
+    def _show_toast_on_main_thread(self, message: str, level: str, duration: int):
+        """Actually create and show the toast (runs on main thread via signal)."""
+        try:
+            self._toast_manager.show_toast(message, level, duration)
+        except Exception as e:
+            print(f"[Toast] Failed: {e}")
     
     # ── Session Persistence ─────────────────────────────────────
     

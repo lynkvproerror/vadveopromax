@@ -74,6 +74,7 @@ class Task:
     # Results
     operation_name: Optional[str] = None
     output_uris: List[str] = field(default_factory=list)
+    thumbnail_paths: List[str] = field(default_factory=list)  # Local paths to cached thumbnails
     
     # Metadata
     created_at: datetime = field(default_factory=datetime.now)
@@ -543,6 +544,7 @@ class Dispatcher:
                     retry_attempts=td.get("retry_attempts", 0),
                     operation_name=td.get("operation_name"),
                     output_uris=td.get("output_uris", []),
+                    thumbnail_paths=td.get("thumbnail_paths", []),
                     assigned_account=td.get("assigned_account"),
                     project_id=td.get("project_id"),
                 )

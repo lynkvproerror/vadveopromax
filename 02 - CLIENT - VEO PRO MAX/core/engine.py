@@ -929,6 +929,24 @@ class Engine:
                                     f.write(chunk)
                             local_paths.append(str(filepath))
                             log.info(f"Downloaded: {filepath.name} → {output_path}")
+                            
+                            # Generate thumbnail (first frame, keep aspect ratio)
+                            try:
+                                import subprocess
+                                thumb_dir = Path.home() / ".veoauto" / "cache" / "thumbnails"
+                                thumb_dir.mkdir(parents=True, exist_ok=True)
+                                thumb_path = thumb_dir / f"{task.id}_{i}.jpg"
+                                subprocess.run(
+                                    ['ffmpeg', '-y', '-i', str(filepath),
+                                     '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                                     str(thumb_path)],
+                                    capture_output=True, timeout=10
+                                )
+                                if thumb_path.exists():
+                                    task.thumbnail_paths.append(str(thumb_path))
+                                    log.info(f"Thumbnail: {thumb_path.name}")
+                            except Exception as te:
+                                log.warning(f"Thumbnail gen failed: {te}")
                         else:
                             log.error(f"Download failed: HTTP {resp.status} for {uri[:80]}")
                         
