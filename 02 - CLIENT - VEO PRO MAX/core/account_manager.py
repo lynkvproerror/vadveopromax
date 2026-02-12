@@ -76,7 +76,14 @@ class AccountManager:
         self._token_cache = TokenCache()
         
         # Paygate tier — auto-detected from GET /v1/credits
-        self._paygate_tier: str = "PAYGATE_TIER_NOT_PAID"
+        self._paygate_tier: str = "PAYGATE_TIER_TWO"
+        
+        # ProfilesController ref — set by AppController for debug browser sharing
+        self._profiles_controller = None
+    
+    def set_profiles_controller(self, profiles_controller):
+        """Set ProfilesController reference for debug browser sharing."""
+        self._profiles_controller = profiles_controller
     
     @property
     def session(self) -> AccountSession:
@@ -223,6 +230,17 @@ class AccountManager:
         # All expired — caller must await refresh_recaptcha()
         return None
     
+    def invalidate_recaptcha(self):
+        """Invalidate current reCAPTCHA token (both cache and session).
+        
+        reCAPTCHA tokens are single-use: after any API call (success or failure),
+        the token is consumed by Google's server. Call this before retry to force
+        a fresh token on the next attempt.
+        """
+        self._token_cache.invalidate()
+        self._session.recaptcha_token = None
+        log.debug(f"[{self.email}] reCAPTCHA token invalidated (single-use consumed)")
+
     async def refresh_recaptcha(self) -> Optional[str]:
         """Get fresh reCAPTCHA token from alive browser.
         
@@ -256,6 +274,10 @@ class AccountManager:
         """Start persistent browser if not running.
         
         Called by MultiAccountManager.startup() or lazily before first generate.
+        
+        Priority:
+        1. If debug browser is already open → attach to its page (no new browser)
+        2. Otherwise → launch headless browser with persistent profile
         """
         if self._browser_session and self._browser_session.is_ready:
             return
@@ -265,8 +287,72 @@ class AccountManager:
             log.warning(f"[{self.email}] No profile_path set, cannot start browser")
             return
         
+        # Priority 1: Try to attach to existing debug browser page
+        # This avoids Chrome profile lock conflict (only 1 process per user-data-dir)
+        if self._profiles_controller:
+            # Wait for debug browser to be ready (may be starting on background thread)
+            # Without this wait, we fall through to Priority 2 which crashes
+            # because it tries to launch headless Chrome on the same locked profile dir
+            debug_page = self._profiles_controller.get_debug_browser_page(self.email)
+            if not debug_page:
+                # Check if debug browser is being opened (entry exists but page not ready)
+                entry = self._profiles_controller._debug_browsers.get(self.email) if hasattr(self._profiles_controller, '_debug_browsers') else None
+                if entry:
+                    log.info(f"[{self.email}] ⏳ Debug browser starting, waiting...")
+                    for _ in range(60):  # Wait up to 30s
+                        await asyncio.sleep(0.5)
+                        debug_page = self._profiles_controller.get_debug_browser_page(self.email)
+                        if debug_page:
+                            break
+            
+            if debug_page:
+                log.info(f"[{self.email}] 🔗 Attaching to debug browser (shared profile)")
+                self._browser_session = RecaptchaBrowserSession(profile_path)
+                self._browser_session.attach_to_sync_page(self._profiles_controller, self.email)
+                
+                # Bug 10 fix: Capture x-browser-* headers from debug browser
+                # RecaptchaBrowserSession._SyncPageAsyncWrapper.route() is a no-op,
+                # so captured_headers is always empty. Read directly from
+                # profiles_controller which has real request interception.
+                headers = self._profiles_controller.get_debug_browser_headers(self.email)
+                if headers:
+                    self._session.update_browser_headers(
+                        browser_validation=headers.get("x-browser-validation", ""),
+                        client_data=headers.get("x-client-data", ""),
+                        browser_channel=headers.get("x-browser-channel", "stable"),
+                        browser_copyright=headers.get("x-browser-copyright", ""),
+                        browser_year=headers.get("x-browser-year", ""),
+                    )
+                    log.info(f"[{self.email}] Browser headers captured from debug browser: {list(headers.keys())}")
+                else:
+                    log.warning(f"[{self.email}] ⚠️ Debug browser attached but no x-browser-* headers captured")
+                
+                # Extract access_token from debug browser page
+                if not self._session.access_token:
+                    access_token, email = await self._browser_session.extract_access_token()
+                    if access_token:
+                        self._session.access_token = access_token
+                        self._session.token_expires = datetime.now() + timedelta(hours=1)
+                        log.info(f"[{self.email}] ✅ Access token extracted from debug browser ({len(access_token)} chars)")
+                    else:
+                        log.warning(f"[{self.email}] ⚠️ Could not extract access_token from debug browser")
+                return
+        
+        # Priority 2: Launch own headless browser (no debug browser available)
         self._browser_session = RecaptchaBrowserSession(profile_path)
         await self._browser_session.ensure_ready(headless=headless)
+        
+        # Extract access_token from __NEXT_DATA__ (page is on VEO)
+        # ChromeProfile does NOT store access_token, so we must get it live
+        if not self._session.access_token:
+            access_token, email = await self._browser_session.extract_access_token()
+            if access_token:
+                self._session.access_token = access_token
+                # Set expiry to 1 hour from now (Google OAuth2 default)
+                self._session.token_expires = datetime.now() + timedelta(hours=1)
+                log.info(f"[{self.email}] ✅ Access token extracted from browser ({len(access_token)} chars)")
+            else:
+                log.warning(f"[{self.email}] ⚠️ Could not extract access_token from browser page")
         
         # Capture initial headers — ALL 5 per Protocol Analysis §1.4
         headers = self._browser_session.captured_headers
@@ -280,6 +366,68 @@ class AccountManager:
             )
             log.info(f"[{self.email}] Browser headers captured: {list(headers.keys())}")
     
+    async def restart_browser(self):
+        """Kill Chrome process completely and relaunch for fresh session.
+        
+        Full restart sequence:
+        1. Close session wrapper (RecaptchaBrowserSession)
+        2. Kill Chrome process via profiles_controller
+        3. Wait for process to fully exit
+        4. Relaunch Chrome via profiles_controller
+        5. Wait for debug browser to be ready
+        6. Re-attach via ensure_browser() (re-extracts tokens/headers)
+        
+        Returns:
+            True if restart successful, False otherwise
+        """
+        email = self.email
+        log.info(f"[{email}] 🔄 Full browser restart: killing Chrome process...")
+        
+        # Step 1: Close session wrapper
+        if self._browser_session:
+            try:
+                await self._browser_session.close()
+            except Exception:
+                pass
+            self._browser_session = None
+        
+        # Step 2: Kill Chrome process via profiles_controller
+        if self._profiles_controller:
+            try:
+                self._profiles_controller.kill_debug_browser(email)
+                log.info(f"[{email}] Chrome kill signal sent")
+            except Exception as e:
+                log.error(f"[{email}] kill_debug_browser error: {e}")
+        
+        # Step 3: Wait for Chrome to fully exit
+        await asyncio.sleep(3)
+        
+        # Step 4: Invalidate cached tokens (force fresh extraction)
+        self._session.access_token = None
+        self._session.token_expires = None
+        self._session.recaptcha_token = None
+        self._token_cache = TokenCache()
+        
+        # Step 5: Relaunch Chrome via profiles_controller
+        if self._profiles_controller:
+            try:
+                self._profiles_controller.open_browser_for_debug(email)
+                log.info(f"[{email}] Chrome relaunch signal sent, waiting for ready...")
+                # Wait for debug browser to initialize
+                await asyncio.sleep(5)
+            except Exception as e:
+                log.error(f"[{email}] open_browser_for_debug error: {e}")
+                return False
+        
+        # Step 6: Re-attach via ensure_browser (extracts fresh token + headers)
+        try:
+            await self.ensure_browser(headless=True)
+            log.info(f"[{email}] ✅ Browser restart complete — fresh PID, tokens, reCAPTCHA")
+            return True
+        except Exception as e:
+            log.error(f"[{email}] ❌ ensure_browser after restart failed: {e}")
+            return False
+
     async def close_browser(self):
         """Close persistent browser session."""
         if self._browser_session:
@@ -296,8 +444,14 @@ class AccountManager:
     
     def get_browser_headers(self) -> dict:
         """Get x-browser-* headers from persistent browser."""
+        # Try browser session first (works for Priority 2: own headless browser)
         if self._browser_session:
-            return self._browser_session.captured_headers
+            headers = self._browser_session.captured_headers
+            if headers:
+                return headers
+        # Fallback to profiles_controller (for Priority 1: debug browser)
+        if self._profiles_controller:
+            return self._profiles_controller.get_debug_browser_headers(self.email)
         return {}
     
     def update_access_token(self, token: str, expires_in: int = TokenLifetime.ACCESS_TOKEN):

@@ -190,6 +190,9 @@ class MainWindow(QMainWindow):
                     self.tabview.removeTab(i)
                     break
             self._dev_console_visible = False
+            # Disconnect from controller
+            if self.controller and hasattr(self.controller, '_dev_console'):
+                self.controller._dev_console = None
             self.set_status("DevConsole hidden")
         else:
             # Add dev console tab (use actual migrated TabDevConsole)
@@ -198,6 +201,13 @@ class MainWindow(QMainWindow):
             self.tabview.addTab(dev_widget, "🛠️ Dev Console")
             self.tabview.setCurrentWidget(dev_widget)
             self.tab_instances['devconsole'] = dev_widget
+            
+            # Wire to controller so it can push JSON/queue data
+            if self.controller and hasattr(self.controller, '_dev_console'):
+                self.controller._dev_console = dev_widget
+                # Immediately push current browser status + session data
+                self.controller._push_browser_status()
+                self.controller._push_session_data()
             
             self._dev_console_visible = True
             self.set_status("DevConsole visible (Ctrl+Shift+D to hide)")
@@ -244,10 +254,13 @@ class MainWindow(QMainWindow):
             self.tab_instances['settings'].settings_changed.connect(self._on_settings_changed)
     
     @Slot(str, int)
-    def _on_progress(self, task_id: str, progress: int):
+    def _on_progress(self, task_id: str, progress: int, status_text: str = ""):
         """Handle task progress update."""
         if "progress" in self._status_widgets:
-            self._status_widgets["progress"].setText(f"📊 {progress}%")
+            if status_text:
+                self._status_widgets["progress"].setText(f"📊 {status_text} {progress}%")
+            else:
+                self._status_widgets["progress"].setText(f"📊 {progress}%")
     
     @Slot(object)
     def _on_task_completed(self, task):

@@ -144,6 +144,10 @@ class TabSettings(QWidget):
         worker_section = self._create_worker_section()
         self.content_layout.addWidget(worker_section)
         
+        # === SESSION & DATA SECTION ===
+        session_section = self._create_session_section()
+        self.content_layout.addWidget(session_section)
+        
         # === UI SECTION ===
         ui_section = self._create_ui_section()
         self.content_layout.addWidget(ui_section)
@@ -252,7 +256,7 @@ class TabSettings(QWidget):
         
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
-        self.profiles_table.setColumnWidth(3, 80)   # Type - emoji only
+        self.profiles_table.setColumnWidth(3, 120)   # Type - browser toggle button
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status - "🟢 Ready" needs more space
@@ -372,16 +376,18 @@ class TabSettings(QWidget):
             email_item.setFlags(email_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.profiles_table.setItem(i, 2, email_item)
             
-            # Type (col 3) - Clickable 🌐 button to open debug browser
-            type_btn = QPushButton("🌐")
-            type_btn.setToolTip("Click to open browser with this profile for debugging")
-            type_btn.setFixedSize(40, 30)
+            # Type (col 3) - Toggle 🌐/👁️ button to show/hide browser
+            type_btn = QPushButton("🌐 Open")
+            type_btn.setToolTip("Click to open browser with this profile")
+            type_btn.setFixedSize(75, 34)
             type_btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {Theme.SURFACE2};
                     border: 1px solid {Theme.OVERLAY0};
-                    border-radius: 4px;
-                    font-size: 16px;
+                    border-radius: 6px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    padding: 2px 8px;
                 }}
                 QPushButton:hover {{
                     background-color: {Theme.BLUE};
@@ -884,6 +890,146 @@ class TabSettings(QWidget):
         
         return section
     
+    def _create_session_section(self) -> QWidget:
+        """Create Session & Data Management section."""
+        section, layout = self._create_section("💾 Session & Data")
+        
+        # Load saved values
+        saved_restore_queue = False
+        saved_restore_tabs = True
+        if self.controller and hasattr(self.controller, 'settings') and self.controller.settings:
+            s = self.controller.settings
+            saved_restore_queue = getattr(s, 'restore_queue_on_startup', False)
+            saved_restore_tabs = getattr(s, 'restore_tabs_on_startup', True)
+        
+        # Toggle: Restore Queue on Startup
+        self.restore_queue_switch = self._create_enable_row(
+            "Restore Queue on Startup:", checked=saved_restore_queue
+        )
+        layout.addLayout(self.restore_queue_switch._row_layout)
+        
+        # Description for restore queue
+        queue_desc = QLabel("⚠️ When ON, tasks from previous session are reloaded. Turn OFF to prevent stale/broken tasks.")
+        queue_desc.setWordWrap(True)
+        queue_desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px; margin-bottom: 4px;")
+        layout.addWidget(queue_desc)
+        
+        # Toggle: Restore Tabs on Startup
+        self.restore_tabs_switch = self._create_enable_row(
+            "Restore Tabs on Startup:", checked=saved_restore_tabs
+        )
+        layout.addLayout(self.restore_tabs_switch._row_layout)
+        
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"background-color: {Theme.BORDER}; max-height: 1px; margin: 8px 0;")
+        layout.addWidget(sep)
+        
+        # Cache stats label
+        cache_stats = self._get_cache_stats_text()
+        self.cache_stats_label = QLabel(cache_stats)
+        self.cache_stats_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        layout.addWidget(self.cache_stats_label)
+        
+        # Action buttons row
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
+        
+        # Clear Queue button (RED)
+        clear_queue_btn = QPushButton("🗑️ Clear Queue")
+        clear_queue_btn.setFixedHeight(32)
+        clear_queue_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.RED};
+                color: {Theme.CRUST};
+                border-radius: 6px;
+                padding: 0 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #EBA0AC;
+            }}
+        """)
+        clear_queue_btn.setToolTip("Clear ALL tasks from queue + delete session file")
+        clear_queue_btn.clicked.connect(self._on_clear_queue)
+        btn_layout.addWidget(clear_queue_btn)
+        
+        # Clear Cache button (YELLOW)
+        clear_cache_btn = QPushButton("🧹 Clear Cache")
+        clear_cache_btn.setFixedHeight(32)
+        clear_cache_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.YELLOW};
+                color: {Theme.CRUST};
+                border-radius: 6px;
+                padding: 0 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #FCE8C0;
+            }}
+        """)
+        clear_cache_btn.setToolTip("Delete cached files (downloaded videos, temp data)")
+        clear_cache_btn.clicked.connect(self._on_clear_cache)
+        btn_layout.addWidget(clear_cache_btn)
+        
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        return section
+    
+    def _get_cache_stats_text(self) -> str:
+        """Get cache statistics as display text."""
+        try:
+            if self.controller and hasattr(self.controller, 'get_cache_stats'):
+                stats = self.controller.get_cache_stats()
+                size_mb = stats.get("size_mb", 0)
+                file_count = stats.get("file_count", 0)
+                return f"📊 Cache: {size_mb:.1f} MB ({file_count} files)"
+        except Exception:
+            pass
+        return "📊 Cache: N/A"
+    
+    def _on_clear_queue(self):
+        """Clear all queue tasks with confirmation."""
+        reply = QMessageBox.question(
+            self, "Clear Queue",
+            "⚠️ This will remove ALL tasks from the queue\n"
+            "and delete the session file.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.controller and hasattr(self.controller, 'clear_queue'):
+                count = self.controller.clear_queue()
+                QMessageBox.information(
+                    self, "Queue Cleared",
+                    f"✅ {count} tasks removed.\nSession file deleted."
+                )
+    
+    def _on_clear_cache(self):
+        """Clear cache files with confirmation."""
+        reply = QMessageBox.question(
+            self, "Clear Cache",
+            "🧹 This will delete ALL cached files.\n\n"
+            "Are you sure?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.controller and hasattr(self.controller, 'clear_cache'):
+                result = self.controller.clear_cache()
+                deleted = result.get("deleted_count", 0)
+                freed = result.get("freed_mb", 0)
+                QMessageBox.information(
+                    self, "Cache Cleared",
+                    f"✅ {deleted} files removed ({freed:.1f} MB freed)."
+                )
+                # Refresh cache stats
+                self.cache_stats_label.setText(self._get_cache_stats_text())
+
     def _create_ui_section(self) -> QWidget:
         """Create UI section - matches CTK lines 301-355."""
         section, layout = self._create_section("🎨 UI")
@@ -1006,6 +1152,9 @@ class TabSettings(QWidget):
         self.enhancer_switch.setToggled(False)
         self.enhancer_quality.setCurrentText("Medium")
         self.enhancer_scale.setCurrentText("1x (enhance only)")
+        # Reset session & data to defaults
+        self.restore_queue_switch.setToggled(False)
+        self.restore_tabs_switch.setToggled(True)
     
     def _on_export(self):
         """Export config to file."""
@@ -1055,6 +1204,11 @@ class TabSettings(QWidget):
             self.anti_detect_delay_min.setValue(float(settings["anti_detect_delay_min"]))
         if "anti_detect_delay_max" in settings:
             self.anti_detect_delay_max.setValue(float(settings["anti_detect_delay_max"]))
+        # Session & Data
+        if "restore_queue_on_startup" in settings:
+            self.restore_queue_switch.setToggled(bool(settings["restore_queue_on_startup"]))
+        if "restore_tabs_on_startup" in settings:
+            self.restore_tabs_switch.setToggled(bool(settings["restore_tabs_on_startup"]))
     
     def _create_setting_row(self, parent_layout, label: str, options: list) -> QComboBox:
         """Create a setting row with dropdown - matches CTK lines 443-465."""
@@ -1077,22 +1231,135 @@ class TabSettings(QWidget):
         return combo
     
     def _on_open_debug_browser(self, email: str):
-        """Open browser with saved profile for manual debugging."""
-        import threading
+        """Toggle browser state for an account (3-state cycle).
         
-        print(f"[Settings] Opening debug browser for {email}...")
+        - closed  → open (visible)
+        - visible → hide (minimized, still running)
+        - hidden  → show (restore window)
+        """
+        state = self.profiles_controller.get_debug_browser_state(email)
         
-        def open_browser():
-            success = self.profiles_controller.open_browser_for_debug(email)
+        if state == "closed":
+            # Not running → Open browser
+            print(f"[Settings] Opening browser for {email}...")
+            self._update_browser_button_state(email, "visible")
+            
+            def on_state_change(changed_email, new_state):
+                """Called by ProfilesController when browser state changes."""
+                from PySide6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(
+                    self, "_refresh_browser_buttons",
+                    Qt.ConnectionType.QueuedConnection
+                )
+            
+            success = self.profiles_controller.open_browser_for_debug(
+                email, on_state_change=on_state_change
+            )
             if not success:
+                self._update_browser_button_state(email, "closed")
                 from PySide6.QtCore import QMetaObject, Qt
                 QMetaObject.invokeMethod(
                     self, "_on_debug_browser_failed",
                     Qt.ConnectionType.QueuedConnection
                 )
+            self._push_dev_console_status()
+            
+        elif state == "visible":
+            # Running & visible → Hide (minimize, keep running)
+            print(f"[Settings] Hiding browser for {email}...")
+            self.profiles_controller.hide_debug_browser(email)
+            self._update_browser_button_state(email, "hidden")
+            self._push_dev_console_status()
+            
+        elif state == "hidden":
+            # Running & hidden → Show (restore window)
+            print(f"[Settings] Showing browser for {email}...")
+            self.profiles_controller.show_debug_browser(email)
+            self._update_browser_button_state(email, "visible")
+            self._push_dev_console_status()
+    
+    def _update_browser_button_state(self, email: str, state: str):
+        """Update button appearance for 3 states: visible/hidden/closed."""
+        for row in range(self.profiles_table.rowCount()):
+            email_item = self.profiles_table.item(row, 2)
+            if email_item and email in email_item.text():
+                btn = self.profiles_table.cellWidget(row, 3)
+                if btn and isinstance(btn, QPushButton):
+                    if state == "visible":
+                        btn.setText("👁️ Visible")
+                        btn.setToolTip("Browser is VISIBLE — click to HIDE")
+                        btn.setStyleSheet(f"""
+                            QPushButton {{
+                                background-color: {Theme.GREEN};
+                                border: 1px solid {Theme.GREEN};
+                                border-radius: 6px;
+                                font-size: 13px;
+                                font-weight: bold;
+                            }}
+                            QPushButton:hover {{
+                                background-color: {Theme.SAPPHIRE};
+                            }}
+                        """)
+                    elif state == "hidden":
+                        btn.setText("🔇 Hidden")
+                        btn.setToolTip("Browser is HIDDEN (running in background) — click to SHOW")
+                        btn.setStyleSheet(f"""
+                            QPushButton {{
+                                background-color: {Theme.YELLOW};
+                                border: 1px solid {Theme.YELLOW};
+                                border-radius: 6px;
+                                font-size: 13px;
+                                font-weight: bold;
+                                color: {Theme.CRUST};
+                            }}
+                            QPushButton:hover {{
+                                background-color: {Theme.PEACH};
+                            }}
+                        """)
+                    else:  # closed
+                        btn.setText("🌐 Open")
+                        btn.setToolTip("Click to open browser with this profile")
+                        btn.setStyleSheet(f"""
+                            QPushButton {{
+                                background-color: {Theme.SURFACE2};
+                                border: 1px solid {Theme.OVERLAY0};
+                                border-radius: 6px;
+                                font-size: 13px;
+                                font-weight: bold;
+                            }}
+                            QPushButton:hover {{
+                                background-color: {Theme.BLUE};
+                                border-color: {Theme.BLUE};
+                            }}
+                        """)
+                break
+    
+    @Slot()
+    def _refresh_browser_buttons(self):
+        """Refresh all browser toggle buttons from actual ProfilesController state.
         
-        thread = threading.Thread(target=open_browser, daemon=True)
-        thread.start()
+        Called from main thread via QMetaObject when a browser state changes.
+        """
+        for row in range(self.profiles_table.rowCount()):
+            email_item = self.profiles_table.item(row, 2)
+            if not email_item:
+                continue
+            # Extract raw email (remove emoji prefix like 🔑 or 🔓)
+            text = email_item.text()
+            parts = text.split(' ', 1)
+            email = parts[-1].strip() if len(parts) > 1 else text.strip()
+            
+            state = self.profiles_controller.get_debug_browser_state(email)
+            self._update_browser_button_state(email, state)
+        
+        self._push_dev_console_status()
+    
+    def _push_dev_console_status(self):
+        """Push browser status and session data to DevConsole via controller."""
+        if self.controller and hasattr(self.controller, '_push_browser_status'):
+            self.controller._push_browser_status()
+        if self.controller and hasattr(self.controller, '_push_session_data'):
+            self.controller._push_session_data()
     
     @Slot()
     def _on_debug_browser_failed(self):
@@ -1488,6 +1755,9 @@ class TabSettings(QWidget):
             "anti_detect_enabled": self.anti_detect_switch.isToggled(),
             "anti_detect_delay_min": self.anti_detect_delay_min.value(),
             "anti_detect_delay_max": self.anti_detect_delay_max.value(),
+            # Session & Data
+            "restore_queue_on_startup": self.restore_queue_switch.isToggled(),
+            "restore_tabs_on_startup": self.restore_tabs_switch.isToggled(),
             # Font Size (new per docs)
             "font_size": self.font_size_menu.currentText(),
         }

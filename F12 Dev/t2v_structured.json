@@ -1,0 +1,52 @@
+[
+  {
+    "file": "Text to video 1.har",
+    "auth_header": "NOT FOUND",
+    "cc_keys": [
+      "projectId",
+      "recaptchaContext",
+      "sessionId",
+      "tool",
+      "userPaygateTier"
+    ],
+    "cc_tool": "PINHOLE",
+    "cc_paygate": "PAYGATE_TIER_TWO",
+    "cc_has_recaptcha": true,
+    "req_count": 1,
+    "r0_keys": [
+      "aspectRatio",
+      "metadata",
+      "seed",
+      "textInput",
+      "videoModelKey"
+    ],
+    "r0_aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+    "r0_videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+    "r0_seed": 12546
+  },
+  {
+    "file": "Text to video 2.har",
+    "auth_header": "NOT FOUND",
+    "cc_keys": [
+      "projectId",
+      "recaptchaContext",
+      "sessionId",
+      "tool",
+      "userPaygateTier"
+    ],
+    "cc_tool": "PINHOLE",
+    "cc_paygate": "PAYGATE_TIER_TWO",
+    "cc_has_recaptcha": true,
+    "req_count": 1,
+    "r0_keys": [
+      "aspectRatio",
+      "metadata",
+      "seed",
+      "textInput",
+      "videoModelKey"
+    ],
+    "r0_aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+    "r0_videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+    "r0_seed": 12546
+  }
+]

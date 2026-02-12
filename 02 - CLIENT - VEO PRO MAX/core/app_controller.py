@@ -10,6 +10,7 @@ from pathlib import Path
 import asyncio
 import threading
 import logging
+import json
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -36,7 +37,7 @@ from services.permissions import PermissionsSystem, Role, Feature
 
 # Config
 from config.settings import AppSettings
-from config.constants import WorkflowType
+from config.constants import WorkflowType, resolve_model_key
 
 
 def _wf_display(wt) -> str:
@@ -108,9 +109,14 @@ class AppController:
         self._on_account_changed: Optional[Callable[[str], None]] = None
         self._on_status_changed: Optional[Callable[[str], None]] = None
         
+        # DevConsole reference (set by UI via set_dev_console)
+        self._dev_console = None
+        self._settings = None  # AppSettings, set via set_settings()
+        
         # Async event loop
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._loop_thread: Optional[threading.Thread] = None
+        self._engine_future = None  # Track engine.start() Future for clean shutdown
         
         # ProfilesController reference (set by UI via set_profiles_controller)
         self._profiles_controller = None
@@ -154,20 +160,414 @@ class AppController:
     
     def stop(self):
         """Stop the application controller."""
+        # Stop processing first (awaits engine shutdown properly)
+        if self.state.is_processing:
+            self.stop_processing()
+        
         self.state.is_running = False
-        self.state.is_processing = False
         
         # Stop monitoring
         self._session_monitor.stop_monitoring()
         self._refresh_manager.stop_auto_check()
         
-        # Stop Engine (replaces old self._workers loop)
-        self._run_async(self._engine.stop())
-        
-        # Stop async loop
+        # Stop async loop (safe now — engine already stopped)
         self._stop_async_loop()
         
         self._notify_status("Controller stopped")
+    
+    def _auto_launch_browsers(self):
+        """Auto-launch browsers for all profiles on app start.
+        
+        Startup sequence (single browser per profile):
+        1. Sync profiles to runtime
+        2. Inject ProfilesController ref into each AccountManager
+        3. Open debug browsers in hidden mode (the ONLY browser per profile)
+        4. startup_browsers() → AccountManager.ensure_browser() attaches
+           to the already-running debug browser (no new headless browser)
+        5. Token + reCAPTCHA extracted from the shared browser page
+        """
+        import logging
+        import time
+        log = logging.getLogger(__name__)
+        
+        async def _launch():
+            try:
+                # Step 1: Sync profiles first
+                self.sync_profiles_to_runtime()
+                log.info("[AutoLaunch] Profiles synced to runtime")
+                
+                # Step 2: Inject ProfilesController into each AccountManager
+                # so ensure_browser() can find debug browser pages
+                if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                    for acc in self._multi_account._accounts:
+                        acc.set_profiles_controller(self._profiles_controller)
+                    log.info(f"[AutoLaunch] ProfilesController injected into {len(self._multi_account._accounts)} accounts")
+                
+                # Step 3: Open debug browsers in hidden mode FIRST
+                # This is the SINGLE browser per profile — no separate headless browser
+                if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                    profiles = self._profiles_controller.get_all_profiles()
+                    for p in profiles:
+                        email = p.get("email")
+                        if email and p.get("is_ready"):
+                            log.info(f"[AutoLaunch] 🔇 Starting hidden browser for {email}...")
+                            success = self._profiles_controller.open_browser_for_debug(
+                                email, 
+                                on_state_change=self._on_debug_browser_state_change
+                            )
+                            if success:
+                                # Wait for browser to fully start and page to load
+                                time.sleep(5)
+                                self._profiles_controller.hide_debug_browser(email)
+                                log.info(f"[AutoLaunch] ✅ {email} browser hidden")
+                    
+                    self._push_browser_status()
+                
+                # Step 4: startup_browsers → ensure_browser() will ATTACH to debug pages
+                # (not launch new headless browsers)
+                if self._multi_account._accounts:
+                    log.info(f"[AutoLaunch] Connecting {len(self._multi_account._accounts)} accounts to debug browsers...")
+                    await self._multi_account.startup_browsers(headless=True)
+                    log.info("[AutoLaunch] ✅ All accounts connected to browsers")
+                else:
+                    log.info("[AutoLaunch] No accounts to connect")
+                
+                # Push final browser status to DevConsole
+                self._push_browser_status()
+                    
+            except Exception as e:
+                log.error(f"[AutoLaunch] Failed to launch browsers: {e}")
+        
+        # Run in background async loop
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(_launch(), self._loop)
+    
+    def _push_browser_status(self):
+        """Push current browser status to DevConsole (thread-safe).
+        
+        Can be called from any thread. Uses QMetaObject.invokeMethod
+        to ensure the actual Qt widget update runs on the GUI thread.
+        """
+        if not hasattr(self, '_dev_console') or not self._dev_console:
+            return
+        
+        status = self.get_browser_status()
+        
+        # Use QMetaObject to safely update from any thread
+        from PySide6.QtCore import QMetaObject, Qt, QThread
+        from functools import partial
+        
+        if QThread.currentThread() == self._dev_console.thread():
+            # Already on GUI thread — safe to call directly
+            self._dev_console.update_browser_status(status)
+        else:
+            # Background thread — schedule on GUI thread
+            QMetaObject.invokeMethod(
+                self._dev_console, "update_browser_status_safe",
+                Qt.ConnectionType.QueuedConnection
+            )
+    
+    def _on_debug_browser_state_change(self, email: str, state: str):
+        """Callback when a debug browser changes state (visible/hidden/closed).
+        
+        Called from background browser thread. Thread-safe via _push_browser_status.
+        """
+        self._push_browser_status()
+        self._push_session_data()
+    
+    def get_browser_status(self) -> list:
+        """Get browser status for all accounts.
+        
+        Combines runtime account data with ProfilesController profiles
+        and debug browser state so the DevConsole shows accurate info.
+        
+        Returns list of dicts: [{email, state, enabled, slots, has_browser}, ...]
+        """
+        result = []
+        seen_emails = set()
+        
+        # Try runtime accounts first (have browser session data)
+        if self._multi_account._accounts:
+            for acc in self._multi_account._accounts:
+                seen_emails.add(acc.email)
+                # Check debug browser state via ProfilesController
+                debug_state = "closed"
+                if (hasattr(self, '_profiles_controller') 
+                    and self._profiles_controller):
+                    debug_state = self._profiles_controller.get_debug_browser_state(acc.email)
+                
+                has_browser = bool(acc._browser_session and acc._browser_session.is_ready) or debug_state != "closed"
+                
+                if debug_state == "visible":
+                    state = "🟢 Visible"
+                elif debug_state == "hidden":
+                    state = "🟡 Hidden"
+                elif acc._browser_session and acc._browser_session.is_ready:
+                    state = "🟢 Ready"
+                else:
+                    state = "⚪ Off"
+                
+                info = {
+                    "email": acc.email,
+                    "enabled": acc.is_enabled,
+                    "slots": acc.max_slots,
+                    "has_browser": has_browser,
+                    "state": state,
+                }
+                result.append(info)
+        
+        # Also show profiles not yet in runtime (or fallback if no runtime accounts)
+        if hasattr(self, '_profiles_controller') and self._profiles_controller:
+            profiles = self._profiles_controller.get_all_profiles()
+            for p in profiles:
+                email = p.get("email", "?")
+                if email in seen_emails:
+                    continue
+                
+                debug_state = self._profiles_controller.get_debug_browser_state(email)
+                
+                if debug_state == "visible":
+                    state = "🟢 Visible"
+                elif debug_state == "hidden":
+                    state = "🟡 Hidden"
+                elif p.get("is_ready"):
+                    state = "🟡 Profile"
+                else:
+                    state = "🔴 Not Ready"
+                
+                info = {
+                    "email": email,
+                    "enabled": p.get("is_ready", False),
+                    "slots": 4,
+                    "has_browser": debug_state != "closed",
+                    "state": state,
+                }
+                result.append(info)
+        
+        return result
+    
+    def get_session_data(self) -> list:
+        """Get session data (tokens, cookies, profile info) for all accounts.
+        
+        Prioritizes runtime AccountManager session data (actual production tokens)
+        over tokens.json cache. Falls back to tokens.json if runtime not loaded.
+        """
+        import sqlite3
+        import shutil
+        import tempfile
+        import uuid
+        
+        result = []
+        
+        if not hasattr(self, '_profiles_controller') or not self._profiles_controller:
+            return result
+        
+        # Build runtime account lookup: email → AccountManager
+        runtime_accounts = {}
+        if self._multi_account._accounts:
+            for acc in self._multi_account._accounts:
+                runtime_accounts[acc.email] = acc
+        
+        # Fallback: load tokens.json for accounts not in runtime
+        tokens_data = {}
+        tokens_path = self._profiles_controller.storage_path.parent / "tokens.json"
+        if tokens_path.exists():
+            try:
+                with open(tokens_path, 'r', encoding='utf-8') as f:
+                    tokens_data = json.load(f)
+            except Exception:
+                pass
+        
+        from datetime import datetime
+        
+        for profile in self._profiles_controller._profiles:
+            email = profile.email
+            runtime_acc = runtime_accounts.get(email)
+            
+            # Check debug browser state early (used by both branches)
+            debug_state = self._profiles_controller.get_debug_browser_state(email)
+            debug_browser_active = debug_state in ("visible", "hidden")
+            
+            if runtime_acc:
+                # ═══ RUNTIME DATA (actual production state) ═══
+                status = runtime_acc.get_status()
+                
+                # Session status — consider debug browser as valid session
+                if runtime_acc.is_ready:
+                    session_status = "🟢 Ready (Production)"
+                elif debug_browser_active and profile.is_ready:
+                    session_status = "🟢 Session via Debug Browser"
+                elif runtime_acc.is_enabled:
+                    session_status = "🟡 Enabled (Waiting Token)"
+                else:
+                    session_status = "🔴 Disabled"
+                
+                # Access token: runtime first, fallback to tokens.json
+                rt_token = runtime_acc._session.access_token or ""
+                token_info = tokens_data.get(email, {})
+                refresh_token = token_info.get("refresh_token", "")
+                updated_at = token_info.get("updated_at", "")
+                
+                if rt_token:
+                    access_token = rt_token
+                    # Token freshness from runtime
+                    if status.get("token_expired"):
+                        token_expiry = "🔄 Expired (auto-refresh on next call)"
+                    else:
+                        try:
+                            expires = runtime_acc._session.token_expires
+                            if expires:
+                                left = (expires - datetime.now()).total_seconds()
+                                mins = max(0, int(left / 60))
+                                token_expiry = f"✅ Live ({mins}m left)"
+                            else:
+                                token_expiry = "✅ Live"
+                        except Exception:
+                            token_expiry = "✅ Live"
+                else:
+                    # No runtime token — fallback to tokens.json for display
+                    access_token = token_info.get("access_token", "")
+                    if access_token:
+                        expires_at = token_info.get("expires_at", 0)
+                        now_ts = datetime.now().timestamp()
+                        if expires_at and (expires_at - now_ts) <= 0:
+                            hours_ago = int(abs(expires_at - now_ts) / 3600)
+                            token_expiry = f"🔄 Cached token ({hours_ago}h ago)"
+                        elif expires_at:
+                            mins = int((expires_at - now_ts) / 60)
+                            token_expiry = f"✅ Cached ({mins}m left)"
+                        else:
+                            token_expiry = "📁 From cache"
+                    elif debug_browser_active:
+                        token_expiry = "🟢 Will extract on next API call"
+                    else:
+                        token_expiry = "❌ No token"
+                
+                # reCAPTCHA
+                recaptcha_age = status.get("recaptcha_age", "N/A")
+                needs_recaptcha = status.get("needs_recaptcha")
+                if recaptcha_age == "infs" or recaptcha_age == "N/A":
+                    if debug_browser_active:
+                        recaptcha_status = "🟢 Will fetch on demand"
+                    else:
+                        recaptcha_status = "⚪ Not initialized"
+                elif needs_recaptcha:
+                    recaptcha_status = f"🔄 Need refresh (age: {recaptcha_age})"
+                else:
+                    recaptcha_status = f"✅ Valid (age: {recaptcha_age})"
+                
+                # Browser session (headless)
+                browser_alive = status.get("browser_alive", False)
+                
+                # Slots
+                slots_display = status.get("slots", "?")
+                
+                data_source = "🔴 Runtime"
+            else:
+                # ═══ FALLBACK: tokens.json cache ═══
+                token_info = tokens_data.get(email, {})
+                access_token = token_info.get("access_token", "")
+                refresh_token = token_info.get("refresh_token", "")
+                expires_at = token_info.get("expires_at", 0)
+                updated_at = token_info.get("updated_at", "")
+                
+                # Session status from profile
+                if profile.is_ready:
+                    session_status = "🟢 Session Active (Offline)"
+                else:
+                    session_status = "🔴 Not Logged In"
+                
+                # Token expiry from cache
+                now_ts = datetime.now().timestamp()
+                if expires_at:
+                    time_left = expires_at - now_ts
+                    if time_left <= 0:
+                        hours_ago = int(abs(time_left) / 3600)
+                        token_expiry = f"🔄 Cached ({hours_ago}h ago)"
+                    elif time_left < 600:
+                        mins = int(time_left / 60)
+                        token_expiry = f"🟠 Expiring ({mins}m left)"
+                    else:
+                        mins = int(time_left / 60)
+                        token_expiry = f"✅ Fresh ({mins}m left)"
+                else:
+                    token_expiry = "❌ No token stored"
+                
+                recaptcha_status = "⚪ Not loaded"
+                browser_alive = False
+                slots_display = f"0/{profile.max_slots}"
+                data_source = "📁 Cache"
+            
+            # Cookie count from browser profile
+            cookie_count = 0
+            cookie_domains = {}
+            cookies_locked = False
+            browser_path = profile.browser_profile_path or profile.profile_path
+            if browser_path:
+                cookies_db = Path(browser_path) / "Default" / "Network" / "Cookies"
+                if cookies_db.exists():
+                    try:
+                        temp_db = Path(tempfile.gettempdir()) / f"cookies_{uuid.uuid4().hex[:8]}.db"
+                        shutil.copy2(cookies_db, temp_db)
+                        conn = sqlite3.connect(str(temp_db))
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT COUNT(*) FROM cookies")
+                        cookie_count = cursor.fetchone()[0]
+                        cursor.execute(
+                            "SELECT host_key, COUNT(*) as cnt FROM cookies "
+                            "GROUP BY host_key ORDER BY cnt DESC LIMIT 5"
+                        )
+                        for row in cursor.fetchall():
+                            cookie_domains[row[0]] = row[1]
+                        conn.close()
+                        temp_db.unlink(missing_ok=True)
+                    except PermissionError:
+                        cookies_locked = True
+                    except Exception:
+                        if debug_browser_active:
+                            cookies_locked = True
+            
+            info = {
+                "email": email,
+                "display_name": profile.display_name,
+                "sku": profile.tier_display,
+                "credits": profile.credits,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "session_status": session_status,
+                "token_expiry": token_expiry,
+                "recaptcha_status": recaptcha_status,
+                "browser_alive": browser_alive,
+                "slots_display": slots_display,
+                "updated_at": updated_at,
+                "cookie_count": cookie_count,
+                "cookie_domains": cookie_domains,
+                "cookies_locked": cookies_locked,
+                "browser_state": debug_state,
+                "is_ready": profile.is_ready,
+                "is_enabled": profile.is_enabled,
+                "data_source": data_source,
+            }
+            result.append(info)
+        
+        return result
+    
+    def _push_session_data(self):
+        """Push session data to DevConsole (thread-safe)."""
+        if not hasattr(self, '_dev_console') or not self._dev_console:
+            return
+        
+        data = self.get_session_data()
+        
+        from PySide6.QtCore import QMetaObject, Qt, QThread
+        
+        if QThread.currentThread() == self._dev_console.thread():
+            self._dev_console.update_session_data(data)
+        else:
+            QMetaObject.invokeMethod(
+                self._dev_console, "update_session_data_safe",
+                Qt.ConnectionType.QueuedConnection
+            )
     
     def _start_async_loop(self):
         """Start background async event loop."""
@@ -259,11 +659,15 @@ class AppController:
         """Set the ProfilesController reference.
         
         Called by UI layer (TabSettings) to bridge persistence → runtime.
+        Triggers auto-launch of headless browsers for all profiles.
         """
         self._profiles_controller = profiles_controller
         # Forward to engine so it can auto re-login on auth failures
         if self._engine:
             self._engine._profiles_controller = profiles_controller
+        
+        # Now that ProfilesController is available, auto-launch browsers
+        self._auto_launch_browsers()
     
     def sync_profiles_to_runtime(self):
         """Sync profiles from ProfilesController → MultiAccountManager.
@@ -414,17 +818,23 @@ class AppController:
         """Return correct default model for workflow type."""
         if workflow in (WorkflowType.T2I, WorkflowType.I2I):
             return "GEM_PIX_2"
-        return "veo_3_1_t2v_fast_landscape_ultra"
+        return "veo_3_1_t2v_fast_ultra"
     
     def submit_prompts(
         self,
         prompts: List[str],
         workflow: WorkflowType,
         images: Optional[List[str]] = None,
+        per_prompt_images: Optional[Dict[int, List[str]]] = None,  # Bug 2: per-prompt image mapping
         settings: Optional[Dict] = None,
         continuation_map: Optional[Dict[int, int]] = None,  # index -> parent_index
     ) -> str:
         """Submit prompts for processing.
+        
+        Args:
+            images: Flat list of image URIs (shared by ALL tasks — legacy)
+            per_prompt_images: Dict mapping prompt index → list of image URIs for that task.
+                              Takes priority over `images` when provided.
         
         Returns group_id.
         """
@@ -436,7 +846,14 @@ class AppController:
         # Map settings to correct API values
         raw_ar = (settings or {}).get("aspect_ratio", "LANDSCAPE")
         aspect_ratio = self._map_aspect_ratio(raw_ar, workflow)
-        model = (settings or {}).get("model", self._default_model(workflow))
+        
+        # Auto-map model display name → API model key
+        model_display = (settings or {}).get("model", "")
+        dual_frame = (settings or {}).get("frame_mode", "") == "both"
+        if model_display and not model_display.startswith("veo_") and model_display not in ("GEM_PIX", "GEM_PIX_2", "IMAGEN_3_5"):
+            model = resolve_model_key(model_display, workflow, raw_ar, dual_frame)
+        else:
+            model = model_display or self._default_model(workflow)
         output_count = (settings or {}).get("outputs_per_prompt", 4)
         
         # Create task group
@@ -463,14 +880,64 @@ class AppController:
                 model=model,
                 output_count=output_count,
                 duration_seconds=(settings or {}).get("duration", 8),
-                image_uris=images or [],
+                # Bug 2 fix: Per-prompt images take priority, fallback to shared list
+                image_uris=(per_prompt_images or {}).get(i, images or []),
                 parent_task_id=parent_task_id,
                 extract_point_ms=(settings or {}).get("extract_point_ms", 750),
                 download_quality=(settings or {}).get("download_quality", "720p"),
+                output_folder=(settings or {}).get("output_folder", ""),
+                project_name=(settings or {}).get("project_name", ""),
+                prompt_index=i,
             )
             tasks.append(task)
         
         group = TaskGroup(id=group_id, name=f"Batch {len(tasks)}", tasks=tasks)
+        
+        # === DEBUG: Export resolved task structure ===
+        log = logging.getLogger(__name__)
+        log.info(f"{'='*60}")
+        log.info(f"[ADD TO QUEUE] group_id={group_id}")
+        log.info(f"  workflow    : {workflow.name}")
+        log.info(f"  model      : {model_display!r} → {model}")
+        log.info(f"  aspect_ratio: {raw_ar} → {aspect_ratio}")
+        log.info(f"  dual_frame : {dual_frame}")
+        log.info(f"  output_count: {output_count}")
+        log.info(f"  tasks      : {len(tasks)}")
+        for t in tasks:
+            cont = f" (cont→{t.parent_task_id})" if t.parent_task_id else ""
+            log.info(f"    [{t.id}] {t.prompt[:60]}...{cont}" if len(t.prompt) > 60 else f"    [{t.id}] {t.prompt}{cont}")
+        log.info(f"{'='*60}")
+        # === END DEBUG ===
+        
+        # Push JSON preview to DevConsole if available
+        if self._dev_console and hasattr(self._dev_console, 'update_json_preview'):
+            preview = {
+                "group_id": group_id,
+                "workflow": workflow.name,
+                "model_display": model_display,
+                "model_api_key": model,
+                "aspect_ratio_raw": raw_ar,
+                "aspect_ratio_api": aspect_ratio,
+                "dual_frame": dual_frame,
+                "output_count": output_count,
+                "tasks": [
+                    {
+                        "id": t.id,
+                        "prompt": t.prompt,
+                        "model": t.model,
+                        "aspect_ratio": t.aspect_ratio,
+                        "duration": t.duration_seconds,
+                        "images": t.image_uris,
+                        "parent": t.parent_task_id,
+                    }
+                    for t in tasks
+                ],
+            }
+            try:
+                self._dev_console.update_json_preview(preview)
+            except Exception:
+                pass
+        
         self._dispatcher.submit_task_group(group)
         
         self.state.queue_count += len(tasks)
@@ -508,21 +975,22 @@ class AppController:
             prompts: List of PromptRow objects with image_tag
             settings: Sidebar settings dict
         """
-        images = []
+        per_prompt_images = {}  # Bug 2 fix: per-prompt image mapping
         prompt_texts = []
         continuation_map = {}
         
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
             if hasattr(p, 'image_tag') and p.image_tag:
-                images.append(p.image_tag)
+                # Bug 2 fix: Each prompt gets its OWN image list
+                per_prompt_images[i] = [p.image_tag]
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
         
         return self.submit_prompts(
             prompts=prompt_texts,
             workflow=WorkflowType.I2V,
-            images=images if images else None,
+            per_prompt_images=per_prompt_images if per_prompt_images else None,
             settings=settings,
             continuation_map=continuation_map if continuation_map else None
         )
@@ -640,17 +1108,40 @@ class AppController:
         self._engine._on_task_completed = lambda task: self._handle_task_completed(task)
         self._engine._on_task_failed = lambda task, err: self._handle_task_failed(task, err)
         
-        # Start Engine in the async loop
-        self._run_async(self._engine.start())
+        # Wire dispatcher progress callback → UI
+        # Engine calls dispatcher.update_progress() during poll loop,
+        # this ensures the UI callback gets triggered
+        self._dispatcher.set_progress_callback(self._forward_progress_to_ui)
+        
+        # Start Engine in the async loop (store Future for clean shutdown)
+        self._engine_future = self._run_async(self._engine.start())
         
         self._notify_status("Processing started")
     
     def stop_processing(self):
-        """Stop processing via Engine."""
+        """Stop processing via Engine.
+        
+        Properly awaits engine shutdown to prevent 'Task was destroyed'
+        warnings from orphaned asyncio tasks.
+        """
         self.state.is_processing = False
         
-        # Stop Engine
-        self._run_async(self._engine.stop())
+        # Signal Engine to stop (sets stop_event → workers exit loops)
+        stop_future = self._run_async(self._engine.stop())
+        if stop_future:
+            try:
+                stop_future.result(timeout=5.0)
+            except Exception:
+                pass
+        
+        # Wait for engine.start() to fully complete
+        # (TaskGroup collects workers → finally block closes browsers)
+        if self._engine_future:
+            try:
+                self._engine_future.result(timeout=15.0)
+            except Exception:
+                pass
+            self._engine_future = None
         
         self._notify_status("Processing stopped")
     
@@ -675,21 +1166,38 @@ class AppController:
         """Handle task completion."""
         if self._on_task_completed:
             self._on_task_completed(task)
+        self._notify_queue_updated()
     
     def _handle_task_failed(self, task: Task, error: str):
         """Handle task failure."""
         if self._on_task_failed:
             self._on_task_failed(task, error)
+        self._notify_queue_updated()
     
-    def _handle_progress(self, task_id: str, progress: int):
-        """Handle progress update."""
-        self._dispatcher.update_progress(task_id, progress)
+    def _handle_progress(self, task_id: str, progress: int, status_text: str = ""):
+        """Handle progress update from engine callback.
+        Dispatcher.update_progress now fires _forward_progress_to_ui automatically.
+        """
+        self._dispatcher.update_progress(task_id, progress, status_text)
+        # Note: UI callback is now triggered by dispatcher.update_progress → _forward_progress_to_ui
+    
+    def _forward_progress_to_ui(self, task_id: str, progress: int, status_text: str = ""):
+        """Forward dispatcher progress updates to the UI callback."""
         if self._on_progress:
-            self._on_progress(task_id, progress)
+            self._on_progress(task_id, progress, status_text)
     
     def _handle_session_expired(self, email: str, event: SessionEvent):
         """Handle session expiry."""
         self._refresh_manager.request_refresh(email, event.value)
+    
+    def set_queue_updated_callback(self, callback):
+        """Register callback for queue state changes (used by TabQueue)."""
+        if callback not in self._on_queue_updated:
+            self._on_queue_updated.append(callback)
+    
+    def set_progress_callback(self, callback):
+        """Register callback for per-task progress updates (used by TabQueue)."""
+        self._on_progress = callback
     
     def _notify_status(self, status: str):
         """Notify status change."""
@@ -697,13 +1205,26 @@ class AppController:
             self._on_status_changed(status)
     
     def _notify_queue_updated(self):
-        """Notify queue update."""
+        """Notify queue update (thread-safe)."""
         status = self.get_queue_status()
         for cb in self._on_queue_updated:
             try:
                 cb(status)
             except Exception:
                 pass
+        # Push to DevConsole (thread-safe)
+        if self._dev_console and hasattr(self._dev_console, 'update_queue_state'):
+            from PySide6.QtCore import QMetaObject, Qt, QThread
+            if QThread.currentThread() == self._dev_console.thread():
+                try:
+                    self._dev_console.update_queue_state(status)
+                except Exception:
+                    pass
+            else:
+                QMetaObject.invokeMethod(
+                    self._dev_console, "update_queue_state_safe",
+                    Qt.ConnectionType.QueuedConnection
+                )
     
     # === PERMISSIONS ===
     
@@ -744,6 +1265,7 @@ class AppController:
                 "prompt": task.prompt,
                 "status": task.state.value,
                 "progress": task.progress,
+                "status_text": getattr(task, 'status_text', ''),
                 "mode": _wf_display(task.workflow_type) if task.workflow_type else "T2V",
                 "project": task.project_id or "Default",
                 "error": task.error,
@@ -823,7 +1345,7 @@ class AppController:
     def set_task_failed_callback(self, callback: Callable[[Task, str], None]):
         self._on_task_failed = callback
     
-    def set_progress_callback(self, callback: Callable[[str, int], None]):
+    def set_progress_callback(self, callback: Callable[[str, int, str], None]):
         self._on_progress = callback
     
     def set_queue_updated_callback(self, callback: Callable[[Dict], None]):
@@ -859,9 +1381,12 @@ class AppController:
     def restore_session(self) -> dict:
         """Restore session from disk.
         
+        Respects settings:
+        - restore_queue_on_startup: if False, queue is NOT loaded (prevents stale tasks)
+        - restore_tabs_on_startup: if False, tab data is NOT returned
+        
         Returns:
             Full session data dict (tabs + queue).
-            Dispatcher queue is automatically restored.
         """
         from core.session_manager import SessionManager
         sm = SessionManager()
@@ -870,14 +1395,44 @@ class AppController:
         if not data:
             return {}
         
-        # Restore queue into dispatcher
-        queue_data = data.get("queue", {})
-        if queue_data:
-            count = self._dispatcher.import_state(queue_data)
-            if count > 0:
-                self._notify_queue_updated()
+        # Only restore queue if setting is enabled
+        restore_queue = True
+        restore_tabs = True
+        if self._settings:
+            restore_queue = getattr(self._settings, 'restore_queue_on_startup', False)
+            restore_tabs = getattr(self._settings, 'restore_tabs_on_startup', True)
+        
+        if restore_queue:
+            queue_data = data.get("queue", {})
+            if queue_data:
+                count = self._dispatcher.import_state(queue_data)
+                if count > 0:
+                    self._notify_queue_updated()
+                    print(f"[Session] Queue restored: {count} tasks")
+        else:
+            print("[Session] Queue restore SKIPPED (restore_queue_on_startup=False)")
+        
+        if not restore_tabs:
+            data.pop("tabs", None)
+            print("[Session] Tabs restore SKIPPED (restore_tabs_on_startup=False)")
         
         return data
+    
+    def clear_queue(self) -> int:
+        """Clear all queue tasks (in-memory + persisted session).
+        
+        Returns:
+            Number of tasks cleared
+        """
+        count = self._dispatcher.clear_all()
+        self._notify_queue_updated()
+        
+        # Also delete the session file to prevent stale queue reload
+        from core.session_manager import SessionManager
+        sm = SessionManager()
+        sm.delete_session()
+        print(f"[Controller] Queue cleared: {count} tasks, session file deleted")
+        return count
     
     def get_cache_stats(self) -> dict:
         """Get cache folder statistics."""

@@ -68,19 +68,118 @@ class VideoQuality(str, Enum):
 class VideoModel(str, Enum):
     """VEO video generation model keys.
     
-    Reference: SEED_MANAGEMENT.md, HAR analysis
+    HAR-verified mapping: {workflow}_{speed}_{orientation}_{quality}[_relaxed]
+    - Fast = default priority
+    - LP (_relaxed) = Lower Priority, slower queue
+    - _fl_ = first-last (dual frame I2V)
     """
-    # VEO 3.1 Fast Models
-    VEO_FAST_31 = "veo_3_1_t2v_fast_landscape_ultra"
-    VEO_FAST_31_PORTRAIT = "veo_3_1_t2v_fast_portrait_ultra"
+    # --- T2V: Text to Video ---
+    # NOTE: T2V landscape does NOT include "_landscape_" (unlike R2V)
+    # HAR + n8n verified: landscape = "fast_ultra", portrait = "fast_portrait_ultra"
+    T2V_LANDSCAPE = "veo_3_1_t2v_fast_ultra"
+    T2V_PORTRAIT = "veo_3_1_t2v_fast_portrait_ultra"
+    T2V_LANDSCAPE_LP = "veo_3_1_t2v_fast_ultra_relaxed"
+    T2V_PORTRAIT_LP = "veo_3_1_t2v_fast_portrait_ultra_relaxed"
     
-    # VEO 3.0 Models
-    VEO_30 = "veo_3_0_t2v_landscape_ultra"
+    # --- I2V Single: Start Image → Video ---
+    I2V_SINGLE_LANDSCAPE = "veo_3_1_i2v_s_fast_ultra"
+    I2V_SINGLE_LANDSCAPE_LP = "veo_3_1_i2v_s_fast_ultra_relaxed"
+    # Portrait single not in HAR — infer pattern:
+    I2V_SINGLE_PORTRAIT = "veo_3_1_i2v_s_fast_portrait_ultra"
+    I2V_SINGLE_PORTRAIT_LP = "veo_3_1_i2v_s_fast_portrait_ultra_relaxed"
+    
+    # --- I2V Dual (FL): First + Last Frame → Video ---
+    I2V_DUAL_LANDSCAPE = "veo_3_1_i2v_s_fast_fl_ultra"
+    I2V_DUAL_LANDSCAPE_LP = "veo_3_1_i2v_s_fast_fl_ultra_relaxed"
+    I2V_DUAL_PORTRAIT = "veo_3_1_i2v_s_fast_portrait_fl_ultra"
+    I2V_DUAL_PORTRAIT_LP = "veo_3_1_i2v_s_fast_portrait_fl_ultra_relaxed"
+    
+    # --- R2V: Reference Images → Video ---
+    R2V_LANDSCAPE = "veo_3_1_r2v_fast_landscape_ultra"
+    R2V_PORTRAIT = "veo_3_1_r2v_fast_portrait_ultra"
+    R2V_LANDSCAPE_LP = "veo_3_1_r2v_fast_landscape_ultra_relaxed"
+    R2V_PORTRAIT_LP = "veo_3_1_r2v_fast_portrait_ultra_relaxed"
+    
+    # --- VEO 3.0 Models (legacy) ---
+    VEO_30_LANDSCAPE = "veo_3_0_t2v_landscape_ultra"
     VEO_30_PORTRAIT = "veo_3_0_t2v_portrait_ultra"
     
-    # Image to Video Models
-    VEO_I2V = "veo_3_1_i2v_fast_landscape_ultra"
-    VEO_I2V_PORTRAIT = "veo_3_1_i2v_fast_portrait_ultra"
+    # --- Upscaler Models ---
+    UPSCALER_1080P = "veo_3_1_upsampler_1080p"
+    UPSCALER_4K = "veo_3_1_upsampler_4k"
+
+
+# === IMAGE MODELS ===
+class ImageModel(str, Enum):
+    """Image generation model keys (HAR-verified)."""
+    GEM_PIX = "GEM_PIX"          # Legacy
+    GEM_PIX_2 = "GEM_PIX_2"      # Default
+    IMAGEN_3_5 = "IMAGEN_3_5"    # Newest
+
+
+def resolve_model_key(
+    display_name: str,
+    workflow: "WorkflowType",
+    aspect_ratio: str,
+    dual_frame: bool = False,
+) -> str:
+    """Auto-map (UI display name + workflow + aspect ratio) → API model key.
+    
+    Args:
+        display_name: UI text from sidebar, e.g. "Veo 3.1 - Fast", "Veo 3.1 - Fast [LP]"
+        workflow: WorkflowType enum (T2V, I2V, R2V, F2V, T2I)
+        aspect_ratio: "LANDSCAPE" or "PORTRAIT"
+        dual_frame: True if I2V with 2 frames (first+last)
+    
+    Returns:
+        API model key string, e.g. "veo_3_1_t2v_fast_portrait_ultra_relaxed"
+    """
+    is_portrait = "PORTRAIT" in aspect_ratio.upper()
+    is_lp = "[LP]" in display_name or "Lower" in display_name
+    
+    # T2I uses ImageModel, not VideoModel
+    if workflow == WorkflowType.T2I:
+        return ImageModel.GEM_PIX_2.value
+    
+    # Model lookup table: (workflow_key, is_portrait, is_lp) → VideoModel
+    _MAP = {
+        # T2V
+        ("T2V", False, False): VideoModel.T2V_LANDSCAPE,
+        ("T2V", True,  False): VideoModel.T2V_PORTRAIT,
+        ("T2V", False, True):  VideoModel.T2V_LANDSCAPE_LP,
+        ("T2V", True,  True):  VideoModel.T2V_PORTRAIT_LP,
+        # I2V Single
+        ("I2V_S", False, False): VideoModel.I2V_SINGLE_LANDSCAPE,
+        ("I2V_S", True,  False): VideoModel.I2V_SINGLE_PORTRAIT,
+        ("I2V_S", False, True):  VideoModel.I2V_SINGLE_LANDSCAPE_LP,
+        ("I2V_S", True,  True):  VideoModel.I2V_SINGLE_PORTRAIT_LP,
+        # I2V Dual (First + Last frame)
+        ("I2V_D", False, False): VideoModel.I2V_DUAL_LANDSCAPE,
+        ("I2V_D", True,  False): VideoModel.I2V_DUAL_PORTRAIT,
+        ("I2V_D", False, True):  VideoModel.I2V_DUAL_LANDSCAPE_LP,
+        ("I2V_D", True,  True):  VideoModel.I2V_DUAL_PORTRAIT_LP,
+        # R2V
+        ("R2V", False, False): VideoModel.R2V_LANDSCAPE,
+        ("R2V", True,  False): VideoModel.R2V_PORTRAIT,
+        ("R2V", False, True):  VideoModel.R2V_LANDSCAPE_LP,
+        ("R2V", True,  True):  VideoModel.R2V_PORTRAIT_LP,
+    }
+    
+    # Determine workflow key
+    wf_name = workflow.name if hasattr(workflow, "name") else str(workflow)
+    if wf_name in ("I2V", "F2V"):
+        wf_key = "I2V_D" if dual_frame else "I2V_S"
+    elif wf_name == "R2V":
+        wf_key = "R2V"
+    else:
+        wf_key = "T2V"
+    
+    result = _MAP.get((wf_key, is_portrait, is_lp))
+    if result:
+        return result.value
+    
+    # Fallback: T2V landscape fast
+    return VideoModel.T2V_LANDSCAPE.value
 
 
 # === VIDEO RESOLUTION API VALUES ===
@@ -180,7 +279,7 @@ class AppConstants:
     DOWNLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
     
     # Polling
-    POLL_INTERVAL = 5          # seconds
+    POLL_INTERVAL = 15         # seconds (matches n8n workflow)
     MAX_POLL_TIME = 600        # 10 minutes
     
     # Trial limits

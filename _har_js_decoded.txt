@@ -1,0 +1,23 @@
+=== Analyzing: Text to video 1.har ===
+
+Total entries: 38
+
+JS entries: 1
+HTML entries: 2
+
+======================================================================
+JS ENTRIES OVERVIEW:
+======================================================================
+  [4] https://labs.google/fx/_next/data/0QTD5IT7rAmrobzxOA4bS/en/tools/flow/project/a89ea3a4-168c-4133-8fb0-7a852f11b33b.json?
+      mime=application/json size=215810 encoding=base64 text_len=287748
+
+======================================================================
+SEARCHING JS BODIES FOR enterprise/recaptcha:
+======================================================================
+
+  [4] https://labs.google/fx/_next/data/0QTD5IT7rAmrobzxOA4bS/en/tools/flow/project/a89ea3a4-168c-4133-8fb0-7a852f11b33b.json?
+      Text length after decode: 215285
+
+======================================================================
+HTML __NEXT_DATA__ SEARCH:
+======================================================================

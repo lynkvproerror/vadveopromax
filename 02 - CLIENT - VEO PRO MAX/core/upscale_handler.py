@@ -34,7 +34,7 @@ class UpscaleHandler:
     - Timeout handling (10 min max)
     """
     
-    DEFAULT_POLL_INTERVAL = 5.0  # seconds
+    DEFAULT_POLL_INTERVAL = 15.0  # seconds (matches n8n workflow)
     DEFAULT_TIMEOUT = 600.0      # 10 minutes
     
     def __init__(

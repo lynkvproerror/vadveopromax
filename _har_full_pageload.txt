@@ -1,0 +1,33 @@
+
+======================================================================
+FILE: labs.google.har
+======================================================================
+Total entries: 95
+
+======================================================================
+FILE: Login dieu huong Flow.har
+======================================================================
+Total entries: 27
+
+  [2] 🎯 https://www.gstatic.com/_/mss/boq-identity/_/js/k=boq-identity.AccountsSignInUi.en_US.nGoZh2P_ZQc.es5.O/am=Kf____8wAADQK
+      mime=text/javascript size=901548 encoding= decoded_len=901548
+
+  [6] 🎯 https://www.gstatic.com/_/mss/boq-identity/_/js/k=boq-identity.AccountsSignInUi.en_US.nGoZh2P_ZQc.es5.O/ck=boq-identity.
+      mime=text/javascript size=861089 encoding= decoded_len=861089
+      All action strings in this response: ['rcuQ6b:I3Yihd;', 'rcuQ6b:WYd;']
+
+======================================================================
+FILE: Model Video (text to video).har
+======================================================================
+Total entries: 11
+
+======================================================================
+FILE: 0. Tao Project.har
+======================================================================
+Total entries: 17
+
+  [4] 🎯 https://labs.google/fx/_next/data/9TO92rV5wvlcVlz1O9A9i/en/tools/flow/project/daba1978-e588-4d76-a4fd-6c3126074187.json?
+      mime=application/json size=214061 encoding=base64 decoded_len=213537
+
+
+DONE

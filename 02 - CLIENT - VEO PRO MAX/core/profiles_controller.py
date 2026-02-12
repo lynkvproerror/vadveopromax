@@ -16,6 +16,82 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.session import AccountSession, SubscriptionType, PaygateTier
 
 
+# ── Win32 API helpers for true browser window hiding ────────────────────
+import ctypes
+import ctypes.wintypes
+
+user32 = ctypes.windll.user32
+
+SW_HIDE = 0
+SW_SHOW = 5
+SW_RESTORE = 9
+
+def _find_hwnds_by_pid(pid: int) -> list:
+    """Find Chrome browser window handles owned by a specific process ID.
+    
+    Only captures windows with class 'Chrome_WidgetWin_1' (actual browser UI),
+    filtering out helper/debug/console windows that share the same PID.
+    """
+    if not pid:
+        return []
+    hwnds = []
+    
+    @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+    def _enum_callback(hwnd, _lparam):
+        proc_id = ctypes.wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(proc_id))
+        if proc_id.value == pid:
+            class_name = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, class_name, 256)
+            if class_name.value == 'Chrome_WidgetWin_1':
+                hwnds.append(int(hwnd))
+        return True
+    
+    user32.EnumWindows(_enum_callback, 0)
+    return hwnds
+
+def _find_chrome_pid_by_profile(profile_dir_name: str) -> int:
+    """Find Chrome main process PID by matching --user-data-dir in command line."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['wmic', 'process', 'where',
+             f"name='chrome.exe' and commandline like '%{profile_dir_name}%' and not commandline like '%--type=%'",
+             'get', 'processid', '/value'],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.strip().splitlines():
+            line = line.strip()
+            if line.startswith('ProcessId='):
+                return int(line.split('=')[1])
+    except Exception as e:
+        print(f"[Win32] PID lookup error: {e}")
+    return 0
+
+def _win32_hide_hwnds(hwnds: list):
+    """Hide specific window handles (disappears from taskbar + Alt+Tab)."""
+    for hwnd in hwnds:
+        user32.ShowWindow(hwnd, SW_HIDE)
+
+def _win32_show_hwnds(hwnds: list):
+    """Show specific window handles, move on-screen, and bring to front."""
+    SWP_NOZORDER = 0x0004
+    SWP_NOSIZE = 0x0001
+    # Get screen size to center the window
+    screen_w = user32.GetSystemMetrics(0)  # SM_CXSCREEN
+    screen_h = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+    for hwnd in hwnds:
+        # Move to center of screen (keep current size)
+        rect = ctypes.wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        w = rect.right - rect.left
+        h = rect.bottom - rect.top
+        x = max(0, (screen_w - w) // 2)
+        y = max(0, (screen_h - h) // 2)
+        user32.SetWindowPos(hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER)
+        user32.ShowWindow(hwnd, SW_RESTORE)
+
+
 @dataclass
 class ChromeProfile:
     """Chrome profile data for account management."""
@@ -23,8 +99,8 @@ class ChromeProfile:
     email: str
     display_name: str = ""
     profile_path: str = ""
-    sku: str = "WS_FREEMIUM"  # WS_ULTRA, WS_PRO, WS_FREEMIUM
-    paygate_tier: str = "PAYGATE_TIER_NOT_PAID"
+    sku: str = "WS_ULTRA"  # Default Ultra; auto-detected from /v1/credits
+    paygate_tier: str = "PAYGATE_TIER_TWO"
     credits: int = 0
     is_ready: bool = False
     last_used: Optional[str] = None
@@ -369,6 +445,26 @@ class ProfilesController:
         Returns dict with {success, reason} instead of bool.
         """
         try:
+            # REUSE: If debug browser is already open or launching, use it
+            # instead of launching a new one (which would cause profile lock crash)
+            if hasattr(self, '_debug_browsers') and profile.email in self._debug_browsers:
+                entry = self._debug_browsers[profile.email]
+                if entry.get("context") is not None:
+                    # Debug browser fully ready — reuse it
+                    print(f"[ProfilesController] Debug browser open for {profile.email} — reusing for subscription fetch")
+                    return self._fetch_subscription_via_debug_browser(profile)
+                else:
+                    # Debug browser is still launching — wait for it
+                    import time
+                    print(f"[ProfilesController] Debug browser launching for {profile.email} — waiting...")
+                    for _ in range(30):  # Wait up to 15s
+                        time.sleep(0.5)
+                        if entry.get("context") is not None:
+                            print(f"[ProfilesController] Debug browser ready — reusing for subscription fetch")
+                            return self._fetch_subscription_via_debug_browser(profile)
+                    print(f"[ProfilesController] Debug browser launch timeout — skipping subscription fetch")
+                    return {"success": False, "reason": "browser_launching"}
+            
             # Check if we're inside an asyncio loop
             import asyncio
             try:
@@ -511,9 +607,9 @@ class ProfilesController:
                     print(f"[ProfilesController] Credits result: {credits_result}")
                     
                     if credits_result and "error" not in credits_result:
-                        profile.sku = credits_result.get("sku", "WS_FREEMIUM")
+                        profile.sku = credits_result.get("sku", "WS_ULTRA")
                         profile.credits = credits_result.get("credits", 0)
-                        profile.paygate_tier = credits_result.get("userPaygateTier", "PAYGATE_TIER_NOT_PAID")
+                        profile.paygate_tier = credits_result.get("userPaygateTier", "PAYGATE_TIER_TWO")
                         profile.is_ready = True
                         profile.subscription_fetched = True
                         profile.last_used = datetime.now().isoformat()
@@ -539,6 +635,87 @@ class ProfilesController:
             traceback.print_exc()
             return {"success": False, "reason": "exception"}
     
+
+    def _fetch_subscription_via_debug_browser(self, profile: "ChromeProfile") -> dict:
+        """Fetch subscription by REUSING the already-open debug browser.
+        
+        Instead of launching a new browser (which would crash due to profile lock),
+        uses evaluate_in_debug_browser() to run JS in the existing page.
+        """
+        from datetime import datetime
+        email = profile.email
+        print(f"[ProfilesController] Fetching subscription via debug browser for {email}...")
+        
+        # Step 1: Extract __NEXT_DATA__ for access token
+        session_result = self.execute_js_on_debug_browser(email, """
+            () => {
+                const script = document.getElementById('__NEXT_DATA__');
+                if (!script) return { error: 'no_next_data' };
+                try {
+                    const data = JSON.parse(script.textContent);
+                    const session = data?.props?.pageProps?.session;
+                    if (!session) return { error: 'no_session' };
+                    return {
+                        access_token: session.access_token || session.accessToken || '',
+                        expires: session.expires || '',
+                        user: {
+                            email: session.user?.email || '',
+                            name: session.user?.name || ''
+                        }
+                    };
+                } catch(e) { return { error: e.message }; }
+            }
+        """, timeout=10)
+        
+        if not session_result or "error" in session_result:
+            print(f"[ProfilesController] __NEXT_DATA__ extraction failed: {session_result}")
+            return {"success": False, "reason": "no_session"}
+        
+        access_token = session_result.get("access_token", "")
+        if not access_token:
+            print(f"[ProfilesController] No access token in __NEXT_DATA__")
+            return {"success": False, "reason": "no_token"}
+        
+        print(f"[ProfilesController] Got access token: {access_token[:20]}...")
+        
+        # Step 2: Fetch credits API using the debug browser's fetch()
+        credits_js = """
+            async () => {
+                try {
+                    const resp = await fetch(
+                        'https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY',
+                        {
+                            headers: { 'Authorization': 'Bearer """ + access_token + """' },
+                            credentials: 'include'
+                        }
+                    );
+                    if (resp.ok) return await resp.json();
+                    return { error: resp.status };
+                } catch (e) { return { error: e.message }; }
+            }
+        """
+        credits_result = self.execute_js_on_debug_browser(email, credits_js, timeout=15)
+        
+        print(f"[ProfilesController] Credits result: {credits_result}")
+        
+        if credits_result and "error" not in credits_result:
+            profile.sku = credits_result.get("sku", "WS_ULTRA")
+            profile.credits = credits_result.get("credits", 0)
+            profile.paygate_tier = credits_result.get("userPaygateTier", "PAYGATE_TIER_TWO")
+            profile.is_ready = True
+            profile.subscription_fetched = True
+            profile.last_used = datetime.now().isoformat()
+            self.save_profiles()
+            print(f"[ProfilesController] \u2705 Success via debug browser: {profile.tier_display}, Credits: {profile.credits}")
+            return {"success": True, "reason": "ok"}
+        else:
+            print(f"[ProfilesController] Credits API failed via debug browser: {credits_result}")
+            profile.is_ready = True
+            profile.subscription_fetched = False
+            profile.last_used = datetime.now().isoformat()
+            self.save_profiles()
+            return {"success": False, "reason": "credits_api_failed"}
+
     def update_subscription_from_response(self, email: str, response: dict) -> bool:
         """Update subscription info from VEO API response.
         
@@ -859,19 +1036,33 @@ class ProfilesController:
             traceback.print_exc()
             return None
     
-    def open_browser_for_debug(self, email: str) -> bool:
+    def open_browser_for_debug(self, email: str, on_state_change=None) -> bool:
         """Open browser with saved profile for manual debugging.
         
-        Launches Chrome with the saved browser profile and navigates to
-        labs.google/fx/tools/flow so user can manually inspect session state.
-        Browser stays open until user closes it manually.
+        Launches Chrome with the saved browser profile. Browser stays open
+        until explicitly closed via close_debug_browser() or user closes all tabs.
+        Supports hide/show toggling while keeping browser alive in background.
         
         Args:
             email: Account email to open browser for
+            on_state_change: Optional callback(email, state) called when state changes.
+                             state is "visible", "hidden", or "closed"
             
         Returns:
             True if browser launched successfully, False otherwise
         """
+        import threading
+        import queue as queue_mod
+        
+        # Initialize tracking dict
+        if not hasattr(self, '_debug_browsers'):
+            self._debug_browsers = {}
+        
+        # Prevent duplicate launches
+        if email in self._debug_browsers:
+            print(f"[ProfilesController] Browser already open for {email}")
+            return True
+        
         profile = self.get_profile(email)
         if not profile or not profile.browser_profile_path:
             print(f"[ProfilesController] No browser profile found for {email}")
@@ -887,40 +1078,501 @@ class ProfilesController:
         try:
             from playwright.sync_api import sync_playwright
             
-            pw = sync_playwright().start()
-            context = pw.chromium.launch_persistent_context(
-                user_data_dir=str(profile_path),
-                channel="chrome",
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                ]
-            )
+            # Command queue for thread-safe hide/show/close
+            cmd_queue = queue_mod.Queue()
+            self._debug_browsers[email] = {
+                "cmd_queue": cmd_queue,
+                "state": "hidden",
+                "context": None,
+                "page": None,
+            }
             
-            page = context.new_page()
-            page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(3000)
+            def _run_debug_browser():
+                """Run debug browser with command loop for hide/show/close.
+                
+                Uses persistent Chrome (detached process) that survives app exit.
+                Connects via CDP — Chrome keeps running after disconnect.
+                """
+                cdp_session = None
+                window_id = None
+                browser_hwnds = []
+                kill_on_exit = False  # Only True if user sends "kill" command
+                chrome_pid = None  # Track for cleanup on failure
+                
+                try:
+                    from core.chrome_manager import launch_or_reconnect, kill_chrome, has_tab_with_url
+                    
+                    # Launch or reconnect to persistent Chrome
+                    chrome_info = launch_or_reconnect(
+                        str(profile_path),
+                        email=email,
+                        start_url="about:blank",
+                        hidden=True,
+                    )
+                    chrome_pid = chrome_info["pid"]
+                    cdp_port = chrome_info["port"]
+                    is_reconnect = "tabs" in chrome_info  # reconnect returns tabs
+                    
+                    print(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port} ({'reconnected' if is_reconnect else 'new'})")
+                    
+                    # Hide browser windows
+                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                    _win32_hide_hwnds(browser_hwnds)
+                    print(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — hidden for {email}")
+                    
+                    if on_state_change:
+                        try:
+                            on_state_change(email, "hidden")
+                        except Exception:
+                            pass
+                    
+                    with sync_playwright() as pw:
+                        # Step 1: Connect to Chrome via CDP (with retry for cold-boot)
+                        print(f"[DEBUG] Step 1: Connecting to CDP on port {cdp_port}...")
+                        browser = None
+                        cdp_retries = 3
+                        for cdp_attempt in range(cdp_retries):
+                            try:
+                                browser = pw.chromium.connect_over_cdp(
+                                    f"http://127.0.0.1:{cdp_port}"
+                                )
+                                break
+                            except Exception as cdp_err:
+                                if cdp_attempt < cdp_retries - 1:
+                                    print(f"[DEBUG] Step 1: CDP connect attempt {cdp_attempt + 1}/{cdp_retries} failed, retrying in 5s...")
+                                    import time as _time
+                                    _time.sleep(5)
+                                else:
+                                    raise cdp_err
+                        print(f"[DEBUG] Step 1: ✅ Connected. Contexts: {len(browser.contexts)}")
+                        context = browser.contexts[0] if browser.contexts else browser.new_context()
+                        
+                        # Step 2: Reuse existing pages
+                        existing_pages = context.pages
+                        print(f"[DEBUG] Step 2: Found {len(existing_pages)} existing page(s)")
+                        if existing_pages:
+                            page = existing_pages[0]
+                            print(f"[DEBUG] Step 2: ✅ Reusing tab: {page.url}")
+                        else:
+                            page = context.new_page()
+                            print(f"[DEBUG] Step 2: ✅ Created new tab")
+                        
+                        # Step 3: Set up header capture via CDP protocol
+                        # (page.route() doesn't work reliably with connect_over_cdp)
+                        captured_headers = {}
+                        print(f"[DEBUG] Step 3: Setting up CDP header capture...")
+                        
+                        try:
+                            cdp_session = context.new_cdp_session(page)
+                            print(f"[DEBUG] Step 3: ✅ CDP session created")
+                        except Exception as e:
+                            print(f"[DEBUG] Step 3: ❌ CDP session failed: {e}")
+                            cdp_session = None
+                        
+                        if cdp_session:
+                            # Use CDP Network domain to capture headers
+                            HEADER_KEYS = [
+                                "x-browser-channel",
+                                "x-browser-copyright", 
+                                "x-browser-year",
+                                "x-browser-validation",
+                                "x-client-data",
+                            ]
+                            
+                            def on_request_will_be_sent(event):
+                                url = event.get("request", {}).get("url", "")
+                                if "googleapis.com" in url or "aisandbox" in url:
+                                    headers = event.get("request", {}).get("headers", {})
+                                    found = []
+                                    for key in HEADER_KEYS:
+                                        val = headers.get(key) or headers.get(key.title()) or headers.get(key.upper())
+                                        if val:
+                                            captured_headers[key] = val
+                                            found.append(key)
+                                    if found:
+                                        print(f"[DEBUG] CDP captured headers from {url[:60]}: {found}")
+                            
+                            def on_request_extra_info(event):
+                                headers = event.get("headers", {})
+                                found = []
+                                for key in HEADER_KEYS:
+                                    # CDP may use different casing
+                                    for h_key, h_val in headers.items():
+                                        if h_key.lower() == key and h_val:
+                                            captured_headers[key] = h_val
+                                            found.append(key)
+                                if found:
+                                    print(f"[DEBUG] CDP ExtraInfo captured: {found}")
+                            
+                            cdp_session.on("Network.requestWillBeSent", on_request_will_be_sent)
+                            cdp_session.on("Network.requestWillBeSentExtraInfo", on_request_extra_info)
+                            cdp_session.send("Network.enable")
+                            print(f"[DEBUG] Step 3: ✅ Network.enable active — listening for headers")
+                            
+                            # Also get window ID
+                            try:
+                                win_info = cdp_session.send("Browser.getWindowForTarget")
+                                window_id = win_info.get("windowId")
+                            except Exception as e:
+                                print(f"[DEBUG] Window ID warning: {e}")
+                        
+                        # Step 4: Navigate to VEO if needed
+                        current_url = page.url
+                        print(f"[DEBUG] Step 4: Current URL = {current_url}")
+                        if "labs.google" not in current_url:
+                            print(f"[DEBUG] Step 4: Navigating to VEO...")
+                            page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
+                            page.wait_for_timeout(3000)
+                            print(f"[DEBUG] Step 4: ✅ Navigated. URL now = {page.url}")
+                            
+                            try:
+                                create_btn = page.locator("button:has-text('Create with Flow')")
+                                if create_btn.count() > 0 and create_btn.first.is_visible():
+                                    create_btn.first.click()
+                                    page.wait_for_timeout(3000)
+                                    print(f"[DEBUG] Step 4: Clicked 'Create with Flow'")
+                            except Exception:
+                                pass
+                        else:
+                            print(f"[DEBUG] Step 4: ✅ Already on VEO — skipping navigation")
+                        
+                        # Step 5: Trigger header capture via reload
+                        print(f"[DEBUG] Step 5: Headers so far = {list(captured_headers.keys())}")
+                        if not captured_headers.get("x-browser-validation"):
+                            print(f"[DEBUG] Step 5: Reloading to trigger API calls...")
+                            try:
+                                page.reload(wait_until="networkidle", timeout=15000)
+                                page.wait_for_timeout(3000)
+                                print(f"[DEBUG] Step 5: Reload done. Headers = {list(captured_headers.keys())}")
+                            except Exception as e:
+                                print(f"[DEBUG] Step 5: Reload error: {e}")
+                        
+                        # Step 5b: If still no headers, try navigating to a different VEO page
+                        if not captured_headers.get("x-browser-validation"):
+                            print(f"[DEBUG] Step 5b: Trying alternative navigation...")
+                            try:
+                                page.goto("https://labs.google/fx/tools/video-fx", wait_until="networkidle", timeout=15000)
+                                page.wait_for_timeout(3000)
+                                print(f"[DEBUG] Step 5b: Headers after video-fx = {list(captured_headers.keys())}")
+                            except Exception as e:
+                                print(f"[DEBUG] Step 5b: Alt nav error: {e}")
+                        
+                        # Final result
+                        if captured_headers:
+                            print(f"[ProfilesController] ✅ Browser headers captured for {email}: {list(captured_headers.keys())}")
+                        else:
+                            print(f"[ProfilesController] ⚠️ No x-browser-* headers captured for {email} — API calls may fail with 403")
+                        
+                        print(f"[ProfilesController] ✅ Debug browser ready for {email} (persistent, port={cdp_port})")
+                        
+                        # Store refs for RecaptchaBrowserSession reuse
+                        entry = self._debug_browsers.get(email)
+                        if entry:
+                            entry["context"] = context
+                            entry["page"] = page
+                            entry["hwnds"] = browser_hwnds
+                            entry["captured_headers"] = captured_headers
+                            entry["cdp_port"] = cdp_port
+                            entry["chrome_pid"] = chrome_pid
+                        
+                        # Command loop
+                        running = True
+                        while running:
+                            try:
+                                cmd = cmd_queue.get(timeout=0.5)
+                                
+                                if isinstance(cmd, tuple) and cmd[0] == "evaluate":
+                                    _, expression, eval_arg, result_event, result_holder = cmd
+                                    try:
+                                        if eval_arg is not None:
+                                            result = page.evaluate(expression, eval_arg)
+                                        else:
+                                            result = page.evaluate(expression)
+                                        result_holder["value"] = result
+                                        result_holder["error"] = None
+                                    except Exception as eval_err:
+                                        result_holder["value"] = None
+                                        result_holder["error"] = str(eval_err)
+                                    result_event.set()
+                                
+                                elif cmd == "hide":
+                                    # Re-scan HWNDs (Chrome may have spawned new windows)
+                                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                    _win32_hide_hwnds(browser_hwnds)
+                                    entry = self._debug_browsers.get(email)
+                                    if entry:
+                                        entry["state"] = "hidden"
+                                    print(f"[ProfilesController] 🔇 Browser hidden for {email}")
+                                    if on_state_change:
+                                        try:
+                                            on_state_change(email, "hidden")
+                                        except Exception:
+                                            pass
+                                            
+                                elif cmd == "show":
+                                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                    _win32_show_hwnds(browser_hwnds)
+                                    entry = self._debug_browsers.get(email)
+                                    if entry:
+                                        entry["state"] = "visible"
+                                    print(f"[ProfilesController] 👁️ Browser shown for {email}")
+                                    if on_state_change:
+                                        try:
+                                            on_state_change(email, "visible")
+                                        except Exception:
+                                            pass
+                                
+                                elif cmd == "refresh_token":
+                                    # Reload page to refresh session, extract fresh access_token
+                                    print(f"[ProfilesController] 🔄 Refreshing token for {email}...")
+                                    try:
+                                        page.reload(wait_until="networkidle", timeout=15000)
+                                        page.wait_for_timeout(2000)
+                                        
+                                        # Extract access_token from __NEXT_DATA__
+                                        token = page.evaluate("""() => {
+                                            try {
+                                                const nd = document.getElementById('__NEXT_DATA__');
+                                                if (nd) {
+                                                    const data = JSON.parse(nd.textContent);
+                                                    return data?.props?.pageProps?.userInfo?.accessToken
+                                                        || data?.props?.pageProps?.session?.accessToken
+                                                        || null;
+                                                }
+                                            } catch {}
+                                            return null;
+                                        }""")
+                                        
+                                        if token and len(token) > 100:
+                                            # Save to profile so Engine can pick it up
+                                            profile = self.get_profile(email)
+                                            if profile:
+                                                profile.access_token = token
+                                                from datetime import datetime, timedelta
+                                                profile.token_expires = datetime.now() + timedelta(hours=1)
+                                            print(f"[ProfilesController] ✅ Token refreshed for {email} ({len(token)} chars)")
+                                        else:
+                                            print(f"[ProfilesController] ⚠️ Token refresh failed — no token in page data")
+                                    except Exception as e:
+                                        print(f"[ProfilesController] ❌ Token refresh error: {e}")
+                                
+                                elif cmd == "close":
+                                    # Disconnect only — Chrome keeps running
+                                    running = False
+                                
+                                elif cmd == "kill":
+                                    # Kill Chrome process entirely
+                                    kill_on_exit = True
+                                    running = False
+                                    
+                            except queue_mod.Empty:
+                                pass
+                            
+                            # Check if browser process died externally
+                            if running:
+                                try:
+                                    from core.chrome_manager import _is_chrome_process_alive
+                                    if not _is_chrome_process_alive(chrome_pid, str(profile_path)):
+                                        running = False
+                                except Exception:
+                                    pass
+                        
+                        # Disconnect Playwright (Chrome keeps running)
+                        try:
+                            browser.close()  # close() on CDP-connected browser = disconnect only
+                        except Exception:
+                            pass
+                    
+                    # If kill was requested, terminate Chrome
+                    if kill_on_exit:
+                        kill_chrome(str(profile_path))
+                        print(f"[ProfilesController] 🔒 Chrome KILLED for {email}")
+                    else:
+                        print(f"[ProfilesController] 🔗 Playwright disconnected — Chrome still running for {email}")
+                        
+                except Exception as e:
+                    print(f"[ProfilesController] Debug browser error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Kill orphaned Chrome if CDP connect failed
+                    # (prevents zombie Chrome windows after reboot/timeout)
+                    try:
+                        if chrome_pid:
+                            kill_chrome(str(profile_path))
+                            print(f"[ProfilesController] 🔒 Killed orphaned Chrome PID={chrome_pid} (CDP connect failed)")
+                    except Exception:
+                        pass
+                finally:
+                    self._debug_browsers.pop(email, None)
+                    state = "closed" if kill_on_exit else "disconnected"
+                    print(f"[ProfilesController] Debug browser {state} for {email}")
+                    if on_state_change:
+                        try:
+                            on_state_change(email, "closed")
+                        except Exception:
+                            pass
             
-            # Click "Create with Flow" button if present (activates VEO Flow)
-            try:
-                create_btn = page.locator("button:has-text('Create with Flow')")
-                if create_btn.count() > 0 and create_btn.first.is_visible():
-                    print("[ProfilesController] Clicking 'Create with Flow' button...")
-                    create_btn.first.click()
-                    page.wait_for_timeout(3000)
-            except Exception:
-                pass
-            
-            print(f"[ProfilesController] ✅ Debug browser opened. Close browser manually when done.")
+            thread = threading.Thread(target=_run_debug_browser, daemon=True)
+            thread.start()
             return True
             
         except Exception as e:
+            self._debug_browsers.pop(email, None)
             print(f"[ProfilesController] Debug browser error: {e}")
             import traceback
             traceback.print_exc()
             return False
+    
+    def hide_debug_browser(self, email: str) -> bool:
+        """Hide (minimize) a debug browser. Browser keeps running in background.
+        
+        Thread-safe: sends 'hide' command via queue to the browser thread.
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return False
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            return False
+        entry["cmd_queue"].put("hide")
+        return True
+    
+    def show_debug_browser(self, email: str) -> bool:
+        """Show (restore) a hidden debug browser window.
+        
+        Thread-safe: sends 'show' command via queue to the browser thread.
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return False
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            return False
+        entry["cmd_queue"].put("show")
+        return True
+    
+    def close_debug_browser(self, email: str) -> bool:
+        """Disconnect from debug browser (Chrome keeps running in background).
+        
+        Thread-safe: sends 'close' command via queue to the browser thread.
+        Chrome process remains alive for fast reconnect.
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return False
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            return False
+        entry["cmd_queue"].put("close")
+        print(f"[ProfilesController] 🔗 Signaled disconnect for {email} (Chrome stays alive)")
+        return True
+    
+    def kill_debug_browser(self, email: str) -> bool:
+        """Kill debug browser completely (terminate Chrome process).
+        
+        Thread-safe: sends 'kill' command via queue to the browser thread.
+        Removes PID file and terminates the Chrome process.
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return False
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            # No active Playwright connection — try direct kill via PID file
+            profile = self.get_profile(email)
+            if profile and profile.browser_profile_path:
+                from core.chrome_manager import kill_chrome
+                return kill_chrome(profile.browser_profile_path)
+            return False
+        entry["cmd_queue"].put("kill")
+        print(f"[ProfilesController] 🔒 Signaled kill for {email}")
+        return True
+    
+    def is_debug_browser_open(self, email: str) -> bool:
+        """Check if a debug browser is currently open (visible or hidden)."""
+        if not hasattr(self, '_debug_browsers'):
+            return False
+        return email in self._debug_browsers
+    
+    def get_debug_browser_state(self, email: str) -> str:
+        """Get the state of a debug browser.
+        
+        Returns: "visible", "hidden", or "closed"
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return "closed"
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            return "closed"
+        return entry.get("state", "visible")
+    
+    def get_debug_browser_page(self, email: str):
+        """Get the Playwright page from a running debug browser.
+        
+        Returns the sync Playwright Page object if debug browser is open,
+        or None if not available. Used by RecaptchaBrowserSession to share
+        the browser context instead of launching a separate headless browser.
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return None
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            return None
+        return entry.get("page")
+    
+    def get_debug_browser_headers(self, email: str) -> Dict[str, str]:
+        """Get captured x-browser-* headers from running debug browser.
+        
+        Returns dict with x-browser-validation, x-client-data, etc.
+        Empty dict if no debug browser or headers not yet captured.
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return {}
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            return {}
+        return dict(entry.get("captured_headers", {}))
+    
+    def execute_js_on_debug_browser(self, email: str, expression: str, arg=None, timeout: float = 10.0):
+        """Execute JavaScript on the debug browser's page (thread-safe).
+        
+        This marshals the JS call through the command queue so it runs
+        on the debug browser's own greenlet/thread — avoiding the
+        Playwright 'Cannot switch to a different thread' error.
+        
+        Args:
+            email: Account email
+            expression: JavaScript expression to evaluate
+            arg: Optional argument to pass to page.evaluate(expression, arg)
+            timeout: Max seconds to wait for result
+            
+        Returns:
+            The result of page.evaluate(expression), or None on error
+        """
+        import threading
+        
+        if not hasattr(self, '_debug_browsers'):
+            return None
+        entry = self._debug_browsers.get(email)
+        if not entry:
+            return None
+        
+        cmd_queue = entry.get("cmd_queue")
+        if not cmd_queue:
+            return None
+        
+        # Create result holder and event
+        result_event = threading.Event()
+        result_holder = {"value": None, "error": None}
+        
+        # Send evaluate command to the browser thread
+        cmd_queue.put(("evaluate", expression, arg, result_event, result_holder))
+        
+        # Wait for the browser thread to process it
+        if result_event.wait(timeout=timeout):
+            if result_holder["error"]:
+                print(f"[ProfilesController] JS eval error for {email}: {result_holder['error']}")
+                return None
+            return result_holder["value"]
+        else:
+            print(f"[ProfilesController] JS eval timeout for {email} ({timeout}s)")
+            return None
     
     def auto_login_with_credentials(
         self, 
@@ -952,16 +1604,14 @@ class ProfilesController:
         """
         print(f"[ProfilesController] Starting Auto-Login for {email} (headless={headless})...")
         
-        # Get or create browser profile path
+        # Get or create browser profile path (each email gets its OWN profile)
         profile_path = None
-        existing_profiles = [p for p in self._profiles if p.browser_profile_path]
-        
-        if existing_profiles:
-            existing_profiles.sort(key=lambda p: p.last_used or "", reverse=True)
-            existing_path = Path(existing_profiles[0].browser_profile_path)
+        existing = self.get_profile(email)
+        if existing and existing.browser_profile_path:
+            existing_path = Path(existing.browser_profile_path)
             if existing_path.exists():
                 profile_path = existing_path
-                print(f"[ProfilesController] Reusing browser profile: {profile_path}")
+                print(f"[ProfilesController] Reusing OWN browser profile: {profile_path}")
         
         if not profile_path:
             import uuid
@@ -972,6 +1622,15 @@ class ProfilesController:
         
         try:
             from playwright.sync_api import sync_playwright
+            
+            # GUARD: If debug browser is already open on this profile, skip
+            # Chrome profile lock only allows ONE instance per user-data-dir
+            if hasattr(self, '_debug_browsers') and email in self._debug_browsers:
+                entry = self._debug_browsers[email]
+                if entry.get("context") is not None:
+                    print(f"[ProfilesController] ⚠️ Debug browser already open for {email} — cannot auto re-login (profile lock)")
+                    print(f"[ProfilesController] Close debug browser first, then retry login")
+                    return None
             
             with sync_playwright() as p:
                 context = p.chromium.launch_persistent_context(
@@ -1196,9 +1855,9 @@ class ProfilesController:
                         existing.is_ready = True
                         existing.last_used = datetime.now().isoformat()
                         if credits_data and "error" not in credits_data:
-                            existing.sku = credits_data.get("sku", "WS_FREEMIUM")
+                            existing.sku = credits_data.get("sku", "WS_ULTRA")
                             existing.credits = credits_data.get("credits", 0)
-                            existing.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_NOT_PAID")
+                            existing.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
                             existing.subscription_fetched = True
                             print(f"[ProfilesController] ✅ {existing.tier_display}, Credits: {existing.credits}")
                         self.save_profiles()
@@ -1219,9 +1878,9 @@ class ProfilesController:
                             profile.login_method = "browser"
                             profile.browser_profile_path = str(profile_path)
                             if credits_data and "error" not in credits_data:
-                                profile.sku = credits_data.get("sku", "WS_FREEMIUM")
+                                profile.sku = credits_data.get("sku", "WS_ULTRA")
                                 profile.credits = credits_data.get("credits", 0)
-                                profile.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_NOT_PAID")
+                                profile.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
                                 profile.subscription_fetched = True
                                 print(f"[ProfilesController] ✅ {profile.tier_display}, Credits: {profile.credits}")
                             self.save_profiles()
@@ -1460,7 +2119,7 @@ class ProfilesController:
         """Mark session as expired/needs login."""
         return self.update_profile(email, is_ready=False)
     
-    def auto_extract_tokens(self, email: str, headless: bool = False) -> bool:
+    def auto_extract_tokens(self, email: str, headless: bool = True) -> bool:
         """Auto-extract tokens from browser session using Playwright.
         
         Uses TokenExtractor to headlessly extract:

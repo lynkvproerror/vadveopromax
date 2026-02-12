@@ -28,7 +28,7 @@ class GenerationRequest:
     prompts: List[str]
     workflow: WorkflowType
     aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE
-    model: VideoModel = VideoModel.VEO_FAST_31
+    model: VideoModel = VideoModel.T2V_LANDSCAPE
     output_count: int = 4
     duration: int = 8
     image_paths: Optional[List[str]] = None
@@ -193,7 +193,7 @@ class GenerationController:
         self,
         prompts: List[str],
         aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE,
-        model: VideoModel = VideoModel.VEO_FAST_31,
+        model: VideoModel = VideoModel.T2V_LANDSCAPE,
         output_count: int = 4,
         duration: int = 8,
     ) -> str:
@@ -213,7 +213,7 @@ class GenerationController:
         prompts: List[str],
         image_paths: List[str],
         aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE,
-        model: VideoModel = VideoModel.VEO_FAST_31,
+        model: VideoModel = VideoModel.T2V_LANDSCAPE,
         output_count: int = 4,
         duration: int = 8,
     ) -> str:
@@ -234,7 +234,7 @@ class GenerationController:
         prompts: List[str],
         reference_video: str,
         aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE,
-        model: VideoModel = VideoModel.VEO_FAST_31,
+        model: VideoModel = VideoModel.T2V_LANDSCAPE,
         output_count: int = 4,
     ) -> str:
         """Submit Reference-to-Video generation."""

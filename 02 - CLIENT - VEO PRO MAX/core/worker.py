@@ -35,6 +35,7 @@ class WorkerResult:
     """Result from worker execution."""
     success: bool
     operation_name: Optional[str] = None
+    scene_id: Optional[str] = None
     output_uris: list = None
     error: Optional[str] = None
     
@@ -79,7 +80,7 @@ class Worker:
         self,
         task: Task,
         account: AccountManager,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
     ) -> WorkerResult:
         """Execute a task using the assigned account.
         
@@ -95,28 +96,29 @@ class Worker:
         self._current_task = task
         
         try:
-            # Get tokens (B1: access_token is passed for signature compat
-            # but NOT used in REST headers per Protocol Analysis §1.4C)
+            # === Stage 1: Token Validation (5%) ===
+            self._report_progress(task.id, 5, "🔑 Validating tokens")
             access_token = account.get_access_token()
             recaptcha_token = account.get_recaptcha_token()
             
-            # B5: Get fresh reCAPTCHA if needed — per Protocol Analysis,
-            # reCAPTCHA token is fetched BEFORE each generate request
-            # (Workflow step 7→8). Token expires in ~80s.
-            # FIX: await refresh from persistent browser instead of fire-and-forget
+            print(f"[Worker] access_token={'VALID(' + str(len(access_token)) + ' chars)' if access_token else 'NONE/EMPTY'}, "
+                  f"recaptcha={'VALID(' + str(len(recaptcha_token)) + ' chars)' if recaptcha_token else 'NONE/EMPTY'}, "
+                  f"token_expired={account._session.is_token_expired}")
+            
+            # === Stage 2: reCAPTCHA Refresh (10%) ===
             if not recaptcha_token or account.session.needs_recaptcha_refresh:
+                self._report_progress(task.id, 8, "🔄 Refreshing reCAPTCHA")
                 recaptcha_token = await account.refresh_recaptcha()
                 if not recaptcha_token:
                     return WorkerResult(
                         success=False,
                         error="reCAPTCHA token expired and refresh failed"
                     )
+            self._report_progress(task.id, 10, "✅ reCAPTCHA ready")
             
-            # Get per-account x-browser-* headers
+            # === Stage 3: Submitting to API (15%) ===
             account_headers = account.get_api_headers()
-            
-            # Report starting
-            self._report_progress(task.id, 10)
+            self._report_progress(task.id, 15, "📤 Submitting request")
             
             # Route to appropriate API method
             result = await self._execute_workflow(
@@ -128,8 +130,8 @@ class Worker:
                 paygate_tier=paygate_tier,
             )
             
-            # Report completion
-            self._report_progress(task.id, 100)
+            # === Stage 4: API Response Received (20%) ===
+            self._report_progress(task.id, 20, "✅ Request accepted")
             
             return result
             
@@ -147,7 +149,7 @@ class Worker:
         recaptcha_token: str,
         project_id: Optional[str],
         account_headers: Optional[dict] = None,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
     ) -> WorkerResult:
         """Execute the appropriate workflow based on task type."""
         
@@ -156,7 +158,11 @@ class Worker:
         try:
             workflow = WorkflowType[wt] if isinstance(wt, str) else wt
         except (KeyError, TypeError):
-            workflow = wt  # fallback: leave as-is
+            # Bug 4 fix: Fallback to value-based lookup (e.g., "text_to_video")
+            try:
+                workflow = WorkflowType(wt) if isinstance(wt, str) else wt
+            except (ValueError, TypeError):
+                workflow = wt  # last resort fallback
         
         if workflow == WorkflowType.T2V:
             response = await self._api_client.generate_video_t2v(
@@ -235,6 +241,7 @@ class Worker:
                 project_id=project_id,
                 prompt=task.prompt,
                 aspect_ratio=task.aspect_ratio,
+                model=task.model or "GEM_PIX_2",
                 output_count=task.output_count,
                 paygate_tier=paygate_tier,
                 account_headers=account_headers,
@@ -262,6 +269,23 @@ class Worker:
             else:
                 return WorkerResult(success=False, error="F2V requires continuation frame")
             
+        elif workflow == WorkflowType.I2I:
+            # Image to Image (edit/transform)
+            if not project_id:
+                return WorkerResult(success=False, error="I2I requires project_id")
+            
+            response = await self._api_client.generate_image(
+                access_token=access_token,
+                recaptcha_token=recaptcha_token,
+                project_id=project_id,
+                prompt=task.prompt,
+                aspect_ratio=task.aspect_ratio,
+                model=task.model or "GEM_PIX_2",
+                output_count=task.output_count,
+                paygate_tier=paygate_tier,
+                account_headers=account_headers,
+            )
+        
         else:
             return WorkerResult(success=False, error=f"Unknown workflow: {workflow}")
         
@@ -276,11 +300,15 @@ class Worker:
         data = response.data or {}
         
         # Extract operation name(s) for async operations
+        # API response structure: ops[0] = {"operation": {"name": "..."}, "sceneId": "...", "status": "..."}
         operation_name = None
         if "operations" in data:
             ops = data["operations"]
             if ops and len(ops) > 0:
-                operation_name = ops[0].get("name")
+                # name is nested inside ops[0]["operation"]["name"], NOT ops[0]["name"]
+                op_obj = ops[0].get("operation", {})
+                operation_name = op_obj.get("name") if isinstance(op_obj, dict) else None
+                scene_id = ops[0].get("sceneId", "")
         
         # Extract direct outputs for sync operations (like T2I)
         output_uris = []
@@ -292,13 +320,14 @@ class Worker:
         return WorkerResult(
             success=True,
             operation_name=operation_name,
+            scene_id=scene_id if 'scene_id' in dir() else None,
             output_uris=output_uris,
         )
     
-    def _report_progress(self, task_id: str, progress: int):
+    def _report_progress(self, task_id: str, progress: int, status_text: str = ""):
         """Report progress to callback."""
         if self._on_progress:
-            self._on_progress(task_id, progress)
+            self._on_progress(task_id, progress, status_text)
     
     def stop(self):
         """Signal worker to stop."""

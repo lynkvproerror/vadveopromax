@@ -340,7 +340,7 @@ class TokenExtractor:
                         }
                         
                         // Execute and get token
-                        return await grecaptcha.execute(siteKey, {action: 'generate'});
+                        return await grecaptcha.execute(siteKey, {action: 'VIDEO_GENERATION'});
                     } catch (e) {
                         console.error('reCAPTCHA error:', e);
                         return null;

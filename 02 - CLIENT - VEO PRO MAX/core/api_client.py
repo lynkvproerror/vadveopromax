@@ -22,11 +22,11 @@ from config.constants import APIEndpoints, WorkflowType, AspectRatio
 
 # === SEED CONSTANTS ===
 SEED_MIN = 0
-SEED_MAX = 32767
+SEED_MAX = 9999  # n8n uses Math.floor(Math.random() * 10000) → 0-9999
 
 
 def generate_random_seed() -> int:
-    """Generate a random seed in valid range (0-32767)."""
+    """Generate a random seed in valid range (0-9999, per n8n reference)."""
     return random.randint(SEED_MIN, SEED_MAX)
 
 
@@ -111,7 +111,7 @@ class VEOApiClient:
     Auth per VEO_Web_Client_Protocol_Analysis.md:
     - x-browser-* headers (via BrowserHeaders) — MANDATORY for all REST
     - reCAPTCHA token in body clientContext (for generation only)
-    - NO Authorization: Bearer header (access_token NOT used in REST)
+    - Authorization: Bearer {access_token} — REQUIRED for all REST endpoints
     
     Reference: CORE_MODULES_SPEC.md, SEED_MANAGEMENT.md
     """
@@ -163,28 +163,33 @@ class VEOApiClient:
 
     def _build_headers(
         self,
+        access_token: str = "",
         extra_headers: Optional[Dict[str, str]] = None,
         account_headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, str]:
         """Build request headers for aisandbox-pa REST endpoints.
         
-        Per VEO_Web_Client_Protocol_Analysis.md §3.3:
-        - Content-Type: text/plain;charset=UTF-8
-        - NO Authorization: Bearer header (access_token NOT used in REST)
-        - NO x-goog-recaptcha-token header (reCAPTCHA goes in body clientContext)
-        - x-browser-* headers are MANDATORY (per-account)
+        Per n8n reference workflow:
+        - Content-Type: application/json
+        - Origin + Referer required for CORS
+        - Authorization: raw token (NO Bearer prefix) for generate calls
+        - x-browser-* headers included for fingerprinting
         
         Args:
+            access_token: OAuth2 access token. Sent as raw token.
             extra_headers: Additional headers to merge.
-            account_headers: Per-account x-browser-* headers dict from
-                AccountSession.get_browser_headers(). When provided, overrides
-                the global BrowserHeaders singleton (critical for multi-account).
+            account_headers: Per-account x-browser-* headers dict.
         """
-        # Core headers — NO Bearer, NO reCAPTCHA header
         headers = {
-            "Content-Type": "text/plain;charset=UTF-8",
+            "Content-Type": "application/json",
+            "Origin": "https://labs.google",
+            "Referer": "https://labs.google/",
         }
-        # Add x-browser-* headers (MANDATORY)
+        # Authorization: Bearer token — required by Google aisandbox-pa API
+        # (n8n uses a proxy that handles auth differently, we call Google directly)
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+        # Add x-browser-* headers
         # Per-account headers take priority over global singleton
         if account_headers:
             headers.update(account_headers)
@@ -199,29 +204,32 @@ class VEOApiClient:
         self,
         recaptcha_token: str,
         project_id: str = "",
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         tool: str = "PINHOLE",
         include_recaptcha: bool = True,
     ) -> Dict[str, Any]:
         """Build clientContext for API requests.
         
-        HAR verified structure:
-        - tool: "PINHOLE" for video, "ASSET_MANAGER" for uploads
-        - recaptchaContext: nested object (required for generation, NOT for polling)
+        Per HAR analysis (verified ground truth):
+        - tool: "PINHOLE" for video/image, "ASSET_MANAGER" for uploads
         - sessionId: ";{timestamp_ms}"
         - projectId: UUID
         - userPaygateTier: account tier
+        - recaptchaContext: REQUIRED for all generation calls (HAR verified)
         """
         import time
+        import uuid as _uuid
         ctx: Dict[str, Any] = {
             "sessionId": f";{int(time.time() * 1000)}",
             "tool": tool,
         }
-        if project_id:
-            ctx["projectId"] = project_id
+        # projectId: always included (n8n always sends it)
+        # Fallback to generated UUID if not provided
+        ctx["projectId"] = project_id if project_id else str(_uuid.uuid4())
         if paygate_tier:
             ctx["userPaygateTier"] = paygate_tier
         if include_recaptcha and recaptcha_token:
+            # HAR verified: recaptchaContext requires both token AND applicationType
             ctx["recaptchaContext"] = {
                 "token": recaptcha_token,
                 "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB",
@@ -240,15 +248,36 @@ class VEOApiClient:
         """Make an API request.
         
         Args:
-            access_token: Kept for signature compat, NOT used in REST (§1.4C).
+            access_token: OAuth2 token, sent as Authorization: Bearer header.
             recaptcha_token: Goes in body clientContext, not headers.
             account_headers: Per-account x-browser-* headers dict.
         """
         url = f"{self.base_url}{endpoint}"
-        headers = self._build_headers(account_headers=account_headers)
+        headers = self._build_headers(access_token=access_token, account_headers=account_headers)
         
         try:
             session = await self._get_session()
+            
+            # DEBUG: dump request details for 403 diagnosis
+            import logging
+            _log = logging.getLogger(__name__)
+            _log.debug(f"[API REQUEST] {method} {url}")
+            _log.debug(f"[API HEADERS] {json.dumps({k: (v[:30] + '...' if len(str(v)) > 30 else v) for k,v in headers.items()}, indent=2, ensure_ascii=False)}")
+            if data:
+                # Show clientContext structure (mask token)
+                ctx = data.get("clientContext", {})
+                rc = ctx.get("recaptchaContext", {})
+                _log.debug(f"[API BODY] clientContext keys: {list(ctx.keys())}")
+                if rc:
+                    _log.debug(f"[API BODY] recaptchaContext: token={len(rc.get('token',''))}chars, applicationType={rc.get('applicationType','MISSING')}")
+                _log.debug(f"[API BODY] top-level keys: {list(data.keys())}")
+                # Full body dump (mask long tokens for readability)
+                import copy
+                dump = copy.deepcopy(data)
+                if "clientContext" in dump and "recaptchaContext" in dump["clientContext"]:
+                    t = dump["clientContext"]["recaptchaContext"].get("token", "")
+                    dump["clientContext"]["recaptchaContext"]["token"] = f"<{len(t)}chars>"
+                _log.debug(f"[API BODY FULL] {json.dumps(dump, indent=2, default=str, ensure_ascii=False)}")
             
             async with session.request(method, url, headers=headers, json=data) as resp:
                 response_code = resp.status
@@ -257,8 +286,19 @@ class VEOApiClient:
                 if response_code == 200:
                     try:
                         response_data = json.loads(response_text)
+                        _log.info(f"[API RESPONSE] {response_code} keys={list(response_data.keys())}")
+                        # Dump operations structure for debugging poll issue
+                        if "operations" in response_data:
+                            ops = response_data["operations"]
+                            _log.info(f"[API RESPONSE] operations count={len(ops)}")
+                            if ops:
+                                # Show first operation's keys and structure (truncated)
+                                first_op = ops[0]
+                                _log.info(f"[API RESPONSE] ops[0] keys={list(first_op.keys())}")
+                                _log.info(f"[API RESPONSE] ops[0] = {json.dumps(first_op, default=str, ensure_ascii=False)[:500]}")
                         return APIResponse(success=True, data=response_data, response_code=response_code)
                     except json.JSONDecodeError:
+                        _log.warning(f"[API RESPONSE] {response_code} JSON decode failed, raw={response_text[:200]}")
                         return APIResponse(success=True, data={"raw": response_text}, response_code=response_code)
                 else:
                     return APIResponse(
@@ -299,7 +339,7 @@ class VEOApiClient:
             "clientContext": self._build_client_context(
                 recaptcha_token,
                 tool="ASSET_MANAGER",
-                include_recaptcha=False,
+                include_recaptcha=False,  # HAR: upload does NOT send recaptcha
             ),
         }
         
@@ -321,32 +361,32 @@ class VEOApiClient:
         prompt: str,
         project_id: str = "",
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        model: str = "veo_3_1_t2v_fast_landscape_ultra",
+        model: str = "veo_3_1_t2v_fast_ultra",
         output_count: int = 4,
         seed: Optional[int] = None,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Text to Video generation.
         
         Endpoint: /v1/video:batchAsyncGenerateVideoText (Async)
-        HAR: T2V not directly captured, structure inferred from I2V/R2V patterns
+        HAR verified (Text to video 1.har): T2V sends 1 request item,
+        server generates multiple outputs from that single item.
         
         Reference: SEED_MANAGEMENT.md - seed is required, range 0-32767
-        Note: Uses multiple items in requests[] for multiple outputs (not numberOfVideos)
         """
         import uuid
         
-        requests_list = []
-        for _ in range(min(output_count, 4)):
-            actual_seed = seed if seed is not None else generate_random_seed()
-            requests_list.append({
-                "aspectRatio": aspect_ratio,
-                "seed": validate_seed(actual_seed),
-                "textInput": {"prompt": prompt},
-                "videoModelKey": model,
-                "metadata": {"sceneId": str(uuid.uuid4())},
-            })
+        # HAR verified: T2V always sends exactly 1 request item
+        # Server generates output_count videos from this single item
+        actual_seed = seed if seed is not None else generate_random_seed()
+        requests_list = [{
+            "aspectRatio": aspect_ratio,
+            "seed": validate_seed(actual_seed),
+            "textInput": {"prompt": prompt},
+            "videoModelKey": model,
+            "metadata": {"sceneId": str(uuid.uuid4())},
+        }]
         
         data = {
             "clientContext": self._build_client_context(
@@ -375,7 +415,7 @@ class VEOApiClient:
         model: str = "veo_3_1_i2v_s_fast_ultra_relaxed",
         output_count: int = 4,
         seed: Optional[int] = None,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Image to Video with single start frame.
@@ -386,8 +426,13 @@ class VEOApiClient:
         import uuid
         
         requests_list = []
-        for _ in range(min(output_count, 4)):
-            actual_seed = seed if seed is not None else generate_random_seed()
+        for idx in range(min(output_count, 4)):
+            # Bug 5 fix: When user provides a fixed seed, vary it per output
+            # to avoid generating identical videos
+            if seed is not None:
+                actual_seed = seed + idx  # Deterministic but unique per output
+            else:
+                actual_seed = generate_random_seed()
             requests_list.append({
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
@@ -425,7 +470,7 @@ class VEOApiClient:
         model: str = "veo_3_1_i2v_s_fast_fl_ultra_relaxed",
         output_count: int = 4,
         seed: Optional[int] = None,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Image to Video with start and end frames (F2V).
@@ -437,8 +482,12 @@ class VEOApiClient:
         import uuid
         
         requests_list = []
-        for _ in range(min(output_count, 4)):
-            actual_seed = seed if seed is not None else generate_random_seed()
+        for idx in range(min(output_count, 4)):
+            # Bug 5 fix: When user provides a fixed seed, vary it per output
+            if seed is not None:
+                actual_seed = seed + idx
+            else:
+                actual_seed = generate_random_seed()
             requests_list.append({
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
@@ -476,7 +525,7 @@ class VEOApiClient:
         model: str = "veo_3_1_r2v_fast_landscape_ultra_relaxed",
         output_count: int = 4,
         seed: Optional[int] = None,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """References/Ingredients to Video.
@@ -493,8 +542,12 @@ class VEOApiClient:
         ]
         
         requests_list = []
-        for _ in range(min(output_count, 4)):
-            actual_seed = seed if seed is not None else generate_random_seed()
+        for idx in range(min(output_count, 4)):
+            # Bug 5 fix: When user provides a fixed seed, vary it per output
+            if seed is not None:
+                actual_seed = seed + idx
+            else:
+                actual_seed = generate_random_seed()
             requests_list.append({
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
@@ -532,7 +585,7 @@ class VEOApiClient:
         model: str = "GEM_PIX_2",
         output_count: int = 4,
         seed: Optional[int] = None,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Text to Image generation.
@@ -546,19 +599,19 @@ class VEOApiClient:
         """
         endpoint = f"/v1/projects/{project_id}/flowMedia:batchGenerateImages"
         
-        # Build shared clientContext
+        # Build shared clientContext — HAR: T2I top-level cc has NO userPaygateTier
         client_ctx = self._build_client_context(
-            recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
+            recaptcha_token, project_id=project_id, paygate_tier="",
         )
         
-        # T2I HAR §3.3.2: each request item has its own clientContext + seed
+        # T2I HAR verified: each request item has its own clientContext + seed
         # Field names: "prompt" (not "promptInputs"), "imageAspectRatio" (not "aspectRatio")
         requests_list = []
         for _ in range(min(output_count, 4)):
             actual_seed = seed if seed is not None else generate_random_seed()
             requests_list.append({
                 "clientContext": client_ctx,
-                "seed": actual_seed,
+                "seed": validate_seed(actual_seed),
                 "imageModelName": model,
                 "prompt": prompt,
                 "imageAspectRatio": aspect_ratio,
@@ -623,7 +676,7 @@ class VEOApiClient:
         target_resolution: str = "VIDEO_RESOLUTION_1080P",
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
         seed: Optional[int] = None,
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Upscale video resolution.
@@ -648,10 +701,17 @@ class VEOApiClient:
         
         # Doc §6.13: Upscale clientContext = only sessionId + recaptchaContext
         # NO projectId, NO userPaygateTier, NO tool (defaults to PINHOLE)
+        # Bug 12 fix: Build minimal context — only sessionId + recaptchaContext
+        import time
+        upscale_ctx: Dict[str, Any] = {
+            "sessionId": f";{int(time.time() * 1000)}",
+        }
+        if recaptcha_token:
+            upscale_ctx["recaptchaContext"] = {
+                "token": recaptcha_token,
+            }
         data = {
-            "clientContext": self._build_client_context(
-                recaptcha_token, include_recaptcha=True,
-            ),
+            "clientContext": upscale_ctx,
             "requests": [{
                 "aspectRatio": aspect_ratio,
                 "resolution": target_resolution,
@@ -688,11 +748,14 @@ class VEOApiClient:
         
         Returns: {"credits": 45000, "userPaygateTier": "...", "sku": "...", "serviceTier": "..."}
         """
+        # Bug 9 fix: Don't send access_token — per HAR, /v1/credits uses
+        # only API key as query param, no Authorization: Bearer header needed.
+        # Sending expired token would cause 401, preventing credit/tier fetch.
         return await self._request(
             "GET",
             f"{APIEndpoints.CREDITS}?key={APIEndpoints.API_KEY}",
-            access_token,
-            recaptcha_token,
+            "",  # Bug 9: No access_token → no Authorization: Bearer
+            "",  # No reCAPTCHA needed
             account_headers=account_headers,
         )
     
@@ -752,7 +815,7 @@ class VEOApiClient:
         media_id: str,
         project_id: str = "",
         target_resolution: str = "UPSAMPLE_IMAGE_RESOLUTION_4K",
-        paygate_tier: str = "PAYGATE_TIER_NOT_PAID",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Upscale image resolution.

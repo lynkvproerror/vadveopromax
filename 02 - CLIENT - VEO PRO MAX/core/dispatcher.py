@@ -45,7 +45,7 @@ class Task:
     
     # Configuration
     aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE"
-    model: str = "veo_3_1_t2v_fast_landscape_ultra"  # Fixed: proper model key
+    model: str = "veo_3_1_t2v_fast_ultra"  # Fixed: proper model key
     output_count: int = 4
     duration_seconds: int = 8
     seed: Optional[int] = None  # Seed for reproducibility (0-32767)
@@ -61,6 +61,9 @@ class Task:
     
     # Output quality — "720p" (no upscale), "1080p", "4K"
     download_quality: str = "720p"
+    output_folder: str = ""  # Sidebar output folder for downloads
+    project_name: str = ""   # Sidebar project name for subfolder
+    prompt_index: int = 0    # Global position in batch (0-based) for sequential naming
     
     # State
     state: TaskState = TaskState.PENDING
@@ -203,6 +206,19 @@ class Dispatcher:
         
         return True
     
+    def requeue_task(self, task: Task):
+        """Re-queue a task that was interrupted (e.g., by engine stop).
+        
+        Bug 7: Called when engine pauses to re-queue RUNNING/WAITING_POLL tasks.
+        Task state should already be set to READY by the caller.
+        Decrements _running_count since the task is no longer running.
+        """
+        if task.state == TaskState.READY:
+            self._ready_queue.put_nowait(task)
+            self._running_count = max(0, self._running_count - 1)
+            if self._on_task_ready:
+                self._on_task_ready(task)
+    
     def submit_task_group(self, group: TaskGroup) -> bool:
         """Submit a group of tasks."""
         with self._lock:
@@ -220,6 +236,10 @@ class Dispatcher:
         """Get the next ready task.
         
         Non-blocking. Returns None if no task available.
+        
+        Bug 15 note: _running_count += 1 is safe in CPython because all workers
+        run on the same asyncio event loop and get_nowait() is synchronous.
+        The GIL ensures atomicity for single statements in cooperative multitasking.
         """
         try:
             task = self._ready_queue.get_nowait()
@@ -335,11 +355,26 @@ class Dispatcher:
                 if self._on_task_failed:
                     self._on_task_failed(task, task.error)
     
-    def update_progress(self, task_id: str, progress: int):
-        """Update task progress."""
+    def update_progress(self, task_id: str, progress: int, status_text: str = ""):
+        """Update task progress and optional status text.
+        
+        Args:
+            task_id: Task identifier
+            progress: Progress percentage (0-100)
+            status_text: Descriptive stage label (e.g., "🔥 Processing")
+        """
         task = self._all_tasks.get(task_id)
         if task:
             task.progress = min(100, max(0, progress))
+            if status_text:
+                task.status_text = status_text
+            # Notify UI callback if registered
+            if hasattr(self, '_on_progress_callback') and self._on_progress_callback:
+                self._on_progress_callback(task_id, task.progress, status_text)
+    
+    def set_progress_callback(self, callback):
+        """Register callback for progress updates: callback(task_id, progress, status_text)."""
+        self._on_progress_callback = callback
     
     def get_task(self, task_id: str) -> Optional[Task]:
         """Get task by ID."""
@@ -432,6 +467,24 @@ class Dispatcher:
         for tid in removable:
             del self._all_tasks[tid]
         return len(removable)
+    
+    def clear_all(self) -> int:
+        """Clear ALL task groups and tasks (queue reset).
+        
+        Returns:
+            Number of tasks removed
+        """
+        count = len(self._all_tasks)
+        self._task_groups.clear()
+        self._all_tasks.clear()
+        # Drain the ready queue
+        while not self._ready_queue.empty():
+            try:
+                self._ready_queue.get_nowait()
+            except Exception:
+                break
+        print(f"[Dispatcher] Cleared all: {count} tasks removed")
+        return count
     
     def export_state(self) -> dict:
         """Export all task groups and tasks for session persistence.

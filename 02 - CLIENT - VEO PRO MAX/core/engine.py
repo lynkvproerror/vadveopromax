@@ -10,7 +10,7 @@ Architecture: Hybrid Asyncio + ProcessPoolExecutor
 - ProcessPoolExecutor: CPU-bound tasks (ffmpeg, image processing)
 """
 
-from typing import Optional, List, Callable
+from typing import Optional, List, Dict, Callable
 from concurrent.futures import ProcessPoolExecutor
 import asyncio
 import base64
@@ -68,6 +68,9 @@ class Engine:
         self._workers: List[Worker] = []
         self._running = False
         self._stop_event = asyncio.Event()
+        self._task_available = asyncio.Event()  # Bug 14: signal workers when new task arrives
+        self._relogin_locks: Dict[str, asyncio.Lock] = {}  # Per-account re-login dedup
+        self._account_rate_locks: Dict[str, asyncio.Lock] = {}  # Bug 13: per-account rate limiter
         
         # Continuation settings (forwarded from AppController.start_processing)
         self._continuation_enabled = True  # C5: global toggle
@@ -86,6 +89,8 @@ class Engine:
     async def stop(self):
         """Stop the engine gracefully.
         
+        Bug 7 fix: Re-queue tasks in RUNNING/WAITING_POLL state so they
+        can be picked up when engine restarts (Resume).
         Sets the stop event, causing all worker loops to exit.
         The start() method's finally block handles browser cleanup.
         """
@@ -94,6 +99,18 @@ class Engine:
         
         log.info("Engine stop requested — signaling workers to exit")
         self._stop_event.set()
+        self._task_available.set()  # Wake up any waiting workers
+        
+        # Bug 7: Re-queue tasks stuck in RUNNING or WAITING_POLL
+        requeued = 0
+        for task in self._dispatcher.get_all_tasks():
+            if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                task.state = TaskState.READY
+                task.assigned_account = None
+                self._dispatcher.requeue_task(task)
+                requeued += 1
+        if requeued:
+            log.info(f"Re-queued {requeued} tasks that were RUNNING/WAITING_POLL")
         
         # Give workers a moment to finish current iteration
         await asyncio.sleep(0.5)
@@ -113,8 +130,18 @@ class Engine:
         
         self._running = True
         self._stop_event.clear()
+        self._task_available.clear()
+        
+        # Bug 14: Wire dispatcher's on_task_ready to wake up waiting workers
+        self._dispatcher._on_task_ready = lambda task: self._task_available.set()
+        
+        # Inject profiles_controller into accounts for debug browser sharing
+        if self._profiles_controller:
+            for acc in self._account_manager._accounts:
+                acc.set_profiles_controller(self._profiles_controller)
         
         # Start persistent browsers for reCAPTCHA refresh
+        # If debug browsers are already open, ensure_browser() will ATTACH to them
         try:
             await self._account_manager.startup_browsers(headless=True)
         except Exception as e:
@@ -156,11 +183,11 @@ class Engine:
                 if not isinstance(exc, asyncio.CancelledError):
                     log.error(f"Worker error: {exc}")
         finally:
-            # Shutdown browsers on engine stop
+            # Disconnect Playwright from persistent Chrome (Chrome keeps running)
             try:
                 await self._account_manager.shutdown_browsers()
             except Exception as e:
-                log.error(f"Browser shutdown error: {e}")
+                log.error(f"Browser disconnect error: {e}")
             self._running = False
             self._workers.clear()
     
@@ -189,7 +216,15 @@ class Engine:
                     task = self._dispatcher.get_next_task()
                     if not task:
                         account.release_slot()
-                        await asyncio.sleep(0.5)
+                        # Bug 14: Wait for task notification instead of busy-polling
+                        self._task_available.clear()
+                        try:
+                            await asyncio.wait_for(
+                                self._task_available.wait(),
+                                timeout=2.0,  # Check stop_event every 2s
+                            )
+                        except asyncio.TimeoutError:
+                            pass
                         continue
                     
                     # D2: Account affinity check — continuation tasks must run on same account
@@ -207,14 +242,9 @@ class Engine:
                         except Exception as e:
                             log.warning(f"Browser start failed for {account.email}: {e} (continuing without persistent browser)")
                     
-                    # Step 4: Preemptive reCAPTCHA refresh
-                    if not account.get_recaptcha_token():
-                        try:
-                            token = await account.refresh_recaptcha()
-                            if not token:
-                                log.warning(f"reCAPTCHA refresh failed for {account.email}, proceeding anyway")
-                        except Exception as e:
-                            log.warning(f"reCAPTCHA refresh error for {account.email}: {e}")
+                    # Bug 11 fix: Removed redundant reCAPTCHA refresh here.
+                    # Worker.execute() already handles reCAPTCHA refresh (step B5).
+                    # Having it in both places caused double-refresh and wasted 200-500ms.
                     
                     # Step 5: Ensure project exists (CHỦ's ProjectManager)
                     if not account.project_id:
@@ -230,9 +260,11 @@ class Engine:
                         )
                         if project_id:
                             account.set_project_id(project_id)
+                        else:
+                            log.warning(f"⚠️ No projectId for {account.email} — generation requests may fail (TRPC createProject returned None)")
                     
                     # Step 5.5: Auto-detect paygate tier (once per account)
-                    if account.paygate_tier == "PAYGATE_TIER_NOT_PAID":
+                    if account.paygate_tier == "PAYGATE_TIER_TWO":
                         await account.fetch_paygate_tier(self._api_client)
                     
                     # Notify UI
@@ -241,30 +273,45 @@ class Engine:
                     if self._on_task_started:
                         self._on_task_started(task)
                     
-                    # Step 6: Anti-Detect Spam — random delay
-                    if getattr(self, '_anti_detect_enabled', True):
-                        delay_min = getattr(self, '_anti_detect_delay_min', 1.0)
-                        delay_max = getattr(self, '_anti_detect_delay_max', 5.0)
-                        delay = random.uniform(delay_min, delay_max)
-                        log.debug(f"Worker {worker.worker_id}: anti-detect delay {delay:.6f}s before submit")
-                        await asyncio.sleep(delay)
+                    # Bug 13: Per-account rate limiter — serialize requests per account
+                    # Ensures 4 workers on same account don't submit simultaneously
+                    if account.email not in self._account_rate_locks:
+                        self._account_rate_locks[account.email] = asyncio.Lock()
                     
                     # Step 7: Execute with RETRY + TIMEOUT
+                    # Rate lock held ONLY during anti-detect delay + API call,
+                    # released between retries so other workers can proceed.
                     max_retries = account.retry_count
                     timeout = account.request_timeout
                     result = None
                     
                     for attempt in range(max_retries + 1):
-                        try:
-                            result = await asyncio.wait_for(
-                                worker.execute(task, account, paygate_tier=account.paygate_tier),
-                                timeout=timeout,
-                            )
-                        except asyncio.TimeoutError:
-                            result = WorkerResult(
-                                success=False,
-                                error=f"Request timed out after {timeout}s"
-                            )
+                        # Lock: covers anti-detect delay + single API call only
+                        async with self._account_rate_locks[account.email]:
+                            # Step 6: Anti-Detect Spam — random delay (SERIALIZED per account)
+                            if getattr(self, '_anti_detect_enabled', True):
+                                delay_min = getattr(self, '_anti_detect_delay_min', 1.0)
+                                delay_max = getattr(self, '_anti_detect_delay_max', 5.0)
+                                delay = random.uniform(delay_min, delay_max)
+                                log.debug(f"Worker {worker.worker_id}: anti-detect delay {delay:.6f}s before submit")
+                                await asyncio.sleep(delay)
+                        
+                            try:
+                                result = await asyncio.wait_for(
+                                    worker.execute(task, account, paygate_tier=account.paygate_tier),
+                                    timeout=timeout,
+                                )
+                            except asyncio.TimeoutError:
+                                result = WorkerResult(
+                                    success=False,
+                                    error=f"Request timed out after {timeout}s"
+                                )
+                            
+                            # reCAPTCHA tokens are single-use: consumed by Google
+                            # on EVERY request (success OR failure).
+                            # Invalidate immediately so next call gets a fresh token.
+                            account.invalidate_recaptcha()
+                        # Rate lock released here — other workers can now submit
                         
                         if result.success:
                             break  # Success — exit retry loop
@@ -273,10 +320,32 @@ class Engine:
                         if self._is_auth_error(result.error or ""):
                             break
                         
-                        # Non-auth error — retry with backoff
+                        # Non-auth error — retry with backoff (OUTSIDE rate lock)
                         task.retry_attempts = attempt + 1
                         if attempt < max_retries:
                             backoff = min(2 ** (attempt + 1), 30)
+                            
+                            # Auto browser restart on persistent reCAPTCHA failures
+                            # After 2 consecutive 403s, full restart: kill Chrome → relaunch → fresh PID
+                            error_lower = (result.error or "").lower()
+                            if attempt == 2 and "recaptcha" in error_lower:
+                                log.warning(
+                                    f"🔄 Worker {worker.worker_id}: reCAPTCHA failed {attempt + 1}x consecutively. "
+                                    f"Full browser restart (kill + relaunch)..."
+                                )
+                                try:
+                                    restart_ok = await account.restart_browser()
+                                    if restart_ok:
+                                        log.info(
+                                            f"✅ Worker {worker.worker_id}: Browser fully restarted for {account.email}. "
+                                            f"Fresh PID, tokens, reCAPTCHA. Retrying..."
+                                        )
+                                    else:
+                                        log.error(f"❌ Worker {worker.worker_id}: Browser restart returned False")
+                                    backoff = 5  # Give extra time after restart
+                                except Exception as restart_err:
+                                    log.error(f"❌ Browser restart failed: {restart_err}")
+                            
                             log.warning(
                                 f"Worker {worker.worker_id}: task {task.id} failed "
                                 f"(attempt {attempt + 1}/{max_retries + 1}): {result.error}. "
@@ -284,15 +353,24 @@ class Engine:
                             )
                             await asyncio.sleep(backoff)
                     
+                    # Bug 18: Release slot IMMEDIATELY after submit
+                    # API is async — server processes in background, no need to hold slot during polling
+                    account.release_slot()
+                    
                     # Step 8: Process final result
+                    log.info(f"[Engine] Task {task.id}: result.success={result.success if result else 'NO_RESULT'}, "
+                             f"operation_name={result.operation_name if result else 'N/A'}")
                     if result and result.success:
-                        # For async operations, start polling
+                        # For async operations, start polling (slot already released)
                         if result.operation_name:
                             task.operation_name = result.operation_name
+                            task.scene_id = result.scene_id or ""
                             task.state = TaskState.WAITING_POLL
+                            log.info(f"[Engine] Task {task.id}: → POLLING {result.operation_name} (scene={task.scene_id[:8]}...)")
                             await self._poll_operation(task, account)
                         else:
                             # Sync operation (T2I) - already complete
+                            log.info(f"[Engine] Task {task.id}: → SYNC COMPLETE (no operation_name)")
                             self._dispatcher.complete_task(
                                 task.id,
                                 output_uris=result.output_uris,
@@ -307,7 +385,7 @@ class Engine:
                             log.warning(f"Auth error for {account.email}: {error_msg}")
                             log.info(f"Attempting auto re-login for {account.email}...")
                             
-                            relogin_ok = await self._try_auto_relogin(account.email)
+                            relogin_ok = await self._try_auto_relogin(account.email, account)
                             
                             if relogin_ok:
                                 log.info(f"✅ Re-login OK for {account.email}, re-queuing task {task.id}")
@@ -331,9 +409,13 @@ class Engine:
                             if self._on_task_failed:
                                 self._on_task_failed(task, final_error)
                 
-                finally:
-                    # Release slot AFTER task fully complete (including polling)
-                    await self._account_manager.release_slot(account.email)
+                except Exception as inner_e:
+                    # Release slot if still held due to error before the release point
+                    try:
+                        account.release_slot()
+                    except Exception:
+                        pass
+                    raise inner_e
                 
             except asyncio.CancelledError:
                 break
@@ -344,7 +426,19 @@ class Engine:
     async def _poll_operation(self, task: Task, account: AccountManager):
         """Poll for async operation completion.
         
-        Uses exponential backoff within reasonable bounds.
+        Progress stages (status-based, not time-based):
+          5%  - Token validation (worker)
+         10%  - reCAPTCHA refresh (worker)
+         15%  - Submitting to API (worker)
+         20%  - API accepted request (worker)
+         25%  - Polling started (PENDING)
+         30%  - Server queued (PENDING, 2nd+ poll)
+         40%  - Server processing (ACTIVE, 1st seen)
+         45-80% - Server processing (ACTIVE, ramping with polls)
+         85%  - All operations SUCCESSFUL
+         90%  - Downloading outputs
+         95%  - Download complete / upscaling
+        100%  - Fully done
         """
         from config.constants import AppConstants
         
@@ -352,12 +446,19 @@ class Engine:
         max_poll_time = AppConstants.MAX_POLL_TIME
         elapsed = 0
         
+        # Track status transitions for progress
+        active_poll_count = 0   # How many polls returned ACTIVE
+        pending_poll_count = 0  # How many polls returned PENDING
+        last_status = "MEDIA_GENERATION_STATUS_PENDING"
+        
+        # Initial: polling started
+        self._dispatcher.update_progress(task.id, 25, "⏳ Waiting in queue")
+        
         while elapsed < max_poll_time and not self._stop_event.is_set():
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
             
             try:
-                # Doc §6.20: Track current status for each operation
                 current_status = getattr(task, '_poll_status', 'MEDIA_GENERATION_STATUS_PENDING')
                 
                 response = await self._api_client.check_status(
@@ -368,18 +469,17 @@ class Engine:
                         "sceneId": getattr(task, 'scene_id', ''),
                         "status": current_status,
                     }],
-                    account_headers=account.get_api_headers(),  # Issue 10: per-account headers
+                    account_headers=account.get_api_headers(),
                 )
                 
                 if not response.success:
                     continue
                 
-                # Doc §6.20: Status is per-operation inside operations[]
                 ops = response.data.get("operations", [])
                 if not ops:
                     continue
                 
-                # Check if ALL operations are SUCCESSFUL
+                # Check statuses
                 all_successful = all(
                     op.get("status") == "MEDIA_GENERATION_STATUS_SUCCESSFUL"
                     for op in ops
@@ -389,31 +489,53 @@ class Engine:
                     for op in ops
                 )
                 
+                # Get current server status
+                server_status = ops[0].get("status", current_status) if ops else current_status
+                
                 # Update tracked status for next poll request
                 if ops:
-                    task._poll_status = ops[0].get("status", current_status)
+                    task._poll_status = server_status
                 
                 if all_successful:
-                    # Extract output URIs from operations[].servingBaseUri
-                    output_uris = self._extract_output_uris(response.data)
+                    # === Stage: All SUCCESSFUL (85%) ===
+                    self._dispatcher.update_progress(task.id, 85, "✅ Generation complete")
                     
-                    # Auto-upscale if quality > 720p
-                    if task.download_quality != "720p" and output_uris:
-                        upscaled = await self._auto_upscale(
-                            task, account, output_uris
+                    output_details = self._extract_output_details(response.data)
+                    output_uris = [d["fifeUrl"] for d in output_details]
+                    media_ids = [d["mediaId"] for d in output_details]
+                    
+                    # === Stage: Download 720p originals (86%) ===
+                    self._dispatcher.update_progress(task.id, 86, "⬇️ Downloading 720p")
+                    local_720p = await self._download_outputs(
+                        task, output_uris, quality_subfolder="720p"
+                    )
+                    
+                    # === Stage: Auto-upscale if needed (88-92%) ===
+                    upscale_paths = []
+                    if task.download_quality != "720p" and media_ids:
+                        self._dispatcher.update_progress(task.id, 88, "⬆️ Upscaling")
+                        upscaled_uris = await self._auto_upscale(
+                            task, account, output_uris, media_ids
                         )
-                        if upscaled:
-                            output_uris = upscaled
+                        if upscaled_uris:
+                            self._dispatcher.update_progress(
+                                task.id, 92, f"⬇️ Downloading {task.download_quality}"
+                            )
+                            upscale_paths = await self._download_outputs(
+                                task, upscaled_uris,
+                                quality_subfolder=task.download_quality,
+                            )
                     
-                    # Download videos to output_folder
-                    local_paths = await self._download_outputs(task, output_uris)
-                    if local_paths:
-                        task.output_uris = local_paths  # Replace URLs with local paths
+                    # Prefer upscaled paths, fallback to 720p
+                    final_paths = upscale_paths if upscale_paths else local_720p
+                    if final_paths:
+                        task.output_uris = final_paths
                     
-                    # FFmpeg pipeline: extract frame for continuation children
+                    # === Stage: Post-processing (95%) ===
+                    self._dispatcher.update_progress(task.id, 95, "🎬 Post-processing")
                     continuation_frame_uri = None
                     if (
-                        self._continuation_enabled  # C5: respect settings toggle
+                        self._continuation_enabled
                         and self._dispatcher.has_children(task.id)
                         and output_uris
                     ):
@@ -421,6 +543,8 @@ class Engine:
                             task, account, output_uris[0]
                         )
                     
+                    # === Stage: Complete (100%) ===
+                    self._dispatcher.update_progress(task.id, 100, "✅ Done")
                     self._dispatcher.complete_task(
                         task.id,
                         output_uris=output_uris,
@@ -439,9 +563,25 @@ class Engine:
                     return
                 
                 else:
-                    # Still ACTIVE or PENDING
-                    progress = min(90, int(elapsed / max_poll_time * 90))
-                    self._dispatcher.update_progress(task.id, progress)
+                    # === Status-based progress mapping ===
+                    if server_status == "MEDIA_GENERATION_STATUS_PENDING":
+                        pending_poll_count += 1
+                        progress = min(35, 25 + pending_poll_count * 2)
+                        status_label = "⏳ Queued on server"
+                    elif server_status == "MEDIA_GENERATION_STATUS_ACTIVE":
+                        active_poll_count += 1
+                        progress = min(80, 40 + int(active_poll_count * 5))
+                        status_label = "🔥 Processing"
+                    else:
+                        progress = min(80, 25 + int(elapsed / max_poll_time * 55))
+                        status_label = "⏳ Working"
+                    
+                    self._dispatcher.update_progress(task.id, progress, status_label)
+                    
+                    # Log status transition
+                    if server_status != last_status:
+                        log.info(f"Task {task.id}: {last_status} → {server_status} ({progress}%)")
+                        last_status = server_status
                     
             except Exception:
                 continue
@@ -449,34 +589,40 @@ class Engine:
         # Timeout
         self._dispatcher.fail_task(task.id, f"Polling timeout ({max_poll_time}s)")
     
-    def _extract_output_uris(self, data: dict) -> list:
-        """Extract output URIs from poll response.
+    def _extract_output_details(self, data: dict) -> list:
+        """Extract output details from poll response.
         
-        Per HAR §3.3.3: URIs are deeply nested:
-          operations[].operation.metadata.video.fifeUrl  (video download)
-          operations[].operation.metadata.video.servingBaseUri  (thumbnail)
-          operations[].operation.metadata.image.generatedImage.fifeUrl  (image)
+        Returns list of {fifeUrl, mediaId} dicts.
+        - fifeUrl: download URL for the video/image
+        - mediaId: metadata.name (protobuf Base64), needed for upscale API
+        
+        HAR-verified paths:
+          operations[].operation.metadata.name           → mediaId for upscale
+          operations[].operation.metadata.video.fifeUrl  → download URL
         """
-        uris = []
+        results = []
         for op in data.get("operations", []):
-            metadata = (
-                op.get("operation", {})
-                .get("metadata", {})
-            )
+            metadata = op.get("operation", {}).get("metadata", {})
+            media_id = metadata.get("name", "")  # protobuf Base64
+            
             # Video result
             video = metadata.get("video", {})
             if video:
-                uri = video.get("fifeUrl") or video.get("servingBaseUri")
+                uri = video.get("fifeUrl") or video.get("servingBaseUri", "")
                 if uri:
-                    uris.append(uri)
+                    results.append({"fifeUrl": uri, "mediaId": media_id})
                     continue
             # Image result
             image = metadata.get("image", {}).get("generatedImage", {})
             if image:
-                uri = image.get("fifeUrl")
+                uri = image.get("fifeUrl", "")
                 if uri:
-                    uris.append(uri)
-        return uris
+                    results.append({"fifeUrl": uri, "mediaId": media_id})
+        return results
+    
+    def _extract_output_uris(self, data: dict) -> list:
+        """Backward-compatible wrapper: extract fifeUrls only."""
+        return [d["fifeUrl"] for d in self._extract_output_details(data)]
     
     async def _extract_continuation_frame(
         self, task: Task, account: AccountManager, video_uri: str
@@ -566,12 +712,23 @@ class Engine:
             return None
     
     async def _auto_upscale(
-        self, task: Task, account: AccountManager, output_uris: list
+        self, task: Task, account: AccountManager,
+        output_uris: list, media_ids: list,
     ) -> list:
         """Auto-upscale videos if download_quality > 720p.
         
-        Protocol §3.3.3: batchAsyncGenerateVideoUpsampleVideo
-        Maps quality → VIDEO_RESOLUTION_* enum.
+        HAR-verified flow:
+        1. Submit upscale with videoInput.mediaId = metadata.name (protobuf Base64)
+        2. Poll with status tracking (PENDING → ACTIVE → SUCCESSFUL)
+        3. Progress reporting 88% → 90%
+        4. Timeout fallback: skip (720p already saved separately)
+        
+        Args:
+            output_uris: fifeUrls (720p download URLs) — for fallback logging only
+            media_ids: metadata.name values (protobuf Base64) — for upscale API
+        
+        Returns:
+            List of upscaled fifeUrls, empty list if all fail.
         """
         quality_map = {
             "1080p": "VIDEO_RESOLUTION_1080P",
@@ -579,111 +736,178 @@ class Engine:
         }
         resolution = quality_map.get(task.download_quality)
         if not resolution:
-            return output_uris  # 720p or unknown → no upscale
+            return []  # 720p or unknown → no upscale needed
         
-        model_map = {
-            "VIDEO_RESOLUTION_1080P": "veo_3_1_upsampler_1080p",
-            "VIDEO_RESOLUTION_4K": "veo_3_1_upsampler_4k",
-        }
-        
+        from core.api_client import generate_random_seed
+        total = len(media_ids)
         upscaled_uris = []
-        for uri in output_uris:
+        
+        for idx, media_id in enumerate(media_ids):
+            video_label = f"{idx + 1}/{total}"
+            if not media_id:
+                log.warning(f"Upscale {video_label}: no mediaId, skipping")
+                continue
+            
             try:
-                # Need mediaId from the URI — extract from poll response
-                # The uri here is fifeUrl; we need a mediaId for upscale
-                # For now, use the operation metadata approach
+                # Get fresh reCAPTCHA token
                 recaptcha_token = account.get_recaptcha_token() or ""
                 if not recaptcha_token:
                     token = await account.refresh_recaptcha()
                     recaptcha_token = token or ""
                 
-                from core.api_client import generate_random_seed
+                # Submit upscale request with correct mediaId
                 resp = await self._api_client.upscale_video(
                     access_token=account.get_access_token() or "",
                     recaptcha_token=recaptcha_token,
-                    media_id=uri,  # fifeUrl doubles as mediaId in some flows
-                    resolution=resolution,
+                    video_media_id=media_id,  # HAR-verified: metadata.name
+                    target_resolution=resolution,
                     aspect_ratio=task.aspect_ratio,
                     seed=generate_random_seed(),
                     account_headers=account.get_api_headers(),
                 )
                 
-                if resp.success:
-                    # Poll upscale operation
-                    ops = resp.data.get("operations", [])
-                    if ops:
-                        op_name = ops[0].get("operation", {}).get("name", "")
-                        if op_name:
-                            # Simple poll loop for upscale
-                            for _ in range(60):  # max 5 min
-                                await asyncio.sleep(5)
-                                poll_resp = await self._api_client.check_status(
-                                    access_token=account.get_access_token() or "",
-                                    recaptcha_token="",
-                                    operations=[{
-                                        "operation": {"name": op_name},
-                                        "status": "MEDIA_GENERATION_STATUS_PENDING",
-                                    }],
-                                    account_headers=account.get_api_headers(),
-                                )
-                                if poll_resp.success:
-                                    poll_ops = poll_resp.data.get("operations", [])
-                                    if poll_ops and poll_ops[0].get("status") == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
-                                        upscaled_uri = self._extract_output_uris(poll_resp.data)
-                                        if upscaled_uri:
-                                            upscaled_uris.extend(upscaled_uri)
-                                        break
-                                    elif poll_ops and poll_ops[0].get("status") == "MEDIA_GENERATION_STATUS_FAILED":
-                                        log.error(f"Upscale failed for {uri}")
-                                        upscaled_uris.append(uri)  # Fallback to original
-                                        break
+                if not resp.success:
+                    log.warning(f"Upscale {video_label} request failed: {resp.error}")
+                    continue
+                
+                # Extract operation name for polling
+                ops = resp.data.get("operations", [])
+                if not ops:
+                    log.warning(f"Upscale {video_label}: no operation returned")
+                    continue
+                
+                op_name = ops[0].get("operation", {}).get("name", "")
+                scene_id = ops[0].get("sceneId", "")
+                if not op_name:
+                    log.warning(f"Upscale {video_label}: no operation name")
+                    continue
+                
+                log.info(f"Upscale {video_label} started: op={op_name}")
+                
+                # Poll upscale with status tracking + progress
+                poll_status = "MEDIA_GENERATION_STATUS_PENDING"
+                max_polls = 60  # 60 × 5s = max 5 min
+                
+                for poll_num in range(max_polls):
+                    await asyncio.sleep(5)
+                    
+                    # Progress: map to 88-90% range
+                    progress = min(90, 88 + int(poll_num * 0.5))
+                    self._dispatcher.update_progress(
+                        task.id, progress,
+                        f"⬆️ Upscaling {video_label}"
+                    )
+                    
+                    poll_resp = await self._api_client.check_status(
+                        access_token=account.get_access_token() or "",
+                        recaptcha_token="",
+                        operations=[{
+                            "operation": {"name": op_name},
+                            "sceneId": scene_id,
+                            "status": poll_status,  # Track actual status
+                        }],
+                        account_headers=account.get_api_headers(),
+                    )
+                    
+                    if not poll_resp.success:
+                        continue
+                    
+                    poll_ops = poll_resp.data.get("operations", [])
+                    if not poll_ops:
+                        continue
+                    
+                    server_status = poll_ops[0].get("status", "")
+                    
+                    # Track status transition
+                    if server_status != poll_status:
+                        log.info(f"Upscale {video_label}: {poll_status} → {server_status}")
+                        poll_status = server_status
+                    
+                    if server_status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
+                        upscaled = self._extract_output_uris(poll_resp.data)
+                        if upscaled:
+                            upscaled_uris.extend(upscaled)
+                            log.info(f"Upscale {video_label} done ✅")
+                        break
+                    
+                    elif server_status == "MEDIA_GENERATION_STATUS_FAILED":
+                        error = poll_ops[0].get("error", {}).get("message", "unknown")
+                        log.error(f"Upscale {video_label} failed: {error}")
+                        break
                 else:
-                    log.warning(f"Upscale request failed: {resp.error}, using original")
-                    upscaled_uris.append(uri)
+                    # Timeout — 720p already saved separately, just log
+                    log.warning(f"Upscale {video_label} timeout (5 min), 720p already saved")
+            
             except Exception as e:
-                log.error(f"Upscale error: {e}, using original")
-                upscaled_uris.append(uri)
+                log.error(f"Upscale {video_label} error: {e}")
         
-        return upscaled_uris if upscaled_uris else output_uris
+        return upscaled_uris
     
-    async def _download_outputs(self, task: Task, output_uris: list) -> list:
-        """Download output URIs to output_folder.
+    async def _download_outputs(
+        self, task: Task, output_uris: list,
+        quality_subfolder: str = "",
+    ) -> list:
+        """Download output URIs to output_folder/project_name/quality_subfolder/.
         
-        Naming convention from AppSettings:
-        {row_digits-padded index}{separator}{timestamp}_{quality}.mp4
+        Folder structure (Option A):
+          output_folder/project_name/720p/001a_..._720p.mp4
+          output_folder/project_name/4K/001a_..._4K.mp4
+        
+        Naming convention:
+        - Single output:   {NNN}_{timestamp}_{quality}.mp4
+        - Multi output:    {NNN}{variant}_{timestamp}_{quality}.mp4
         """
         from config.settings import get_settings
         settings = get_settings()
         
-        output_folder = settings.output_folder
+        # Prefer task-level output_folder (from sidebar), fallback to global settings
+        output_folder = getattr(task, 'output_folder', '') or settings.output_folder
         if not output_folder:
             log.debug("No output_folder configured, skipping download")
             return []
         
-        output_path = Path(output_folder)
+        # Create project subfolder + quality subfolder
+        project_name = getattr(task, 'project_name', '') or "Untitled"
+        if quality_subfolder:
+            output_path = Path(output_folder) / project_name / quality_subfolder
+        else:
+            output_path = Path(output_folder) / project_name
         output_path.mkdir(parents=True, exist_ok=True)
         
         local_paths = []
         import aiohttp
         from datetime import datetime
         
+        # Global prompt index (1-based, 3-digit padded)
+        prompt_num = getattr(task, 'prompt_index', 0) + 1
+        idx_str = str(prompt_num).zfill(3)
+        
+        # Variant suffixes for multi-output
+        variant_letters = "abcdefghijklmnopqrstuvwxyz"
+        is_multi = len(output_uris) > 1
+        
         async with aiohttp.ClientSession() as session:
             for i, uri in enumerate(output_uris):
                 try:
-                    # Build filename
+                    # Build filename parts
                     parts = []
-                    idx_str = str(i + 1).zfill(settings.row_digits)
-                    parts.append(idx_str)
+                    
+                    # Index + variant suffix
+                    if is_multi and i < len(variant_letters):
+                        parts.append(f"{idx_str}{variant_letters[i]}")
+                    else:
+                        parts.append(idx_str)
                     
                     if settings.include_timestamp:
                         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                         parts.append(ts)
                     
                     if settings.include_quality:
-                        parts.append(task.download_quality)
+                        # Use actual quality (subfolder name), not target quality
+                        file_quality = quality_subfolder or task.download_quality
+                        parts.append(file_quality)
                     
                     if settings.include_model:
-                        # Shorten model key for filename
                         model_short = task.model.replace("veo_3_1_", "v31_").replace("_fast_", "_")
                         parts.append(model_short)
                     
@@ -691,7 +915,7 @@ class Engine:
                     filename = sep.join(parts) + ".mp4"
                     filepath = output_path / filename
                     
-                    # Avoid overwrite — add suffix if exists
+                    # Avoid overwrite — add numeric suffix if exists
                     counter = 1
                     while filepath.exists():
                         filepath = output_path / f"{sep.join(parts)}_{counter}.mp4"
@@ -704,10 +928,10 @@ class Engine:
                                 async for chunk in resp.content.iter_chunked(8192):
                                     f.write(chunk)
                             local_paths.append(str(filepath))
-                            log.info(f"Downloaded: {filepath.name}")
+                            log.info(f"Downloaded: {filepath.name} → {output_path}")
                         else:
                             log.error(f"Download failed: HTTP {resp.status} for {uri[:80]}")
-                            
+                        
                 except Exception as e:
                     log.error(f"Download error: {e}")
         
@@ -716,26 +940,37 @@ class Engine:
     def _is_auth_error(self, error_msg: str) -> bool:
         """Check if error indicates authentication failure.
         
-        Matches common auth error patterns from VEO API:
-        - HTTP 401/403
+        Only matches REAL auth errors that can be fixed by re-login:
+        - HTTP 401 / UNAUTHENTICATED
         - Token expired/invalid
-        - UNAUTHENTICATED gRPC status
+        
+        Does NOT match:
+        - HTTP 403 reCAPTCHA failures (re-login won't fix these)
+        - Generic 403 permission errors
         """
         if not error_msg:
             return False
         lower = error_msg.lower()
+        
+        # Exclude reCAPTCHA errors — re-login won't help
+        if "recaptcha" in lower:
+            return False
+        
         auth_keywords = [
-            "401", "403", "unauthorized", "unauthenticated",
+            "401", "unauthorized", "unauthenticated",
             "token expired", "token invalid", "invalid credentials",
             "session expired", "authentication failed",
+            "credentials_missing",
         ]
         return any(kw in lower for kw in auth_keywords)
     
-    async def _try_auto_relogin(self, email: str) -> bool:
+    async def _try_auto_relogin(self, email: str, account: 'AccountManager') -> bool:
         """Attempt auto re-login via ProfilesController.
         
-        Uses stored credentials (if available) to re-authenticate.
-        Updates account tokens on success.
+        Strategy:
+        1. If debug browser is open → reload page to refresh session, extract
+           fresh access_token from __NEXT_DATA__ (NO new browser needed)
+        2. If no debug browser → close headless, launch new browser for re-login
         
         Returns:
             True if re-login succeeded and tokens updated
@@ -744,32 +979,132 @@ class Engine:
             log.warning("No ProfilesController — cannot auto re-login")
             return False
         
-        try:
-            # ProfilesController.auto_relogin is sync, run in thread
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                self._profiles_controller.auto_relogin,
-                email,
-            )
-            
-            if result:
-                log.info(f"Auto re-login OK for {email}, updating account tokens")
-                # Refresh the account's tokens from updated profile
-                account = self._account_manager.get_account(email)
-                if account:
+        # Per-account lock — only ONE worker attempts re-login at a time
+        if email not in self._relogin_locks:
+            self._relogin_locks[email] = asyncio.Lock()
+        
+        lock = self._relogin_locks[email]
+        
+        if lock.locked():
+            log.info(f"Re-login already in progress for {email}, waiting...")
+            async with lock:
+                if account._browser_session and account._browser_session.is_ready:
+                    return True
+                return False
+        
+        async with lock:
+            try:
+                # ── Strategy 1: Debug browser is open → refresh token from existing page ──
+                debug_page = self._profiles_controller.get_debug_browser_page(email)
+                if debug_page:
+                    log.info(f"[{email}] Debug browser open — refreshing token via page reload...")
+                    
+                    try:
+                        # Send 'refresh_token' command via queue to reload page and re-extract token
+                        entry = self._profiles_controller._debug_browsers.get(email) if hasattr(self._profiles_controller, '_debug_browsers') else None
+                        if entry and entry.get("cmd_queue"):
+                            entry["cmd_queue"].put("refresh_token")
+                            
+                            # Wait for token to be refreshed (up to 15 seconds)
+                            loop = asyncio.get_event_loop()
+                            for _ in range(30):
+                                await asyncio.sleep(0.5)
+                                # Check if fresh token is available
+                                profile = self._profiles_controller.get_profile(email)
+                                token = getattr(profile, "access_token", None) if profile else None
+                                if token and len(token) > 100:
+                                    account.update_access_token(token, expires_in=3599)
+                                    log.info(f"[{email}] ✅ Access token refreshed from debug browser ({len(token)} chars)")
+                                    
+                                    # Re-attach to debug browser
+                                    await account.ensure_browser(headless=True)
+                                    return True
+                        
+                        # Fallback: try direct JS extraction from the page
+                        log.info(f"[{email}] Trying direct JS token extraction from debug page...")
+                        # Use run_in_executor since page operations are sync
+                        def _extract_from_page():
+                            try:
+                                page = debug_page
+                                page.reload(wait_until="networkidle", timeout=15000)
+                                page.wait_for_timeout(2000)
+                                
+                                # Extract access_token from __NEXT_DATA__
+                                result = page.evaluate("""() => {
+                                    try {
+                                        const nd = document.getElementById('__NEXT_DATA__');
+                                        if (nd) {
+                                            const data = JSON.parse(nd.textContent);
+                                            const token = data?.props?.pageProps?.userInfo?.accessToken
+                                                       || data?.props?.pageProps?.session?.accessToken;
+                                            return token || null;
+                                        }
+                                    } catch {}
+                                    return null;
+                                }""")
+                                return result
+                            except Exception as e:
+                                log.warning(f"[{email}] JS token extraction failed: {e}")
+                                return None
+                        
+                        token = await loop.run_in_executor(None, _extract_from_page)
+                        if token and len(token) > 100:
+                            account.update_access_token(token, expires_in=3599)
+                            log.info(f"[{email}] ✅ Access token extracted via JS ({len(token)} chars)")
+                            await account.ensure_browser(headless=True)
+                            return True
+                        
+                        log.warning(f"[{email}] Could not refresh token from debug browser")
+                        return False
+                        
+                    except Exception as e:
+                        log.error(f"[{email}] Token refresh from debug browser failed: {e}")
+                        return False
+                
+                # ── Strategy 2: No debug browser → full re-login with credentials ──
+                log.info(f"Closing Engine browser for {email} before re-login...")
+                await account.close_browser()
+                
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    self._profiles_controller.auto_relogin,
+                    email,
+                )
+                
+                if result:
+                    log.info(f"Auto re-login OK for {email}, updating account tokens")
                     profile = self._profiles_controller.get_profile(email)
-                    if profile and profile.get("access_token"):
+                    access_token = getattr(profile, "access_token", None) if profile else None
+                    if access_token:
                         account.update_access_token(
-                            profile["access_token"],
-                            expires_in=profile.get("expires_in", 3599),
+                            access_token,
+                            expires_in=getattr(profile, "expires_in", 3599),
                         )
-                return True
-            return False
-            
-        except Exception as e:
-            log.error(f"Auto re-login error for {email}: {e}")
-            return False
+                    
+                    log.info(f"Re-opening headless browser for {email}...")
+                    try:
+                        await account.ensure_browser(headless=True)
+                    except Exception as e:
+                        log.warning(f"Browser re-open failed for {email}: {e}")
+                    
+                    return True
+                
+                # Re-login failed — still re-open browser for reCAPTCHA attempts
+                log.warning(f"Re-login failed for {email}, re-opening browser anyway")
+                try:
+                    await account.ensure_browser(headless=True)
+                except Exception:
+                    pass
+                return False
+                
+            except Exception as e:
+                log.error(f"Auto re-login error for {email}: {e}")
+                try:
+                    await account.ensure_browser(headless=True)
+                except Exception:
+                    pass
+                return False
     
     def set_callbacks(
         self,

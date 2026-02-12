@@ -32,6 +32,10 @@ class AppSettings:
     auto_start_queue: bool = False
     pause_on_error: bool = True
     
+    # === SESSION PERSISTENCE ===
+    restore_queue_on_startup: bool = False   # Load queue from previous session (OFF to prevent stale tasks)
+    restore_tabs_on_startup: bool = True     # Restore tab content (prompts, settings) on startup
+    
     # === WORKER DEFAULTS (applied to new accounts) ===
     # Per-account max_slots is stored in AccountSession, not here
     retry_count: int = 3        # Default retry count for new accounts

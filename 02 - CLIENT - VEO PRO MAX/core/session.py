@@ -103,7 +103,12 @@ class AccountSession:
     
     @property
     def needs_recaptcha_refresh(self) -> bool:
-        """Check if reCAPTCHA token needs refresh (80s threshold)."""
+        """Check if reCAPTCHA token needs refresh.
+        
+        Safety net: Tokens are normally invalidated immediately after each
+        API call (single-use). This 80s threshold catches edge cases where
+        invalidate() was missed (e.g., exception paths, code changes).
+        """
         if not self.recaptcha_token or self.recaptcha_fetched_at == datetime.min:
             return True
         
@@ -134,7 +139,8 @@ class AccountSession:
             not self.is_token_expired
             and not self.needs_recaptcha_refresh
             and self.available_slots > 0
-            and self.browser_validation != ""  # Must have browser headers
+            # Note: browser_validation is desirable but NOT required for is_ready.
+            # Missing headers will cause 403, handled by retry logic.
         )
     
     def acquire_slot(self) -> bool:

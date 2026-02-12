@@ -86,7 +86,7 @@ class VEOGenerationRequest:
     prompt: str
     workflow: WorkflowType
     aspect_ratio: AspectRatio = AspectRatio.LANDSCAPE
-    model: VideoModel = VideoModel.VEO_FAST_31
+    model: VideoModel = VideoModel.T2V_LANDSCAPE
     output_count: int = 4
     duration: int = 8
     image_path: Optional[str] = None
@@ -117,7 +117,7 @@ class VEOAutomationHandler:
     - Download orchestration
     """
     
-    POLL_INTERVAL_SEC = 5
+    POLL_INTERVAL_SEC = 15  # matches n8n workflow
     MAX_WAIT_SEC = 600  # 10 minutes
     
     def __init__(self, browser_manager: BrowserManager):

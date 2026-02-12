@@ -50,12 +50,15 @@ class TabQueue(QWidget):
     resume_all = Signal()
     cancel_all = Signal()
     clear_failed = Signal()
+    _progress_signal = Signal(str, int, str)  # task_id, progress, status_text (thread-safe)
+    _queue_updated_signal = Signal()  # thread-safe queue refresh trigger
     
     def __init__(self, parent: Optional[QWidget] = None, controller=None):
         super().__init__(parent)
         self.controller = controller
         self._queue_items: List[QueueItem] = []
         self._item_widgets: Dict[int, QFrame] = {}  # Track widgets by item ID
+        self._task_widgets: Dict[str, QFrame] = {}   # task_id → row widget (for progress updates)
         self._group_widgets: Dict[str, dict] = {}   # group_id → {header, content, items}
         self._group_expanded: Dict[str, bool] = {}   # group_id → expanded state
         self._projects: List[str] = ["All Projects"]  # Dynamic project list
@@ -71,22 +74,45 @@ class TabQueue(QWidget):
     def _register_controller_callbacks(self):
         """Register callbacks with controller for real-time updates."""
         if self.controller:
-            self.controller.set_queue_updated_callback(self._on_queue_updated)
+            self.controller.set_queue_updated_callback(self._on_queue_updated_from_thread)
             if hasattr(self.controller, 'set_progress_callback'):
-                self.controller.set_progress_callback(self._on_progress_update)
+                self.controller.set_progress_callback(self._on_progress_update_from_thread)
+        # Connect signals for thread-safe UI updates
+        self._progress_signal.connect(self._on_progress_update)
+        self._queue_updated_signal.connect(self._on_queue_updated)
     
-    def _on_progress_update(self, task_id: str, progress: int):
-        """Handle progress update from controller."""
-        for i in range(self.queue_layout.count()):
-            item = self.queue_layout.itemAt(i)
-            widget = item.widget() if item else None
-            if widget and hasattr(widget, 'task_id') and widget.task_id == task_id:
-                if hasattr(widget, 'set_progress'):
-                    widget.set_progress(progress)
-                break
+    def _on_progress_update_from_thread(self, task_id: str, progress: int, status_text: str = ""):
+        """Thread-safe bridge: emit signal from worker thread → main thread."""
+        self._progress_signal.emit(task_id, progress, status_text)
     
-    def _on_queue_updated(self, status: Dict):
-        """Handle queue update from controller."""
+    def _on_progress_update(self, task_id: str, progress: int, status_text: str = ""):
+        """Handle progress update from controller.
+        
+        Uses _task_widgets dict for O(1) lookup instead of scanning
+        nested group containers.
+        """
+        widget = self._task_widgets.get(task_id)
+        if widget and hasattr(widget, 'progress_bar'):
+            widget.progress_bar.setValue(progress)
+            if status_text:
+                widget.progress_bar.setFormat(f"{status_text} {progress}%")
+            else:
+                widget.progress_bar.setFormat(f"{progress}%")
+            # Update status label dynamically
+            if hasattr(widget, 'status_label'):
+                if progress >= 100:
+                    widget.status_label.setText("✅ DONE")
+                    widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
+                elif progress > 0:
+                    widget.status_label.setText("🔥 PROCESSING")
+                    widget.status_label.setStyleSheet(f"color: {Theme.PEACH}; font-size: 10px; font-weight: bold; border: none;")
+    
+    def _on_queue_updated_from_thread(self, status: Dict):
+        """Thread-safe bridge: emit signal from any thread → main thread."""
+        self._queue_updated_signal.emit()
+    
+    def _on_queue_updated(self):
+        """Handle queue update on GUI thread."""
         self._refresh_queue_from_controller()
     
     def _refresh_queue_from_controller(self):
@@ -119,6 +145,7 @@ class TabQueue(QWidget):
         # Update or create groups
         self._queue_items.clear()
         self._item_widgets.clear()
+        self._task_widgets.clear()
         
         for g in groups_data:
             gid = g['id']
@@ -428,6 +455,7 @@ class TabQueue(QWidget):
         """)
         widget.setFixedHeight(44)
         widget.setProperty("item_id", item.id)
+        widget.task_id = str(item.id)  # For progress update lookup
         
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(9, 4, 12, 4)
@@ -452,13 +480,18 @@ class TabQueue(QWidget):
         prompt_label.setToolTip(item.prompt)
         layout.addWidget(prompt_label, stretch=1)
         
-        # Col 4: Progress — 120px
+        # Col 4: Progress + Status Text — 180px
         progress = QProgressBar()
-        progress.setFixedWidth(120)
+        progress.setFixedWidth(180)
         progress.setFixedHeight(16)
         progress.setValue(item.progress)
         progress.setTextVisible(True)
-        progress.setFormat(f"{item.progress}%")
+        # Show status_text if available
+        status_text = getattr(item, 'status_text', '') or ''
+        if status_text and item.progress > 0 and item.progress < 100:
+            progress.setFormat(f"{status_text} {item.progress}%")
+        else:
+            progress.setFormat(f"{item.progress}%")
         progress.setStyleSheet(f"""
             QProgressBar {{
                 background-color: {Theme.SURFACE0};
@@ -473,6 +506,7 @@ class TabQueue(QWidget):
                 border-radius: 3px;
             }}
         """)
+        widget.progress_bar = progress  # Store reference for live updates
         layout.addWidget(progress)
         
         # Col 5: Status badge — 80px
@@ -485,6 +519,7 @@ class TabQueue(QWidget):
             font-weight: bold;
             border: none;
         """)
+        widget.status_label = status_label  # Store reference for live updates
         layout.addWidget(status_label)
         
         # Col 6: Actions — 70px
@@ -617,6 +652,8 @@ class TabQueue(QWidget):
             )
             row = self._create_queue_item_widget(item)
             content_layout.addWidget(row)
+            # Register for progress updates
+            self._task_widgets[str(td['id'])] = row
         
         content.setVisible(expanded)
         container_layout.addWidget(content)
@@ -658,6 +695,9 @@ class TabQueue(QWidget):
                 border-left: 4px solid {status_color};
                 border-bottom: 1px solid {Theme.SURFACE0};
             }}
+            QFrame:hover {{
+                background-color: {Theme.OVERLAY0 if hasattr(Theme, 'OVERLAY0') else Theme.SURFACE2};
+            }}
         """)
     
     def _rebuild_group_children(self, gw: dict, group_data: dict):
@@ -680,6 +720,8 @@ class TabQueue(QWidget):
             )
             row = self._create_queue_item_widget(item)
             layout.addWidget(row)
+            # Register for progress updates
+            self._task_widgets[str(td['id'])] = row
     
     def _toggle_group(self, group_id: str):
         """Toggle expand/collapse of a group."""
@@ -774,26 +816,34 @@ class TabQueue(QWidget):
     # Event handlers
     def _on_start_all(self):
         """Start processing all pending tasks."""
-        self._is_processing = True
+        # Bug 1 fix: Don't start engine if queue is empty
+        if self.controller and hasattr(self.controller, '_dispatcher'):
+            if self.controller._dispatcher.ready_count == 0:
+                return  # Nothing to process
+        
         self.start_all.emit()
         if self.controller:
             self.controller.start_processing()
+        # Bug 6 fix: Sync with controller's actual state
+        self._is_processing = self.controller.state.is_processing if self.controller else True
         self._update_button_states()
     
     def _on_pause_all(self):
         """Pause all processing."""
-        self._is_processing = False
         self.pause_all.emit()
         if self.controller:
             self.controller.stop_processing()
+        # Bug 6 fix: Sync with controller's actual state
+        self._is_processing = self.controller.state.is_processing if self.controller else False
         self._update_button_states()
     
     def _on_resume_all(self):
         """Resume processing."""
-        self._is_processing = True
         self.resume_all.emit()
         if self.controller:
             self.controller.start_processing()
+        # Bug 6 fix: Sync with controller's actual state
+        self._is_processing = self.controller.state.is_processing if self.controller else True
         self._update_button_states()
     
     def _on_cancel_all(self):
@@ -813,6 +863,8 @@ class TabQueue(QWidget):
         self.cancel_all.emit()
         if self.controller:
             self.controller.stop_processing()
+            if hasattr(self.controller, 'clear_all_tasks'):
+                self.controller.clear_all_tasks()
         
         self._clear_all_items()
         self._update_stats()
