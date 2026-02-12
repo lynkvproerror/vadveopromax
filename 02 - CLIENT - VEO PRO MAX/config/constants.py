@@ -229,12 +229,17 @@ class AccountStatus(str, Enum):
 
 # === LICENSE TIERS ===
 class LicenseTier(str, Enum):
-    """Application license tiers."""
-    TRIAL = "TRIA"
-    BASIC = "BASI"
-    PRO = "PROF"
-    ENTERPRISE = "ENTR"
-    LIFETIME = "LIFE"
+    """Application license tiers (per LICENSE_TIERS_FEATURES.md).
+    
+    All paid tiers map to PREMIUM role.
+    TESTER role is assigned via Firebase _role field, not via tier.
+    """
+    TRIAL = "trial"          # 7 days free
+    ONE_MONTH = "1M"         # 300,000 VND
+    THREE_MONTHS = "3M"      # 500,000 VND
+    SIX_MONTHS = "6M"        # 800,000 VND
+    ONE_YEAR = "1Y"          # 1,200,000 VND
+    LIFETIME = "LIFE"        # 3,000,000 VND
 
 
 # === WORKER STATES ===

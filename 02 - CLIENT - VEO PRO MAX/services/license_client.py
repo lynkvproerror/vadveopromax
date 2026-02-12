@@ -180,15 +180,17 @@ class LicenseClient:
         return hmac_result[0].upper()
     
     def _detect_tier_from_key(self, key: str) -> LicenseTier:
-        """Detect license tier from key prefix."""
+        """Detect license tier from key prefix or Firebase _t field."""
         prefix = key[:4]
         tier_map = {
             "LIFE": LicenseTier.LIFETIME,
-            "PREM": LicenseTier.PREMIUM,
-            "PROF": LicenseTier.PROFESSIONAL,
-            "BASI": LicenseTier.BASIC,
+            "1M":   LicenseTier.ONE_MONTH,
+            "3M":   LicenseTier.THREE_MONTHS,
+            "6M":   LicenseTier.SIX_MONTHS,
+            "1Y":   LicenseTier.ONE_YEAR,
         }
-        return tier_map.get(prefix, LicenseTier.TRIAL)
+        # Try exact match first, then prefix match
+        return tier_map.get(prefix, tier_map.get(prefix[:2], LicenseTier.TRIAL))
     
     def _get_trial_days_remaining(self) -> int:
         """Get remaining trial days."""

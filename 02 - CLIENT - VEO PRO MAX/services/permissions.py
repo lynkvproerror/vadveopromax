@@ -16,13 +16,10 @@ from config.constants import LicenseTier
 
 
 class Role(str, Enum):
-    """User roles."""
-    TRIAL = "trial"
-    BASIC = "basic"
-    PROFESSIONAL = "professional"
-    PREMIUM = "premium"
-    TESTER = "tester"
-    ADMIN = "admin"
+    """User roles — v2.2: Only 3 roles per LICENSE_TIERS_FEATURES.md"""
+    TRIAL = "trial"        # 0 — Limited features during trial period
+    PREMIUM = "premium"    # 1 — Full features for paid users (all tiers)
+    TESTER = "tester"      # 2 — Full + Dev Console + Beta (trusted testers)
 
 
 class Feature(str, Enum):
@@ -49,6 +46,7 @@ class Feature(str, Enum):
     # Settings
     CUSTOM_OUTPUT = "custom_output"
     ADVANCED_SETTINGS = "advanced_settings"
+    BETA_FEATURES = "beta_features"
 
 
 @dataclass
@@ -65,13 +63,13 @@ class RoleLimits:
 class PermissionsSystem:
     """Role-based feature gating.
     
-    Features:
-    - Role-based access control
-    - Feature gating per role
-    - Trial limits enforcement
+    Roles (v2.2 — per LICENSE_TIERS_FEATURES.md):
+    - TRIAL (0): 1 cookie, 2 threads, 10 prompts
+    - PREMIUM (1): Unlimited (all paid tiers)
+    - TESTER (2): Unlimited + Dev Console + Beta
     """
     
-    # Role → Limits mapping
+    # Role → Limits mapping (per docs)
     ROLE_LIMITS: Dict[Role, RoleLimits] = {
         Role.TRIAL: RoleLimits(
             max_cookies=1,
@@ -81,48 +79,18 @@ class PermissionsSystem:
             daily_generation_limit=20,
             features={
                 Feature.TEXT_TO_VIDEO,
-                Feature.QUEUE_MANAGER,
-            },
-        ),
-        Role.BASIC: RoleLimits(
-            max_cookies=2,
-            max_threads=4,
-            max_prompts_per_batch=50,
-            max_outputs_per_prompt=4,
-            daily_generation_limit=100,
-            features={
-                Feature.TEXT_TO_VIDEO,
-                Feature.IMAGE_TO_VIDEO,
-                Feature.TEXT_TO_IMAGE,
-                Feature.QUEUE_MANAGER,
-                Feature.CUSTOM_OUTPUT,
-            },
-        ),
-        Role.PROFESSIONAL: RoleLimits(
-            max_cookies=5,
-            max_threads=8,
-            max_prompts_per_batch=200,
-            max_outputs_per_prompt=4,
-            daily_generation_limit=500,
-            features={
-                Feature.TEXT_TO_VIDEO,
                 Feature.IMAGE_TO_VIDEO,
                 Feature.REF_TO_VIDEO,
                 Feature.TEXT_TO_IMAGE,
                 Feature.IMAGE_TO_IMAGE,
-                Feature.CONTINUATION,
-                Feature.BATCH_PROCESSING,
-                Feature.MULTI_ACCOUNT,
                 Feature.QUEUE_MANAGER,
-                Feature.IMAGE_LIBRARY,
-                Feature.CUSTOM_OUTPUT,
-                Feature.ADVANCED_SETTINGS,
+                Feature.AUTO_UPSCALE,
             },
         ),
         Role.PREMIUM: RoleLimits(
-            max_cookies=10,
-            max_threads=16,
-            max_prompts_per_batch=1000,
+            max_cookies=-1,      # Unlimited
+            max_threads=-1,      # Unlimited
+            max_prompts_per_batch=-1,  # Unlimited
             max_outputs_per_prompt=4,
             daily_generation_limit=-1,  # Unlimited
             features={
@@ -143,38 +111,16 @@ class PermissionsSystem:
             },
         ),
         Role.TESTER: RoleLimits(
-            max_cookies=10,
-            max_threads=16,
-            max_prompts_per_batch=100,
+            max_cookies=-1,      # Unlimited
+            max_threads=-1,      # Unlimited
+            max_prompts_per_batch=-1,  # Unlimited
             max_outputs_per_prompt=4,
-            daily_generation_limit=100,
-            features={
-                Feature.TEXT_TO_VIDEO,
-                Feature.IMAGE_TO_VIDEO,
-                Feature.REF_TO_VIDEO,
-                Feature.TEXT_TO_IMAGE,
-                Feature.IMAGE_TO_IMAGE,
-                Feature.CONTINUATION,
-                Feature.BATCH_PROCESSING,
-                Feature.MULTI_ACCOUNT,
-                Feature.DEV_CONSOLE,
-                Feature.QUEUE_MANAGER,
-                Feature.IMAGE_LIBRARY,
-                Feature.CUSTOM_OUTPUT,
-                Feature.ADVANCED_SETTINGS,
-            },
-        ),
-        Role.ADMIN: RoleLimits(
-            max_cookies=-1,  # Unlimited
-            max_threads=-1,
-            max_prompts_per_batch=-1,
-            max_outputs_per_prompt=4,
-            daily_generation_limit=-1,
-            features=set(Feature),  # All features
+            daily_generation_limit=-1,  # Unlimited
+            features=set(Feature),  # All features (incl. DEV_CONSOLE, BETA)
         ),
     }
     
-    def __init__(self, default_role: Role = Role.TRIAL):
+    def __init__(self, default_role: Role = Role.TESTER):
         self._current_role = default_role
         self._custom_features: Set[Feature] = set()
     
@@ -191,15 +137,15 @@ class PermissionsSystem:
         self._current_role = role
     
     def set_role_from_tier(self, tier: LicenseTier):
-        """Set role from license tier."""
-        tier_to_role = {
-            LicenseTier.TRIAL: Role.TRIAL,
-            LicenseTier.BASIC: Role.BASIC,
-            LicenseTier.PROFESSIONAL: Role.PROFESSIONAL,
-            LicenseTier.PREMIUM: Role.PREMIUM,
-            LicenseTier.LIFETIME: Role.PREMIUM,
-        }
-        self._current_role = tier_to_role.get(tier, Role.TRIAL)
+        """Set role from license tier.
+        
+        All paid tiers → PREMIUM. TESTER is set via Firebase _role field only.
+        """
+        if tier == LicenseTier.TRIAL:
+            self._current_role = Role.TRIAL
+        else:
+            # All paid tiers (1M, 3M, 6M, 1Y, LIFETIME) → PREMIUM
+            self._current_role = Role.PREMIUM
     
     def has_feature(self, feature: Feature) -> bool:
         """Check if current role has a feature."""
