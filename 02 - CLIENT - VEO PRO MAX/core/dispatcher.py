@@ -37,6 +37,43 @@ class TaskState(str, Enum):
 
 
 @dataclass
+class VideoOutputInfo:
+    """Per-video tracking — unified for 1-video and multi-video prompts."""
+    index: int = 0                       # Submit order (0-based)
+    
+    # IDs — needed for retry/re-upscale
+    operation_name: str = ""             # Generation operation UUID
+    scene_id: str = ""                   # Scene UUID
+    media_id: str = ""                   # Protobuf Base64 — for upscale API
+    
+    # Files
+    file_720p: str = ""                  # Local path to 720p video
+    file_upscaled: str = ""              # Local path to upscaled video
+    thumbnail_path: str = ""             # Local path to thumbnail JPG
+    
+    # Quality state
+    quality: str = "pending"             # "pending" | "720p" | "1080p" | "4K"
+    upscale_status: str = ""             # "" | "success" | "failed" | "skipped"
+    upscale_error: str = ""              # Error message if upscale failed
+    
+    @property
+    def best_file(self) -> str:
+        """Highest quality file available."""
+        return self.file_upscaled or self.file_720p
+    
+    @property
+    def border_color(self) -> str:
+        """Thumbnail border color based on quality state."""
+        if self.upscale_status == "failed":
+            return "red"
+        if self.quality in ("1080p", "4K"):
+            return "blue"
+        if self.quality == "720p":
+            return "yellow"
+        return "gray"
+
+
+@dataclass
 class Task:
     """A single generation task."""
     id: str
@@ -52,6 +89,7 @@ class Task:
     
     # Image references (for I2V, R2V, I2I)
     image_uris: List[str] = field(default_factory=list)
+    image_paths: List[str] = field(default_factory=list)  # Local paths from [tag] resolution
     
     # Continuation
     parent_task_id: Optional[str] = None
@@ -73,8 +111,16 @@ class Task:
     
     # Results
     operation_name: Optional[str] = None
+    operation_names: List[str] = field(default_factory=list)   # Ordered list of op UUIDs
+    scene_ids: List[str] = field(default_factory=list)          # Ordered list of scene UUIDs
     output_uris: List[str] = field(default_factory=list)
     thumbnail_paths: List[str] = field(default_factory=list)  # Local paths to cached thumbnails
+    video_outputs: List[VideoOutputInfo] = field(default_factory=list)  # Per-video tracking
+    
+    # Upscale state — backward compat (overall status derived from video_outputs)
+    upscale_status: str = ""           # "", "success", "failed"
+    upscale_media_ids: List[str] = field(default_factory=list)  # For re-upscale
+    upscale_error: str = ""            # Error message for display
     
     # Metadata
     created_at: datetime = field(default_factory=datetime.now)
@@ -302,20 +348,32 @@ class Dispatcher:
                         self._on_task_failed(child, child.error)
     
     def cancel_task(self, task_id: str) -> bool:
-        """Cancel a task if not running."""
+        """Cancel a task regardless of its current state.
+        
+        Handles all states:
+        - PENDING/WAITING/READY: direct cancel
+        - RUNNING/WAITING_POLL: mark as CANCELLED, engine will detect and abort
+        """
         task = self._all_tasks.get(task_id)
         if not task:
             return False
         
-        if task.state in (TaskState.PENDING, TaskState.WAITING, TaskState.READY):
-            task.state = TaskState.CANCELLED
-            
-            # Remove from waiting queue
-            if task_id in self._waiting_tasks:
-                del self._waiting_tasks[task_id]
-            
-            return True
-        return False
+        if task.state in (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED):
+            return False  # Already terminal
+        
+        prev_state = task.state
+        task.state = TaskState.CANCELLED
+        
+        # Remove from waiting queue
+        if task_id in self._waiting_tasks:
+            del self._waiting_tasks[task_id]
+        
+        # If was running, decrement counter so dispatcher counts stay accurate
+        if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+            self._running_count = max(0, self._running_count - 1)
+        
+        print(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
+        return True
     
     def has_children(self, task_id: str) -> bool:
         """Check if a task has pending continuation children."""
@@ -448,6 +506,9 @@ class Dispatcher:
         task.progress = 0
         task.retry_attempts += 1
         self._ready_queue.put_nowait(task)
+        # Wake up engine workers waiting for tasks
+        if self._on_task_ready:
+            self._on_task_ready(task)
         return True
     
     def retry_all_failed(self) -> int:
@@ -459,23 +520,105 @@ class Dispatcher:
                     count += 1
         return count
     
-    def clear_all(self) -> int:
-        """Clear all non-running tasks. Returns count cleared."""
-        removable = [
-            tid for tid, task in self._all_tasks.items()
-            if task.state not in (TaskState.RUNNING, TaskState.WAITING_POLL)
-        ]
-        for tid in removable:
-            del self._all_tasks[tid]
-        return len(removable)
+    def reset_task(self, task_id: str) -> bool:
+        """Reset a task to initial state — delete all cached/downloaded files.
+        
+        Clears: output files, thumbnails, operation reference, progress.
+        Preserves: prompt, config, image_uris, workflow_type.
+        Sets state back to READY and re-queues.
+        
+        Skips: RUNNING tasks (active) and COMPLETED tasks (already done).
+        """
+        import os
+        task = self._all_tasks.get(task_id)
+        if not task:
+            return False
+        # Don't reset a currently running task
+        if task.state == TaskState.RUNNING:
+            return False
+        # Don't reset already completed tasks — preserve finished work
+        if task.state == TaskState.COMPLETED:
+            return False
+        
+        # Delete downloaded video files
+        for path in list(task.output_uris):
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+                    print(f"[Reset] Deleted output: {path}")
+            except Exception as e:
+                print(f"[Reset] Could not delete {path}: {e}")
+        
+        # Delete cached thumbnails
+        for path in list(task.thumbnail_paths):
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+                    print(f"[Reset] Deleted thumbnail: {path}")
+            except Exception as e:
+                print(f"[Reset] Could not delete {path}: {e}")
+        
+        # Reset runtime state (keep prompt, config, image_uris)
+        task.output_uris.clear()
+        task.thumbnail_paths.clear()
+        task.operation_name = None
+        task.operation_names.clear()
+        task.scene_ids.clear()
+        task.video_outputs.clear()
+        task.upscale_status = ""
+        task.upscale_error = ""
+        task.upscale_media_ids.clear()
+        task.state = TaskState.READY
+        task.progress = 0
+        task.error = None
+        task.started_at = None
+        task.completed_at = None
+        task.assigned_account = None
+        
+        # Re-queue
+        self._ready_queue.put_nowait(task)
+        # Wake up engine workers waiting for tasks
+        if self._on_task_ready:
+            self._on_task_ready(task)
+        return True
+    
+    def reset_all_tasks(self) -> int:
+        """Reset ALL non-completed, non-running tasks. Returns count reset.
+        
+        Iterates through groups in creation order so tasks are re-queued
+        top-to-bottom (first group first), ensuring Start All processes
+        from the beginning of the queue downward.
+        """
+        count = 0
+        # Iterate groups in chronological order for correct queue ordering
+        sorted_groups = sorted(
+            self._task_groups.values(),
+            key=lambda g: g.created_at
+        )
+        for group in sorted_groups:
+            for task in group.tasks:
+                if task.state not in (TaskState.RUNNING, TaskState.COMPLETED):
+                    if self.reset_task(task.id):
+                        count += 1
+        return count
     
     def clear_all(self) -> int:
         """Clear ALL task groups and tasks (queue reset).
+        
+        Marks RUNNING/WAITING_POLL tasks as CANCELLED first so engine workers
+        detect cancellation (they hold direct Task object references).
         
         Returns:
             Number of tasks removed
         """
         count = len(self._all_tasks)
+        
+        # Cancel all running tasks FIRST — engine workers hold task references
+        for task in self._all_tasks.values():
+            if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                task.state = TaskState.CANCELLED
+                self._running_count = max(0, self._running_count - 1)
+        
         self._task_groups.clear()
         self._all_tasks.clear()
         # Drain the ready queue
@@ -484,6 +627,7 @@ class Dispatcher:
                 self._ready_queue.get_nowait()
             except Exception:
                 break
+        self._running_count = 0  # Reset to 0 since everything is cleared
         print(f"[Dispatcher] Cleared all: {count} tasks removed")
         return count
     
