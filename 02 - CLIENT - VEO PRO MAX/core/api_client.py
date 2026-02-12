@@ -377,16 +377,21 @@ class VEOApiClient:
         """
         import uuid
         
-        # HAR verified: T2V always sends exactly 1 request item
-        # Server generates output_count videos from this single item
-        actual_seed = seed if seed is not None else generate_random_seed()
-        requests_list = [{
-            "aspectRatio": aspect_ratio,
-            "seed": validate_seed(actual_seed),
-            "textInput": {"prompt": prompt},
-            "videoModelKey": model,
-            "metadata": {"sceneId": str(uuid.uuid4())},
-        }]
+        # Each output requires its own request item with unique seed + sceneId
+        # (same pattern as I2V, R2V)
+        requests_list = []
+        for idx in range(min(output_count, 4)):
+            if seed is not None:
+                actual_seed = seed + idx  # Deterministic but unique per output
+            else:
+                actual_seed = generate_random_seed()
+            requests_list.append({
+                "aspectRatio": aspect_ratio,
+                "seed": validate_seed(actual_seed),
+                "textInput": {"prompt": prompt},
+                "videoModelKey": model,
+                "metadata": {"sceneId": str(uuid.uuid4())},
+            })
         
         data = {
             "clientContext": self._build_client_context(
@@ -709,6 +714,7 @@ class VEOApiClient:
         if recaptcha_token:
             upscale_ctx["recaptchaContext"] = {
                 "token": recaptcha_token,
+                "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB",
             }
         data = {
             "clientContext": upscale_ctx,

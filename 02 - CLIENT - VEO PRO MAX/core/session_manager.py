@@ -223,7 +223,10 @@ class SessionManager:
         }
     
     def clear_cache(self, cache_folder: Optional[str] = None) -> dict:
-        """Delete ALL cache files.
+        """Delete cache files, preserving thumbnails.
+        
+        Thumbnails are lightweight and referenced by task.video_outputs.
+        Deleting them would break Queue tab display with no auto-regeneration.
         
         Returns:
             {"deleted_count": int, "freed_mb": float}
@@ -232,18 +235,35 @@ class SessionManager:
         if not folder.exists():
             return {"deleted_count": 0, "freed_mb": 0.0}
         
-        stats = self.get_cache_stats(str(folder))
+        # Count stats EXCLUDING thumbnails
+        deleted_count = 0
+        freed_bytes = 0
         
         try:
-            shutil.rmtree(folder)
-            folder.mkdir(parents=True, exist_ok=True)
+            for item in list(folder.iterdir()):
+                # Skip thumbnails directory
+                if item.is_dir() and item.name == "thumbnails":
+                    continue
+                
+                if item.is_file():
+                    freed_bytes += item.stat().st_size
+                    item.unlink()
+                    deleted_count += 1
+                elif item.is_dir():
+                    # Count files in subdirectory before deleting
+                    for f in item.rglob("*"):
+                        if f.is_file():
+                            freed_bytes += f.stat().st_size
+                            deleted_count += 1
+                    shutil.rmtree(item)
         except OSError as e:
             print(f"[Session] Clear cache failed: {e}")
         
         return {
-            "deleted_count": stats["file_count"],
-            "freed_mb": stats["size_mb"],
+            "deleted_count": deleted_count,
+            "freed_mb": round(freed_bytes / (1024 * 1024), 2),
         }
+
     
     # ── Helpers ──────────────────────────────────────────────────
     

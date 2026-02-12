@@ -96,6 +96,7 @@ class TabDevConsole(QWidget):
         self._min_level = "DEBUG"
         self._log_count = 0
         self._max_log_lines = 5000
+        self._log_buffer = []  # Store all (message, level) for re-filtering
         
         self._setup_ui()
         self._attach_logging()
@@ -249,7 +250,12 @@ class TabDevConsole(QWidget):
     @Slot(str, str)
     def _on_log_received(self, message: str, level: str):
         """Handle incoming log message from Python logging."""
-        # Level filter
+        # Always store in buffer (unfiltered)
+        self._log_buffer.append((message, level))
+        if len(self._log_buffer) > self._max_log_lines:
+            self._log_buffer = self._log_buffer[-self._max_log_lines:]
+        
+        # Level filter for display
         level_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
         if level_order.get(level, 0) < level_order.get(self._min_level, 0):
             return
@@ -266,14 +272,6 @@ class TabDevConsole(QWidget):
         # Update count
         self._log_count += 1
         self.log_count_label.setText(f"{self._log_count} logs")
-        
-        # Auto-trim if too many lines
-        if self._log_count > self._max_log_lines:
-            cursor = self.log_text.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            cursor.movePosition(QTextCursor.MoveOperation.Down, QTextCursor.MoveMode.KeepAnchor, 500)
-            cursor.removeSelectedText()
-            self._log_count -= 500
     
     # === Public API (called by app_controller / other modules) ===
     
@@ -451,35 +449,72 @@ class TabDevConsole(QWidget):
     # === Actions ===
     
     def _on_level_changed(self, level: str):
-        """Handle log level filter change."""
+        """Handle log level filter change — re-render all stored logs."""
         self._min_level = level
+        self._rerender_logs()
+    
+    def _rerender_logs(self):
+        """Re-render log display from buffer using current level filter."""
+        level_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
+        min_ord = level_order.get(self._min_level, 0)
+        
+        self.log_text.clear()
+        count = 0
+        for message, level in self._log_buffer:
+            if level_order.get(level, 0) < min_ord:
+                continue
+            color = LEVEL_COLORS.get(level, Theme.SUBTEXT0)
+            self.log_text.moveCursor(QTextCursor.MoveOperation.End)
+            self.log_text.setTextColor(QColor(color))
+            self.log_text.insertPlainText(message + "\n")
+            count += 1
+        
+        self.log_text.moveCursor(QTextCursor.MoveOperation.End)
+        self._log_count = count
+        self.log_count_label.setText(f"{self._log_count} logs")
     
     def _on_clear(self):
         """Clear all log panels."""
         self.log_text.clear()
+        self._log_buffer.clear()
         self._log_count = 0
         self.log_count_label.setText("0 logs")
         self.clear_logs.emit()
     
     def _on_export(self):
         """Export logs to file."""
+        try:
+            # Snapshot text BEFORE opening dialog (avoid race with logging threads)
+            logs = self.log_text.toPlainText()
+            queue = self.queue_text.toPlainText()
+            json_preview = self.json_text.toPlainText()
+            browser = self.playwright_text.toPlainText()
+            session = self.session_text.toPlainText() if hasattr(self, 'session_text') else ""
+        except RuntimeError:
+            return  # Widget destroyed
+        
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Logs",
             f"veo_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
             "Text Files (*.txt);;All Files (*)",
         )
-        if path:
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write("=== LOGS ===\n")
-                    f.write(self.log_text.toPlainText())
-                    f.write("\n\n=== QUEUE STATE ===\n")
-                    f.write(self.queue_text.toPlainText())
-                    f.write("\n\n=== JSON PREVIEW ===\n")
-                    f.write(self.json_text.toPlainText())
-                    f.write("\n\n=== BROWSER STATUS ===\n")
-                    f.write(self.playwright_text.toPlainText())
-                self.append_log(f"Logs exported to {path}", "INFO")
-            except Exception as e:
-                self.append_log(f"Export failed: {e}", "ERROR")
-        self.export_logs.emit()
+        if not path:
+            return  # User cancelled
+        
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("=== LOGS ===\n")
+                f.write(logs)
+                f.write("\n\n=== QUEUE STATE ===\n")
+                f.write(queue)
+                f.write("\n\n=== JSON PREVIEW ===\n")
+                f.write(json_preview)
+                f.write("\n\n=== BROWSER STATUS ===\n")
+                f.write(browser)
+                if session:
+                    f.write("\n\n=== SESSION DATA ===\n")
+                    f.write(session)
+            self.append_log(f"Logs exported to {path}", "INFO")
+            self.export_logs.emit()
+        except Exception as e:
+            self.append_log(f"Export failed: {e}", "ERROR")

@@ -94,6 +94,15 @@ class SidebarBase(QWidget):
         self.browse_btn.clicked.connect(self._browse_folder)
         self._layout.addWidget(self.browse_btn)
         
+        # Auto-populate from global default settings
+        try:
+            from config.settings import get_settings
+            global_settings = get_settings()
+            if global_settings.output_folder:
+                self.output_folder.setText(global_settings.output_folder)
+        except Exception:
+            pass
+        
         # === ASPECT RATIO ===
         self._create_section_label("📐 Aspect Ratio")
         

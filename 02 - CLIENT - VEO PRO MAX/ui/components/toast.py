@@ -31,8 +31,7 @@ class ToastWidget(QFrame):
     def __init__(self, message: str, level: str = "info",
                  duration: int = 4000, parent: QWidget = None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool |
-                           Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         

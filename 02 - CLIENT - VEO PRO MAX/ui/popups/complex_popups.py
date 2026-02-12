@@ -373,7 +373,20 @@ class HelpTooltipPopup(BasePopup):
 
 
 class ImageManagerPopup(BasePopup):
-    """Image Library Manager popup (PySide6)."""
+    """Image Library Manager popup (PySide6).
+    
+    Features:
+    - Browse images with thumbnails in a scrollable grid
+    - Filter by category (dynamic from library)
+    - Search by tag or filename
+    - Add images via file dialog
+    - Delete images
+    - Edit tags on images
+    - Select image → insert [tag] into prompt (on_select callback)
+    """
+    
+    THUMB_SIZE = 100
+    GRID_COLS = 5
     
     def __init__(
         self,
@@ -382,8 +395,22 @@ class ImageManagerPopup(BasePopup):
     ):
         self._on_select = on_select
         self._selected_category = "All"
+        self._library = None
+        self._cat_buttons: Dict[str, QPushButton] = {}
         
-        super().__init__(parent, title="📂 Image Library", width=800, height=500)
+        super().__init__(parent, title="📂 Image Library", width=800, height=550)
+        
+        # Load library and populate
+        self._init_library()
+        self._reload_grid()
+    
+    def _init_library(self):
+        """Initialize ImageLibrary connection."""
+        try:
+            from services.image_library import get_image_library
+            self._library = get_image_library()
+        except ImportError:
+            self._library = None
     
     def _create_content(self):
         """Create split layout with category list and image grid."""
@@ -403,38 +430,74 @@ class ImageManagerPopup(BasePopup):
         self._main_layout.addWidget(self.content, stretch=1)
     
     def _create_sidebar(self) -> QWidget:
-        """Create category sidebar."""
-        sidebar = QFrame()
-        sidebar.setFixedWidth(180)
-        sidebar.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        """Create category sidebar with dynamic categories."""
+        self._sidebar_frame = QFrame()
+        self._sidebar_frame.setFixedWidth(180)
+        self._sidebar_frame.setStyleSheet(f"background-color: {Theme.SURFACE0};")
         
-        layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
+        self._sidebar_layout = QVBoxLayout(self._sidebar_frame)
+        self._sidebar_layout.setContentsMargins(8, 8, 8, 8)
+        self._sidebar_layout.setSpacing(4)
         
         header = QLabel("📁 Categories")
         header.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
-        layout.addWidget(header)
+        self._sidebar_layout.addWidget(header)
         
-        categories = [("All", "📋"), ("Characters", "👤"), ("Backgrounds", "🏞️"), 
-                      ("Objects", "📦"), ("Styles", "🎨")]
+        # Category buttons container
+        self._cat_container = QWidget()
+        self._cat_layout = QVBoxLayout(self._cat_container)
+        self._cat_layout.setContentsMargins(0, 0, 0, 0)
+        self._cat_layout.setSpacing(2)
+        self._sidebar_layout.addWidget(self._cat_container)
         
-        for name, icon in categories:
+        self._sidebar_layout.addStretch()
+        
+        add_cat_btn = QPushButton("➕ New Category")
+        add_cat_btn.setProperty("variant", "secondary")
+        add_cat_btn.clicked.connect(self._on_add_category)
+        self._sidebar_layout.addWidget(add_cat_btn)
+        
+        return self._sidebar_frame
+    
+    def _rebuild_category_buttons(self):
+        """Rebuild category buttons from library."""
+        # Clear existing
+        for btn in self._cat_buttons.values():
+            btn.deleteLater()
+        self._cat_buttons.clear()
+        
+        # Default categories + dynamic from library
+        default_cats = [("All", "📋")]
+        if self._library:
+            lib_cats = self._library.get_categories()
+            for cat in lib_cats:
+                if cat != "All":
+                    icon = {"Characters": "👤", "Backgrounds": "🏞️",
+                            "Objects": "📦", "Styles": "🎨"}.get(cat, "📂")
+                    default_cats.append((cat, icon))
+        
+        for name, icon in default_cats:
             btn = QPushButton(f"{icon} {name}")
-            btn.setStyleSheet(f"text-align: left;")
+            is_active = (name == self._selected_category)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    text-align: left;
+                    padding: 6px 8px;
+                    background-color: {Theme.SURFACE2 if is_active else 'transparent'};
+                    color: {Theme.BLUE if is_active else Theme.TEXT};
+                    border: none;
+                    border-radius: 4px;
+                }}
+                QPushButton:hover {{
+                    background-color: {Theme.SURFACE1};
+                }}
+            """)
             btn.clicked.connect(lambda c, n=name: self._select_category(n))
-            layout.addWidget(btn)
-        
-        layout.addStretch()
-        
-        add_btn = QPushButton("➕ New Category")
-        add_btn.setProperty("variant", "secondary")
-        layout.addWidget(add_btn)
-        
-        return sidebar
+            self._cat_layout.addWidget(btn)
+            self._cat_buttons[name] = btn
     
     def _create_grid_area(self) -> QWidget:
-        """Create image grid area."""
+        """Create image grid area with toolbar."""
         area = QWidget()
         layout = QVBoxLayout(area)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -450,6 +513,7 @@ class ImageManagerPopup(BasePopup):
         self.search_entry = QLineEdit()
         self.search_entry.setPlaceholderText("🔍 Search by tag...")
         self.search_entry.setFixedWidth(200)
+        self.search_entry.textChanged.connect(self._on_search)
         toolbar.addWidget(self.search_entry)
         
         toolbar.addStretch()
@@ -460,17 +524,18 @@ class ImageManagerPopup(BasePopup):
         
         layout.addLayout(toolbar)
         
-        # Grid placeholder
-        grid_scroll = QScrollArea()
-        grid_scroll.setStyleSheet(f"background-color: {Theme.SURFACE0};")
-        grid_scroll.setWidgetResizable(True)
+        # Scrollable grid
+        self._grid_scroll = QScrollArea()
+        self._grid_scroll.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        self._grid_scroll.setWidgetResizable(True)
         
-        self.empty_label = QLabel("No images in this category.\nClick 'Add Images' to import.")
-        self.empty_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
-        self.empty_label.setAlignment(Qt.AlignCenter)
-        grid_scroll.setWidget(self.empty_label)
+        self._grid_widget = QWidget()
+        self._grid_layout = QGridLayout(self._grid_widget)
+        self._grid_layout.setSpacing(8)
+        self._grid_layout.setContentsMargins(8, 8, 8, 8)
+        self._grid_scroll.setWidget(self._grid_widget)
         
-        layout.addWidget(grid_scroll)
+        layout.addWidget(self._grid_scroll)
         
         return area
     
@@ -491,20 +556,182 @@ class ImageManagerPopup(BasePopup):
         
         self._main_layout.addWidget(self.footer)
     
+    def _reload_grid(self):
+        """Reload image grid from library."""
+        # Rebuild categories
+        self._rebuild_category_buttons()
+        
+        # Clear grid
+        while self._grid_layout.count():
+            child = self._grid_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        if not self._library:
+            empty = QLabel("Library not available.\nCheck ImageLibrary service.")
+            empty.setStyleSheet(f"color: {Theme.RED};")
+            empty.setAlignment(Qt.AlignCenter)
+            self._grid_layout.addWidget(empty, 0, 0)
+            self.image_count.setText("0 images")
+            return
+        
+        # Get images
+        cat = self._selected_category if self._selected_category != "All" else None
+        images = self._library.get_images(category=cat)
+        
+        # Apply search filter
+        query = self.search_entry.text().strip().lower() if hasattr(self, 'search_entry') else ""
+        if query:
+            images = [img for img in images
+                      if query in img.filename.lower()
+                      or any(query in t.lower() for t in img.tags)]
+        
+        self.image_count.setText(f"{len(images)} images")
+        
+        if not images:
+            empty = QLabel("No images found.\nClick '➕ Add Images' to import.")
+            empty.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+            empty.setAlignment(Qt.AlignCenter)
+            self._grid_layout.addWidget(empty, 0, 0, 1, self.GRID_COLS)
+            return
+        
+        # Render image cards
+        from PySide6.QtGui import QPixmap
+        for i, img in enumerate(images):
+            row = i // self.GRID_COLS
+            col = i % self.GRID_COLS
+            card = self._create_image_card(img)
+            self._grid_layout.addWidget(card, row, col)
+    
+    def _create_image_card(self, img) -> QFrame:
+        """Create a single image card widget."""
+        from PySide6.QtGui import QPixmap
+        
+        card = QFrame()
+        card.setFixedSize(self.THUMB_SIZE + 16, self.THUMB_SIZE + 50)
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: {Theme.SURFACE1};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+            }}
+            QFrame:hover {{
+                border-color: {Theme.BLUE};
+            }}
+        """)
+        card.setCursor(Qt.PointingHandCursor)
+        
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
+        
+        # Thumbnail
+        thumb = QLabel()
+        thumb.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
+        thumb.setAlignment(Qt.AlignCenter)
+        thumb.setStyleSheet("border: none; background: transparent;")
+        
+        pixmap = QPixmap(img.path)
+        if not pixmap.isNull():
+            scaled = pixmap.scaled(self.THUMB_SIZE, self.THUMB_SIZE,
+                                   Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            thumb.setPixmap(scaled)
+        else:
+            thumb.setText("🖼️")
+            thumb.setStyleSheet(f"border: none; color: {Theme.OVERLAY0}; font-size: 28px;")
+        
+        layout.addWidget(thumb)
+        
+        # Tag label (first tag or filename)
+        tag_text = img.tags[0] if img.tags else img.filename
+        tag_label = QLabel(tag_text)
+        tag_label.setAlignment(Qt.AlignCenter)
+        tag_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 10px; border: none;")
+        tag_label.setToolTip(f"Tags: {', '.join(img.tags)}\nPath: {img.path}")
+        tag_label.setWordWrap(False)
+        layout.addWidget(tag_label)
+        
+        # Action buttons row
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(2)
+        
+        # Select button
+        select_btn = QPushButton("✓")
+        select_btn.setFixedSize(24, 20)
+        select_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.GREEN};
+                color: {Theme.CRUST};
+                border: none; border-radius: 3px;
+                font-size: 11px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #B8F0B2; }}
+        """)
+        select_btn.setToolTip("Select this image")
+        select_btn.clicked.connect(lambda _, t=tag_text: self._on_image_select(t))
+        btn_row.addWidget(select_btn)
+        
+        # Delete button
+        del_btn = QPushButton("✕")
+        del_btn.setFixedSize(24, 20)
+        del_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.RED};
+                color: {Theme.CRUST};
+                border: none; border-radius: 3px;
+                font-size: 11px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #EBA0AC; }}
+        """)
+        del_btn.setToolTip("Delete from library")
+        del_btn.clicked.connect(lambda _, iid=img.id: self._on_delete_image(iid))
+        btn_row.addWidget(del_btn)
+        
+        layout.addLayout(btn_row)
+        
+        return card
+    
     def _select_category(self, name: str):
         """Handle category selection."""
         self._selected_category = name
-        # TODO: Reload images
+        self._reload_grid()
+    
+    def _on_search(self, text: str):
+        """Handle search input change."""
+        self._reload_grid()
     
     def _on_add_images(self):
-        """Open file dialog to add images."""
+        """Open file dialog to add images to library."""
         files, _ = QFileDialog.getOpenFileNames(
             self, "Select Images", "",
-            "Image files (*.png *.jpg *.jpeg *.webp);;All files (*.*)"
+            "Image files (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tiff);;All files (*.*)"
         )
-        if files:
-            # TODO: Add to library
-            pass
+        if files and self._library:
+            for f in files:
+                tag = Path(f).stem
+                cat = self._selected_category if self._selected_category != "All" else "All"
+                self._library.add_image(f, tags=[tag], category=cat)
+            self._reload_grid()
+    
+    def _on_delete_image(self, image_id: str):
+        """Delete image from library."""
+        if self._library:
+            self._library.remove_image(image_id, delete_file=False)
+            self._reload_grid()
+    
+    def _on_add_category(self):
+        """Add new category via simple input dialog."""
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "New Category", "Category name:")
+        if ok and name.strip() and self._library:
+            self._library.add_category(name.strip())
+            self._reload_grid()
+    
+    def _on_image_select(self, tag: str):
+        """Handle image selection — callback to insert [tag] in prompt."""
+        if self._on_select:
+            self._on_select(tag)
+        self._on_close()
 
 
 class LicenseExpirationDialog(BasePopup):

@@ -7,7 +7,7 @@ Role: Execute individual tasks using assigned account
 Architecture: Asyncio (Hybrid with ProcessPoolExecutor for CPU tasks)
 """
 
-from typing import Optional, Callable, Any
+from typing import Optional, List, Callable, Any
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -34,14 +34,20 @@ class WorkerState(str, Enum):
 class WorkerResult:
     """Result from worker execution."""
     success: bool
-    operation_name: Optional[str] = None
-    scene_id: Optional[str] = None
+    operation_name: Optional[str] = None       # First op name (backward compat)
+    scene_id: Optional[str] = None             # First scene ID (backward compat)
+    operation_names: List[str] = None           # ALL op names (ordered)
+    scene_ids: List[str] = None                 # ALL scene IDs (ordered)
     output_uris: list = None
     error: Optional[str] = None
     
     def __post_init__(self):
         if self.output_uris is None:
             self.output_uris = []
+        if self.operation_names is None:
+            self.operation_names = []
+        if self.scene_ids is None:
+            self.scene_ids = []
 
 
 class Worker:
@@ -293,22 +299,26 @@ class Worker:
         return self._process_response(response)
     
     def _process_response(self, response: APIResponse) -> WorkerResult:
-        """Process API response into WorkerResult."""
+        """Process API response into WorkerResult.
+        
+        Extracts ALL operation names and scene IDs in submit order.
+        """
         if not response.success:
             return WorkerResult(success=False, error=response.error)
         
         data = response.data or {}
         
-        # Extract operation name(s) for async operations
-        # API response structure: ops[0] = {"operation": {"name": "..."}, "sceneId": "...", "status": "..."}
-        operation_name = None
+        # Extract ALL operation name(s) for async operations (ordered)
+        operation_names = []
+        scene_ids = []
         if "operations" in data:
-            ops = data["operations"]
-            if ops and len(ops) > 0:
-                # name is nested inside ops[0]["operation"]["name"], NOT ops[0]["name"]
-                op_obj = ops[0].get("operation", {})
-                operation_name = op_obj.get("name") if isinstance(op_obj, dict) else None
-                scene_id = ops[0].get("sceneId", "")
+            for op in data["operations"]:
+                op_obj = op.get("operation", {})
+                name = op_obj.get("name") if isinstance(op_obj, dict) else None
+                if name:
+                    operation_names.append(name)
+                sid = op.get("sceneId", "")
+                scene_ids.append(sid)
         
         # Extract direct outputs for sync operations (like T2I)
         output_uris = []
@@ -319,8 +329,10 @@ class Worker:
         
         return WorkerResult(
             success=True,
-            operation_name=operation_name,
-            scene_id=scene_id if 'scene_id' in dir() else None,
+            operation_name=operation_names[0] if operation_names else None,
+            scene_id=scene_ids[0] if scene_ids else None,
+            operation_names=operation_names,
+            scene_ids=scene_ids,
             output_uris=output_uris,
         )
     

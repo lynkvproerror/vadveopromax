@@ -422,6 +422,23 @@ class AccountManager:
         # Step 6: Re-attach via ensure_browser (extracts fresh token + headers)
         try:
             await self.ensure_browser(headless=True)
+            
+            # Step 7: Re-capture headers if x-client-data still looks truncated
+            # Chrome's Variations Service may need more time after restart
+            current_cd = self._session.client_data or ""
+            if len(current_cd) < 20 and self._profiles_controller:
+                log.info(f"[{email}] x-client-data short ({len(current_cd)} chars), "
+                         f"waiting for Variations Service...")
+                await asyncio.sleep(5)
+                headers = self._profiles_controller.get_debug_browser_headers(email)
+                new_cd = headers.get("x-client-data", "")
+                if len(new_cd) >= 20:
+                    self._session.client_data = new_cd
+                    log.info(f"[{email}] ✅ x-client-data refreshed ({len(new_cd)} chars)")
+                else:
+                    log.warning(f"[{email}] ⚠️ x-client-data still short after retry "
+                                f"({len(new_cd)} chars)")
+            
             log.info(f"[{email}] ✅ Browser restart complete — fresh PID, tokens, reCAPTCHA")
             return True
         except Exception as e:

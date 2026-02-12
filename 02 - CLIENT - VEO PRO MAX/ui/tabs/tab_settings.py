@@ -148,6 +148,10 @@ class TabSettings(QWidget):
         session_section = self._create_session_section()
         self.content_layout.addWidget(session_section)
         
+        # === NOTIFICATIONS SECTION ===
+        notif_section = self._create_notification_section()
+        self.content_layout.addWidget(notif_section)
+        
         # === UI SECTION ===
         ui_section = self._create_ui_section()
         self.content_layout.addWidget(ui_section)
@@ -231,7 +235,7 @@ class TabSettings(QWidget):
     def _create_profiles_section(self) -> QWidget:
         """Create Chrome Profiles section - per TAB_07_SETTINGS.md spec.
         
-        9 columns: ✓, #, Email, Type, Plan, Credits, Status, Slots, Actions
+        9 columns: ✓, #, Email, Type, Plan, Credits, Status, Workers, Actions
         """
         section, layout = self._create_section("🌐 Chrome Profiles (Account Manager)")
         
@@ -239,7 +243,7 @@ class TabSettings(QWidget):
         self.profiles_table = QTableWidget()
         self.profiles_table.setColumnCount(9)
         self.profiles_table.setHorizontalHeaderLabels([
-            "✓", "#", "Email", "Type", "Plan", "Credits", "Status", "Slots", "Actions"
+            "✓", "#", "Email", "Type", "Plan", "Credits", "Status", "Workers", "Actions"
         ])
         
         # Set column widths per docs spec
@@ -251,7 +255,7 @@ class TabSettings(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Plan
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)  # Credits
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)  # Status
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)  # Slots
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)  # Workers
         header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)  # Actions
         
         self.profiles_table.setColumnWidth(0, 80)   # ✓
@@ -260,7 +264,7 @@ class TabSettings(QWidget):
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status - "🟢 Ready" needs more space
-        self.profiles_table.setColumnWidth(7, 60)   # Slots - SpinBox 0-4
+        self.profiles_table.setColumnWidth(7, 60)   # Workers - SpinBox 0-4
         self.profiles_table.setColumnWidth(8, 120)  # Actions - 3 buttons + spacing
         
         self.profiles_table.setMinimumHeight(80)
@@ -423,11 +427,11 @@ class TabSettings(QWidget):
             # Get email for action handlers
             email = acc.get('email', '')
             
-            # Slots SpinBox (col 7) — per-account concurrent worker limit
+            # Workers SpinBox (col 7) — per-account concurrent worker limit
             slots_spin = QSpinBox()
             slots_spin.setRange(0, 4)
             slots_spin.setValue(acc.get('max_slots', 4))
-            slots_spin.setToolTip("Max concurrent workers for this account (0 = disabled)")
+            slots_spin.setToolTip("Max concurrent workers for this account (0 = disable processing)")
             slots_spin.setFixedWidth(50)
             slots_spin.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 2px; text-align: center;")
             slots_spin.valueChanged.connect(
@@ -514,7 +518,7 @@ class TabSettings(QWidget):
         section, layout = self._create_section("👥 Google Accounts")
         
         # Description
-        desc = QLabel("Manage accounts for parallel generation (4 slots each)")
+        desc = QLabel("Manage accounts for parallel generation (up to 4 workers each)")
         desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-bottom: 8px;")
         layout.addWidget(desc)
         
@@ -568,7 +572,7 @@ class TabSettings(QWidget):
         layout.addWidget(email_label, stretch=1)
         
         slots = acc.get('slots', '0/4')
-        slots_label = QLabel(f"Slots: {slots}")
+        slots_label = QLabel(f"Workers: {slots}")
         slots_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
         layout.addWidget(slots_label)
         
@@ -902,9 +906,9 @@ class TabSettings(QWidget):
             saved_restore_queue = getattr(s, 'restore_queue_on_startup', False)
             saved_restore_tabs = getattr(s, 'restore_tabs_on_startup', True)
         
-        # Toggle: Restore Queue on Startup
+        # Toggle: Restore Queue
         self.restore_queue_switch = self._create_enable_row(
-            "Restore Queue on Startup:", checked=saved_restore_queue
+            "Restore Queue:", checked=saved_restore_queue
         )
         layout.addLayout(self.restore_queue_switch._row_layout)
         
@@ -914,9 +918,9 @@ class TabSettings(QWidget):
         queue_desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px; margin-bottom: 4px;")
         layout.addWidget(queue_desc)
         
-        # Toggle: Restore Tabs on Startup
+        # Toggle: Restore Tabs
         self.restore_tabs_switch = self._create_enable_row(
-            "Restore Tabs on Startup:", checked=saved_restore_tabs
+            "Restore Tabs:", checked=saved_restore_tabs
         )
         layout.addLayout(self.restore_tabs_switch._row_layout)
         
@@ -935,25 +939,6 @@ class TabSettings(QWidget):
         # Action buttons row
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
-        
-        # Clear Queue button (RED)
-        clear_queue_btn = QPushButton("🗑️ Clear Queue")
-        clear_queue_btn.setFixedHeight(32)
-        clear_queue_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.RED};
-                color: {Theme.CRUST};
-                border-radius: 6px;
-                padding: 0 16px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: #EBA0AC;
-            }}
-        """)
-        clear_queue_btn.setToolTip("Clear ALL tasks from queue + delete session file")
-        clear_queue_btn.clicked.connect(self._on_clear_queue)
-        btn_layout.addWidget(clear_queue_btn)
         
         # Clear Cache button (YELLOW)
         clear_cache_btn = QPushButton("🧹 Clear Cache")
@@ -991,24 +976,6 @@ class TabSettings(QWidget):
             pass
         return "📊 Cache: N/A"
     
-    def _on_clear_queue(self):
-        """Clear all queue tasks with confirmation."""
-        reply = QMessageBox.question(
-            self, "Clear Queue",
-            "⚠️ This will remove ALL tasks from the queue\n"
-            "and delete the session file.\n\n"
-            "Are you sure?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            if self.controller and hasattr(self.controller, 'clear_queue'):
-                count = self.controller.clear_queue()
-                QMessageBox.information(
-                    self, "Queue Cleared",
-                    f"✅ {count} tasks removed.\nSession file deleted."
-                )
-    
     def _on_clear_cache(self):
         """Clear cache files with confirmation."""
         reply = QMessageBox.question(
@@ -1030,6 +997,158 @@ class TabSettings(QWidget):
                 # Refresh cache stats
                 self.cache_stats_label.setText(self._get_cache_stats_text())
 
+    def _create_notification_section(self) -> QWidget:
+        """Create Notifications section — toast + sound settings."""
+        section, layout = self._create_section("🔔 Notifications")
+        
+        from config.settings import get_settings
+        settings = get_settings()
+        
+        # Row 1: In-App Toast toggle
+        toast_row = QHBoxLayout()
+        
+        toast_label = QLabel("In-App Toast:")
+        toast_label.setFixedWidth(150)
+        toast_label.setStyleSheet(f"color: {Theme.TEXT};")
+        toast_row.addWidget(toast_label)
+        
+        self.notify_toast_toggle = ToggleSwitch(checked=settings.notify_toast_enabled)
+        toast_row.addWidget(self.notify_toast_toggle)
+        toast_row.addStretch()
+        layout.addLayout(toast_row)
+        
+        # Row 2: Sound Notification toggle + sound selector + preview
+        sound_row = QHBoxLayout()
+        
+        sound_label = QLabel("Sound Notification:")
+        sound_label.setFixedWidth(150)
+        sound_label.setStyleSheet(f"color: {Theme.TEXT};")
+        sound_row.addWidget(sound_label)
+        
+        self.notify_sound_toggle = ToggleSwitch(checked=settings.notify_sound_enabled)
+        sound_row.addWidget(self.notify_sound_toggle)
+        
+        # Separator
+        sep = QFrame()
+        sep.setFixedSize(1, 24)
+        sep.setStyleSheet(f"background-color: {Theme.BORDER};")
+        sound_row.addWidget(sep)
+        
+        # Sound selector dropdown
+        sound_select_label = QLabel("Sound:")
+        sound_select_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        sound_row.addWidget(sound_select_label)
+        
+        self.sound_file_combo = QComboBox()
+        from core.notification_manager import BUILTIN_SOUNDS
+        self._builtin_sound_names = list(BUILTIN_SOUNDS.keys())
+        self.sound_file_combo.addItems(self._builtin_sound_names + ["Custom..."])
+        self.sound_file_combo.setFixedWidth(140)
+        
+        # Set current selection from settings
+        current_sound = settings.notify_sound_file
+        if current_sound in self._builtin_sound_names:
+            self.sound_file_combo.setCurrentText(current_sound)
+        elif current_sound:
+            # Custom file — show filename
+            from pathlib import Path
+            custom_name = Path(current_sound).name
+            idx = self.sound_file_combo.count() - 1  # Before "Custom..."
+            self.sound_file_combo.insertItem(idx, f"📁 {custom_name}")
+            self.sound_file_combo.setCurrentIndex(idx)
+            self.sound_file_combo.setItemData(idx, current_sound, Qt.UserRole)
+        
+        self.sound_file_combo.currentIndexChanged.connect(self._on_sound_selection_changed)
+        sound_row.addWidget(self.sound_file_combo)
+        
+        # Preview button
+        from PySide6.QtWidgets import QPushButton
+        preview_btn = QPushButton("🔊 Preview")
+        preview_btn.setFixedWidth(90)
+        preview_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.SURFACE2};
+            }}
+        """)
+        preview_btn.clicked.connect(self._on_preview_sound)
+        sound_row.addWidget(preview_btn)
+        
+        sound_row.addStretch()
+        layout.addLayout(sound_row)
+        
+        # Auto-save: connect toggles + dropdown to persist immediately
+        self.notify_toast_toggle.toggled_signal.connect(self._save_notification_settings)
+        self.notify_sound_toggle.toggled_signal.connect(self._save_notification_settings)
+        self.sound_file_combo.currentIndexChanged.connect(
+            lambda: self._save_notification_settings()
+        )
+        
+        return section
+    
+    def _save_notification_settings(self, *args):
+        """Persist notification settings to AppSettings singleton."""
+        from config.settings import get_settings, save_settings
+        settings = get_settings()
+        settings.notify_toast_enabled = self.notify_toast_toggle.isToggled()
+        settings.notify_sound_enabled = self.notify_sound_toggle.isToggled()
+        settings.notify_sound_file = self._get_selected_sound()
+        save_settings()
+    
+    def _on_sound_selection_changed(self, index: int):
+        """Handle sound dropdown selection change."""
+        text = self.sound_file_combo.currentText()
+        if text == "Custom...":
+            from PySide6.QtWidgets import QFileDialog
+            filepath, _ = QFileDialog.getOpenFileName(
+                self, "Select Sound File", "",
+                "Sound Files (*.wav *.mp3);;All Files (*)"
+            )
+            if filepath:
+                from pathlib import Path
+                custom_name = Path(filepath).name
+                # Insert custom file before "Custom..." item
+                insert_idx = self.sound_file_combo.count() - 1
+                self.sound_file_combo.blockSignals(True)
+                self.sound_file_combo.insertItem(insert_idx, f"📁 {custom_name}")
+                self.sound_file_combo.setItemData(insert_idx, filepath, Qt.UserRole)
+                self.sound_file_combo.setCurrentIndex(insert_idx)
+                self.sound_file_combo.blockSignals(False)
+            else:
+                # User cancelled — revert to "default"
+                self.sound_file_combo.blockSignals(True)
+                self.sound_file_combo.setCurrentIndex(0)
+                self.sound_file_combo.blockSignals(False)
+    
+    def _on_preview_sound(self):
+        """Preview the currently selected notification sound."""
+        sound = self._get_selected_sound()
+        try:
+            from core.notification_manager import NotificationManager
+            if not hasattr(self, '_preview_player'):
+                self._preview_player = NotificationManager()
+            self._preview_player.play(sound, duration_ms=4000)
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Sound Error", f"Cannot play sound: {e}")
+    
+    def _get_selected_sound(self) -> str:
+        """Get the sound file name/path from the current dropdown selection."""
+        text = self.sound_file_combo.currentText()
+        if text in self._builtin_sound_names:
+            return text
+        # Custom file — get path from UserRole data
+        custom_path = self.sound_file_combo.itemData(
+            self.sound_file_combo.currentIndex(), Qt.UserRole
+        )
+        return custom_path if custom_path else "default"
+    
     def _create_ui_section(self) -> QWidget:
         """Create UI section - matches CTK lines 301-355."""
         section, layout = self._create_section("🎨 UI")
@@ -1523,6 +1642,7 @@ class TabSettings(QWidget):
         """Called when browser login completes successfully."""
         self.setEnabled(True)
         self._refresh_profiles_table()
+        self._push_dev_console_status()  # Refresh DevConsole panels
         QMessageBox.information(
             self, 
             "Success", 

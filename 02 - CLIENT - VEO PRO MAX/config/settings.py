@@ -63,6 +63,11 @@ class AppSettings:
     developer_mode: bool = False
     show_json_preview: bool = False
     
+    # === NOTIFICATIONS ===
+    notify_toast_enabled: bool = True        # In-app toast on group complete
+    notify_sound_enabled: bool = True        # Sound on group complete
+    notify_sound_file: str = "default"       # "default" | "success" | "chime" | custom path
+    
     # === PATHS ===
     profiles_folder: str = ""
     cache_folder: str = ""

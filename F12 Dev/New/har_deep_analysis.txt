@@ -1,0 +1,145 @@
+=== GENERATE REQUEST BODY (Entry 48) ===
+{
+  "clientContext": {
+    "recaptchaContext": {
+      "token": "<REDACTED>",
+      "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+    },
+    "sessionId": ";1770915442952",
+    "projectId": "ccfc4999-0865-4e67-9121-18dc10e85b03",
+    "tool": "PINHOLE",
+    "userPaygateTier": "PAYGATE_TIER_TWO"
+  },
+  "requests": [
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 14283,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "eec9336f-4cc0-4f61-8fea-ed00e9ba7f73"
+      }
+    },
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 6917,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "e1ed0b99-c7c0-425f-b821-fecdecb44d3c"
+      }
+    },
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 22225,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "6b5c4c1c-3423-4665-bdc6-66491083ac9d"
+      }
+    },
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 5106,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "4b22f521-7db6-4b21-8599-491fd3bc8ada"
+      }
+    }
+  ]
+}
+
+=== GENERATE REQUEST BODY (Entry 33 - status 0) ===
+{
+  "clientContext": {
+    "recaptchaContext": {
+      "token": "<REDACTED>",
+      "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB"
+    },
+    "sessionId": ";1770915442952",
+    "projectId": "ccfc4999-0865-4e67-9121-18dc10e85b03",
+    "tool": "PINHOLE",
+    "userPaygateTier": "PAYGATE_TIER_TWO"
+  },
+  "requests": [
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 588,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "a6f3c9ca-cfda-4b65-a262-663acaf075e4"
+      }
+    },
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 15793,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "5e60571d-1c14-482e-9a81-53bc9c1ce427"
+      }
+    },
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 2227,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "8827aa48-55f9-4de6-9712-d96194bca0b2"
+      }
+    },
+    {
+      "aspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "seed": 29832,
+      "textInput": {
+        "prompt": "Hook-end scene. Whimsical animated 3D style, Pixar-inspired anthropomorphic characters, vibrant warm lighting, modern Vietnamese kitchen interior. Close-up, dolly out. Vietnamese traditional medicine room, herbal shelves, warm amber lighting, wooden desk with herbs. [Bác Nghệ] Bác Nghệ, an anthropomorphic Vietnamese turmeric root, oversized 25cm tall, knobby bright vivid golden-orange turmeric body with smooth powdery skin, broad flat green turmeric leaves on top as a wise crown, large wise compassionate cartoon eyes with white sclera and jet black pupils with golden sparkle, small warm golden mouth with caring expression, thick turmeric root tendrils as sturdy legs, panicked expression being ground into fine powder in mortar and pestle, golden dust flying everywhere. Audio of comedic dramatic music. [Giọng: Miền Bắc, 55 tuổi] \"Ơ kìa, tao bảo thái lát pha sữa chứ ai nghiền tao thành bột thế này, tao còn nguyên mới đẹp mà, nhẹ tayy.\"\n"
+      },
+      "videoModelKey": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "metadata": {
+        "sceneId": "81444e79-12e0-4a5b-855b-f22627a92ef0"
+      }
+    }
+  ]
+}
+
+=== CREDITS (Entry 1) ===
+{
+  "credits": 23800,
+  "userPaygateTier": "PAYGATE_TIER_TWO",
+  "sku": "G1_TIER2",
+  "serviceTier": "SERVICE_TIER_ADVANCED"
+}
+
+
+=== FETCH USER RECOMMENDATIONS (Entry 2) ===
+REQ: {"onramp":["FLOW_UPGRADE_BANNER","FLOW_UPGRADE_BUTTON","FLOW_MANAGE_AI_CREDITS","FLOW_VIDEO_TOOLTIP_UPSELL","FLOW_MODEL_UPGRADE","FLOW_MANAGE_MEMBERSHIP"]}
+RESP: {}
+
+
+=== CHECK APP AVAILABILITY (Entry 3) ===
+REQ: {"clientContext":{"tool":"PINHOLE"}}
+RESP: {
+  "availabilityState": "AVAILABLE"
+}
+
+
+=== GENERATE HEADERS (Entry 48) ===
+  content-type: text/plain;charset=UTF-8
+  origin: https://labs.google
+  referer: https://labs.google/
