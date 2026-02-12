@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.theme import Theme
 from ui.components.toast import ToastManager
+from core.notification_manager import NotificationManager
 
 # Import PySide6 tabs
 from ui.tabs.tab_t2v import TabT2V
@@ -77,6 +78,9 @@ class MainWindow(QMainWindow):
         
         # Tab instances
         self.tab_instances = {}
+        
+        # Notification manager (sound playback)
+        self._notification_manager = NotificationManager()
         
         # Setup UI
         self._setup_window()
@@ -198,9 +202,12 @@ class MainWindow(QMainWindow):
                     self.tabview.removeTab(i)
                     break
             self._dev_console_visible = False
-            # Disconnect from controller
-            if self.controller and hasattr(self.controller, '_dev_console'):
-                self.controller._dev_console = None
+            # Stop performance timer + disconnect from controller
+            if self.controller:
+                if hasattr(self.controller, 'stop_perf_timer'):
+                    self.controller.stop_perf_timer()
+                if hasattr(self.controller, '_dev_console'):
+                    self.controller._dev_console = None
             self.set_status("DevConsole hidden")
         else:
             # Add dev console tab (use actual migrated TabDevConsole)
@@ -213,9 +220,11 @@ class MainWindow(QMainWindow):
             # Wire to controller so it can push JSON/queue data
             if self.controller and hasattr(self.controller, '_dev_console'):
                 self.controller._dev_console = dev_widget
-                # Immediately push current browser status + session data
+                # Immediately push current browser status + session data + queue state
                 self.controller._push_browser_status()
                 self.controller._push_session_data()
+                self.controller._notify_queue_updated()
+                self.controller.start_perf_timer()
             
             self._dev_console_visible = True
             self.show_toast("DevConsole visible (Ctrl+Shift+D to hide)", "info")
@@ -239,6 +248,9 @@ class MainWindow(QMainWindow):
         self.controller.set_task_completed_callback(self._on_task_completed)
         self.controller.set_task_failed_callback(self._on_task_failed)
         
+        # Group completed (notification)
+        self.controller.set_group_completed_callback(self._on_group_completed)
+        
         # === UI → CONTROLLER SIGNAL CONNECTIONS ===
         self._connect_tab_signals()
     
@@ -254,8 +266,8 @@ class MainWindow(QMainWindow):
                 queue_tab.start_all.connect(self.controller.start_processing)
             if hasattr(queue_tab, 'pause_all'):
                 queue_tab.pause_all.connect(self.controller.stop_processing)
-            if hasattr(queue_tab, 'clear_failed'):
-                queue_tab.clear_failed.connect(self._on_clear_failed)
+            if hasattr(queue_tab, 'stop_all'):
+                queue_tab.stop_all.connect(self.controller.stop_processing)
         
         # Settings Tab
         if 'settings' in self.tab_instances and hasattr(self.tab_instances['settings'], 'settings_changed'):
@@ -278,14 +290,43 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def _on_task_completed(self, task):
         """Handle task completion."""
-        self.set_status(f"✅ Task completed: {task.id if hasattr(task, 'id') else task}")
-        self.show_toast(f"Task completed: {task.id if hasattr(task, 'id') else task}", "success")
+        # Build descriptive notification with project name and prompt excerpt
+        project = getattr(task, 'project_name', '') or 'Unknown'
+        idx = getattr(task, 'prompt_index', 0) + 1  # 0-based → 1-based
+        prompt = getattr(task, 'prompt', '')
+        prompt_short = prompt[:40] + '...' if len(prompt) > 40 else prompt
+        
+        self.set_status(f"✅ [{project}] #{idx} completed")
+        if not self.settings or getattr(self.settings, 'notify_toast_enabled', True):
+            self.show_toast(f"✅ [{project}] #{idx}: \"{prompt_short}\"", "success")
     
     @Slot(object, str)
     def _on_task_failed(self, task, error: str):
         """Handle task failure."""
-        self.set_status(f"❌ Task failed: {error}")
-        self.show_toast(f"Task failed: {error[:60]}", "error")
+        project = getattr(task, 'project_name', '') or 'Unknown'
+        idx = getattr(task, 'prompt_index', 0) + 1
+        error_short = error[:50] + '...' if len(error) > 50 else error
+        
+        self.set_status(f"❌ [{project}] #{idx} failed: {error_short}")
+        if not self.settings or getattr(self.settings, 'notify_toast_enabled', True):
+            self.show_toast(f"❌ [{project}] #{idx}: {error_short}", "error")
+    
+    def _on_group_completed(self, group):
+        """Handle group completion — toast + sound notification."""
+        name = getattr(group, 'name', 'Unknown')
+        task_count = len(group.tasks) if hasattr(group, 'tasks') else 0
+        
+        # In-app toast
+        if self.settings and getattr(self.settings, 'notify_toast_enabled', True):
+            self.show_toast(
+                f"🎉 Group '{name}' completed ({task_count} tasks)",
+                "success", 4000
+            )
+        
+        # Sound notification
+        if self.settings and getattr(self.settings, 'notify_sound_enabled', True):
+            sound = getattr(self.settings, 'notify_sound_file', 'default')
+            self._notification_manager.play(sound, duration_ms=4000)
     
     @Slot()
     def _on_clear_failed(self):

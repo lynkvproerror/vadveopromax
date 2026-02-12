@@ -39,6 +39,8 @@ from services.permissions import PermissionsSystem, Role, Feature
 from config.settings import AppSettings
 from config.constants import WorkflowType, resolve_model_key
 
+log = logging.getLogger(__name__)
+
 
 def _wf_display(wt) -> str:
     """Extract clean display name from workflow_type (enum or string)."""
@@ -108,10 +110,16 @@ class AppController:
         self._on_queue_updated: List[Callable[[Dict], None]] = []
         self._on_account_changed: Optional[Callable[[str], None]] = None
         self._on_status_changed: Optional[Callable[[str], None]] = None
+        self._on_group_completed: Optional[Callable] = None  # Group completion notification
+        self._notified_groups: set = set()  # Track notified group IDs
         
         # DevConsole reference (set by UI via set_dev_console)
         self._dev_console = None
         self._settings = None  # AppSettings, set via set_settings()
+        
+        # Performance tracking
+        self._start_time = datetime.now()
+        self._perf_timer = None  # QTimer, started when DevConsole opens
         
         # Async event loop
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -569,6 +577,59 @@ class AppController:
                 Qt.ConnectionType.QueuedConnection
             )
     
+    def _push_performance(self):
+        """Push performance metrics to DevConsole.
+        
+        Called by _perf_timer every 5 seconds while DevConsole is open.
+        """
+        if not hasattr(self, '_dev_console') or not self._dev_console:
+            return
+        
+        try:
+            import psutil
+            process = psutil.Process()
+            
+            # Uptime
+            elapsed = datetime.now() - self._start_time
+            hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            uptime_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            
+            data = {
+                "uptime": uptime_str,
+                "cpu": round(process.cpu_percent(interval=0), 1),
+                "ram": round(process.memory_info().rss / (1024 * 1024), 1),
+                "threads": process.num_threads(),
+                "api_calls": getattr(self._api_client, '_call_count', 0),
+                "downloads": getattr(self._engine, '_download_count', 0),
+                "errors": getattr(self._engine, '_error_count', 0),
+            }
+        except Exception:
+            data = {"uptime": "N/A", "cpu": 0, "ram": 0, "threads": 0}
+        
+        try:
+            self._dev_console.update_performance(data)
+        except Exception:
+            pass
+    
+    def start_perf_timer(self):
+        """Start performance timer (called when DevConsole opens)."""
+        if self._perf_timer is not None:
+            return  # Already running
+        
+        from PySide6.QtCore import QTimer
+        self._perf_timer = QTimer()
+        self._perf_timer.timeout.connect(self._push_performance)
+        self._perf_timer.start(5000)  # Every 5 seconds
+        self._push_performance()  # Immediate first push
+    
+    def stop_perf_timer(self):
+        """Stop performance timer (called when DevConsole closes)."""
+        if self._perf_timer:
+            self._perf_timer.stop()
+            self._perf_timer.deleteLater()
+            self._perf_timer = None
+    
     def _start_async_loop(self):
         """Start background async event loop."""
         def run_loop():
@@ -755,6 +816,13 @@ class AppController:
                         try:
                             future.result(timeout=3.0)
                             log.info(f"Synced profile → runtime: {email}")
+                            
+                            # Hot-reload: if engine is running, spawn workers immediately
+                            if self._engine and self._engine.is_running:
+                                acc_mgr = self._multi_account.get_account(email)
+                                if acc_mgr:
+                                    self._engine.add_account_hot(acc_mgr)
+                                    
                         except Exception as e:
                             log.warning(f"Failed to sync {email}: {e}")
                             
@@ -790,6 +858,27 @@ class AppController:
             logging.getLogger(__name__).info(
                 f"Runtime max_slots for {email} → {max_slots}"
             )
+    
+    # Safe concurrency limit: max concurrent API calls per account
+    # e.g. 2 workers × 4 outputs = 8 API calls — safe ceiling
+    SAFE_CONCURRENT_API_CALLS = 8
+    
+    def get_concurrency_warnings(self, output_per_prompt: int = 4) -> list:
+        """Check if any account's concurrent load exceeds the safe limit.
+        
+        Risk = output_per_prompt × max_slots (workers).
+        Safe limit: SAFE_CONCURRENT_API_CALLS (8 concurrent operations).
+        
+        Returns list of (email, current_slots, concurrent_load, safe_limit) tuples
+        for accounts that exceed the safe limit. Empty list = all safe.
+        """
+        warnings = []
+        safe = self.SAFE_CONCURRENT_API_CALLS
+        for acc in self._multi_account._accounts:
+            concurrent_load = acc.max_slots * output_per_prompt
+            if acc.is_enabled and concurrent_load > safe:
+                warnings.append((acc.email, acc.max_slots, concurrent_load, safe))
+        return warnings
     
     @staticmethod
     def _map_aspect_ratio(raw: str, workflow: "WorkflowType") -> str:
@@ -889,12 +978,42 @@ class AppController:
                 project_name=(settings or {}).get("project_name", ""),
                 prompt_index=i,
             )
+            
+            # === Tag resolution: [tag] → local image path ===
+            # Only resolve if task has no explicit image_uris already
+            if not task.image_uris:
+                import re
+                tags = re.findall(r'\[([^\]]+)\]', prompt)
+                if tags:
+                    try:
+                        from services.image_library import get_image_library
+                        library = get_image_library()
+                        resolved_paths = []
+                        for tag in tags:
+                            img = library.resolve_tag(tag)
+                            if img and img.path:
+                                resolved_paths.append(img.path)
+                                log.info(f"  [TAG] [{tag}] → {img.path}")
+                            else:
+                                log.warning(f"  [TAG] [{tag}] not found in library")
+                        
+                        if resolved_paths:
+                            task.image_paths = resolved_paths
+                            # Auto-switch T2V → I2V when tags detected
+                            if task.workflow_type == "T2V":
+                                task.workflow_type = "I2V"
+                                log.info(f"  [AUTO] T2V → I2V (tags detected)")
+                    except ImportError:
+                        log.warning("  ImageLibrary not available for tag resolution")
+            # === End tag resolution ===
+            
             tasks.append(task)
         
-        group = TaskGroup(id=group_id, name=f"Batch {len(tasks)}", tasks=tasks)
+        project_name = (settings or {}).get("project_name", "")
+        group_display = project_name if project_name else f"Batch {len(tasks)}"
+        group = TaskGroup(id=group_id, name=group_display, tasks=tasks)
         
         # === DEBUG: Export resolved task structure ===
-        log = logging.getLogger(__name__)
         log.info(f"{'='*60}")
         log.info(f"[ADD TO QUEUE] group_id={group_id}")
         log.info(f"  workflow    : {workflow.name}")
@@ -1163,10 +1282,23 @@ class AppController:
     # === EVENT HANDLERS ===
     
     def _handle_task_completed(self, task: Task):
-        """Handle task completion."""
+        """Handle task completion + detect group completion."""
         if self._on_task_completed:
             self._on_task_completed(task)
         self._notify_queue_updated()
+        
+        # Check if this task's group is now fully completed
+        self._check_group_completion(task)
+    
+    def _check_group_completion(self, task: Task):
+        """Check if the task's group is fully completed and fire notification."""
+        for group_id, group in self._dispatcher._task_groups.items():
+            if any(t.id == task.id for t in group.tasks):
+                if group.status == "completed" and group_id not in self._notified_groups:
+                    self._notified_groups.add(group_id)
+                    if self._on_group_completed:
+                        self._on_group_completed(group)
+                break
     
     def _handle_task_failed(self, task: Task, error: str):
         """Handle task failure."""
@@ -1291,6 +1423,10 @@ class AppController:
                 "total": total,
                 "mode": _wf_display(first.workflow_type) if first else "T2V",
                 "model": (first.model if first else ""),
+                "output_folder": (first.output_folder if first else ""),
+                "project_name": (first.project_name if first else ""),
+                "aspect_ratio": (first.aspect_ratio if first else ""),
+                "output_count": (first.output_count if first else 4),
                 "created_at": group.created_at,
                 "tasks": [
                     {
@@ -1306,11 +1442,56 @@ class AppController:
                         "output_count": t.output_count,
                         "output_files": list(t.output_uris) if t.output_uris else [],
                         "thumbnails": list(t.thumbnail_paths) if hasattr(t, 'thumbnail_paths') else [],
+                        "upscale_status": getattr(t, 'upscale_status', ''),
+                        "upscale_error": getattr(t, 'upscale_error', ''),
+                        "download_quality": getattr(t, 'download_quality', '720p'),
+                        "video_outputs": [
+                            {
+                                "index": vo.index,
+                                "quality": vo.quality,
+                                "upscale_status": vo.upscale_status,
+                                "upscale_error": vo.upscale_error,
+                                "best_file": vo.best_file,
+                                "border_color": vo.border_color,
+                                "task_id": t.id,
+                                "target_quality": getattr(t, 'download_quality', '1080p'),
+                            }
+                            for vo in (t.video_outputs if hasattr(t, 'video_outputs') else [])
+                        ],
                     }
                     for i, t in enumerate(group.tasks)
                 ],
             })
         return result
+    
+    def update_group_settings(self, group_id: str, settings: dict) -> bool:
+        """Update settings on all tasks in a group.
+        
+        Args:
+            group_id: Group ID
+            settings: Dict with keys like 'model', 'aspect_ratio', 'output_folder',
+                      'project_name', 'output_count'
+        Returns True if group found and updated.
+        """
+        groups = self._dispatcher.get_all_groups()
+        group = groups.get(group_id)
+        if not group:
+            return False
+        
+        for task in group.tasks:
+            if 'model' in settings:
+                task.model = settings['model']
+            if 'aspect_ratio' in settings:
+                task.aspect_ratio = settings['aspect_ratio']
+            if 'output_folder' in settings:
+                task.output_folder = settings['output_folder']
+            if 'project_name' in settings:
+                task.project_name = settings['project_name']
+                # Also update group display name
+                group.name = settings['project_name'] or group.name
+            if 'output_count' in settings:
+                task.output_count = settings['output_count']
+        return True
     
     def cancel_task(self, task_id: str) -> bool:
         """Cancel a specific task."""
@@ -1320,9 +1501,68 @@ class AppController:
         """Retry a failed task."""
         return self._dispatcher.retry_task(task_id)
     
+    def re_upscale_task(self, task_id: str):
+        """Re-upscale a completed task using stored media_ids.
+        
+        Runs async engine method on the background event loop.
+        Returns immediately — result is communicated via callbacks.
+        """
+        if not self._loop:
+            return
+        
+        async def _run():
+            # Pick the first available account for re-upscale
+            account = await self._multi_account.get_available_account()
+            if not account:
+                return
+            
+            result = await self._engine.re_upscale_task(task_id, account)
+            # Trigger queue refresh so UI updates status
+            for cb in self._on_queue_updated:
+                try:
+                    cb({})
+                except Exception:
+                    pass
+        
+        asyncio.run_coroutine_threadsafe(_run(), self._loop)
+    
+    def re_upscale_single_video(self, task_id: str, video_index: int):
+        """Re-upscale a single video by index.
+        
+        Called from UI right-click on red thumbnail.
+        Runs async engine method on the background event loop.
+        """
+        if not self._loop:
+            return
+        
+        async def _run():
+            account = await self._multi_account.get_available_account()
+            if not account:
+                return
+            
+            result = await self._engine.re_upscale_single_video(
+                task_id, video_index, account
+            )
+            # Trigger queue refresh so UI updates status
+            for cb in self._on_queue_updated:
+                try:
+                    cb({})
+                except Exception:
+                    pass
+        
+        asyncio.run_coroutine_threadsafe(_run(), self._loop)
+    
     def retry_all_failed(self) -> int:
         """Retry all failed tasks."""
         return self._dispatcher.retry_all_failed()
+    
+    def reset_task(self, task_id: str) -> bool:
+        """Reset a task to initial state — delete cache/downloads, re-queue."""
+        return self._dispatcher.reset_task(task_id)
+    
+    def reset_all_tasks(self) -> int:
+        """Reset ALL non-running tasks to initial state."""
+        return self._dispatcher.reset_all_tasks()
     
     def clear_all_tasks(self) -> int:
         """Clear all non-running tasks."""
@@ -1344,6 +1584,10 @@ class AppController:
     
     def set_task_completed_callback(self, callback: Callable[[Task], None]):
         self._on_task_completed = callback
+    
+    def set_group_completed_callback(self, callback):
+        """Set callback for group completion notification."""
+        self._on_group_completed = callback
     
     def set_task_failed_callback(self, callback: Callable[[Task, str], None]):
         self._on_task_failed = callback
