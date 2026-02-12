@@ -34,6 +34,9 @@ class TabT2V(QWidget):
     # Signals
     add_to_queue = Signal(list)  # List of prompts
     
+    # Class-level flag: suppress concurrency warning until app restart
+    _suppress_concurrency_warning = False
+    
     def __init__(self, parent: Optional[QWidget] = None, controller=None):
         super().__init__(parent)
         self.controller = controller
@@ -357,10 +360,48 @@ Tips:
         if not prompts:
             return
         
+        # Check concurrency warnings
+        if not TabT2V._suppress_concurrency_warning and self.controller and hasattr(self.controller, 'get_concurrency_warnings'):
+            output_count = self.sidebar.get_values().get("output_count", 2)
+            warnings = self.controller.get_concurrency_warnings(output_per_prompt=output_count)
+            if warnings:
+                from PySide6.QtWidgets import QMessageBox, QCheckBox
+                details = "\n".join(
+                    f"  • {email}: {workers} workers × {output_count} outputs = {load} calls (safe: ≤{safe})"
+                    for email, workers, load, safe in warnings
+                )
+                msgbox = QMessageBox(self)
+                msgbox.setWindowModality(Qt.WindowModal)
+                msgbox.setIcon(QMessageBox.Warning)
+                msgbox.setWindowTitle("⚠️ High Concurrency Risk")
+                msgbox.setText(
+                    f"Some accounts exceed the safe concurrent API limit:\n\n"
+                    f"{details}\n\n"
+                    f"Higher values may cause 403 errors from Google.\n"
+                    f"Go to Settings tab to adjust workers.\n\n"
+                    f"Add to queue anyway?"
+                )
+                dont_remind = QCheckBox("Don't remind again this session")
+                msgbox.setCheckBox(dont_remind)
+                msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                msgbox.setDefaultButton(QMessageBox.StandardButton.No)
+                result = msgbox.exec()
+                if dont_remind.isChecked():
+                    TabT2V._suppress_concurrency_warning = True
+                if result != QMessageBox.StandardButton.Yes:
+                    return
+        
         settings = self.sidebar.get_values()
         
         if self.controller:
             self.controller.add_t2v_batch(prompts, settings)
+            # Show success toast
+            main_win = self.window()
+            if hasattr(main_win, 'show_toast'):
+                main_win.show_toast(f"✅ Added {len(prompts)} prompt(s) to queue", "success")
+                # Warn if output folder not set
+                if not settings.get("output_folder", "").strip():
+                    main_win.show_toast("⚠️ No output folder set — videos won't be saved to disk!", "warning")
     
     # ── Session Persistence ─────────────────────────────────────
     

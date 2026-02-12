@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, Signal
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
 from ui.components.sidebar_base import ImageSidebar
-from ui.components.prompt_table import PromptTable, PromptRow
+from ui.components.prompt_table import PromptTable, PromptRow, ImageMode
 
 
 class TabI2I(QWidget):
@@ -37,6 +37,9 @@ class TabI2I(QWidget):
     
     # Signals
     add_to_queue = Signal(list)
+    
+    # Class-level flag: suppress concurrency warning until app restart
+    _suppress_concurrency_warning = False
     
     def __init__(self, parent: Optional[QWidget] = None, controller=None):
         super().__init__(parent)
@@ -202,7 +205,10 @@ class TabI2I(QWidget):
         layout.addWidget(header)
         
         # Prompt table (simpler than video tabs - no continuation)
-        self.prompt_table = PromptTable()
+        self.prompt_table = PromptTable(
+            image_mode=ImageMode.I2I,
+            accent_color=Theme.PURPLE,
+        )
         self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
         self.prompt_table.delete_clicked.connect(self._on_delete_prompt)
         layout.addWidget(self.prompt_table)
@@ -314,11 +320,45 @@ Image Library:
         if not prompts:
             return
         
+        # Check concurrency warnings
+        if not TabI2I._suppress_concurrency_warning and self.controller and hasattr(self.controller, 'get_concurrency_warnings'):
+            output_count = self.sidebar.get_values().get("output_count", 2)
+            warnings = self.controller.get_concurrency_warnings(output_per_prompt=output_count)
+            if warnings:
+                from PySide6.QtWidgets import QMessageBox, QCheckBox
+                details = "\n".join(
+                    f"  • {email}: {workers} workers × {output_count} outputs = {load} calls (safe: ≤{safe})"
+                    for email, workers, load, safe in warnings
+                )
+                msgbox = QMessageBox(self)
+                msgbox.setWindowModality(Qt.WindowModal)
+                msgbox.setIcon(QMessageBox.Warning)
+                msgbox.setWindowTitle("⚠️ High Concurrency Risk")
+                msgbox.setText(
+                    f"Some accounts exceed the safe concurrent API limit:\n\n"
+                    f"{details}\n\n"
+                    f"Higher values may cause 403 errors from Google.\n"
+                    f"Go to Settings tab to adjust workers.\n\n"
+                    f"Add to queue anyway?"
+                )
+                dont_remind = QCheckBox("Don't remind again this session")
+                msgbox.setCheckBox(dont_remind)
+                msgbox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                msgbox.setDefaultButton(QMessageBox.StandardButton.No)
+                result = msgbox.exec()
+                if dont_remind.isChecked():
+                    TabI2I._suppress_concurrency_warning = True
+                if result != QMessageBox.StandardButton.Yes:
+                    return
+        
         settings = self.sidebar.get_values()
         
         if self.controller:
             self.controller.add_i2i_batch(prompts, settings)
             self.prompt_table.set_prompts([])
+            main_win = self.window()
+            if hasattr(main_win, 'show_toast'):
+                main_win.show_toast(f"✅ Added {len(prompts)} prompt(s) to queue", "success")
     
     # ── Session Persistence ─────────────────────────────────────
     
