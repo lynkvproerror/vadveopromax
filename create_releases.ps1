@@ -3,15 +3,15 @@
 # Tao token tai: https://github.com/settings/tokens/new (chon scope "repo")
 
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$Token
 )
 
 $owner = "levanlinh"
 $repo = "veo-pro-max"
 $headers = @{
-    "Authorization" = "Bearer $Token"
-    "Accept" = "application/vnd.github+json"
+    "Authorization"        = "Bearer $Token"
+    "Accept"               = "application/vnd.github+json"
     "X-GitHub-Api-Version" = "2022-11-28"
 }
 
@@ -26,7 +26,8 @@ $releases = @(
     @{ tag = "v1.1.3"; title = "v1.1.3 — Concurrency Warning Fix"; body = "fix: concurrency warning - accurate calc + dont-remind-again checkbox" },
     @{ tag = "v1.1.4"; title = "v1.1.4 — Submit Prompts Fix"; body = "fix: UnboundLocalError in submit_prompts + toast gating" },
     @{ tag = "v1.2.0"; title = "v1.2.0 — Notifications, Settings & UI"; body = "feat: notification sounds, image slot widget, settings, queue UI, and misc improvements" },
-    @{ tag = "v1.3.0"; title = "v1.3.0 — Extension Bridge, reCAPTCHA Fix & Multi-Pipeline"; body = "feat: extension bridge (WebSocket), reCAPTCHA fix (chrome.scripting.executeScript), CDP HTTP extension installer (pure Python, no Node.js), splash screen, drag-drop widgets, I2V/R2V/I2I/F2V pipelines, x-client-data header extraction, persistent Chrome management" }
+    @{ tag = "v1.3.0"; title = "v1.3.0 — Extension Bridge, reCAPTCHA Fix & Multi-Pipeline"; body = "feat: extension bridge (WebSocket), reCAPTCHA fix (chrome.scripting.executeScript), CDP HTTP extension installer (pure Python, no Node.js), splash screen, drag-drop widgets, I2V/R2V/I2I/F2V pipelines, x-client-data header extraction, persistent Chrome management" },
+    @{ tag = "v1.4.0"; title = "v1.4.0 — Browser Restart, Hot Reload & Profile Cleanup"; body = "feat: restart browser button (per account), app hot reload button (restart Python process), pre-set Developer Mode in Chrome profiles (fix chrome://extensions loading), fix: delete profile now kills Chrome before rmtree (prevents orphan folders), retry rmtree 3x with logging" }
 )
 
 $created = 0
@@ -36,10 +37,10 @@ foreach ($r in $releases) {
     Write-Host "Creating release: $($r.title)..." -NoNewline
     
     $body = @{
-        tag_name = $r.tag
-        name = $r.title
-        body = $r.body
-        draft = $false
+        tag_name   = $r.tag
+        name       = $r.title
+        body       = $r.body
+        draft      = $false
         prerelease = $false
     } | ConvertTo-Json -Compress
     
