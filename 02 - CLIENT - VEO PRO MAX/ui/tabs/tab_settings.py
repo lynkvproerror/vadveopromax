@@ -490,6 +490,11 @@ class TabSettings(QWidget):
             refresh_btn.clicked.connect(lambda checked, e=email: self._on_refresh_session(e))
             actions_layout.addWidget(refresh_btn)
             
+            # Restart Browser button
+            restart_btn = _action_btn("🔁", "Restart Browser (Kill + Relaunch)", "#FF6B00")
+            restart_btn.clicked.connect(lambda checked, e=email: self._on_restart_browser(e))
+            actions_layout.addWidget(restart_btn)
+            
             # Delete button
             delete_btn = _action_btn("🗑️", "Delete Profile", Theme.RED)
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
@@ -1381,6 +1386,13 @@ class TabSettings(QWidget):
         import_btn.clicked.connect(self._on_import)
         layout.addWidget(import_btn)
         
+        # Reload App button — restart Python process
+        reload_btn = QPushButton("🔄 Reload App")
+        reload_btn.setToolTip("Restart application (browsers keep running)")
+        reload_btn.setStyleSheet(f"background-color: #FF6B00; color: {Theme.CRUST}; height: 36px; font-weight: bold;")
+        reload_btn.clicked.connect(self._on_reload_app)
+        layout.addWidget(reload_btn)
+        
         layout.addStretch()
         
         return frame
@@ -1827,6 +1839,73 @@ class TabSettings(QWidget):
         
         thread = threading.Thread(target=fetch_browser, daemon=True)
         thread.start()
+    
+    def _on_restart_browser(self, email: str):
+        """Kill and relaunch Chrome browser for this account."""
+        import threading
+        
+        reply = QMessageBox.question(
+            self, "Restart Browser",
+            f"Kill and relaunch Chrome for:\n{email}\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        print(f"[Settings] 🔁 Restarting browser for: {email}")
+        self._update_row_status(email, "⏳ Restarting...", "...")
+        self.setEnabled(False)
+        
+        def _do_restart():
+            ok = False
+            if self.controller:
+                ok = self.controller.restart_browser_for(email)
+            
+            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
+            QMetaObject.invokeMethod(
+                self, "_on_browser_restarted",
+                Qt.ConnectionType.QueuedConnection,
+                Q_ARG(str, email),
+                Q_ARG(str, "ok" if ok else "fail"),
+            )
+        
+        thread = threading.Thread(target=_do_restart, daemon=True)
+        thread.start()
+    
+    @Slot(str, str)
+    def _on_browser_restarted(self, email: str, result: str):
+        """Called when browser restart completes (from background thread)."""
+        self.setEnabled(True)
+        self._refresh_profiles_table()
+        if result == "ok":
+            QMessageBox.information(
+                self, "Restart Browser",
+                f"✅ Browser restarted for {email}"
+            )
+        else:
+            QMessageBox.warning(
+                self, "Restart Browser",
+                f"❌ Failed to restart browser for {email}"
+            )
+    
+    def _on_reload_app(self):
+        """Restart the entire Python application process."""
+        reply = QMessageBox.question(
+            self, "Reload App",
+            "Restart application with latest code?\n\n"
+            "• All running tasks will stop\n"
+            "• Chrome browsers will keep running\n"
+            "• App will relaunch automatically\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        if self.controller:
+            self.controller.hot_reload_app()
+    
+
     
     @Slot(str, str)
     def _on_subscription_fetched(self, email: str, result_json: str):

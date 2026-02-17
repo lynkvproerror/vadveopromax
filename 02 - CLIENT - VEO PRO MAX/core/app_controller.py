@@ -445,6 +445,93 @@ class AppController:
         self._push_session_data()
         self._push_extension_status()
     
+    def restart_browser_for(self, email: str) -> bool:
+        """Kill and relaunch Chrome browser for a specific account.
+        
+        Thread-safe. Called from UI thread via background thread.
+        
+        Returns:
+            True if restart succeeded, False otherwise
+        """
+        import time
+        
+        pc = self.profiles_controller
+        if not pc:
+            log.error("[AppController] No ProfilesController — cannot restart browser")
+            return False
+        
+        log.info(f"[AppController] 🔁 Restarting browser for {email}...")
+        print(f"[AppController] 🔁 Restarting browser for {email}...")
+        
+        # Step 1: Kill existing browser
+        try:
+            pc.kill_debug_browser(email)
+            log.info(f"[AppController] Chrome killed for {email}")
+        except Exception as e:
+            log.error(f"[AppController] kill_debug_browser error: {e}")
+        
+        time.sleep(3)
+        
+        # Step 2: Relaunch browser
+        try:
+            pc.open_browser_for_debug(
+                email,
+                on_state_change=self._on_debug_browser_state_change,
+            )
+            log.info(f"[AppController] ✅ Browser relaunched for {email}")
+        except Exception as e:
+            log.error(f"[AppController] ❌ open_browser_for_debug error: {e}")
+            return False
+        
+        # Step 3: Push updated status
+        self._push_browser_status()
+        self._push_extension_status()
+        return True
+    
+    def hot_reload_app(self):
+        """Restart the entire Python process.
+        
+        Gracefully stops engine and event manager, then spawns
+        a new `python main.py` process and exits the current one.
+        Chrome browsers persist (PID files) and will be reconnected.
+        """
+        import subprocess as _sp
+        
+        log.info("[AppController] 🔄 Hot reload: stopping services...")
+        print("[AppController] 🔄 Hot reload: stopping services...")
+        
+        # Step 1: Stop engine gracefully
+        try:
+            self.stop()
+        except Exception as e:
+            log.warning(f"[AppController] stop() error during reload: {e}")
+        
+        # Step 2: Stop event manager
+        try:
+            from core.event_manager import get_event_manager
+            get_event_manager().stop_processor()
+        except Exception:
+            pass
+        
+        # Step 3: Spawn new process
+        main_py = str(Path(__file__).resolve().parent.parent / "main.py")
+        python_exe = sys.executable
+        log.info(f"[AppController] Spawning: {python_exe} {main_py}")
+        
+        creation_flags = _sp.DETACHED_PROCESS | _sp.CREATE_NEW_PROCESS_GROUP
+        _sp.Popen(
+            [python_exe, main_py],
+            creationflags=creation_flags,
+            close_fds=True,
+            cwd=str(Path(main_py).parent),
+        )
+        
+        # Step 4: Exit current process
+        log.info("[AppController] 🔄 Exiting current process for hot reload...")
+        import os
+        os._exit(0)
+    
+
     def get_browser_status(self) -> list:
         """Get browser status for all accounts.
         
