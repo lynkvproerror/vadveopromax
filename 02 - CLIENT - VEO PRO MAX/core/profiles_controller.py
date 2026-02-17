@@ -309,6 +309,7 @@ class ProfilesController:
         """Remove profile by email.
         
         Also cleans up:
+        - Kills running Chrome process first
         - Browser profile folder on disk
         - Stored credentials for this email
         
@@ -318,17 +319,42 @@ class ProfilesController:
         for i, p in enumerate(self._profiles):
             if p.email == email:
                 import shutil
-                import glob as glob_mod
+                import time
                 
-                # Cleanup browser profile folder
+                # Step 1: Kill Chrome browser BEFORE deleting folder
+                try:
+                    self.kill_debug_browser(email)
+                    print(f"[ProfilesController] 🔒 Chrome killed for {email}")
+                    time.sleep(2)  # Wait for process to fully die
+                except Exception as e:
+                    print(f"[ProfilesController] ⚠️ kill_debug_browser: {e}")
+                
+                # Also kill via PID file (in case debug browser wasn't tracked)
+                if p.browser_profile_path:
+                    try:
+                        from core.chrome_manager import kill_chrome
+                        kill_chrome(p.browser_profile_path)
+                    except Exception:
+                        pass
+                    time.sleep(1)
+                
+                # Step 2: Cleanup browser profile folder (with retry)
                 if p.browser_profile_path:
                     profile_dir = Path(p.browser_profile_path)
                     if profile_dir.exists():
-                        try:
-                            shutil.rmtree(profile_dir, ignore_errors=True)
-                            print(f"[ProfilesController] 🗑️ Deleted profile: {profile_dir}")
-                        except Exception as e:
-                            print(f"[ProfilesController] ⚠️ Could not delete profile: {e}")
+                        deleted = False
+                        for attempt in range(3):
+                            try:
+                                shutil.rmtree(profile_dir)
+                                print(f"[ProfilesController] 🗑️ Deleted browser folder: {profile_dir.name}")
+                                deleted = True
+                                break
+                            except Exception as e:
+                                print(f"[ProfilesController] ⚠️ rmtree attempt {attempt+1}/3: {e}")
+                                time.sleep(2)
+                        
+                        if not deleted:
+                            print(f"[ProfilesController] ❌ Could not delete {profile_dir.name} — may need manual cleanup")
                 
                 # Cleanup stored credentials
                 try:
