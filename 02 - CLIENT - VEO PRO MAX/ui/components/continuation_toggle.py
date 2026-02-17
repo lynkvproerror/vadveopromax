@@ -61,22 +61,25 @@ class ContinuationHeader(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         
+        layout.addStretch()
+        
         # Label
         label = QLabel("🔗 CONT:")
-        label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        label.setStyleSheet(f"color: {Theme.CRUST}; font-size: 12px; font-weight: bold;")
         layout.addWidget(label)
         
         # All button
         self.all_btn = QPushButton("All")
-        self.all_btn.setFixedSize(40, 22)
+        self.all_btn.setFixedSize(60, 28)
         self.all_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE1};
                 color: {Theme.GREEN};
                 border: 1px solid {Theme.BORDER};
                 border-radius: 4px;
-                font-size: 11px;
+                font-size: 12px;
                 font-weight: bold;
+                padding: 0px;
             }}
             QPushButton:hover {{
                 background-color: {Theme.GREEN};
@@ -88,15 +91,16 @@ class ContinuationHeader(QWidget):
         
         # None button
         self.none_btn = QPushButton("None")
-        self.none_btn.setFixedSize(48, 22)
+        self.none_btn.setFixedSize(60, 28)
         self.none_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE1};
                 color: {Theme.RED};
                 border: 1px solid {Theme.BORDER};
                 border-radius: 4px;
-                font-size: 11px;
+                font-size: 12px;
                 font-weight: bold;
+                padding: 0px;
             }}
             QPushButton:hover {{
                 background-color: {Theme.RED};
@@ -105,8 +109,6 @@ class ContinuationHeader(QWidget):
         """)
         self.none_btn.clicked.connect(self._on_none_click)
         layout.addWidget(self.none_btn)
-        
-        layout.addStretch()
     
     def _on_all_click(self):
         """Handle All button click."""

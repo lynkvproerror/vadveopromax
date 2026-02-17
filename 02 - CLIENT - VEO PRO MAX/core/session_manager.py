@@ -129,9 +129,14 @@ class SessionManager:
                     "duration_seconds": task.duration_seconds,
                     "seed": task.seed,
                     "image_uris": list(task.image_uris),
+                    "image_paths": list(getattr(task, 'image_paths', [])),
                     "parent_task_id": task.parent_task_id,
+                    "continuation_frame_uri": getattr(task, 'continuation_frame_uri', None),
+                    "continuation_frame_local_path": getattr(task, 'continuation_frame_local_path', None),
+                    "required_account": getattr(task, 'required_account', None),
                     "extract_point_ms": task.extract_point_ms,
                     "download_quality": task.download_quality,
+                    "stage": task.stage.value if hasattr(task.stage, 'value') else "init",
                     "state": task.state.value if hasattr(task.state, 'value') else str(task.state),
                     "progress": task.progress,
                     "error": task.error,
@@ -141,8 +146,25 @@ class SessionManager:
                     "thumbnail_paths": list(getattr(task, 'thumbnail_paths', [])),
                     "assigned_account": task.assigned_account,
                     "project_id": task.project_id,
+                    "output_folder": getattr(task, 'output_folder', ''),
+                    "project_name": getattr(task, 'project_name', ''),
                     "created_at": task.created_at.isoformat() if hasattr(task.created_at, 'isoformat') else None,
                     "completed_at": task.completed_at.isoformat() if hasattr(task.completed_at, 'isoformat') else None,
+                    "video_outputs": [
+                        {
+                            "index": vo.index,
+                            "operation_name": vo.operation_name,
+                            "scene_id": vo.scene_id,
+                            "media_id": vo.media_id,
+                            "file_720p": vo.file_720p,
+                            "file_upscaled": vo.file_upscaled,
+                            "thumbnail_path": vo.thumbnail_path,
+                            "quality": vo.quality,
+                            "upscale_status": vo.upscale_status,
+                            "upscale_error": vo.upscale_error,
+                        }
+                        for vo in (task.video_outputs if hasattr(task, 'video_outputs') else [])
+                    ],
                 }
                 g_data["tasks"].append(t_data)
             result.append(g_data)

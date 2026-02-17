@@ -110,7 +110,7 @@ class AuthManager:
         Uses 60s buffer before actual expiry.
         """
         buffer = timedelta(seconds=60)
-        if datetime.now() >= (session.token_expires - buffer):
+        if session.token_expires is None or datetime.now() >= (session.token_expires - buffer):
             return None
         
         return session.access_token
@@ -158,7 +158,7 @@ class AuthManager:
     def extract_tokens_from_page_data(self, next_data: dict) -> Optional[AccountSession]:
         """Extract tokens from __NEXT_DATA__ JSON.
         
-        This is typically extracted from the aistudio.google.com page.
+        This is typically extracted from the labs.google/fx/tools/flow page.
         
         Args:
             next_data: Parsed __NEXT_DATA__ JSON object

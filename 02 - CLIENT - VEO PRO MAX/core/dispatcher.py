@@ -36,6 +36,22 @@ class TaskState(str, Enum):
     CANCELLED = "cancelled"       # Cancelled by user
 
 
+class TaskStage(str, Enum):
+    """Pipeline stage checkpoint — Thợ biết resume từ đâu khi retry.
+    
+    Flow: INIT → SUBMITTED → GENERATED → DOWNLOADED_720 → UPSCALING → UPSCALED → COMPLETED
+    Retry preserves stage → worker skips already-completed stages.
+    Reset clears stage → worker starts from INIT.
+    """
+    INIT = "init"                     # Chưa chạy
+    SUBMITTED = "submitted"           # Đã gửi prompt → có operation_names
+    GENERATED = "generated"           # Poll xong → có video URLs + media_ids
+    DOWNLOADED_720 = "downloaded_720" # Đã download 720p → có file_720p
+    UPSCALING = "upscaling"           # Đã submit upscale
+    UPSCALED = "upscaled"             # Upscale xong → có upscaled URLs
+    COMPLETED = "completed"           # Hoàn tất toàn bộ
+
+
 @dataclass
 class VideoOutputInfo:
     """Per-video tracking — unified for 1-video and multi-video prompts."""
@@ -64,7 +80,7 @@ class VideoOutputInfo:
     @property
     def border_color(self) -> str:
         """Thumbnail border color based on quality state."""
-        if self.upscale_status == "failed":
+        if self.upscale_status == "failed" or self.quality == "failed":
             return "red"
         if self.quality in ("1080p", "4K"):
             return "blue"
@@ -94,6 +110,7 @@ class Task:
     # Continuation
     parent_task_id: Optional[str] = None
     continuation_frame_uri: Optional[str] = None
+    continuation_frame_local_path: Optional[str] = None  # Local file path for UI thumbnail
     extract_point_ms: int = 750  # Milliseconds before video end for frame extraction
     required_account: Optional[str] = None  # D2: Force child to same account as parent
     
@@ -105,6 +122,7 @@ class Task:
     
     # State
     state: TaskState = TaskState.PENDING
+    stage: TaskStage = TaskStage.INIT  # Pipeline checkpoint for retry resume
     progress: int = 0              # 0-100
     error: Optional[str] = None
     retry_attempts: int = 0        # Track retries for UI display
@@ -176,7 +194,8 @@ class Dispatcher:
     """
     
     def __init__(self, max_concurrent: int = 10):
-        self._ready_queue: asyncio.Queue[Task] = asyncio.Queue()
+        self._ready_queue: asyncio.PriorityQueue = asyncio.PriorityQueue()
+        self._queue_counter = 0  # Monotonic counter for FIFO ordering among same priority
         self._waiting_tasks: Dict[str, Task] = {}  # task_id → Task
         self._all_tasks: Dict[str, Task] = {}      # task_id → Task
         self._task_groups: Dict[str, TaskGroup] = {}
@@ -228,7 +247,7 @@ class Dispatcher:
                 return True
             # Re-queue: put back in ready queue
             existing.state = TaskState.READY
-            self._ready_queue.put_nowait(existing)
+            self._enqueue_task(existing, priority=0)  # Re-submit = high priority
             return True
         
         self._all_tasks[task.id] = task
@@ -246,7 +265,7 @@ class Dispatcher:
         else:
             # Add to ready queue
             task.state = TaskState.READY
-            self._ready_queue.put_nowait(task)
+            self._enqueue_task(task)
             
             if self._on_task_ready:
                 self._on_task_ready(task)
@@ -261,7 +280,7 @@ class Dispatcher:
         Decrements _running_count since the task is no longer running.
         """
         if task.state == TaskState.READY:
-            self._ready_queue.put_nowait(task)
+            self._enqueue_task(task, priority=0)  # Requeue = high priority
             self._running_count = max(0, self._running_count - 1)
             if self._on_task_ready:
                 self._on_task_ready(task)
@@ -289,7 +308,7 @@ class Dispatcher:
         The GIL ensures atomicity for single statements in cooperative multitasking.
         """
         try:
-            task = self._ready_queue.get_nowait()
+            _, _, task = self._ready_queue.get_nowait()
             task.state = TaskState.RUNNING
             task.started_at = datetime.now()
             self._running_count += 1
@@ -301,7 +320,8 @@ class Dispatcher:
         self,
         task_id: str,
         output_uris: List[str],
-        continuation_frame_uri: Optional[str] = None
+        continuation_frame_uri: Optional[str] = None,
+        continuation_frame_local_path: Optional[str] = None,
     ):
         """Mark a task as completed and resolve dependencies."""
         task = self._all_tasks.get(task_id)
@@ -316,7 +336,7 @@ class Dispatcher:
         
         # Resolve dependencies
         if task_id in self._parent_to_children:
-            self._resolve_dependencies(task_id, continuation_frame_uri)
+            self._resolve_dependencies(task_id, continuation_frame_uri, continuation_frame_local_path)
         
         if self._on_task_completed:
             self._on_task_completed(task)
@@ -379,7 +399,8 @@ class Dispatcher:
         """Check if a task has pending continuation children."""
         return task_id in self._parent_to_children and bool(self._parent_to_children[task_id])
     
-    def _resolve_dependencies(self, parent_id: str, frame_uri: Optional[str]):
+    def _resolve_dependencies(self, parent_id: str, frame_uri: Optional[str],
+                              frame_local_path: Optional[str] = None):
         """Resolve dependencies when parent completes.
         
         C2: If frame_uri is None (extraction failed), fail children.
@@ -397,12 +418,13 @@ class Dispatcher:
             if frame_uri:
                 # Inject continuation frame + account affinity
                 task.continuation_frame_uri = frame_uri
+                task.continuation_frame_local_path = frame_local_path  # For UI thumbnail
                 task.image_uris = [frame_uri]
                 task.required_account = parent_account  # D2: same account
                 
                 # Move to ready queue
                 task.state = TaskState.READY
-                self._ready_queue.put_nowait(task)
+                self._enqueue_task(task)
                 
                 if self._on_task_ready:
                     self._on_task_ready(task)
@@ -458,6 +480,16 @@ class Dispatcher:
             "groups": len(self._task_groups),
         }
     
+    def _enqueue_task(self, task: Task, priority: int = 1):
+        """Add task to priority queue.
+        
+        Args:
+            task: Task to enqueue
+            priority: 0 = high (retry/requeue), 1 = normal (new task)
+        """
+        self._queue_counter += 1
+        self._ready_queue.put_nowait((priority, self._queue_counter, task))
+    
     def set_callbacks(
         self,
         on_ready: Optional[Callable[[Task], None]] = None,
@@ -505,10 +537,26 @@ class Dispatcher:
         task.error = None
         task.progress = 0
         task.retry_attempts += 1
-        self._ready_queue.put_nowait(task)
+        # NOTE: task.stage preserved — worker will resume from checkpoint
+        self._enqueue_task(task, priority=0)  # Retry = high priority
         # Wake up engine workers waiting for tasks
         if self._on_task_ready:
             self._on_task_ready(task)
+        return True
+    
+    def requeue_task(self, task) -> bool:
+        """Re-queue a running task without incrementing retry count.
+        
+        Used by network error handler: task goes back to queue
+        and will be picked up after engine resumes.
+        """
+        if not task:
+            return False
+        task.state = TaskState.READY
+        task.error = None
+        # NOTE: Don't increment retry_attempts — this isn't a real failure
+        # NOTE: Preserve task.stage — resume from checkpoint after reconnect
+        self._enqueue_task(task, priority=0)  # High priority: was already running
         return True
     
     def retry_all_failed(self) -> int:
@@ -568,18 +616,117 @@ class Dispatcher:
         task.upscale_status = ""
         task.upscale_error = ""
         task.upscale_media_ids.clear()
-        task.state = TaskState.READY
+        task.stage = TaskStage.INIT  # Reset stage — start from scratch
         task.progress = 0
         task.error = None
         task.started_at = None
         task.completed_at = None
         task.assigned_account = None
         
+        # Handle continuation tasks: children must WAIT for parent
+        if task.parent_task_id:
+            parent = self._all_tasks.get(task.parent_task_id)
+            parent_done = parent and parent.state == TaskState.COMPLETED if parent else False
+            
+            if parent_done and parent and parent.output_uris:
+                # Parent already completed — child can start immediately
+                task.state = TaskState.READY
+                self._enqueue_task(task, priority=0)
+                if self._on_task_ready:
+                    self._on_task_ready(task)
+            else:
+                # Parent hasn't completed yet — child must wait
+                task.continuation_frame_uri = None  # Clear so has_dependency = True
+                task.image_uris.clear()
+                task.state = TaskState.WAITING
+                self._waiting_tasks[task.id] = task
+                
+                # Re-register dependency mapping
+                pid = task.parent_task_id
+                if pid not in self._parent_to_children:
+                    self._parent_to_children[pid] = []
+                if task.id not in self._parent_to_children[pid]:
+                    self._parent_to_children[pid].append(task.id)
+                
+                print(f"[Reset] Task {task.id} is continuation → WAITING for parent {pid}")
+        else:
+            # Normal task — ready to run
+            task.state = TaskState.READY
+            self._enqueue_task(task, priority=0)  # Reset = high priority
+            if self._on_task_ready:
+                self._on_task_ready(task)
+        
+        return True
+    
+    def force_retry_task(self, task_id: str) -> bool:
+        """Force retry a task regardless of current state (including COMPLETED).
+        
+        Fully resets the task: clears all outputs, thumbnails, video_outputs,
+        upscale state. Re-queues as READY for fresh generation.
+        
+        Unlike reset_task(), this accepts ANY state including COMPLETED and RUNNING.
+        """
+        import os
+        task = self._all_tasks.get(task_id)
+        if not task:
+            return False
+        
+        # Delete downloaded video files
+        for path in list(task.output_uris):
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+                    print(f"[ForceRetry] Deleted output: {path}")
+            except Exception as e:
+                print(f"[ForceRetry] Could not delete {path}: {e}")
+        
+        # Delete cached thumbnails
+        for path in list(task.thumbnail_paths):
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+                    print(f"[ForceRetry] Deleted thumbnail: {path}")
+            except Exception as e:
+                print(f"[ForceRetry] Could not delete {path}: {e}")
+        
+        # Delete per-video files from video_outputs (720p, upscaled, thumbnails)
+        # These may differ from task.output_uris (e.g. 720p kept alongside upscaled)
+        deleted = set(task.output_uris) | set(task.thumbnail_paths)
+        for vo in task.video_outputs:
+            for vpath in (vo.file_720p, vo.file_upscaled, vo.thumbnail_path):
+                if vpath and vpath not in deleted:
+                    try:
+                        if os.path.isfile(vpath):
+                            os.remove(vpath)
+                            print(f"[ForceRetry] Deleted video_output file: {vpath}")
+                    except Exception as e:
+                        print(f"[ForceRetry] Could not delete {vpath}: {e}")
+                    deleted.add(vpath)
+        
+        # Full reset
+        task.output_uris.clear()
+        task.thumbnail_paths.clear()
+        task.operation_name = None
+        task.operation_names.clear()
+        task.scene_ids.clear()
+        task.video_outputs.clear()
+        task.upscale_status = ""
+        task.upscale_error = ""
+        task.upscale_media_ids.clear()
+        task.state = TaskState.READY
+        task.stage = TaskStage.INIT
+        task.progress = 0
+        task.error = None
+        task.retry_attempts = 0
+        task.started_at = None
+        task.completed_at = None
+        task.assigned_account = None
+        
         # Re-queue
-        self._ready_queue.put_nowait(task)
-        # Wake up engine workers waiting for tasks
+        self._enqueue_task(task, priority=0)
         if self._on_task_ready:
             self._on_task_ready(task)
+        print(f"[ForceRetry] Task {task_id} reset and re-queued")
         return True
     
     def reset_all_tasks(self) -> int:
@@ -624,7 +771,7 @@ class Dispatcher:
         # Drain the ready queue
         while not self._ready_queue.empty():
             try:
-                self._ready_queue.get_nowait()
+                self._ready_queue.get_nowait()  # Discard (priority, counter, task)
             except Exception:
                 break
         self._running_count = 0  # Reset to 0 since everything is cleared
@@ -679,7 +826,11 @@ class Dispatcher:
                     duration_seconds=td.get("duration_seconds", 8),
                     seed=td.get("seed"),
                     image_uris=td.get("image_uris", []),
+                    image_paths=td.get("image_paths", []),
                     parent_task_id=td.get("parent_task_id"),
+                    continuation_frame_uri=td.get("continuation_frame_uri"),
+                    continuation_frame_local_path=td.get("continuation_frame_local_path"),
+                    required_account=td.get("required_account"),
                     extract_point_ms=td.get("extract_point_ms", 750),
                     download_quality=td.get("download_quality", "720p"),
                     state=TaskState(td.get("state", "pending")),
@@ -691,6 +842,8 @@ class Dispatcher:
                     thumbnail_paths=td.get("thumbnail_paths", []),
                     assigned_account=td.get("assigned_account"),
                     project_id=td.get("project_id"),
+                    output_folder=td.get("output_folder", ""),
+                    project_name=td.get("project_name", ""),
                 )
                 # Restore timestamps
                 for ts_field in ("created_at", "completed_at"):
@@ -700,6 +853,29 @@ class Dispatcher:
                             setattr(task, ts_field, datetime.fromisoformat(ts_val))
                         except (ValueError, TypeError):
                             pass
+                
+                # Restore stage checkpoint
+                stage_val = td.get("stage", "init")
+                try:
+                    task.stage = TaskStage(stage_val)
+                except (ValueError, KeyError):
+                    task.stage = TaskStage.INIT
+                
+                # Restore video_outputs (VideoOutputInfo list)
+                for vod in td.get("video_outputs", []):
+                    vo = VideoOutputInfo(
+                        index=vod.get("index", 0),
+                        operation_name=vod.get("operation_name", ""),
+                        scene_id=vod.get("scene_id", ""),
+                        media_id=vod.get("media_id", ""),
+                        file_720p=vod.get("file_720p", ""),
+                        file_upscaled=vod.get("file_upscaled", ""),
+                        thumbnail_path=vod.get("thumbnail_path", ""),
+                        quality=vod.get("quality", "pending"),
+                        upscale_status=vod.get("upscale_status", ""),
+                        upscale_error=vod.get("upscale_error", ""),
+                    )
+                    task.video_outputs.append(vo)
                 
                 group.tasks.append(task)
                 self._all_tasks[task.id] = task
@@ -716,7 +892,24 @@ class Dispatcher:
                     task.operation_name = None
                     task.assigned_account = None
                     task.retry_attempts = 0
-                    self._ready_queue.put_nowait(task)
+                    self._enqueue_task(task)
+                
+                # Handle WAITING continuation tasks:
+                # - If frame_uri already resolved → ready to run
+                # - If still waiting on parent → rebuild dependency map
+                elif task.state == TaskState.WAITING:
+                    if task.continuation_frame_uri:
+                        # Frame already resolved before app closed → safe to run
+                        task.state = TaskState.READY
+                        task.progress = 0
+                        self._enqueue_task(task)
+                    elif task.parent_task_id:
+                        # Still depends on parent → rebuild dependency tracking
+                        self._waiting_tasks[task.id] = task
+                        pid = task.parent_task_id
+                        if pid not in self._parent_to_children:
+                            self._parent_to_children[pid] = []
+                        self._parent_to_children[pid].append(task.id)
                 
                 count += 1
             

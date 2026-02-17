@@ -77,6 +77,9 @@ class AccountSession:
     browser_copyright: str = ""     # x-browser-copyright header
     browser_year: str = ""          # x-browser-year header
     
+    # === Authorization (SAPISIDHASH) ===
+    _sapisidhash: str = ""            # SAPISIDHASH authorization header (from extension)
+    
     # === Internal State ===
     state: AccountState = AccountState.DISCONNECTED
     active_slots: int = 0
@@ -98,6 +101,8 @@ class AccountSession:
     @property
     def is_token_expired(self) -> bool:
         """Check if access token is expired (with 60s buffer)."""
+        if self.token_expires is None:
+            return True  # No expiry set → treat as expired
         buffer = timedelta(seconds=60)
         return datetime.now() >= (self.token_expires - buffer)
     

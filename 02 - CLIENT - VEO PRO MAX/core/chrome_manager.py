@@ -13,7 +13,9 @@ import logging
 import os
 import socket
 import subprocess
+import threading
 import time
+import urllib.request
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
@@ -66,16 +68,25 @@ def _is_cdp_alive(port: int) -> bool:
         return False
 
 
+# Track ports allocated within this process to prevent race conditions
+# when multiple Chrome launches happen in rapid succession
+_allocated_ports: set = set()
+
+
 def allocate_port(base: int = CDP_PORT_BASE, max_port: int = CDP_PORT_MAX) -> int:
     """Find a free CDP port in the range [base, max_port].
     
-    Skips ports that are already serving CDP (owned by another Chrome).
+    Skips ports that are already serving CDP (owned by another Chrome)
+    AND ports already allocated in this session (not yet bound by Chrome).
     
     Raises:
         RuntimeError: If no free port found in range.
     """
     for port in range(base, max_port + 1):
+        if port in _allocated_ports:
+            continue  # Already given out this session
         if _is_port_free(port):
+            _allocated_ports.add(port)
             return port
         # Port occupied — might be our old Chrome, skip
     raise RuntimeError(f"No free CDP port in range {base}-{max_port}")
@@ -168,6 +179,132 @@ def _is_chrome_process_alive(pid: int, profile_path: str) -> bool:
         return False
 
 
+# ── Install Extension via CDP HTTP ───────────────────────────────────────
+# Chrome 137+ removed --load-extension flag. Instead, we install the extension
+# AFTER Chrome launches by calling Extensions.loadUnpacked via CDP WebSocket
+# on the already-running debug port. Pure Python — no Node.js needed.
+
+EXTENSION_MARKER = ".veo_extension_installed"
+_install_locks: Dict[str, threading.Lock] = {}  # Per-profile install lock
+_install_locks_guard = threading.Lock()          # Guard for _install_locks dict
+
+
+def _is_extension_installed(profile_path: str) -> bool:
+    """Check if the extension was already installed for this profile."""
+    marker = Path(profile_path) / EXTENSION_MARKER
+    return marker.exists()
+
+
+def _mark_extension_installed(profile_path: str, ext_id: str):
+    """Create marker file to indicate extension is installed."""
+    marker = Path(profile_path) / EXTENSION_MARKER
+    marker.write_text(ext_id, encoding="utf-8")
+
+
+def _install_extension_via_cdp(port: int, extension_path: str, profile_path: str) -> bool:
+    """Install unpacked extension via CDP WebSocket on an already-running Chrome.
+    
+    Connects to Chrome's debug port, gets the WebSocket URL, sends
+    Extensions.loadUnpacked command, and waits for the extension ID.
+    
+    Args:
+        port: Chrome's --remote-debugging-port
+        extension_path: Absolute path to the extension directory
+        profile_path: Chrome profile path (for marker file)
+        
+    Returns:
+        True if extension was installed successfully
+    """
+    # Per-profile lock prevents concurrent installs
+    with _install_locks_guard:
+        if profile_path not in _install_locks:
+            _install_locks[profile_path] = threading.Lock()
+        lock = _install_locks[profile_path]
+    
+    with lock:
+        # Skip if already installed (check INSIDE lock for thread safety)
+        if _is_extension_installed(profile_path):
+            log.info("[ChromeManager] ✅ Extension already installed (skipping)")
+            return True
+        
+        return _do_cdp_extension_install(port, extension_path, profile_path)
+
+
+def _do_cdp_extension_install(port: int, extension_path: str, profile_path: str) -> bool:
+    """Internal: perform extension install via CDP WebSocket (called under lock)."""
+    import websocket  # websocket-client library
+    
+    log.info("[ChromeManager] 🔧 Installing extension via CDP HTTP...")
+    print("[ChromeManager] 🔧 Installing extension via CDP HTTP...")
+    
+    try:
+        # Step 1: Get WebSocket debugger URL from CDP
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/json/version", method="GET")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            version_info = json.loads(resp.read().decode())
+        
+        ws_url = version_info.get("webSocketDebuggerUrl")
+        if not ws_url:
+            log.error("[ChromeManager] ❌ No webSocketDebuggerUrl in CDP response")
+            print("[ChromeManager] ❌ CDP did not return WebSocket URL")
+            return False
+        
+        log.info(f"[ChromeManager] CDP WebSocket: {ws_url}")
+        
+        # Step 2: Connect via WebSocket and send Extensions.loadUnpacked
+        # Normalize path to forward slashes (Chrome CDP requires this)
+        ext_path_normalized = extension_path.replace("\\", "/")
+        
+        ws = websocket.create_connection(ws_url, timeout=10)
+        try:
+            # Send the CDP command
+            cdp_command = json.dumps({
+                "id": 1,
+                "method": "Extensions.loadUnpacked",
+                "params": {"path": ext_path_normalized}
+            })
+            ws.send(cdp_command)
+            log.info("[ChromeManager] Sent Extensions.loadUnpacked command")
+            
+            # Wait for response (with timeout)
+            ws.settimeout(15)
+            while True:
+                response_text = ws.recv()
+                response = json.loads(response_text)
+                
+                # Look for our command response (id: 1)
+                if response.get("id") == 1:
+                    if response.get("result", {}).get("id"):
+                        ext_id = response["result"]["id"]
+                        _mark_extension_installed(profile_path, ext_id)
+                        log.info(f"[ChromeManager] ✅ Extension installed via CDP HTTP: {ext_id}")
+                        print(f"[ChromeManager] ✅ Extension installed: {ext_id}")
+                        return True
+                    elif response.get("error"):
+                        error_msg = response["error"].get("message", "Unknown error")
+                        log.error(f"[ChromeManager] ❌ CDP install failed: {error_msg}")
+                        print(f"[ChromeManager] ❌ Extension install failed: {error_msg}")
+                        return False
+                    else:
+                        log.warning(f"[ChromeManager] ⚠️ Unexpected CDP response: {response}")
+                        return False
+                
+                # Skip events (method responses without id matching ours)
+                
+        finally:
+            ws.close()
+    
+    except ImportError:
+        log.error("[ChromeManager] ❌ websocket-client not installed. Run: pip install websocket-client")
+        print("[ChromeManager] ❌ Missing dependency: pip install websocket-client")
+        return False
+    except Exception as e:
+        log.error(f"[ChromeManager] ❌ Extension install via CDP failed: {e}")
+        print(f"[ChromeManager] ❌ Extension install failed: {e}")
+        return False
+
+
+
 # ── Launch Chrome ────────────────────────────────────────────────────────
 
 def launch_chrome(
@@ -180,6 +317,7 @@ def launch_chrome(
     """Launch a detached Chrome process with CDP enabled.
     
     The Chrome process survives app exit (DETACHED_PROCESS flag).
+    Extension is installed via CDP HTTP AFTER Chrome launches and CDP is ready.
     
     Args:
         profile_path: Path to Chrome user-data-dir
@@ -201,14 +339,20 @@ def launch_chrome(
     if port is None:
         port = allocate_port()
 
+    # Resolve Extension path (inside client app directory)
+    _client_dir = Path(__file__).resolve().parent.parent  # 02 - CLIENT - VEO PRO MAX/
+    _extension_dir = _client_dir / "extension"
+    _has_extension = _extension_dir.exists() and (_extension_dir / "manifest.json").exists()
+
     args = [
         chrome_exe,
         f"--remote-debugging-port={port}",
         f"--user-data-dir={profile_path}",
+        "--remote-allow-origins=*",
+        "--enable-extensions",
+        "--enable-unsafe-extension-debugging",  # Required for unpacked extensions (CDP-installed)
         "--no-first-run",
         "--no-default-browser-check",
-        "--disable-infobars",
-        "--disable-blink-features=AutomationControlled",
     ]
 
     if hidden:
@@ -235,15 +379,85 @@ def launch_chrome(
     _save_pid_file(profile_path, pid, port, email, chrome_exe)
 
     # Wait for CDP to become responsive
+    cdp_ready = False
     deadline = time.time() + CHROME_STARTUP_TIMEOUT
     while time.time() < deadline:
         if _is_cdp_alive(port):
             log.info(f"[ChromeManager] ✅ CDP ready on port {port}")
-            return {"pid": pid, "port": port, "email": email, "chrome_exe": chrome_exe}
+            cdp_ready = True
+            break
         time.sleep(0.5)
 
-    log.warning(f"[ChromeManager] ⚠️ CDP not responding after {CHROME_STARTUP_TIMEOUT}s (Chrome may still be starting)")
+    if not cdp_ready:
+        log.warning(f"[ChromeManager] ⚠️ CDP not responding after {CHROME_STARTUP_TIMEOUT}s")
+
+    # Install extension AFTER Chrome is running (via CDP HTTP — no Node.js needed)
+    if cdp_ready and _has_extension:
+        _install_extension_via_cdp(port, str(_extension_dir), profile_path)
+
     return {"pid": pid, "port": port, "email": email, "chrome_exe": chrome_exe}
+
+
+# ── Orphan Chrome Discovery ─────────────────────────────────────────────
+
+def _find_orphan_chrome(profile_path: str) -> Optional[Dict[str, Any]]:
+    """Scan running Chrome processes to find one using the given profile path.
+    
+    Handles orphan Chromes that survive app restarts (DETACHED_PROCESS)
+    but whose PID files were cleaned up. Extracts the CDP port from
+    the process command line and validates CDP is responding.
+    
+    Returns:
+        Dict with {pid, port, email} if found and CDP alive, None otherwise.
+    """
+    try:
+        import psutil
+    except ImportError:
+        return None
+    
+    profile_name = Path(profile_path).name
+    
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            if "chrome" not in (proc.info["name"] or "").lower():
+                continue
+            
+            cmdline = proc.cmdline()
+            cmdline_str = " ".join(cmdline)
+            
+            # Check if this Chrome uses our profile path
+            if profile_name not in cmdline_str:
+                continue
+            
+            # Extract --remote-debugging-port=NNNN
+            port = None
+            for arg in cmdline:
+                if arg.startswith("--remote-debugging-port="):
+                    try:
+                        port = int(arg.split("=", 1)[1])
+                    except (ValueError, IndexError):
+                        pass
+                    break
+            
+            if port is None:
+                continue
+            
+            # Verify CDP is actually responding
+            if not _is_cdp_alive(port):
+                continue
+            
+            pid = proc.info["pid"]
+            log.info(f"[ChromeManager] 🔍 Found orphan Chrome: PID={pid}, port={port}, profile={profile_name}")
+            
+            # Recreate PID file so future reconnects work
+            _save_pid_file(profile_path, pid, port, "", "")
+            
+            return {"pid": pid, "port": port, "email": ""}
+            
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    
+    return None
 
 
 # ── Reconnect to existing Chrome ────────────────────────────────────────
@@ -252,6 +466,7 @@ def reconnect_chrome(profile_path: str) -> Optional[Dict[str, Any]]:
     """Try to reconnect to an existing Chrome process.
     
     Reads PID file → validates PID alive + correct profile → tests CDP port.
+    Falls back to scanning running processes for orphan Chromes.
     
     Returns:
         Dict with {pid, port, email, tabs} if reconnect successful, None otherwise.
@@ -259,6 +474,13 @@ def reconnect_chrome(profile_path: str) -> Optional[Dict[str, Any]]:
     info = _load_pid_file(profile_path)
     if not info:
         log.debug(f"[ChromeManager] No PID file for {Path(profile_path).name}")
+        # Fallback: scan running processes for orphan Chrome
+        orphan = _find_orphan_chrome(profile_path)
+        if orphan:
+            tabs = get_cdp_tabs(orphan["port"])
+            log.info(f"[ChromeManager] 🔗 Reconnected to orphan Chrome PID={orphan['pid']}, port={orphan['port']}, {len(tabs)} tab(s)")
+            orphan["tabs"] = tabs
+            return orphan
         return None
 
     pid = info["pid"]
@@ -268,6 +490,13 @@ def reconnect_chrome(profile_path: str) -> Optional[Dict[str, Any]]:
     if not _is_chrome_process_alive(pid, profile_path):
         log.info(f"[ChromeManager] PID {pid} not alive or not Chrome — cleaning up")
         _remove_pid_file(profile_path)
+        # Fallback: scan running processes for orphan Chrome
+        orphan = _find_orphan_chrome(profile_path)
+        if orphan:
+            tabs = get_cdp_tabs(orphan["port"])
+            log.info(f"[ChromeManager] 🔗 Reconnected to orphan Chrome PID={orphan['pid']}, port={orphan['port']}, {len(tabs)} tab(s)")
+            orphan["tabs"] = tabs
+            return orphan
         return None
 
     # Step 3: CDP port responding
@@ -288,7 +517,10 @@ def reconnect_chrome(profile_path: str) -> Optional[Dict[str, Any]]:
     }
 
 
-# ── Launch or Reconnect ─────────────────────────────────────────────────
+# Per-profile launch lock — prevents two threads from launching Chrome
+# on the same profile simultaneously (e.g. debug browser + RecaptchaBrowserSession)
+_launch_locks: Dict[str, threading.Lock] = {}
+_launch_locks_guard = threading.Lock()
 
 def launch_or_reconnect(
     profile_path: str,
@@ -299,17 +531,38 @@ def launch_or_reconnect(
     """Try reconnect first, launch new Chrome if not possible.
     
     This is the main entry point for getting a Chrome instance.
+    Thread-safe: uses per-profile lock to prevent duplicate Chrome launches.
     
     Returns:
         Dict with {pid, port, email, ...}
     """
-    # Try reconnect
-    existing = reconnect_chrome(profile_path)
-    if existing:
-        return existing
+    # Per-profile lock prevents race condition between concurrent callers
+    with _launch_locks_guard:
+        if profile_path not in _launch_locks:
+            _launch_locks[profile_path] = threading.Lock()
+        lock = _launch_locks[profile_path]
+    
+    with lock:
+        # Check if extension needs to be installed
+        _client_dir = Path(__file__).resolve().parent.parent
+        _extension_dir = _client_dir / "extension"
+        _has_extension = (
+            _extension_dir.exists()
+            and (_extension_dir / "manifest.json").exists()
+        )
 
-    # Launch new
-    return launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden)
+        # Try reconnect
+        existing = reconnect_chrome(profile_path)
+        if existing:
+            # Install extension on reconnected Chrome if needed (no kill+relaunch!)
+            if _has_extension and not _is_extension_installed(profile_path):
+                port = existing.get("port")
+                if port:
+                    _install_extension_via_cdp(port, str(_extension_dir), profile_path)
+            return existing
+
+        # Launch new (will install extension after CDP ready)
+        return launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden)
 
 
 # ── Tab management ───────────────────────────────────────────────────────

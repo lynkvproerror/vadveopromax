@@ -105,9 +105,8 @@ class TokenExtractor:
         tokens = await extract_tokens(profile_path)
     """
     
-    # VEO URLs
+    # VEO URL
     VEO_URL = "https://labs.google/fx/tools/flow"
-    VEO_FALLBACK_URL = "https://aistudio.google.com/app/generate/video"
     
     def __init__(self):
         self._playwright = None
@@ -183,11 +182,7 @@ class TokenExtractor:
             await self._setup_header_interception(page)
             
             # Navigate to VEO
-            try:
-                await page.goto(self.VEO_URL, wait_until="networkidle", timeout=timeout_ms)
-            except Exception:
-                # Try fallback URL
-                await page.goto(self.VEO_FALLBACK_URL, wait_until="networkidle", timeout=timeout_ms)
+            await page.goto(self.VEO_URL, wait_until="networkidle", timeout=timeout_ms)
             
             # 1. Extract access token from __NEXT_DATA__
             access_token, email = await self._extract_access_token(page)

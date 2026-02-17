@@ -75,7 +75,7 @@ class BrowserManager:
     - Humanized action delays
     """
     
-    VEO_URL = "https://aistudio.google.com/app/generate/video"
+    VEO_URL = "https://labs.google/fx/tools/flow"
     
     def __init__(self, config: Optional[BrowserConfig] = None):
         if not HAS_PLAYWRIGHT:
@@ -200,10 +200,7 @@ class BrowserManager:
                 )
                 page = await context.new_page()
             
-            # Apply stealth if enabled
-            if self._config.use_stealth:
-                await self._apply_stealth(page)
-            
+
             session = BrowserSession(
                 id=session_id,
                 email=email,
@@ -246,32 +243,6 @@ class BrowserManager:
         """Get all active sessions."""
         return list(self._sessions.values())
     
-    async def _apply_stealth(self, page: "Page"):
-        """Apply anti-detection measures."""
-        await page.add_init_script("""
-            // Remove webdriver property
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-            });
-            
-            // Add language
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['en-US', 'en'],
-            });
-            
-            // Hide automation
-            window.chrome = {
-                runtime: {},
-            };
-            
-            // Permissions
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ?
-                    Promise.resolve({ state: Notification.permission }) :
-                    originalQuery(parameters)
-            );
-        """)
     
     async def navigate_to_veo(self, session_id: str) -> bool:
         """Navigate session to VEO page.

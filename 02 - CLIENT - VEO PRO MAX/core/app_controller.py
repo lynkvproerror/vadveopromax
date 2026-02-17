@@ -129,6 +129,19 @@ class AppController:
         # ProfilesController reference (set by UI via set_profiles_controller)
         self._profiles_controller = None
         
+        # Extension bridge — WebSocket server for Chrome Extension tokens
+        from core.extension_bridge import ExtensionBridge
+        self._extension_bridge = ExtensionBridge(port=8765)
+        self._extension_bridge.on_headers_update = self._on_extension_headers_update
+        self._extension_bridge.on_extension_connect = self._on_extension_connect
+        
+        # Wire extension bridge into RefreshManager for auto header refresh
+        self._refresh_manager.set_extension_bridge(self._extension_bridge)
+        
+        # Splash screen callbacks
+        self._splash_progress_cb = None   # fn(int, str) → update progress
+        self._splash_finish_cb = None     # fn() → close splash
+        
         # Setup callbacks
         self._setup_callbacks()
     
@@ -155,6 +168,20 @@ class AppController:
         # Start async loop in background
         self._start_async_loop()
         
+        # Start Extension bridge WebSocket server
+        if self._loop:
+            try:
+                future = asyncio.run_coroutine_threadsafe(self._extension_bridge.start(), self._loop)
+                future.result(timeout=5.0)  # Wait and catch any startup errors
+                log.info("[AppController] Extension bridge started on ws://127.0.0.1:8765")
+                print("[AppController] ✅ Extension bridge started on ws://127.0.0.1:8765")
+            except Exception as e:
+                log.error(f"[AppController] ❌ Extension bridge failed to start: {e}")
+                print(f"[AppController] ❌ Extension bridge failed: {e}")
+        else:
+            log.error("[AppController] ❌ Async loop not ready — bridge not started")
+            print("[AppController] ❌ Async loop not ready — bridge not started")
+        
         # Start session monitoring
         self._session_monitor.start_monitoring()
         
@@ -165,6 +192,26 @@ class AppController:
         self._update_permissions()
         
         self._notify_status("Controller started")
+    
+    def set_splash_callback(self, cb):
+        """Set splash progress callback: cb(percent: int, status: str)."""
+        self._splash_progress_cb = cb
+    
+    def set_splash_finish_callback(self, cb):
+        """Set splash finish callback: cb() → close splash."""
+        self._splash_finish_cb = cb
+    
+    def _splash_update(self, pct: int, msg: str):
+        """Thread-safe splash progress update via QTimer."""
+        if self._splash_progress_cb:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: self._splash_progress_cb(pct, msg))
+    
+    def _splash_done(self):
+        """Thread-safe splash finish via QTimer."""
+        if self._splash_finish_cb:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self._splash_finish_cb)
     
     def stop(self):
         """Stop the application controller."""
@@ -178,13 +225,86 @@ class AppController:
         self._session_monitor.stop_monitoring()
         self._refresh_manager.stop_auto_check()
         
+        # Stop Extension bridge
+        if self._loop and self._extension_bridge:
+            asyncio.run_coroutine_threadsafe(self._extension_bridge.stop(), self._loop)
+        
         # Stop async loop (safe now — engine already stopped)
         self._stop_async_loop()
         
         self._notify_status("Controller stopped")
     
+    def _on_extension_headers_update(self, email: str, headers: Dict[str, str], access_token: str = None):
+        """Callback from ExtensionBridge when new headers are received."""
+        # Find the account manager for this email and update session headers
+        account = self._multi_account.get_account(email)
+        if account:
+            # Use session.update_browser_headers() — has x-client-data downgrade guard
+            account._session.update_browser_headers(
+                browser_validation=headers.get("x-browser-validation", account._session.browser_validation),
+                client_data=headers.get("x-client-data", account._session.client_data),
+                browser_channel=headers.get("x-browser-channel", account._session.browser_channel),
+                browser_copyright=headers.get("x-browser-copyright", account._session.browser_copyright),
+                browser_year=headers.get("x-browser-year", account._session.browser_year),
+            )
+            # Store full headers dict for get_browser_headers() fallback
+            if account._browser_session:
+                account._browser_session._captured_headers.update(headers)
+            # Store SAPISIDHASH authorization header if provided
+            if access_token and access_token.startswith("SAPISIDHASH"):
+                account._session._sapisidhash = access_token
+                log.debug(f"[ExtensionBridge] SAPISIDHASH stored for {email}")
+            log.info(f"[ExtensionBridge] Headers updated for {email}: {list(headers.keys())}")
+        else:
+            log.debug(f"[ExtensionBridge] No account found for {email} (headers ignored)")
+    
+    def _on_extension_connect(self, email: str):
+        """Callback from ExtensionBridge when an extension connects.
+        
+        Immediately requests fresh headers + access token so the app
+        has data right away without waiting for the next auto-check cycle.
+        """
+        log.info(f"[ExtensionBridge] Extension connected for {email}")
+        self._notify_status(f"Extension connected for {email}")
+        
+        # Immediate data refresh — don't wait for auto-check
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self._refresh_extension_data(email))
+            else:
+                loop.run_until_complete(self._refresh_extension_data(email))
+        except Exception as e:
+            log.debug(f"[ExtensionBridge] Startup refresh scheduling failed: {e}")
+    
+    async def _refresh_extension_data(self, email: str):
+        """Request fresh headers + access token from extension immediately."""
+        try:
+            # 1. Refresh headers (triggers VEO tab reload → fresh x-browser-*)
+            await self._extension_bridge.refresh_headers(email, timeout=10)
+            log.info(f"[ExtensionBridge] ✅ Startup headers refreshed for {email}")
+        except Exception as e:
+            log.debug(f"[ExtensionBridge] Startup header refresh failed: {e}")
+        
+        try:
+            # 2. Get fresh access token
+            result = await self._extension_bridge.request_access_token(email, timeout=10)
+            if result and result.get('token'):
+                account = self._multi_account.get_account(email)
+                if account:
+                    from datetime import timedelta
+                    account._session.access_token = result['token']
+                    account._session.token_expires = datetime.now() + timedelta(minutes=55)
+                    log.info(f"[ExtensionBridge] ✅ Startup access token set for {email}")
+        except Exception as e:
+            log.debug(f"[ExtensionBridge] Startup token fetch failed: {e}")
+    
     def _auto_launch_browsers(self):
-        """Auto-launch browsers for all profiles on app start.
+        """Auto-launch browsers for all profiles in background.
+        
+        Runs AFTER splash is closed and main window is visible.
+        Browser status is pushed to DevConsole via _push_browser_status().
         
         Startup sequence (single browser per profile):
         1. Sync profiles to runtime
@@ -195,44 +315,47 @@ class AppController:
         5. Token + reCAPTCHA extracted from the shared browser page
         """
         import logging
-        import time
         log = logging.getLogger(__name__)
         
         async def _launch():
             try:
-                # Step 1: Sync profiles first
+                # Step 1: Sync profiles
                 self.sync_profiles_to_runtime()
                 log.info("[AutoLaunch] Profiles synced to runtime")
                 
-                # Step 2: Inject ProfilesController into each AccountManager
-                # so ensure_browser() can find debug browser pages
+                # Step 2: Inject ProfilesController + ExtensionBridge
                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                     for acc in self._multi_account._accounts:
                         acc.set_profiles_controller(self._profiles_controller)
-                    log.info(f"[AutoLaunch] ProfilesController injected into {len(self._multi_account._accounts)} accounts")
+                        acc._extension_bridge = self._extension_bridge
+                    log.info(f"[AutoLaunch] ProfilesController + ExtensionBridge injected into {len(self._multi_account._accounts)} accounts")
                 
-                # Step 3: Open debug browsers in hidden mode FIRST
-                # This is the SINGLE browser per profile — no separate headless browser
+                # Step 3: Open debug browsers
                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                     profiles = self._profiles_controller.get_all_profiles()
-                    for p in profiles:
+                    ready_profiles = [p for p in profiles if p.get("email") and p.get("is_ready")]
+                    total = len(ready_profiles)
+                    
+                    for idx, p in enumerate(ready_profiles):
                         email = p.get("email")
-                        if email and p.get("is_ready"):
-                            log.info(f"[AutoLaunch] 🔇 Starting hidden browser for {email}...")
-                            success = self._profiles_controller.open_browser_for_debug(
-                                email, 
-                                on_state_change=self._on_debug_browser_state_change
-                            )
-                            if success:
-                                # Wait for browser to fully start and page to load
-                                time.sleep(5)
-                                self._profiles_controller.hide_debug_browser(email)
-                                log.info(f"[AutoLaunch] ✅ {email} browser hidden")
+                        log.info(f"[AutoLaunch] 🔇 Starting hidden browser {idx+1}/{total}: {email}...")
+                        
+                        success = self._profiles_controller.open_browser_for_debug(
+                            email, 
+                            on_state_change=self._on_debug_browser_state_change
+                        )
+                        
+                        if success:
+                            # Brief yield — browser thread starts in background
+                            await asyncio.sleep(1)
+                            self._profiles_controller.hide_debug_browser(email)
+                            log.info(f"[AutoLaunch] ✅ {email} browser hidden")
+                        else:
+                            log.warning(f"[AutoLaunch] ⚠️ Failed to open browser for {email}")
                     
                     self._push_browser_status()
                 
-                # Step 4: startup_browsers → ensure_browser() will ATTACH to debug pages
-                # (not launch new headless browsers)
+                # Step 4: Connect accounts (ensure_browser polls until page ready)
                 if self._multi_account._accounts:
                     log.info(f"[AutoLaunch] Connecting {len(self._multi_account._accounts)} accounts to debug browsers...")
                     await self._multi_account.startup_browsers(headless=True)
@@ -240,8 +363,8 @@ class AppController:
                 else:
                     log.info("[AutoLaunch] No accounts to connect")
                 
-                # Push final browser status to DevConsole
                 self._push_browser_status()
+                log.info("[AutoLaunch] ✅ Background browser launch complete")
                     
             except Exception as e:
                 log.error(f"[AutoLaunch] Failed to launch browsers: {e}")
@@ -275,6 +398,44 @@ class AppController:
                 Qt.ConnectionType.QueuedConnection
             )
     
+    def _push_pool_status(self):
+        """Push worker pool status to DevConsole (thread-safe)."""
+        if not hasattr(self, '_dev_console') or not self._dev_console:
+            return
+        
+        from PySide6.QtCore import QMetaObject, Qt, QThread
+        
+        if QThread.currentThread() == self._dev_console.thread():
+            pools = self.get_pool_status()
+            self._dev_console.update_pool_status(pools)
+        else:
+            QMetaObject.invokeMethod(
+                self._dev_console, "update_pool_status_safe",
+                Qt.ConnectionType.QueuedConnection
+            )
+    
+    def get_extension_status(self) -> dict:
+        """Get Extension Bridge status for DevConsole."""
+        if hasattr(self, '_extension_bridge') and self._extension_bridge:
+            return self._extension_bridge.get_status()
+        return {}
+    
+    def _push_extension_status(self):
+        """Push extension bridge status to DevConsole (thread-safe)."""
+        if not hasattr(self, '_dev_console') or not self._dev_console:
+            return
+        
+        from PySide6.QtCore import QMetaObject, Qt, QThread
+        
+        if QThread.currentThread() == self._dev_console.thread():
+            status = self.get_extension_status()
+            self._dev_console.update_extension_status(status)
+        else:
+            QMetaObject.invokeMethod(
+                self._dev_console, "update_extension_status_safe",
+                Qt.ConnectionType.QueuedConnection
+            )
+    
     def _on_debug_browser_state_change(self, email: str, state: str):
         """Callback when a debug browser changes state (visible/hidden/closed).
         
@@ -282,6 +443,7 @@ class AppController:
         """
         self._push_browser_status()
         self._push_session_data()
+        self._push_extension_status()
     
     def get_browser_status(self) -> list:
         """Get browser status for all accounts.
@@ -289,7 +451,8 @@ class AppController:
         Combines runtime account data with ProfilesController profiles
         and debug browser state so the DevConsole shows accurate info.
         
-        Returns list of dicts: [{email, state, enabled, slots, has_browser}, ...]
+        Returns list of dicts: [{email, state, enabled, slots, has_browser,
+                                  isolation, master_profile, worker_details}, ...]
         """
         result = []
         seen_emails = set()
@@ -322,6 +485,7 @@ class AppController:
                     "has_browser": has_browser,
                     "state": state,
                 }
+                
                 result.append(info)
         
         # Also show profiles not yet in runtime (or fallback if no runtime accounts)
@@ -349,10 +513,49 @@ class AppController:
                     "slots": 4,
                     "has_browser": debug_state != "closed",
                     "state": state,
+                    "isolation": False,
                 }
                 result.append(info)
         
         return result
+    
+    def get_pool_status(self) -> list:
+        """Get worker pool status for all accounts.
+        
+        No longer used — clone profile feature removed.
+        Kept for API compatibility with DevConsole.
+        """
+        return []
+    
+    def toggle_account(self, email: str, enabled: bool):
+        """Enable or disable an account.
+        
+        Called from Settings UI when user toggles the account switch.
+        """
+        # Update profile on disk
+        if self._profiles_controller:
+            self._profiles_controller.update_profile(email, is_enabled=enabled)
+        
+        # Update runtime AccountManager
+        acc = self._multi_account.get_account(email)
+        if acc:
+            if enabled:
+                acc.enable()
+            else:
+                acc.disable()
+        
+        log.info(f"[AppController] Account {email} {'enabled' if enabled else 'disabled'}")
+    
+    def set_account_max_slots(self, email: str, value: int):
+        """Set max concurrent workers for an account.
+        
+        Called from Settings UI when user changes the slots spinner.
+        """
+        acc = self._multi_account.get_account(email)
+        if acc:
+            acc.set_max_slots(value)
+        
+        log.info(f"[AppController] Account {email} max_slots → {value}")
     
     def get_session_data(self) -> list:
         """Get session data (tokens, cookies, profile info) for all accounts.
@@ -400,13 +603,19 @@ class AppController:
                 # ═══ RUNTIME DATA (actual production state) ═══
                 status = runtime_acc.get_status()
                 
-                # Session status — consider debug browser as valid session
+                # Extension connection status
+                ext_connected = (
+                    self._extension_bridge and 
+                    self._extension_bridge.is_connected(email)
+                )
+                
+                # Session status — extension-only architecture
                 if runtime_acc.is_ready:
                     session_status = "🟢 Ready (Production)"
-                elif debug_browser_active and profile.is_ready:
-                    session_status = "🟢 Session via Debug Browser"
+                elif ext_connected:
+                    session_status = "🟢 Session via Extension"
                 elif runtime_acc.is_enabled:
-                    session_status = "🟡 Enabled (Waiting Token)"
+                    session_status = "🟡 Enabled (Waiting Extension)"
                 else:
                     session_status = "🔴 Disabled"
                 
@@ -446,19 +655,19 @@ class AppController:
                             token_expiry = f"✅ Cached ({mins}m left)"
                         else:
                             token_expiry = "📁 From cache"
-                    elif debug_browser_active:
-                        token_expiry = "🟢 Will extract on next API call"
+                    elif ext_connected:
+                        token_expiry = "🟢 Will extract via Extension on next call"
                     else:
-                        token_expiry = "❌ No token"
+                        token_expiry = "❌ No token (Extension not connected)"
                 
                 # reCAPTCHA
                 recaptcha_age = status.get("recaptcha_age", "N/A")
                 needs_recaptcha = status.get("needs_recaptcha")
                 if recaptcha_age == "infs" or recaptcha_age == "N/A":
-                    if debug_browser_active:
-                        recaptcha_status = "🟢 Will fetch on demand"
+                    if ext_connected:
+                        recaptcha_status = "🟢 Will fetch via Extension on demand"
                     else:
-                        recaptcha_status = "⚪ Not initialized"
+                        recaptcha_status = "❌ Extension not connected"
                 elif needs_recaptcha:
                     recaptcha_status = f"🔄 Need refresh (age: {recaptcha_age})"
                 else:
@@ -545,6 +754,7 @@ class AppController:
                 "session_status": session_status,
                 "token_expiry": token_expiry,
                 "recaptcha_status": recaptcha_status,
+                "ext_connected": ext_connected if runtime_acc else False,
                 "browser_alive": browser_alive,
                 "slots_display": slots_display,
                 "updated_at": updated_at,
@@ -611,6 +821,12 @@ class AppController:
             self._dev_console.update_performance(data)
         except Exception:
             pass
+        
+        # Also refresh extension status on each tick
+        try:
+            self._push_extension_status()
+        except Exception:
+            pass
     
     def start_perf_timer(self):
         """Start performance timer (called when DevConsole opens)."""
@@ -632,13 +848,17 @@ class AppController:
     
     def _start_async_loop(self):
         """Start background async event loop."""
+        loop_ready = threading.Event()
+        
         def run_loop():
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
+            loop_ready.set()  # Signal main thread that loop is ready
             self._loop.run_forever()
         
         self._loop_thread = threading.Thread(target=run_loop, daemon=True)
         self._loop_thread.start()
+        loop_ready.wait(timeout=5.0)  # Wait for loop to be created
     
     def _stop_async_loop(self):
         """Stop background async event loop."""
@@ -846,6 +1066,14 @@ class AppController:
             f"Profile sync complete: {self._multi_account.account_count} accounts, "
             f"{len(self._multi_account.ready_accounts)} ready"
         )
+        
+        # Ensure ExtensionBridge + ProfilesController are injected on ALL accounts
+        # (covers newly-created accounts from sync AND existing ones)
+        for acc in self._multi_account._accounts:
+            if hasattr(self, '_extension_bridge') and self._extension_bridge:
+                acc._extension_bridge = self._extension_bridge
+            if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                acc.set_profiles_controller(self._profiles_controller)
     
     def set_account_max_slots(self, email: str, max_slots: int):
         """Set max_slots on runtime AccountManager for a given email.
@@ -979,9 +1207,24 @@ class AppController:
                 prompt_index=i,
             )
             
+            # Separate local file paths from remote URIs
+            # add_i2v_batch / add_r2v_batch / add_i2i_batch resolve tags → local paths
+            # and pass them as per_prompt_images/images, which land here in image_uris.
+            # Local paths must go to image_paths so Engine._resolve_image_paths() uploads them.
+            if task.image_uris:
+                from pathlib import Path as _P
+                local = [u for u in task.image_uris if _P(u).exists()]
+                remote = [u for u in task.image_uris if not _P(u).exists()]
+                if local:
+                    task.image_paths = local
+                    task.image_uris = remote  # Only keep actual remote URIs/mediaIds
+            
             # === Tag resolution: [tag] → local image path ===
-            # Only resolve if task has no explicit image_uris already
-            if not task.image_uris:
+            # Only resolve if task has no explicit image_uris or image_paths already
+            # Bug 1 fix: Also check image_paths — they may have been populated by
+            # _resolve_tags_to_paths() in add_i2v_batch() and then moved from
+            # image_uris to image_paths by the local/remote split above (line 1031-1037)
+            if not task.image_uris and not task.image_paths:
                 import re
                 tags = re.findall(r'\[([^\]]+)\]', prompt)
                 if tags:
@@ -1007,7 +1250,47 @@ class AppController:
                         log.warning("  ImageLibrary not available for tag resolution")
             # === End tag resolution ===
             
+            # === Workflow auto-switch ===
+            # Per-task: adjust workflow_type + model based on actual conditions
+            has_images = bool(task.image_uris or task.image_paths)
+            has_continuation = task.parent_task_id is not None
+            
+            # Downgrade: image workflow → text workflow (no images available)
+            if not has_images and not has_continuation and task.workflow_type in ("I2V", "F2V"):
+                task.workflow_type = "T2V"
+                task.model = resolve_model_key(model_display, WorkflowType.T2V, raw_ar, False)
+                log.info(f"  [AUTO] I2V → T2V (no images, task {i})")
+            
+            elif not has_images and not has_continuation and task.workflow_type == "R2V":
+                task.workflow_type = "T2V"
+                task.model = resolve_model_key(model_display, WorkflowType.T2V, raw_ar, False)
+                log.info(f"  [AUTO] R2V → T2V (no images, task {i})")
+            
+            elif not has_images and task.workflow_type == "I2I":
+                task.workflow_type = "T2I"
+                # T2I/I2I both use GEM_PIX_2 — no model change needed
+                log.info(f"  [AUTO] I2I → T2I (no images, task {i})")
+            
+            # Upgrade: T2V/R2V → I2V (continuation needs a start frame)
+            elif has_continuation and task.workflow_type in ("T2V", "R2V"):
+                old_wf = task.workflow_type
+                task.workflow_type = "I2V"
+                task.model = resolve_model_key(model_display, WorkflowType.I2V, raw_ar, False)
+                log.info(f"  [AUTO] {old_wf} → I2V (continuation, task {i})")
+            # === End auto-switch ===
+            
             tasks.append(task)
+        
+        # === Continuation constraint: force output_count=1 for entire group ===
+        # When ANY task in the group is a continuation, the whole chain must
+        # produce exactly 1 video per prompt (last frame → next prompt's start).
+        # Workers: dependency chain already ensures serial execution —
+        # only 1 task from the chain is in ready queue at any time.
+        has_any_continuation = any(t.parent_task_id is not None for t in tasks)
+        if has_any_continuation:
+            for t in tasks:
+                t.output_count = 1
+            log.info(f"  [CONT] Continuation detected → output_count forced to 1 for all {len(tasks)} tasks")
         
         project_name = (settings or {}).get("project_name", "")
         group_display = project_name if project_name else f"Batch {len(tasks)}"
@@ -1020,7 +1303,7 @@ class AppController:
         log.info(f"  model      : {model_display!r} → {model}")
         log.info(f"  aspect_ratio: {raw_ar} → {aspect_ratio}")
         log.info(f"  dual_frame : {dual_frame}")
-        log.info(f"  output_count: {output_count}")
+        log.info(f"  output_count: {1 if has_any_continuation else output_count}{' (continuation override)' if has_any_continuation else ''}")
         log.info(f"  tasks      : {len(tasks)}")
         for t in tasks:
             cont = f" (cont→{t.parent_task_id})" if t.parent_task_id else ""
@@ -1087,24 +1370,61 @@ class AppController:
             continuation_map=continuation_map if continuation_map else None
         )
     
+    def _resolve_tags_to_paths(self, tags: List[str]) -> List[str]:
+        """Resolve image tag names to file paths via ImageLibrary.
+        
+        Tags that cannot be resolved are skipped.
+        """
+        if not tags:
+            return []
+        try:
+            from services.image_library import get_image_library
+            library = get_image_library()
+            paths = []
+            for tag in tags:
+                # If it already looks like a file path, keep it
+                if '/' in tag or '\\' in tag or '.' in tag and len(tag) > 5:
+                    paths.append(tag)
+                    continue
+                img = library.resolve_tag(tag)
+                if img and img.path:
+                    paths.append(img.path)
+                    log.info(f"  [TAG→PATH] [{tag}] → {img.path}")
+                else:
+                    log.warning(f"  [TAG→PATH] [{tag}] not found in library, skipping")
+            return paths
+        except Exception as e:
+            log.error(f"  [TAG→PATH] Error resolving tags: {e}")
+            return []
+    
     def add_i2v_batch(self, prompts: List, settings: Dict) -> str:
         """Add Image-to-Video batch to queue.
         
         Args:
-            prompts: List of PromptRow objects with image_tag
+            prompts: List of PromptRow objects with image_tags
             settings: Sidebar settings dict
         """
-        per_prompt_images = {}  # Bug 2 fix: per-prompt image mapping
+        per_prompt_images = {}
         prompt_texts = []
         continuation_map = {}
         
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
-            if hasattr(p, 'image_tag') and p.image_tag:
-                # Bug 2 fix: Each prompt gets its OWN image list
-                per_prompt_images[i] = [p.image_tag]
+            if hasattr(p, 'image_tags') and p.image_tags:
+                # Resolve tags to actual file paths
+                resolved = self._resolve_tags_to_paths(list(p.image_tags))
+                if resolved:
+                    per_prompt_images[i] = resolved
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
+        
+        # Bug 3: Warn when I2V batch has prompts without images (will auto-convert to T2V)
+        no_image_indices = [i for i in range(len(prompts)) if i not in per_prompt_images and i not in continuation_map]
+        if no_image_indices and per_prompt_images:
+            log.warning(
+                f"  [I2V] {len(no_image_indices)} prompt(s) have no images "
+                f"(indices: {no_image_indices}) — will auto-convert to T2V"
+            )
         
         return self.submit_prompts(
             prompts=prompt_texts,
@@ -1127,7 +1447,8 @@ class AppController:
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
             if hasattr(p, 'image_tags') and p.image_tags:
-                all_images.extend(p.image_tags[:3])  # Max 3 images per prompt
+                resolved = self._resolve_tags_to_paths(list(p.image_tags[:3]))  # Max 3
+                all_images.extend(resolved)
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
         
@@ -1156,15 +1477,16 @@ class AppController:
         """Add Image-to-Image batch to queue.
         
         Args:
-            prompts: List of PromptRow objects with image_tag
+            prompts: List of PromptRow objects with image_tags
             settings: Sidebar settings dict
         """
         images = []
         prompt_texts = []
         for p in prompts:
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
-            if hasattr(p, 'image_tag') and p.image_tag:
-                images.append(p.image_tag)
+            if hasattr(p, 'image_tags') and p.image_tags:
+                resolved = self._resolve_tags_to_paths(list(p.image_tags))
+                images.extend(resolved)
         
         return self.submit_prompts(
             prompts=prompt_texts,
@@ -1215,8 +1537,8 @@ class AppController:
         
         # Anti-Detect Spam settings (global — applies to all accounts)
         self._engine._anti_detect_enabled = getattr(self.settings, 'anti_detect_enabled', True)
-        self._engine._anti_detect_delay_min = getattr(self.settings, 'anti_detect_delay_min', 1.0)
-        self._engine._anti_detect_delay_max = getattr(self.settings, 'anti_detect_delay_max', 5.0)
+        self._engine._anti_detect_delay_min = getattr(self.settings, 'anti_detect_delay_min', 3.0)
+        self._engine._anti_detect_delay_max = getattr(self.settings, 'anti_detect_delay_max', 8.0)
         
         # D1: Continuation Frame settings (global)
         self._engine._continuation_enabled = getattr(self.settings, 'continuation_enabled', True)
@@ -1263,6 +1585,32 @@ class AppController:
             self._engine_future = None
         
         self._notify_status("Processing stopped")
+    
+    def pause_processing(self):
+        """Pause processing — workers sleep, browsers stay alive.
+        
+        Much faster resume vs stop/start cycle.
+        """
+        if not self.state.is_processing:
+            return
+        if self._engine.is_paused:
+            return
+        
+        self._run_async(self._engine.pause())
+        self._notify_status("Processing paused")
+    
+    def resume_processing(self):
+        """Resume processing — wake up sleeping workers.
+        
+        No engine restart needed — workers and browsers are still alive.
+        """
+        if not self.state.is_processing:
+            return
+        if not self._engine.is_paused:
+            return
+        
+        self._run_async(self._engine.resume())
+        self._notify_status("Processing resumed")
     
     def _process_result(self, task: Task, result: WorkerResult):
         """Process worker result."""
@@ -1380,12 +1728,44 @@ class AppController:
     
     def get_queue_status(self) -> Dict:
         """Get current queue status."""
+        dispatcher_status = self._dispatcher.get_status_summary()
+        by_state = dispatcher_status.get("by_state", {})
+        
+        # AppState counters reset on app restart — fall back to dispatcher's
+        # actual task state counts so persisted completed/failed are visible
+        completed = self.state.completed_count or by_state.get("completed", 0)
+        errors = self.state.error_count or by_state.get("failed", 0) + by_state.get("cancelled", 0)
+        
         return {
-            "total": self.state.queue_count,
-            "completed": self.state.completed_count,
-            "errors": self.state.error_count,
+            "total": self.state.queue_count or dispatcher_status.get("total", 0),
+            "completed": completed,
+            "errors": errors,
             "is_processing": self.state.is_processing,
-            **self._dispatcher.get_status_summary(),
+            # Map dispatcher keys to Dev Console expected keys
+            "pending": dispatcher_status.get("ready", 0) + dispatcher_status.get("waiting", 0),
+            "processing": dispatcher_status.get("running", 0),
+            **dispatcher_status,
+        }
+    
+    def get_license_status(self) -> Dict:
+        """Get license status for status bar display."""
+        try:
+            info = self._license_client.license_info
+            return {
+                "is_licensed": self._license_client.is_licensed,
+                "is_trial": getattr(self._license_client, 'is_trial', False),
+                "tier": info.tier.value if info else None,
+                "days_remaining": info.days_remaining if info else 0,
+            }
+        except Exception:
+            return {"is_licensed": False, "is_trial": False, "tier": None, "days_remaining": 0}
+    
+    def get_account_summary(self) -> Dict:
+        """Get account summary for status bar display."""
+        return {
+            "total": self._multi_account.account_count,
+            "ready": len(self._multi_account.ready_accounts),
+            "active": self._multi_account.total_active,
         }
     
     def get_queue_items(self) -> List[Dict]:
@@ -1442,6 +1822,8 @@ class AppController:
                         "output_count": t.output_count,
                         "output_files": list(t.output_uris) if t.output_uris else [],
                         "thumbnails": list(t.thumbnail_paths) if hasattr(t, 'thumbnail_paths') else [],
+                        "image_paths": list(t.image_paths) if t.image_paths else [],
+                        "continuation_frame": t.continuation_frame_local_path or "",
                         "upscale_status": getattr(t, 'upscale_status', ''),
                         "upscale_error": getattr(t, 'upscale_error', ''),
                         "download_quality": getattr(t, 'download_quality', '720p'),
@@ -1501,6 +1883,40 @@ class AppController:
         """Retry a failed task."""
         return self._dispatcher.retry_task(task_id)
     
+    def force_retry_task(self, task_id: str) -> bool:
+        """Force retry a task regardless of state (including completed)."""
+        return self._dispatcher.force_retry_task(task_id)
+    
+    def _get_account_for_reupscale(self, task_id: str):
+        """Get account for re-upscale: prefer assigned_account, fallback to first.
+        
+        Bypasses is_ready check because re-upscale methods handle
+        reCAPTCHA refresh internally (engine.py _re_upscale_single).
+        
+        Returns:
+            (account, error_msg) tuple. account is None if unavailable.
+        """
+        task = self._dispatcher.get_task(task_id)
+        if not task:
+            return None, f"⚠️ Task {task_id} not found"
+        
+        # Priority 1: Same account that processed the original prompt
+        if task.assigned_account:
+            account = self._multi_account.get_account(task.assigned_account)
+            if account:
+                return account, None
+        
+        # Priority 2: Any account with valid token
+        for acc in self._multi_account._accounts:
+            if not acc._session.is_token_expired:
+                return acc, None
+        
+        # Priority 3: First account (re-upscale will refresh tokens)
+        if self._multi_account._accounts:
+            return self._multi_account._accounts[0], None
+        
+        return None, "⚠️ No account available for re-upscale"
+    
     def re_upscale_task(self, task_id: str):
         """Re-upscale a completed task using stored media_ids.
         
@@ -1511,9 +1927,9 @@ class AppController:
             return
         
         async def _run():
-            # Pick the first available account for re-upscale
-            account = await self._multi_account.get_available_account()
+            account, error = self._get_account_for_reupscale(task_id)
             if not account:
+                self._notify_status(error)
                 return
             
             result = await self._engine.re_upscale_task(task_id, account)
@@ -1536,8 +1952,9 @@ class AppController:
             return
         
         async def _run():
-            account = await self._multi_account.get_available_account()
+            account, error = self._get_account_for_reupscale(task_id)
             if not account:
+                self._notify_status(error)
                 return
             
             result = await self._engine.re_upscale_single_video(
@@ -1643,7 +2060,8 @@ class AppController:
             return {}
         
         # Only restore queue if setting is enabled
-        restore_queue = True
+        # Default matches settings.py: restore_queue_on_startup=False
+        restore_queue = False
         restore_tabs = True
         if self._settings:
             restore_queue = getattr(self._settings, 'restore_queue_on_startup', False)
@@ -1654,7 +2072,12 @@ class AppController:
             if queue_data:
                 count = self._dispatcher.import_state(queue_data)
                 if count > 0:
+                    # Sync AppState counter so status bar/DevConsole show correct total
+                    self.state.queue_count = count
                     self._notify_queue_updated()
+                    # Deferred re-notify: DevConsole may not exist yet at restore time
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(2000, self._notify_queue_updated)
                     print(f"[Session] Queue restored: {count} tasks")
         else:
             print("[Session] Queue restore SKIPPED (restore_queue_on_startup=False)")

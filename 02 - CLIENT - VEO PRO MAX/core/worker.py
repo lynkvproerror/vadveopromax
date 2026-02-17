@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 import asyncio
+import logging
 import sys
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from core.dispatcher import Task, TaskState
 from core.account_manager import AccountManager
 from core.api_client import VEOApiClient, APIResponse
 from config.constants import WorkflowType
+
+log = logging.getLogger(__name__)
 
 
 class WorkerState(str, Enum):
@@ -105,11 +108,24 @@ class Worker:
             # === Stage 1: Token Validation (5%) ===
             self._report_progress(task.id, 5, "🔑 Validating tokens")
             access_token = account.get_access_token()
+            
+            # Auto-refresh expired access token via extension bridge
+            if not access_token:
+                self._report_progress(task.id, 6, "🔄 Refreshing access token")
+                access_token = await account.refresh_access_token()
+                if not access_token:
+                    return WorkerResult(
+                        success=False,
+                        error="Access token expired and refresh failed"
+                    )
+            
             recaptcha_token = account.get_recaptcha_token()
             
-            print(f"[Worker] access_token={'VALID(' + str(len(access_token)) + ' chars)' if access_token else 'NONE/EMPTY'}, "
-                  f"recaptcha={'VALID(' + str(len(recaptcha_token)) + ' chars)' if recaptcha_token else 'NONE/EMPTY'}, "
-                  f"token_expired={account._session.is_token_expired}")
+            log.debug(
+                f"[Worker] access_token={'VALID(' + str(len(access_token)) + ' chars)' if access_token else 'NONE/EMPTY'}, "
+                f"recaptcha={'VALID(' + str(len(recaptcha_token)) + ' chars)' if recaptcha_token else 'NONE/EMPTY'}, "
+                f"token_expired={account._session.is_token_expired}"
+            )
             
             # === Stage 2: reCAPTCHA Refresh (10%) ===
             if not recaptcha_token or account.session.needs_recaptcha_refresh:

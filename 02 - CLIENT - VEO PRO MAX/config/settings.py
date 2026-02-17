@@ -36,6 +36,18 @@ class AppSettings:
     restore_queue_on_startup: bool = False   # Load queue from previous session (OFF to prevent stale tasks)
     restore_tabs_on_startup: bool = True     # Restore tab content (prompts, settings) on startup
     
+    # Granular restore sub-options (only effective when restore_tabs_on_startup=True)
+    restore_project_name: bool = True
+    restore_output_folder: bool = True
+    restore_aspect_ratio: bool = True
+    restore_outputs_per_prompt: bool = True
+    restore_ai_model: bool = True
+    restore_download_quality: bool = True
+    restore_prompt_input: bool = True        # Raw text in prompt input area
+    restore_parsed_prompts: bool = True      # Parsed prompt table rows
+    restore_prompt_images: bool = True       # Image paths in prompts (all tabs)
+    restore_frame_mode: bool = True          # I2V frame mode dropdown
+    
     # === WORKER DEFAULTS (applied to new accounts) ===
     # Per-account max_slots is stored in AccountSession, not here
     retry_count: int = 3        # Default retry count for new accounts
@@ -43,8 +55,8 @@ class AppSettings:
     
     # === ANTI-DETECT SPAM ===
     anti_detect_enabled: bool = True
-    anti_detect_delay_min: float = 1.0   # seconds (microsecond precision at runtime)
-    anti_detect_delay_max: float = 5.0   # seconds
+    anti_detect_delay_min: float = 3.0   # seconds (microsecond precision at runtime)
+    anti_detect_delay_max: float = 8.0   # seconds
     
     # === BROWSER ===
     headless_mode: bool = False

@@ -20,14 +20,14 @@ from PySide6.QtCore import Qt, Signal
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
 from ui.components.sidebar_base import VideoSidebar
-from ui.components.prompt_table import PromptTable, PromptRow, ImageMode
+from ui.components.prompt_table import PromptTable, PromptRow, PromptStatus, ImageMode
+from ui.components.drop_widgets import TextFileDropEdit
 from ui.components.continuation_toggle import ContinuationHeader
 
 
 class FrameMode(Enum):
     """Frame mode options for I2V."""
     START_ONLY = "start"
-    END_ONLY = "end"
     START_END = "both"
 
 
@@ -104,7 +104,6 @@ class TabI2V(QWidget):
         self.mode_dropdown = QComboBox()
         self.mode_dropdown.addItems([
             "START only",
-            "END only", 
             "START + END"
         ])
         self.mode_dropdown.currentTextChanged.connect(self._on_mode_change)
@@ -159,7 +158,7 @@ class TabI2V(QWidget):
         layout.addWidget(header)
         
         # Text input
-        self.prompt_input = QTextEdit()
+        self.prompt_input = TextFileDropEdit()
         self.prompt_input.setFixedHeight(150)
         self.prompt_input.setPlaceholderText(
             "Enter prompts with [tag] to match Library images...\n\n"
@@ -175,7 +174,7 @@ class TabI2V(QWidget):
         btn_layout = QHBoxLayout(btn_frame)
         btn_layout.setContentsMargins(8, 4, 8, 0)
         
-        self.import_btn = QPushButton("📥 Import TXT")
+        self.import_btn = QPushButton("📥 Import File")
         self.import_btn.setProperty("variant", "secondary")
         self.import_btn.clicked.connect(self._on_import_txt)
         btn_layout.addWidget(self.import_btn)
@@ -229,38 +228,27 @@ class TabI2V(QWidget):
         self.prompt_table = PromptTable(image_mode=ImageMode.I2V)
         self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
         self.prompt_table.delete_clicked.connect(self._on_delete_prompt)
+        self.prompt_table.slot_image_changed.connect(self._on_slot_changed)
         layout.addWidget(self.prompt_table)
         
         return frame
     
     # Event handlers
     def _on_mode_change(self, value: str):
-        """Handle frame mode change + CONT × Frame Mode matrix (Fix 6).
-        
-        Logic per §E2:
-        VEO uses continuation frame as START frame (always):
-        - Continuation frame → Start slot → disable if END_ONLY
-        """
+        """Handle frame mode change — update image slots in parsed prompt table."""
         if "START only" in value:
             self._frame_mode = FrameMode.START_ONLY
             mode_info = "Only START frame will be used"
-        elif "END only" in value:
-            self._frame_mode = FrameMode.END_ONLY
-            mode_info = "Only END frame will be used"
+            # Show 1 slot: Start
+            self.prompt_table.set_image_labels(['Start'], max_slots=1)
         else:
             self._frame_mode = FrameMode.START_END
             mode_info = "Both START and END frames will be used"
+            # Show 2 slots: Start + End
+            self.prompt_table.set_image_labels(['Start', 'End'], max_slots=2)
         
         # Update parsed section title to show current mode
         self.parsed_title.setText(f"📊 PARSED PROMPTS ({self.prompt_table.get_count()}) • {mode_info}")
-        
-        # CONT × Frame Mode matrix (simplified — VEO always uses cont frame as Start)
-        # Continuation frame → Start slot → conflict with END_ONLY mode
-        cont_allowed = (self._frame_mode != FrameMode.END_ONLY)
-        
-        self.continuation.set_cont_enabled(cont_allowed)
-        if not cont_allowed:
-            self.continuation.reset_checkboxes()
     
     def _on_help(self):
         """Show help for I2V workflow."""
@@ -282,15 +270,21 @@ the Library or from Continuation (previous video frame)."""
         HelpTooltipPopup(self, "I2V Workflow", help_text).exec()
     
     def _on_open_library(self):
-        """Open image library manager."""
+        """Open image library manager (non-modal, singleton)."""
+        if hasattr(self, '_library_popup') and self._library_popup and self._library_popup.isVisible():
+            self._library_popup.raise_()
+            self._library_popup.activateWindow()
+            return
         from ui.popups.complex_popups import ImageManagerPopup
-        ImageManagerPopup(self, on_select=self._handle_library_select).exec()
+        self._library_popup = ImageManagerPopup(self, on_select=self._handle_library_select)
+        self._library_popup.show()
     
     def _handle_library_select(self, tag: str):
-        """Insert selected image tag into prompt input."""
+        """Insert selected image tag into prompt input and refresh table."""
         cursor = self.prompt_input.textCursor()
         cursor.insertText(f"[{tag}] ")
         self.prompt_input.setTextCursor(cursor)
+        self._parse_prompts()
     
     def _on_text_changed(self):
         """Handle text input change."""
@@ -325,11 +319,17 @@ the Library or from Continuation (previous video frame)."""
         self.prompt_input.blockSignals(False)
         self.prompt_count.setText(f"{len(prompts)} prompts")
     
+    def _on_slot_changed(self, row_idx: int):
+        """Sync prompt text back to input when a slot image changes."""
+        prompts = self.prompt_table.get_prompts()
+        self._sync_to_input(prompts)
+    
     def _on_import_txt(self):
-        """Import prompts from TXT file."""
+        """Import prompts from text file (.txt, .md, .csv, .log)."""
         from PySide6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Prompts", "", "Text files (*.txt);;All files (*.*)"
+            self, "Import Prompts", "",
+            "Text files (*.txt *.md *.csv *.log *.text);;All files (*.*)"
         )
         if path:
             with open(path, 'r', encoding='utf-8') as f:
@@ -357,18 +357,9 @@ the Library or from Continuation (previous video frame)."""
         self.prompt_table.set_prompts(prompts)
     
     def _on_edit_prompt(self, row_index: int):
-        """Handle edit prompt action."""
-        from PySide6.QtWidgets import QInputDialog
+        """Handle edit prompt action — sync updated prompts back to input."""
         prompts = self.prompt_table.get_prompts()
-        if 0 <= row_index < len(prompts):
-            current_text = prompts[row_index].text
-            new_text, ok = QInputDialog.getMultiLineText(
-                self, "Edit Prompt", "Prompt:", current_text
-            )
-            if ok and new_text:
-                prompts[row_index].text = new_text
-                self.prompt_table.set_prompts(prompts)
-                self._sync_to_input(prompts)
+        self._sync_to_input(prompts)
     
     def _on_delete_prompt(self, row_index: int):
         """Handle delete prompt action."""
@@ -421,14 +412,18 @@ the Library or from Continuation (previous video frame)."""
         settings = self.sidebar.get_values()
         settings['frame_mode'] = self._frame_mode.value
         
+        # Block if no output folder set
+        if not settings.get("output_folder", "").strip():
+            main_win = self.window()
+            if hasattr(main_win, 'show_toast'):
+                main_win.show_toast("❌ No output folder set — please set one in sidebar before adding to queue!", "error")
+            return
+        
         if self.controller:
             self.controller.add_i2v_batch(prompts, settings)
             main_win = self.window()
             if hasattr(main_win, 'show_toast'):
                 main_win.show_toast(f"✅ Added {len(prompts)} prompt(s) to queue", "success")
-                # Warn if output folder not set
-                if not settings.get("output_folder", "").strip():
-                    main_win.show_toast("⚠️ No output folder set — videos won't be saved to disk!", "warning")
     
     # ── Session Persistence ─────────────────────────────────────
     
@@ -436,6 +431,8 @@ the Library or from Continuation (previous video frame)."""
         """Save tab state for session persistence."""
         prompts = self.prompt_table.get_prompts()
         return {
+            "prompt_input": self.prompt_input.toPlainText(),
+            "frame_mode": self._frame_mode.value,
             "prompts": [
                 {
                     "index": p.index,
@@ -450,22 +447,60 @@ the Library or from Continuation (previous video frame)."""
             "sidebar": self.sidebar.get_values(),
         }
     
-    def restore_state(self, data: dict):
-        """Restore tab state from saved session data."""
+    def restore_state(self, data: dict, restore_options=None):
+        """Restore tab state from saved session data.
+        
+        Args:
+            data: Saved tab state dict
+            restore_options: AppSettings instance for granular filtering (None = restore all)
+        """
         from ui.components.prompt_table import PromptRow
+        opts = restore_options
         
+        # Restore sidebar (filtered)
         if "sidebar" in data:
-            self.sidebar.set_values(data["sidebar"])
+            sidebar_data = dict(data["sidebar"])
+            if opts:
+                if not opts.restore_project_name:
+                    sidebar_data.pop("project_name", None)
+                if not opts.restore_output_folder:
+                    sidebar_data.pop("output_folder", None)
+                if not opts.restore_aspect_ratio:
+                    sidebar_data.pop("aspect_ratio", None)
+                if not opts.restore_outputs_per_prompt:
+                    sidebar_data.pop("outputs_per_prompt", None)
+                if not opts.restore_ai_model:
+                    sidebar_data.pop("model", None)
+                if not opts.restore_download_quality:
+                    sidebar_data.pop("download_quality", None)
+            if sidebar_data:
+                self.sidebar.set_values(sidebar_data)
         
-        if "prompts" in data and data["prompts"]:
+        # Restore frame mode dropdown
+        if (not opts or opts.restore_frame_mode) and "frame_mode" in data:
+            fm = data["frame_mode"]
+            mode_map = {"start": 0, "end": 1, "both": 2}
+            idx = mode_map.get(fm, 0)
+            self.mode_dropdown.setCurrentIndex(idx)
+        
+        # Restore raw prompt input text
+        if (not opts or opts.restore_prompt_input) and "prompt_input" in data:
+            self.prompt_input.blockSignals(True)
+            self.prompt_input.setPlainText(data["prompt_input"])
+            self.prompt_input.blockSignals(False)
+        
+        # Restore parsed prompts
+        if (not opts or opts.restore_parsed_prompts) and "prompts" in data and data["prompts"]:
             rows = []
             for pd in data["prompts"]:
+                restore_imgs = not opts or opts.restore_prompt_images
                 rows.append(PromptRow(
                     index=pd.get("index", 0),
                     text=pd.get("text", ""),
                     continuation_from=pd.get("continuation_from"),
-                    image_path=pd.get("image_path"),
-                    start_frame=pd.get("start_frame"),
-                    end_frame=pd.get("end_frame"),
+                    image_path=pd.get("image_path") if restore_imgs else None,
+                    start_frame=pd.get("start_frame") if restore_imgs else None,
+                    end_frame=pd.get("end_frame") if restore_imgs else None,
                 ))
             self.prompt_table.set_prompts(rows)
+

@@ -16,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.session import AccountSession, SubscriptionType, PaygateTier
 
 
+
+
 # ── Win32 API helpers for true browser window hiding ────────────────────
 import ctypes
 import ctypes.wintypes
@@ -90,6 +92,8 @@ def _win32_show_hwnds(hwnds: list):
         y = max(0, (screen_h - h) // 2)
         user32.SetWindowPos(hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER)
         user32.ShowWindow(hwnd, SW_RESTORE)
+
+
 
 
 @dataclass
@@ -187,6 +191,10 @@ class ChromeProfile:
             data["token_expires_at"] = None
         if "is_enabled" not in data:
             data["is_enabled"] = True  # Default enabled for legacy profiles
+        
+        # Remove legacy worker_profiles key if present
+        data.pop("worker_profiles", None)
+        
         return cls(**data)
 
 
@@ -240,21 +248,22 @@ class ProfilesController:
         
         Returns list of dicts with UI-friendly format.
         """
-        return [
-            {
+        results = []
+        for p in self._profiles:
+            d = {
                 "email": p.email,
                 "display_name": p.display_name,
                 "tier": p.tier_display,
                 "credits": p.credits_display,
                 "status": p.status_display,
                 "is_ready": p.is_ready,
-                "is_enabled": p.is_enabled,  # Issue B: expose toggle state to UI
+                "is_enabled": p.is_enabled,
                 "profile_path": p.profile_path,
                 "login_method": p.login_method,
-                "max_slots": p.max_slots,  # Per-account slot limit (0-4)
+                "max_slots": p.max_slots,
             }
-            for p in self._profiles
-        ]
+            results.append(d)
+        return results
     
     def get_profile(self, email: str) -> Optional[ChromeProfile]:
         """Get profile by email."""
@@ -308,16 +317,18 @@ class ProfilesController:
         """
         for i, p in enumerate(self._profiles):
             if p.email == email:
+                import shutil
+                import glob as glob_mod
+                
                 # Cleanup browser profile folder
                 if p.browser_profile_path:
-                    import shutil
                     profile_dir = Path(p.browser_profile_path)
                     if profile_dir.exists():
                         try:
                             shutil.rmtree(profile_dir, ignore_errors=True)
-                            print(f"[ProfilesController] 🗑️ Deleted browser profile: {profile_dir}")
+                            print(f"[ProfilesController] 🗑️ Deleted profile: {profile_dir}")
                         except Exception as e:
-                            print(f"[ProfilesController] ⚠️ Could not delete browser profile: {e}")
+                            print(f"[ProfilesController] ⚠️ Could not delete profile: {e}")
                 
                 # Cleanup stored credentials
                 try:
@@ -334,6 +345,8 @@ class ProfilesController:
         
         print(f"[ProfilesController] Profile not found: {email}")
         return False
+    
+
     
     def update_profile(self, email: str, **updates) -> bool:
         """Update profile fields.
@@ -491,6 +504,7 @@ class ProfilesController:
             CREDITS_URL = f"https://aisandbox-pa.googleapis.com/v1/credits?key={API_KEY}"
             
             print(f"[ProfilesController] Launching browser with saved profile...")
+            
             
             with sync_playwright() as p:
                 # Headless mode for subscription refresh - no need to show browser
@@ -811,6 +825,7 @@ class ProfilesController:
         
         try:
             from playwright.sync_api import sync_playwright
+            
             
             with sync_playwright() as p:
                 # Launch VISIBLE browser for user to login
@@ -1221,9 +1236,13 @@ class ProfilesController:
                         print(f"[DEBUG] Step 4: Current URL = {current_url}")
                         if "labs.google" not in current_url:
                             print(f"[DEBUG] Step 4: Navigating to VEO...")
-                            page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
+                            try:
+                                page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
+                            except Exception as nav_err:
+                                # ERR_ABORTED = Chrome redirected (e.g., to login) — not fatal
+                                print(f"[DEBUG] Step 4: Navigation interrupted ({type(nav_err).__name__}), checking final URL...")
                             page.wait_for_timeout(3000)
-                            print(f"[DEBUG] Step 4: ✅ Navigated. URL now = {page.url}")
+                            print(f"[DEBUG] Step 4: Final URL = {page.url}")
                             
                             try:
                                 create_btn = page.locator("button:has-text('Create with Flow')")
@@ -1241,7 +1260,7 @@ class ProfilesController:
                         if not captured_headers.get("x-browser-validation"):
                             print(f"[DEBUG] Step 5: Reloading to trigger API calls...")
                             try:
-                                page.reload(wait_until="networkidle", timeout=15000)
+                                page.reload(wait_until="load", timeout=15000)
                                 page.wait_for_timeout(3000)
                                 print(f"[DEBUG] Step 5: Reload done. Headers = {list(captured_headers.keys())}")
                             except Exception as e:
@@ -1251,7 +1270,7 @@ class ProfilesController:
                         if not captured_headers.get("x-browser-validation"):
                             print(f"[DEBUG] Step 5b: Trying alternative navigation...")
                             try:
-                                page.goto("https://labs.google/fx/tools/video-fx", wait_until="networkidle", timeout=15000)
+                                page.goto("https://labs.google/fx/tools/flow", wait_until="load", timeout=15000)
                                 page.wait_for_timeout(3000)
                                 print(f"[DEBUG] Step 5b: Headers after video-fx = {list(captured_headers.keys())}")
                             except Exception as e:
@@ -1326,7 +1345,11 @@ class ProfilesController:
                                     # Reload page to refresh session, extract fresh access_token
                                     print(f"[ProfilesController] 🔄 Refreshing token for {email}...")
                                     try:
-                                        page.reload(wait_until="networkidle", timeout=15000)
+                                        try:
+                                            page.reload(wait_until="load", timeout=15000)
+                                        except Exception:
+                                            # Fallback: navigate directly if reload fails (frame detached)
+                                            page.goto("https://labs.google/fx/tools/flow", wait_until="load", timeout=15000)
                                         page.wait_for_timeout(2000)
                                         
                                         # Extract access_token from __NEXT_DATA__
@@ -1623,14 +1646,44 @@ class ProfilesController:
         try:
             from playwright.sync_api import sync_playwright
             
-            # GUARD: If debug browser is already open on this profile, skip
-            # Chrome profile lock only allows ONE instance per user-data-dir
-            if hasattr(self, '_debug_browsers') and email in self._debug_browsers:
-                entry = self._debug_browsers[email]
-                if entry.get("context") is not None:
-                    print(f"[ProfilesController] ⚠️ Debug browser already open for {email} — cannot auto re-login (profile lock)")
-                    print(f"[ProfilesController] Close debug browser first, then retry login")
-                    return None
+            # Bug 4 fix: Kill ALL Chrome processes using this profile directory
+            # (debug browser, ChromeManager, or any stale instance)
+            # This prevents CDP port conflicts and profile lock errors.
+            import time
+            print(f"[ProfilesController] Killing any Chrome using profile: {profile_path.name}")
+            try:
+                # Force-close debug browser entry if exists
+                if hasattr(self, '_debug_browsers') and email in self._debug_browsers:
+                    entry = self._debug_browsers[email]
+                    ctx = entry.get("context")
+                    pw = entry.get("playwright")
+                    try:
+                        if ctx:
+                            ctx.close()
+                    except Exception:
+                        pass
+                    try:
+                        if pw:
+                            pw.stop()
+                    except Exception:
+                        pass
+                    self._debug_browsers[email] = {"context": None, "playwright": None}
+                
+                # Kill chrome.exe processes that reference this profile path
+                import subprocess
+                profile_str = str(profile_path).replace("\\", "\\\\")
+                kill_cmd = (
+                    f'Get-WmiObject Win32_Process -Filter "Name=\'chrome.exe\'" | '
+                    f'Where-Object {{ $_.CommandLine -like "*{profile_path.name}*" }} | '
+                    f'ForEach-Object {{ $_.Terminate() }}'
+                )
+                subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10)
+                print(f"[ProfilesController] ✅ Chrome processes killed for {profile_path.name}")
+            except Exception as e:
+                print(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
+            
+            time.sleep(3)  # Wait for Chrome to fully exit and release profile lock
+            
             
             with sync_playwright() as p:
                 context = p.chromium.launch_persistent_context(
@@ -1946,6 +1999,295 @@ class ProfilesController:
             traceback.print_exc()
             return None
     
+    def copy_variations_and_warmup(self, email: str) -> bool:
+        """Phase 2 recovery: Copy Variations from donor + warm up browser with tabs.
+        
+        Steps:
+        1. Kill any Chrome using this profile
+        2. Copy 'Local State' + 'Variations' from a working profile
+        3. Launch browser with 3 warmup tabs (gmail, youtube, labs.google)
+        4. Wait for Variations Service enrollment
+        5. Close browser
+        
+        Args:
+            email: Account email to recover
+            
+        Returns:
+            True if Variations copied + warmup completed
+        """
+        import time
+        import subprocess
+        
+        print(f"[ProfilesController] 🟠 Phase 2: Copy Variations + warmup for {email}")
+        
+        profile = self.get_profile(email)
+        if not profile or not profile.browser_profile_path:
+            print(f"[ProfilesController] ❌ Profile not found: {email}")
+            return False
+        
+        profile_path = Path(profile.browser_profile_path)
+        
+        # Step 1: Kill any Chrome using this profile
+        print(f"[ProfilesController] Step 1: Killing Chrome for {profile_path.name}...")
+        try:
+            self.kill_debug_browser(email)
+        except Exception:
+            pass
+        
+        try:
+            # Force-close debug browser entry
+            if hasattr(self, '_debug_browsers') and email in self._debug_browsers:
+                entry = self._debug_browsers[email]
+                try:
+                    ctx = entry.get("context")
+                    if ctx:
+                        ctx.close()
+                except Exception:
+                    pass
+                try:
+                    pw = entry.get("playwright")
+                    if pw:
+                        pw.stop()
+                except Exception:
+                    pass
+                self._debug_browsers[email] = {"context": None, "playwright": None}
+            
+            # Kill chrome.exe processes using this profile
+            kill_cmd = (
+                f'Get-WmiObject Win32_Process -Filter "Name=\'chrome.exe\'" | '
+                f'Where-Object {{ $_.CommandLine -like "*{profile_path.name}*" }} | '
+                f'ForEach-Object {{ $_.Terminate() }}'
+            )
+            subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10)
+        except Exception as e:
+            print(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
+        
+        time.sleep(3)  # Wait for Chrome to fully exit
+        
+        # Step 2: Copy Variations from donor
+        print(f"[ProfilesController] Step 2: Copying Variations from donor...")
+        donor_path = self._find_donor_profile(exclude_email=email)
+        
+        if not donor_path:
+            print(f"[ProfilesController] ⚠️ No donor profile found — warmup only")
+        else:
+            print(f"[ProfilesController] Donor: {donor_path.name}")
+            self._copy_variations_files(donor_path, profile_path)
+        
+        time.sleep(3)  # Let Variations files settle
+        
+        # Step 3: Launch browser with warmup tabs
+        warmup_urls = [
+            "https://mail.google.com",
+            "https://www.youtube.com",
+            "https://labs.google/fx/tools/flow",
+        ]
+        
+        print(f"[ProfilesController] Step 3: Warming up browser with {len(warmup_urls)} tabs...")
+        try:
+            from playwright.sync_api import sync_playwright
+            
+            
+            with sync_playwright() as p:
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=str(profile_path),
+                    channel="chrome",
+                    headless=False,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                        "--start-maximized",
+                    ],
+                )
+                
+                # Open warmup tabs
+                for url in warmup_urls:
+                    try:
+                        page = context.new_page()
+                        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                        print(f"[ProfilesController] ✅ Opened: {url}")
+                    except Exception as e:
+                        print(f"[ProfilesController] ⚠️ Tab {url} error: {e}")
+                
+                # Wait for Variations Service enrollment + x-client-data generation
+                print(f"[ProfilesController] ⏳ Waiting 15s for Variations enrollment...")
+                time.sleep(15)
+                
+                # Close all pages and context
+                try:
+                    context.close()
+                except Exception:
+                    pass
+            
+            print(f"[ProfilesController] ✅ Phase 2 warmup complete for {email}")
+            return True
+            
+        except Exception as e:
+            print(f"[ProfilesController] ❌ Warmup browser error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def _find_donor_profile(self, exclude_email: str) -> Optional[Path]:
+        """Find a working Chrome profile to donate Variations files.
+        
+        Looks for a profile that has both 'Local State' and 'Variations' files,
+        preferring profiles that are is_ready=True.
+        
+        Args:
+            exclude_email: Email of the profile being reset (skip this one)
+            
+        Returns:
+            Path to donor profile directory, or None
+        """
+        candidates = []
+        for profile in self._profiles:
+            if profile.email == exclude_email:
+                continue
+            profile_path = Path(profile.browser_profile_path) if profile.browser_profile_path else None
+            if not profile_path or not profile_path.exists():
+                continue
+            
+            local_state = profile_path / "Local State"
+            variations = profile_path / "Variations"
+            if local_state.exists() and variations.exists():
+                candidates.append((profile, profile_path))
+        
+        if not candidates:
+            return None
+        
+        # Prefer ready profiles
+        ready = [p for p in candidates if p[0].is_ready]
+        if ready:
+            return ready[0][1]
+        return candidates[0][1]
+    
+    def _copy_variations_files(self, source_path: Path, target_path: Path) -> bool:
+        """Copy 'Local State' and 'Variations' from source to target profile.
+        
+        Args:
+            source_path: Path to donor Chrome profile directory
+            target_path: Path to target Chrome profile directory
+            
+        Returns:
+            True if both files copied successfully
+        """
+        import shutil
+        
+        target_path.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        
+        for filename in ("Local State", "Variations"):
+            src = source_path / filename
+            dst = target_path / filename
+            if src.exists():
+                try:
+                    shutil.copy2(str(src), str(dst))
+                    print(f"[ProfilesController] ✅ Copied {filename}: {source_path.name} → {target_path.name}")
+                    copied += 1
+                except Exception as e:
+                    print(f"[ProfilesController] ❌ Failed to copy {filename}: {e}")
+            else:
+                print(f"[ProfilesController] ⚠️ {filename} not found in {source_path.name}")
+        
+        return copied == 2
+    
+    def reset_profile_and_relogin(self, email: str) -> Optional[str]:
+        """Full profile reset with Variations copy + auto re-login.
+        
+        3-step recovery for persistent reCAPTCHA 403 errors:
+        1. Kill debug browser (if open)
+        2. Copy 'Local State' + 'Variations' from a working profile
+        3. Delete old profile folder, create new one with Variations, auto re-login
+        
+        Args:
+            email: Account email to reset
+            
+        Returns:
+            Email if successful, None if failed
+        """
+        import shutil
+        import uuid
+        
+        print(f"[ProfilesController] 🔄 Starting full profile reset for {email}...")
+        
+        profile = self.get_profile(email)
+        if not profile:
+            print(f"[ProfilesController] ❌ Profile not found: {email}")
+            return None
+        
+        # Step 1: Kill debug browser
+        print(f"[ProfilesController] Step 1: Killing debug browser for {email}...")
+        try:
+            self.kill_debug_browser(email)
+        except Exception as e:
+            print(f"[ProfilesController] ⚠️ Kill browser warning: {e}")
+        
+        import time
+        time.sleep(2)  # Wait for Chrome process to fully exit
+        
+        # Step 2: Find donor profile and copy Variations
+        print(f"[ProfilesController] Step 2: Finding donor profile for Variations...")
+        donor_path = self._find_donor_profile(exclude_email=email)
+        
+        variations_copied = False
+        temp_variations_dir = None
+        
+        if donor_path:
+            print(f"[ProfilesController] Found donor: {donor_path.name}")
+            # Save Variations files to temp location before deleting profile
+            temp_variations_dir = Path(self.storage_path.parent / "browser_profiles" / "_temp_variations")
+            temp_variations_dir.mkdir(parents=True, exist_ok=True)
+            variations_copied = self._copy_variations_files(donor_path, temp_variations_dir)
+        else:
+            print(f"[ProfilesController] ⚠️ No donor profile found — proceeding without Variations copy")
+        
+        # Step 3: Delete old profile folder
+        old_profile_path = Path(profile.browser_profile_path) if profile.browser_profile_path else None
+        
+        if old_profile_path and old_profile_path.exists():
+            print(f"[ProfilesController] Step 3: Deleting old profile: {old_profile_path.name}")
+            try:
+                shutil.rmtree(str(old_profile_path), ignore_errors=True)
+                print(f"[ProfilesController] ✅ Old profile deleted")
+            except Exception as e:
+                print(f"[ProfilesController] ⚠️ Partial delete: {e}")
+        
+        # Create new profile folder
+        profile_folder = f"browser_session_{uuid.uuid4().hex[:8]}"
+        new_profile_path = self.storage_path.parent / "browser_profiles" / profile_folder
+        new_profile_path.mkdir(parents=True, exist_ok=True)
+        print(f"[ProfilesController] ✅ New profile created: {profile_folder}")
+        
+        # Copy Variations files to new profile
+        if variations_copied and temp_variations_dir and temp_variations_dir.exists():
+            self._copy_variations_files(temp_variations_dir, new_profile_path)
+            # Cleanup temp
+            try:
+                shutil.rmtree(str(temp_variations_dir), ignore_errors=True)
+            except Exception:
+                pass
+            # Bug 5 fix: Wait for Chrome Variations Service to read the seed
+            print(f"[ProfilesController] ⏳ Waiting 5s for Variations seed to settle...")
+            time.sleep(5)
+        
+        # Update profile paths in memory
+        profile.profile_path = str(new_profile_path)
+        profile.browser_profile_path = str(new_profile_path)
+        profile.is_ready = False
+        self.save_profiles()
+        
+        # Step 4: Auto re-login
+        print(f"[ProfilesController] Step 4: Auto re-login with stored credentials...")
+        result = self.auto_relogin(email)
+        
+        if result:
+            print(f"[ProfilesController] ✅ Full profile reset + re-login successful for {email}")
+        else:
+            print(f"[ProfilesController] ❌ Re-login failed for {email}. Manual login may be needed.")
+        
+        return result
 
     def get_tokens(self, email: str) -> Optional[dict]:
         """Get stored tokens for an email."""

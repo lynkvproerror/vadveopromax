@@ -46,25 +46,19 @@ from .security import (
     SecurityStatus,
     SecurityCheckResult,
 )
-from .cookie_validator import CookieValidator, CookieStatus, CookieValidationResult
 
 # Session Management
 from .session_monitor import SessionMonitor, SessionEvent, SessionError
 from .refresh_manager import CookieRefreshManager, RefreshRequest, RefreshStatus
-from .transfer_handler import ExpiredCookieTransferHandler, TransferResult, PendingWork
 
 # Controllers
 from .app_controller import AppController, AppState
 from .event_manager import EventManager, EventType, Event, get_event_manager, emit_event
-from .generation_controller import GenerationController, GenerationRequest, GenerationResult
 from .queue_controller import QueueController, QueueItemView
 from .settings_controller import SettingsController, LicenseController
 
-# Browser Automation
+# Browser Automation (still referenced — pending refactor)
 from .browser_manager import BrowserManager, BrowserSession, BrowserConfig, BrowserState
-from .veo_automation import VEOAutomationHandler, VEOGenerationRequest, VEOGenerationResult, VEOState
-from .browser_integration import AccountBrowserIntegration, AccountBrowserMapping
-from .recaptcha_handler import RecaptchaHandler, TokenExpiryHandler, RecaptchaState, RecaptchaEvent
 from .token_extractor import TokenExtractor, ExtractedTokens, extract_tokens, extract_tokens_sync
 
 __all__ = [
@@ -130,9 +124,6 @@ __all__ = [
     "EnvironmentChecker",
     "SecurityStatus",
     "SecurityCheckResult",
-    "CookieValidator",
-    "CookieStatus",
-    "CookieValidationResult",
     
     # Session Management
     "SessionMonitor",
@@ -141,9 +132,6 @@ __all__ = [
     "CookieRefreshManager",
     "RefreshRequest",
     "RefreshStatus",
-    "ExpiredCookieTransferHandler",
-    "TransferResult",
-    "PendingWork",
     
     # Controllers
     "AppController",
@@ -153,9 +141,6 @@ __all__ = [
     "Event",
     "get_event_manager",
     "emit_event",
-    "GenerationController",
-    "GenerationRequest",
-    "GenerationResult",
     "QueueController",
     "QueueItemView",
     "SettingsController",
@@ -166,16 +151,6 @@ __all__ = [
     "BrowserSession",
     "BrowserConfig",
     "BrowserState",
-    "VEOAutomationHandler",
-    "VEOGenerationRequest",
-    "VEOGenerationResult",
-    "VEOState",
-    "AccountBrowserIntegration",
-    "AccountBrowserMapping",
-    "RecaptchaHandler",
-    "TokenExpiryHandler",
-    "RecaptchaState",
-    "RecaptchaEvent",
     
     # Token Extraction
     "TokenExtractor",

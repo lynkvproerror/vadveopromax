@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QComboBox, QLineEdit, QCheckBox,
     QRadioButton, QButtonGroup, QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox
+    QHeaderView, QMessageBox, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, Slot
 
@@ -239,7 +239,7 @@ class TabSettings(QWidget):
         """
         section, layout = self._create_section("🌐 Chrome Profiles (Account Manager)")
         
-        # Create QTableWidget with 9 columns (added Slots column)
+        # Create QTableWidget with 9 columns
         self.profiles_table = QTableWidget()
         self.profiles_table.setColumnCount(9)
         self.profiles_table.setHorizontalHeaderLabels([
@@ -248,24 +248,24 @@ class TabSettings(QWidget):
         
         # Set column widths per docs spec
         header = self.profiles_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # ✓
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # #
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Email
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)  # Type
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Plan
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)  # Credits
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)  # Status
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)  # Workers
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)  # Actions
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)   # ✓
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)   # #
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch) # Email
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)   # Type
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)   # Plan
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)   # Credits
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)   # Status
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)   # Workers
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)   # Actions
         
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
-        self.profiles_table.setColumnWidth(3, 120)   # Type - browser toggle button
+        self.profiles_table.setColumnWidth(3, 120)  # Type - browser toggle button
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
-        self.profiles_table.setColumnWidth(6, 110)  # Status - "🟢 Ready" needs more space
+        self.profiles_table.setColumnWidth(6, 110)  # Status
         self.profiles_table.setColumnWidth(7, 60)   # Workers - SpinBox 0-4
-        self.profiles_table.setColumnWidth(8, 120)  # Actions - 3 buttons + spacing
+        self.profiles_table.setColumnWidth(8, 260)  # Actions - 5 buttons (32px each + spacing)
         
         self.profiles_table.setMinimumHeight(80)
         self.profiles_table.setStyleSheet(f"background-color: {Theme.SURFACE2};")
@@ -341,13 +341,15 @@ class TabSettings(QWidget):
         if not accounts:
             placeholder = QTableWidgetItem("No profiles added. Click '🌐 Add Account' to add.")
             self.profiles_table.insertRow(0)
-            self.profiles_table.setSpan(0, 0, 1, 9)  # 9 columns now
+            self.profiles_table.setSpan(0, 0, 1, 9)  # 9 columns
             self.profiles_table.setItem(0, 0, placeholder)
-            self._adjust_table_height(1)
+            self._adjust_table_height()
             return
         
+        actual_row = 0  # Track actual table row (accounts + detail rows)
+        
         for i, acc in enumerate(accounts):
-            self.profiles_table.insertRow(i)
+            self.profiles_table.insertRow(actual_row)
             
             # Toggle switch (col 0) - Enable/Disable account for rotation
             is_enabled = acc.get('is_enabled', True)
@@ -357,13 +359,13 @@ class TabSettings(QWidget):
             toggle.toggled_signal.connect(
                 lambda checked, e=email_for_toggle: self._on_toggle_account(e, checked)
             )
-            self.profiles_table.setCellWidget(i, 0, toggle)
+            self.profiles_table.setCellWidget(actual_row, 0, toggle)
             
             # # row number (col 1) - centered
             row_item = QTableWidgetItem(str(i + 1))
             row_item.setFlags(row_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             row_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(i, 1, row_item)
+            self.profiles_table.setItem(actual_row, 1, row_item)
             
             # Email (col 2) — with credential status icon
             email_text = acc.get('email', 'Unknown')
@@ -378,7 +380,7 @@ class TabSettings(QWidget):
             email_item = QTableWidgetItem(f"{cred_icon} {email_text}")
             email_item.setToolTip(cred_tip)
             email_item.setFlags(email_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.profiles_table.setItem(i, 2, email_item)
+            self.profiles_table.setItem(actual_row, 2, email_item)
             
             # Type (col 3) - Toggle 🌐/👁️ button to show/hide browser
             type_btn = QPushButton("🌐 Open")
@@ -402,19 +404,19 @@ class TabSettings(QWidget):
             type_btn.clicked.connect(
                 lambda checked, e=email_for_browser: self._on_open_debug_browser(e)
             )
-            self.profiles_table.setCellWidget(i, 3, type_btn)
+            self.profiles_table.setCellWidget(actual_row, 3, type_btn)
             
             # Plan (col 4) - tier_display already formatted - centered
             plan_item = QTableWidgetItem(acc.get('tier', '👤 Free'))
             plan_item.setFlags(plan_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             plan_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(i, 4, plan_item)
+            self.profiles_table.setItem(actual_row, 4, plan_item)
             
             # Credits (col 5) - credits_display already formatted - centered
             credits_item = QTableWidgetItem(acc.get('credits', 'N/A'))
             credits_item.setFlags(credits_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             credits_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(i, 5, credits_item)
+            self.profiles_table.setItem(actual_row, 5, credits_item)
             
             # Status (col 6) - Uses enhanced status_display from ChromeProfile - centered
             # Status values: 🔴 Expired, 🟠 Expiring, 🟡 Login, 🟢 Ready
@@ -422,7 +424,7 @@ class TabSettings(QWidget):
             status_item = QTableWidgetItem(status)
             status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(i, 6, status_item)
+            self.profiles_table.setItem(actual_row, 6, status_item)
             
             # Get email for action handlers
             email = acc.get('email', '')
@@ -437,48 +439,92 @@ class TabSettings(QWidget):
             slots_spin.valueChanged.connect(
                 lambda value, e=email: self._on_slots_changed(e, value)
             )
-            self.profiles_table.setCellWidget(i, 7, slots_spin)
+            self.profiles_table.setCellWidget(actual_row, 7, slots_spin)
             
             # Actions buttons (col 8)
             actions_widget = QWidget()
             actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(2, 0, 2, 0)
-            actions_layout.setSpacing(3)
+            actions_layout.setContentsMargins(4, 2, 4, 2)
+            actions_layout.setSpacing(4)
             
-            style = self.style()
+            # Common button style for high visibility on dark background
+            def _action_btn(text, tip, bg_color):
+                btn = QPushButton(text)
+                btn.setFixedSize(32, 32)
+                btn.setToolTip(tip)
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {bg_color};
+                        border: 1px solid rgba(255,255,255,0.15);
+                        border-radius: 6px;
+                        font-size: 15px;
+                        padding: 0px;
+                    }}
+                    QPushButton:hover {{
+                        border: 1px solid rgba(255,255,255,0.5);
+                        background-color: {bg_color};
+                    }}
+                """)
+                return btn
             
-            # Refresh button - refresh session via browser
-            refresh_btn = QPushButton()
-            refresh_btn.setIcon(style.standardIcon(style.StandardPixmap.SP_BrowserReload))
-            refresh_btn.setFixedSize(26, 26)
-            refresh_btn.setToolTip("Refresh Session")
-            refresh_btn.setStyleSheet(f"background-color: {Theme.BLUE}; border-radius: 4px;")
+            # Save Password button
+            pwd_btn = _action_btn("🔑", "Save Password (for auto re-login)", Theme.YELLOW)
+            pwd_btn.clicked.connect(lambda checked, e=email: self._on_save_password(e))
+            actions_layout.addWidget(pwd_btn)
+            
+            # Re-login button — only if stored credentials exist
+            try:
+                from core.credentials_manager import get_credentials_manager
+                has_creds = get_credentials_manager().has_credentials_for(email)
+            except Exception:
+                has_creds = False
+            
+            if has_creds:
+                relogin_btn = _action_btn("🔄", "Reset Profile + Re-login", Theme.GREEN)
+                relogin_btn.clicked.connect(lambda checked, e=email: self._on_relogin_profile(e))
+                actions_layout.addWidget(relogin_btn)
+            
+            # Refresh button
+            refresh_btn = _action_btn("🔃", "Refresh Session", Theme.BLUE)
             refresh_btn.clicked.connect(lambda checked, e=email: self._on_refresh_session(e))
             actions_layout.addWidget(refresh_btn)
             
-            # Delete button - remove profile
-            delete_btn = QPushButton()
-            delete_btn.setIcon(style.standardIcon(style.StandardPixmap.SP_TrashIcon))
-            delete_btn.setFixedSize(26, 26)
-            delete_btn.setToolTip("Delete Profile")
-            delete_btn.setStyleSheet(f"background-color: {Theme.RED}; border-radius: 4px;")
+            # Delete button
+            delete_btn = _action_btn("🗑️", "Delete Profile", Theme.RED)
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
             
-            self.profiles_table.setCellWidget(i, 8, actions_widget)
+            self.profiles_table.setCellWidget(actual_row, 8, actions_widget)
+            
+            actual_row += 1
         
-        # Auto-expand table height to fit all rows
-        self._adjust_table_height(len(accounts))
+        # Auto-expand table height to fit visible rows
+        self._adjust_table_height()
     
-    def _adjust_table_height(self, row_count: int):
-        """Adjust table height to show all rows without scrolling (max 10 rows)."""
-        row_height = self.profiles_table.verticalHeader().defaultSectionSize()
-        header_height = self.profiles_table.horizontalHeader().height()
-        visible_rows = min(row_count, 10)  # Cap at 10 rows visible
-        # +2 for borders/padding
-        total_height = header_height + (row_height * visible_rows) + 2
-        self.profiles_table.setFixedHeight(max(total_height, 80))
+    def _adjust_table_height(self):
+        """Adjust table height to fit all visible rows (including expanded detail rows)."""
+        tbl = self.profiles_table
+        header_height = tbl.horizontalHeader().height()
+        total_row_height = 0
+        visible_count = 0
+        for row in range(tbl.rowCount()):
+            if not tbl.isRowHidden(row):
+                # Use actual row height (detail rows may be taller)
+                h = tbl.rowHeight(row)
+                total_row_height += h
+                visible_count += 1
+        
+        # Cap visible rows at 12 to avoid overly tall table
+        if visible_count > 12:
+            # Estimate: use average row height × 12
+            avg = total_row_height // visible_count if visible_count else 48
+            total_row_height = avg * 12
+        
+        total_height = header_height + total_row_height + 4  # +4 for borders
+        tbl.setFixedHeight(max(total_height, 80))
+    
+
     
     def _create_profile_row(self, name: str, status: str, last_used: str) -> QWidget:
         """Create a profile row - matches CTK _create_profile_row."""
@@ -797,8 +843,8 @@ class TabSettings(QWidget):
                 'retry_count': getattr(s, 'retry_count', 3),
                 'request_timeout': getattr(s, 'request_timeout', 120),
                 'anti_detect_enabled': getattr(s, 'anti_detect_enabled', True),
-                'anti_detect_delay_min': getattr(s, 'anti_detect_delay_min', 1.0),
-                'anti_detect_delay_max': getattr(s, 'anti_detect_delay_max', 5.0),
+                'anti_detect_delay_min': getattr(s, 'anti_detect_delay_min', 3.0),
+                'anti_detect_delay_max': getattr(s, 'anti_detect_delay_max', 8.0),
             }
         
         # Note: Max Concurrent Workers removed — now per-account via Chrome Profiles
@@ -859,7 +905,7 @@ class TabSettings(QWidget):
         self.anti_detect_delay_min.setRange(0.5, 10.0)
         self.anti_detect_delay_min.setSingleStep(0.1)
         self.anti_detect_delay_min.setDecimals(1)
-        self.anti_detect_delay_min.setValue(saved.get('anti_detect_delay_min', 1.0))
+        self.anti_detect_delay_min.setValue(saved.get('anti_detect_delay_min', 3.0))
         self.anti_detect_delay_min.setFixedWidth(80)
         self.anti_detect_delay_min.setSuffix("s")
         self.anti_detect_delay_min.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
@@ -878,7 +924,7 @@ class TabSettings(QWidget):
         self.anti_detect_delay_max.setRange(1.0, 30.0)
         self.anti_detect_delay_max.setSingleStep(0.1)
         self.anti_detect_delay_max.setDecimals(1)
-        self.anti_detect_delay_max.setValue(saved.get('anti_detect_delay_max', 5.0))
+        self.anti_detect_delay_max.setValue(saved.get('anti_detect_delay_max', 8.0))
         self.anti_detect_delay_max.setFixedWidth(80)
         self.anti_detect_delay_max.setSuffix("s")
         self.anti_detect_delay_max.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
@@ -923,6 +969,89 @@ class TabSettings(QWidget):
             "Restore Tabs:", checked=saved_restore_tabs
         )
         layout.addLayout(self.restore_tabs_switch._row_layout)
+        
+        # Auto-save: persist session toggles immediately on change
+        self.restore_queue_switch.toggled_signal.connect(self._save_session_settings)
+        self.restore_tabs_switch.toggled_signal.connect(self._save_session_settings)
+        
+        # === Granular Restore Sub-toggles (grouped columns) ===
+        self._restore_sub_container = QFrame()
+        self._restore_sub_container.setStyleSheet(f"margin-left: 16px; padding: 4px 0;")
+        sub_outer = QVBoxLayout(self._restore_sub_container)
+        sub_outer.setContentsMargins(0, 4, 0, 4)
+        sub_outer.setSpacing(4)
+        
+        sub_label = QLabel("Choose what to restore:")
+        sub_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-style: italic;")
+        sub_outer.addWidget(sub_label)
+        
+        # Load saved granular values
+        _g = lambda attr, default=True: getattr(s, attr, default) if self.controller and hasattr(self.controller, 'settings') and self.controller.settings else default
+        
+        # Define groups with their options
+        restore_groups = [
+            ("📁 Project", [
+                ("Project Name",    "restore_project_name",       _g('restore_project_name')),
+                ("Output Folder",   "restore_output_folder",      _g('restore_output_folder')),
+            ]),
+            ("⚙️ Generation", [
+                ("Aspect Ratio",      "restore_aspect_ratio",       _g('restore_aspect_ratio')),
+                ("Outputs/Prompt",    "restore_outputs_per_prompt", _g('restore_outputs_per_prompt')),
+                ("AI Model",          "restore_ai_model",           _g('restore_ai_model')),
+                ("Download Quality",  "restore_download_quality",   _g('restore_download_quality')),
+                ("Frame Mode (I2V)",  "restore_frame_mode",         _g('restore_frame_mode')),
+            ]),
+            ("✍️ Content", [
+                ("Prompt Input",    "restore_prompt_input",       _g('restore_prompt_input')),
+                ("Parsed Prompts",  "restore_parsed_prompts",     _g('restore_parsed_prompts')),
+                ("Prompt Images",   "restore_prompt_images",      _g('restore_prompt_images')),
+            ]),
+        ]
+        
+        # Create columns layout
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(12)
+        columns_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self._restore_sub_toggles = {}  # attr_name -> toggle widget
+        
+        for group_title, options in restore_groups:
+            group_frame = QFrame()
+            group_frame.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {Theme.SURFACE1};
+                    border: 1px solid {Theme.BORDER};
+                    border-radius: 6px;
+                    padding: 4px;
+                }}
+            """)
+            group_layout = QVBoxLayout(group_frame)
+            group_layout.setContentsMargins(8, 6, 8, 6)
+            group_layout.setSpacing(2)
+            
+            # Group header
+            header = QLabel(group_title)
+            header.setStyleSheet(f"color: {Theme.TEXT}; font-size: 11px; font-weight: bold; border: none; padding: 0; margin-bottom: 2px;")
+            group_layout.addWidget(header)
+            
+            for label_text, attr_name, checked in options:
+                toggle = self._create_enable_row(label_text, checked=checked)
+                group_layout.addLayout(toggle._row_layout)
+                toggle.toggled_signal.connect(self._save_session_settings)
+                self._restore_sub_toggles[attr_name] = toggle
+            
+            group_layout.addStretch()
+            columns_layout.addWidget(group_frame)
+        
+        sub_outer.addLayout(columns_layout)
+        
+        layout.addWidget(self._restore_sub_container)
+        
+        # Show/hide sub-toggles based on Restore Tabs state
+        self._restore_sub_container.setVisible(saved_restore_tabs)
+        self.restore_tabs_switch.toggled_signal.connect(
+            lambda checked: self._restore_sub_container.setVisible(checked)
+        )
         
         # Separator
         sep = QFrame()
@@ -1101,6 +1230,17 @@ class TabSettings(QWidget):
         settings.notify_sound_file = self._get_selected_sound()
         save_settings()
     
+    def _save_session_settings(self, *args):
+        """Persist session toggles (Restore Queue/Tabs + granular options) to AppSettings immediately."""
+        from config.settings import get_settings, save_settings
+        settings = get_settings()
+        settings.restore_queue_on_startup = self.restore_queue_switch.isToggled()
+        settings.restore_tabs_on_startup = self.restore_tabs_switch.isToggled()
+        # Save granular sub-toggles
+        for attr_name, toggle in self._restore_sub_toggles.items():
+            setattr(settings, attr_name, toggle.isToggled())
+        save_settings()
+    
     def _on_sound_selection_changed(self, index: int):
         """Handle sound dropdown selection change."""
         text = self.sound_file_combo.currentText()
@@ -1265,8 +1405,8 @@ class TabSettings(QWidget):
         self.request_timeout.setValue(120)
         # Reset anti-detect spam to defaults
         self.anti_detect_switch.setToggled(True)
-        self.anti_detect_delay_min.setValue(1.0)
-        self.anti_detect_delay_max.setValue(5.0)
+        self.anti_detect_delay_min.setValue(3.0)
+        self.anti_detect_delay_max.setValue(8.0)
         # Reset enhancer image to defaults
         self.enhancer_switch.setToggled(False)
         self.enhancer_quality.setCurrentText("Medium")
@@ -1791,6 +1931,112 @@ class TabSettings(QWidget):
             "Auto Re-Login Failed",
             f"❌ Failed to re-login: {email}\n\nPlease login manually using the Browser button."
         )
+    
+    def _on_save_password(self, email: str):
+        """Show dialog to save/update password for an account."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QLineEdit, QDialogButtonBox
+        
+        try:
+            from core.credentials_manager import get_credentials_manager
+            creds_manager = get_credentials_manager()
+        except ImportError as e:
+            QMessageBox.warning(self, "Error", f"Credentials manager not available: {e}")
+            return
+        
+        # Check existing credentials
+        existing = creds_manager.load_credentials_for(email)
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"🔑 Save Password — {email}")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        form = QFormLayout()
+        
+        email_label = QLineEdit(email)
+        email_label.setReadOnly(True)
+        email_label.setStyleSheet("color: #888;")
+        
+        password_input = QLineEdit()
+        password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        password_input.setPlaceholderText("Enter Google account password")
+        if existing:
+            password_input.setText(existing.get("password", ""))
+        
+        form.addRow("📧 Email:", email_label)
+        form.addRow("🔑 Password:", password_input)
+        layout.addLayout(form)
+        
+        info = QLabel(
+            "⚠️ Password is encrypted locally (Fernet).\n"
+            "Used for auto re-login when profile needs reset."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        password = password_input.text()
+        if not password:
+            QMessageBox.warning(self, "Error", "Password cannot be empty.")
+            return
+        
+        if creds_manager.save_credentials(email, password):
+            QMessageBox.information(self, "Saved", f"✅ Password saved for {email}")
+            self._refresh_profiles_table()  # Update 🔑/🔓 icon
+        else:
+            QMessageBox.warning(self, "Error", "Failed to save credentials.")
+    
+    def _on_relogin_profile(self, email: str):
+        """Reset profile (copy Variations) + auto re-login with stored credentials."""
+        import threading
+        
+        reply = QMessageBox.question(
+            self,
+            f"🔄 Reset Profile — {email}",
+            f"This will:\n"
+            f"1. Kill browser for {email}\n"
+            f"2. Copy Variations from working profile\n"
+            f"3. Delete old profile + create new\n"
+            f"4. Auto re-login with saved password\n\n"
+            f"Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        self.setEnabled(False)
+        self._update_row_status(email, "🔄 Resetting...", "...")
+        
+        def run_reset():
+            result = self.profiles_controller.reset_profile_and_relogin(email)
+            
+            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
+            if result:
+                QMetaObject.invokeMethod(
+                    self, "_on_auto_relogin_complete",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(str, email)
+                )
+            else:
+                QMetaObject.invokeMethod(
+                    self, "_on_auto_relogin_failed",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(str, email)
+                )
+        
+        thread = threading.Thread(target=run_reset, daemon=True)
+        thread.start()
     
     def _on_toggle_account(self, email: str, enabled: bool):
         """Handle toggle switch change - enable/disable account for generation.

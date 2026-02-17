@@ -15,6 +15,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 def main():
     """Main entry point for VEO Pro Max application."""
     try:
+        # ── Pre-UI: ensure PySide6 is installed (no splash yet) ──
+        from core.dependency_checker import ensure_critical_deps
+        ensure_critical_deps()
+        
         # PySide6 imports
         from PySide6.QtWidgets import QApplication
         from PySide6.QtCore import Qt
@@ -25,6 +29,7 @@ def main():
         from core.app_controller import AppController
         from core.event_manager import get_event_manager
         from ui.app import MainWindow
+        from ui.splash_screen import SplashScreen
         
         # Create Qt application
         app = QApplication(sys.argv)
@@ -35,22 +40,54 @@ def main():
         theme_manager = ThemeManager()
         theme_manager.apply_to_app(app)
         
+        # ── Show splash immediately ──
+        splash = SplashScreen()
+        splash.show()
+        app.processEvents()
+        
+        # ── Check & install missing dependencies (with splash progress) ──
+        from core.dependency_checker import check_all_dependencies
+        
+        def _dep_callback(pct: int, status: str):
+            """Map dependency progress (0-100) into splash auto-advance range."""
+            # Dependency check uses the splash status text only
+            # Auto-advance handles the progress bar (0→80%)
+            splash.set_status(status)
+            app.processEvents()
+        
+        check_all_dependencies(_dep_callback)
+        
+        # Auto-advance mode: splash auto-animates 0→80% on its own
+        # We only update the status text at each init step
+        splash.set_status("Loading settings...")
+        
         # Load settings
         settings = AppSettings.load()
         
         # Initialize controller
+        splash.set_status("Initializing engine...")
         controller = AppController(settings)
         
+        # Connect controller's auto-launch progress to splash
+        controller.set_splash_callback(splash.set_progress)
+        
         # Initialize event manager
+        splash.set_status("Starting event manager...")
         event_manager = get_event_manager()
         event_manager.start_processor()
         
         # Start controller
+        splash.set_status("Starting services...")
         controller.start()
         
-        # Create main window
+        # Create main window (hidden for now, splash is visible)
+        splash.set_status("Building interface...")
         window = MainWindow(controller=controller, settings=settings)
-        window.show()
+        
+        # ── Splash done: close as soon as UI is built ──
+        # Browsers will auto-launch in background via set_profiles_controller()
+        # No need to wait for browser launch — user sees app immediately
+        splash.finish(window)
         
         # Run event loop
         exit_code = app.exec()

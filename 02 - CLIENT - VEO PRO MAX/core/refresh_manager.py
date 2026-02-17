@@ -58,7 +58,7 @@ class CookieRefreshManager:
     - Refresh queue management per-account
     """
     
-    REFRESH_CHECK_INTERVAL = 30 * 60  # 30 minutes
+    REFRESH_CHECK_INTERVAL = 5 * 60   # 5 minutes
     TOKEN_REFRESH_BUFFER = 5 * 60     # Refresh 5 min before expiry
     
     def __init__(self):
@@ -70,6 +70,9 @@ class CookieRefreshManager:
         self._on_refresh_complete: Optional[Callable[[str, bool], None]] = None
         self._show_refresh_dialog: Optional[Callable[[RefreshRequest], bool]] = None
         self._on_auto_relogin: Optional[Callable[[str], Optional[str]]] = None
+        
+        # Extension bridge ref for auto header refresh
+        self._extension_bridge = None
         
         # Timer
         self._timer_thread: Optional[threading.Thread] = None
@@ -110,6 +113,10 @@ class CookieRefreshManager:
         This is typically profiles_controller.auto_relogin().
         """
         self._on_auto_relogin = callback
+    
+    def set_extension_bridge(self, bridge):
+        """Set ExtensionBridge reference for auto header refresh."""
+        self._extension_bridge = bridge
     
     def request_refresh(self, email: str, reason: str) -> RefreshRequest:
         """Request a cookie refresh.
@@ -217,6 +224,7 @@ class CookieRefreshManager:
         """Check which sessions need refresh.
         
         Returns list of emails needing refresh.
+        Also triggers extension header refresh for stale headers.
         """
         need_refresh = []
         now = datetime.now()
@@ -226,18 +234,34 @@ class CookieRefreshManager:
             if email in self._pending_requests:
                 continue
             
-            # Check token expiry
+            # Check token expiry — extension will auto-refresh on next API call
             if session.token_expires:
                 time_until_expiry = (session.token_expires - now).total_seconds()
                 if time_until_expiry < self.TOKEN_REFRESH_BUFFER:
-                    self.request_refresh(email, "Token expiring soon")
                     need_refresh.append(email)
                     continue
             
-            # Check reCAPTCHA
-            if session.needs_recaptcha_refresh:
-                self.request_refresh(email, "reCAPTCHA expired")
-                need_refresh.append(email)
+            # reCAPTCHA is on-demand via extension — no proactive refresh needed
+        
+        # Auto-refresh stale extension headers (Fix #6)
+        if self._extension_bridge:
+            for email in self._sessions:
+                headers = self._extension_bridge.get_cached_headers(email, max_age_seconds=240)
+                if headers is None and self._extension_bridge.is_connected(email):
+                    # Headers stale (>12 min) — trigger refresh
+                    try:
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.ensure_future(
+                                self._extension_bridge.refresh_headers(email, timeout=10)
+                            )
+                        else:
+                            loop.run_until_complete(
+                                self._extension_bridge.refresh_headers(email, timeout=10)
+                            )
+                    except Exception:
+                        pass  # Best-effort
         
         return need_refresh
     

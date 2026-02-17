@@ -19,12 +19,12 @@ class ProjectManager:
     Each account (CHỦ) needs a project_id for certain API calls (T2I, etc).
     This class handles:
     - Creating new projects via API
-    - Caching project IDs per email
+    - Caching project IDs per (email, title)
     - Reusing existing project IDs
     """
     
     def __init__(self):
-        self._project_cache: Dict[str, str] = {}  # email → project_id
+        self._project_cache: Dict[str, str] = {}  # "email|title" → project_id
         self._lock = asyncio.Lock()
     
     async def get_or_create_project(
@@ -33,6 +33,7 @@ class ProjectManager:
         access_token: str = "",
         api_client=None,
         trpc_client=None,
+        title: str = "VEO Pro Max",
     ) -> Optional[str]:
         """Get cached project ID or create a new one.
         
@@ -41,30 +42,34 @@ class ProjectManager:
             access_token: Kept for signature compat (not used by TRPC)
             api_client: Legacy param (unused — TRPC doesn't go through REST)
             trpc_client: TRPCClient instance from AccountManager's browser session
+            title: Project title to use when creating (from tab's project name)
         
         Returns:
             project_id string, or None if creation failed
         """
+        cache_key = f"{email}|{title}"
+        
         # Check cache first
-        if email in self._project_cache:
-            return self._project_cache[email]
+        if cache_key in self._project_cache:
+            return self._project_cache[cache_key]
         
         # Create new project via TRPC
         async with self._lock:
             # Double-check after acquiring lock
-            if email in self._project_cache:
-                return self._project_cache[email]
+            if cache_key in self._project_cache:
+                return self._project_cache[cache_key]
             
-            project_id = await self._create_project(trpc_client)
+            project_id = await self._create_project(trpc_client, title=title)
             
             if project_id:
-                self._project_cache[email] = project_id
+                self._project_cache[cache_key] = project_id
             
             return project_id
     
     async def _create_project(
         self,
         trpc_client=None,
+        title: str = "VEO Pro Max",
     ) -> Optional[str]:
         """Create a new VEO project via TRPC.
         
@@ -84,7 +89,7 @@ class ProjectManager:
             return None
         
         try:
-            return await trpc_client.create_project(title="VEO Pro Max")
+            return await trpc_client.create_project(title=title)
         except Exception:
             return None
     

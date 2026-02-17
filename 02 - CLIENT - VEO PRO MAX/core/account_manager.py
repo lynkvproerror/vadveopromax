@@ -80,6 +80,9 @@ class AccountManager:
         
         # ProfilesController ref — set by AppController for debug browser sharing
         self._profiles_controller = None
+        
+        # Extension bridge ref — set by AppController for real-web token extraction
+        self._extension_bridge = None
     
     def set_profiles_controller(self, profiles_controller):
         """Set ProfilesController reference for debug browser sharing."""
@@ -120,6 +123,8 @@ class AccountManager:
         """
         self._enabled = False
         log.info(f"[{self.email}] Account disabled")
+    
+
     
     @property
     def available_slots(self) -> int:
@@ -193,23 +198,69 @@ class AccountManager:
     def get_access_token(self) -> Optional[str]:
         """Get valid access token.
         
-        Returns None if token is expired.
+        Returns None if token is expired and no sync refresh is available.
         Triggers refresh callback if token expiring soon.
         """
         if self._session.is_token_expired:
-            # Token expired, trigger refresh
+            # Token expired, trigger refresh callback (legacy)
             if self._on_token_refresh_needed:
                 self._on_token_refresh_needed(self)
             return None
         
         # Check if nearing expiration (5 min before)
         buffer_check = timedelta(minutes=5)
-        if datetime.now() >= (self._session.token_expires - buffer_check):
+        if self._session.token_expires and datetime.now() >= (self._session.token_expires - buffer_check):
             # Trigger background refresh
             if self._on_token_refresh_needed:
                 self._on_token_refresh_needed(self)
         
         return self._session.access_token
+    
+    async def refresh_access_token(self) -> Optional[str]:
+        """Refresh access token via extension bridge.
+        
+        Called when get_access_token() returns None (expired).
+        Extension extracts fresh token from __NEXT_DATA__ on the VEO page.
+        If page token is also stale, triggers tab reload first.
+        
+        Returns:
+            Fresh access token, or None if all sources exhausted.
+        """
+        # Priority 1: Extension bridge (extract from live VEO page)
+        if self._extension_bridge and self._extension_bridge.is_connected(self.email):
+            try:
+                result = await self._extension_bridge.request_access_token(self.email, timeout=10)
+                if result and result.get('token'):
+                    token = result['token']
+                    # Update session with fresh token (assume ~55 min lifetime)
+                    self._session.access_token = token
+                    self._session.token_expires = datetime.now() + timedelta(minutes=55)
+                    log.info(f"[{self.email}] 🔑 Access token refreshed via Extension bridge")
+                    return token
+                
+                # Token from page was also stale — reload tab and try again
+                log.info(f"[{self.email}] Page token stale, triggering tab reload...")
+                await self._extension_bridge.refresh_headers(self.email, timeout=15)
+                # Wait for page to reload and re-render __NEXT_DATA__
+                await asyncio.sleep(3)
+                
+                result = await self._extension_bridge.request_access_token(self.email, timeout=10)
+                if result and result.get('token'):
+                    token = result['token']
+                    self._session.access_token = token
+                    self._session.token_expires = datetime.now() + timedelta(minutes=55)
+                    log.info(f"[{self.email}] 🔑 Access token refreshed after tab reload")
+                    return token
+                    
+            except Exception as e:
+                log.warning(f"[{self.email}] Extension access token refresh failed: {e}")
+        
+        # Priority 2: Check if token became valid (e.g., refreshed by another path)
+        if not self._session.is_token_expired:
+            return self._session.access_token
+        
+        log.error(f"[{self.email}] ❌ Access token refresh failed — all sources exhausted")
+        return None
     
     def get_recaptcha_token(self) -> Optional[str]:
         """Get valid reCAPTCHA token from cache or session.
@@ -242,33 +293,34 @@ class AccountManager:
         log.debug(f"[{self.email}] reCAPTCHA token invalidated (single-use consumed)")
 
     async def refresh_recaptcha(self) -> Optional[str]:
-        """Get fresh reCAPTCHA token from alive browser.
-        
-        This is the CORRECT way to refresh reCAPTCHA:
-        - Browser is already on VEO page (persistent session)
-        - Calls grecaptcha.execute() directly (~100-500ms)
-        - Updates both TokenCache and AccountSession
+        """Get fresh reCAPTCHA token via Extension bridge (extension-only).
         
         Returns:
-            Fresh reCAPTCHA token, or None if browser is not available
+            Fresh reCAPTCHA token, or None if extension not connected.
         """
-        if not self._browser_session or not self._browser_session.is_ready:
-            log.warning(f"[{self.email}] Browser not ready for reCAPTCHA refresh")
-            # Fallback: fire old callback if exists
-            if self._on_recaptcha_refresh_needed:
-                self._on_recaptcha_refresh_needed(self)
+        if not self._extension_bridge:
+            log.warning(f"[{self.email}] ❌ Extension bridge NOT SET on AccountManager — cannot get reCAPTCHA")
+            return None
+        if not self._extension_bridge.is_connected(self.email):
+            connected_emails = self._extension_bridge.get_connected_emails()
+            conn_count = len(self._extension_bridge._connections)
+            log.warning(
+                f"[{self.email}] ❌ Extension not connected for this email — "
+                f"bridge has {conn_count} connection(s), registered emails: {connected_emails}"
+            )
             return None
         
         try:
-            token = await self._browser_session.get_recaptcha_token()
+            token = await self._extension_bridge.request_recaptcha(self.email, timeout=15)
             if token:
                 self._token_cache.set(token)
                 self._session.update_recaptcha(token)
-                log.info(f"[{self.email}] reCAPTCHA refreshed via persistent browser")
-            return token
+                log.info(f"[{self.email}] 🧩 reCAPTCHA refreshed via Extension bridge")
+                return token
+            log.warning(f"[{self.email}] Extension bridge returned no reCAPTCHA token")
         except Exception as e:
-            log.error(f"[{self.email}] reCAPTCHA refresh failed: {e}")
-            return None
+            log.warning(f"[{self.email}] Extension reCAPTCHA failed: {e}")
+        return None
     
     async def ensure_browser(self, headless: bool = True):
         """Start persistent browser if not running.
@@ -336,6 +388,9 @@ class AccountManager:
                         log.info(f"[{self.email}] ✅ Access token extracted from debug browser ({len(access_token)} chars)")
                     else:
                         log.warning(f"[{self.email}] ⚠️ Could not extract access_token from debug browser")
+                
+                # Warmup: simulate human activity for reCAPTCHA trust
+                await self._browser_session.warmup()
                 return
         
         # Priority 2: Launch own headless browser (no debug browser available)
@@ -366,16 +421,41 @@ class AccountManager:
             )
             log.info(f"[{self.email}] Browser headers captured: {list(headers.keys())}")
     
+    async def soft_recover_browser(self):
+        """Soft recovery: navigate away and back WITHOUT killing Chrome.
+        
+        First-tier recovery for reCAPTCHA 403 failures.
+        Keeps browser process alive, just reloads the page + warms up.
+        
+        Returns:
+            True if recovery successful, False otherwise
+        """
+        email = self.email
+        log.info(f"[{email}] 🔄 Soft browser recovery (no kill)...")
+        
+        if not self._browser_session:
+            log.warning(f"[{email}] No browser session for soft recovery")
+            return False
+        
+        # Invalidate reCAPTCHA token (force fresh request)
+        self._session.recaptcha_token = None
+        self._token_cache = TokenCache()
+        
+        try:
+            result = await self._browser_session.soft_recovery()
+            if result:
+                log.info(f"[{email}] ✅ Soft recovery complete")
+            else:
+                log.warning(f"[{email}] ⚠️ Soft recovery returned False")
+            return result
+        except Exception as e:
+            log.error(f"[{email}] ❌ Soft recovery failed: {e}")
+            return False
+    
     async def restart_browser(self):
         """Kill Chrome process completely and relaunch for fresh session.
         
-        Full restart sequence:
-        1. Close session wrapper (RecaptchaBrowserSession)
-        2. Kill Chrome process via profiles_controller
-        3. Wait for process to fully exit
-        4. Relaunch Chrome via profiles_controller
-        5. Wait for debug browser to be ready
-        6. Re-attach via ensure_browser() (re-extracts tokens/headers)
+        Uses profiles_controller to kill/relaunch the debug browser.
         
         Returns:
             True if restart successful, False otherwise
@@ -391,53 +471,57 @@ class AccountManager:
                 pass
             self._browser_session = None
         
-        # Step 2: Kill Chrome process via profiles_controller
+        # Step 2+3: Kill and relaunch Chrome via profiles_controller
         if self._profiles_controller:
             try:
                 self._profiles_controller.kill_debug_browser(email)
                 log.info(f"[{email}] Chrome kill signal sent")
             except Exception as e:
                 log.error(f"[{email}] kill_debug_browser error: {e}")
-        
-        # Step 3: Wait for Chrome to fully exit
-        await asyncio.sleep(3)
-        
-        # Step 4: Invalidate cached tokens (force fresh extraction)
-        self._session.access_token = None
-        self._session.token_expires = None
-        self._session.recaptcha_token = None
-        self._token_cache = TokenCache()
-        
-        # Step 5: Relaunch Chrome via profiles_controller
-        if self._profiles_controller:
+            
+            await asyncio.sleep(3)
+            
             try:
                 self._profiles_controller.open_browser_for_debug(email)
                 log.info(f"[{email}] Chrome relaunch signal sent, waiting for ready...")
-                # Wait for debug browser to initialize
-                await asyncio.sleep(5)
+                await asyncio.sleep(10)
             except Exception as e:
                 log.error(f"[{email}] open_browser_for_debug error: {e}")
                 return False
         
-        # Step 6: Re-attach via ensure_browser (extracts fresh token + headers)
+        # Step 4: Invalidate cached tokens AND browser headers (force fresh extraction)
+        saved_client_data = self._session.client_data or ""
+        self._session.access_token = None
+        self._session.token_expires = None
+        self._session.recaptcha_token = None
+        self._session.client_data = ""          # Must clear to accept new value
+        self._session.browser_validation = ""   # Also browser-specific
+        self._session.browser_copyright = ""
+        self._session.browser_year = ""
+        self._token_cache = TokenCache()
+        
+        # Step 5: Re-attach via ensure_browser (extracts fresh token + headers)
         try:
             await self.ensure_browser(headless=True)
             
-            # Step 7: Re-capture headers if x-client-data still looks truncated
-            # Chrome's Variations Service may need more time after restart
+            # Step 6: Fix x-client-data if new browser value is too short
+            # Chrome Variations Service may not have loaded yet → short value.
+            # Restore cached pre-restart value if it was good and new is short.
             current_cd = self._session.client_data or ""
-            if len(current_cd) < 20 and self._profiles_controller:
-                log.info(f"[{email}] x-client-data short ({len(current_cd)} chars), "
-                         f"waiting for Variations Service...")
-                await asyncio.sleep(5)
-                headers = self._profiles_controller.get_debug_browser_headers(email)
-                new_cd = headers.get("x-client-data", "")
-                if len(new_cd) >= 20:
-                    self._session.client_data = new_cd
-                    log.info(f"[{email}] ✅ x-client-data refreshed ({len(new_cd)} chars)")
-                else:
-                    log.warning(f"[{email}] ⚠️ x-client-data still short after retry "
-                                f"({len(new_cd)} chars)")
+            MIN_GOOD = 20  # Full x-client-data is typically 50+ chars
+            if len(current_cd) < MIN_GOOD and len(saved_client_data) >= MIN_GOOD:
+                log.info(
+                    f"[{email}] Restoring cached x-client-data "
+                    f"({len(saved_client_data)} chars, new was {len(current_cd)} chars)"
+                )
+                self._session.client_data = saved_client_data
+            elif len(current_cd) < MIN_GOOD:
+                log.warning(
+                    f"[{email}] ⚠️ x-client-data short ({len(current_cd)} chars) — "
+                    f"Engine will borrow from pool after restart"
+                )
+            else:
+                log.info(f"[{email}] x-client-data OK ({len(current_cd)} chars)")
             
             log.info(f"[{email}] ✅ Browser restart complete — fresh PID, tokens, reCAPTCHA")
             return True
@@ -452,23 +536,19 @@ class AccountManager:
             self._browser_session = None
     
     def get_api_headers(self) -> dict:
-        """Get per-account x-browser-* headers for API calls.
+        """Get per-account x-browser-* headers for API calls (extension-only).
         
         Returns dict suitable for passing as account_headers to VEOApiClient.
-        Delegates to AccountSession.get_browser_headers().
+        Source: Extension bridge cached headers only.
         """
-        return self._session.get_browser_headers()
+        return self.get_browser_headers()
     
     def get_browser_headers(self) -> dict:
-        """Get x-browser-* headers from persistent browser."""
-        # Try browser session first (works for Priority 2: own headless browser)
-        if self._browser_session:
-            headers = self._browser_session.captured_headers
-            if headers:
-                return headers
-        # Fallback to profiles_controller (for Priority 1: debug browser)
-        if self._profiles_controller:
-            return self._profiles_controller.get_debug_browser_headers(self.email)
+        """Get x-browser-* headers from Extension bridge (extension-only)."""
+        if self._extension_bridge:
+            ext_headers = self._extension_bridge.get_cached_headers(self.email)
+            if ext_headers:
+                return ext_headers
         return {}
     
     def update_access_token(self, token: str, expires_in: int = TokenLifetime.ACCESS_TOKEN):

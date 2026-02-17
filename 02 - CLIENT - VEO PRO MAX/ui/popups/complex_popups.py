@@ -376,10 +376,12 @@ class ImageManagerPopup(BasePopup):
     """Image Library Manager popup (PySide6).
     
     Features:
+    - Non-modal: does not block main app interaction
     - Browse images with thumbnails in a scrollable grid
     - Filter by category (dynamic from library)
     - Search by tag or filename
-    - Add images via file dialog
+    - Add images via file dialog or drag from Explorer
+    - Drag images from popup into prompt thumbnails
     - Delete images
     - Edit tags on images
     - Select image → insert [tag] into prompt (on_select callback)
@@ -399,6 +401,16 @@ class ImageManagerPopup(BasePopup):
         self._cat_buttons: Dict[str, QPushButton] = {}
         
         super().__init__(parent, title="📂 Image Library", width=800, height=550)
+        
+        # Make non-modal so user can interact with main app
+        self.setModal(False)
+        # Use native title bar instead of custom header
+        self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+        self.header.hide()  # Hide redundant custom header
+        self.footer.hide()  # Hide redundant Close button
+        # Allow resizing
+        self.setMinimumSize(600, 400)
+        self.setMaximumSize(1200, 800)
         
         # Load library and populate
         self._init_library()
@@ -524,12 +536,13 @@ class ImageManagerPopup(BasePopup):
         
         layout.addLayout(toolbar)
         
-        # Scrollable grid
+        # Scrollable grid with drop support
         self._grid_scroll = QScrollArea()
         self._grid_scroll.setStyleSheet(f"background-color: {Theme.SURFACE0};")
         self._grid_scroll.setWidgetResizable(True)
+        self._grid_scroll.setAcceptDrops(True)
         
-        self._grid_widget = QWidget()
+        self._grid_widget = _DroppableGridWidget(self)
         self._grid_layout = QGridLayout(self._grid_widget)
         self._grid_layout.setSpacing(8)
         self._grid_layout.setContentsMargins(8, 8, 8, 8)
@@ -604,90 +617,71 @@ class ImageManagerPopup(BasePopup):
             self._grid_layout.addWidget(card, row, col)
     
     def _create_image_card(self, img) -> QFrame:
-        """Create a single image card widget."""
+        """Create a single draggable image card widget."""
         from PySide6.QtGui import QPixmap
         
-        card = QFrame()
-        card.setFixedSize(self.THUMB_SIZE + 16, self.THUMB_SIZE + 50)
-        card.setStyleSheet(f"""
-            QFrame {{
-                background-color: {Theme.SURFACE1};
-                border: 1px solid {Theme.BORDER};
-                border-radius: 4px;
-            }}
-            QFrame:hover {{
-                border-color: {Theme.BLUE};
-            }}
-        """)
-        card.setCursor(Qt.PointingHandCursor)
-        
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(2)
+        tag_text = img.tags[0] if img.tags else img.filename
+        card = _DraggableImageCard(img.path, tag_text, self.THUMB_SIZE)
         
         # Thumbnail
-        thumb = QLabel()
-        thumb.setFixedSize(self.THUMB_SIZE, self.THUMB_SIZE)
-        thumb.setAlignment(Qt.AlignCenter)
-        thumb.setStyleSheet("border: none; background: transparent;")
-        
         pixmap = QPixmap(img.path)
         if not pixmap.isNull():
             scaled = pixmap.scaled(self.THUMB_SIZE, self.THUMB_SIZE,
                                    Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            thumb.setPixmap(scaled)
+            card.thumb.setPixmap(scaled)
         else:
-            thumb.setText("🖼️")
-            thumb.setStyleSheet(f"border: none; color: {Theme.OVERLAY0}; font-size: 28px;")
+            card.thumb.setText("🖼️")
+            card.thumb.setStyleSheet(f"border: none; color: {Theme.OVERLAY0}; font-size: 28px;")
         
-        layout.addWidget(thumb)
+        # Double-click thumbnail for full-size preview
+        card.thumb.mouseDoubleClickEvent = lambda e, p=img.path: self._show_preview(p)
+        card.thumb.setCursor(Qt.PointingHandCursor)
         
-        # Tag label (first tag or filename)
-        tag_text = img.tags[0] if img.tags else img.filename
-        tag_label = QLabel(tag_text)
-        tag_label.setAlignment(Qt.AlignCenter)
-        tag_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 10px; border: none;")
-        tag_label.setToolTip(f"Tags: {', '.join(img.tags)}\nPath: {img.path}")
-        tag_label.setWordWrap(False)
-        layout.addWidget(tag_label)
+        # Tag label tooltip
+        card.tag_label.setToolTip(
+            f"Tags: {', '.join(img.tags)}\nCategory: {img.category}\nPath: {img.path}"
+            f"\n\n💡 Drag to prompt | Double-click to preview")
         
-        # Action buttons row
+        # Action buttons row 1: Select + Edit + Delete
         btn_row = QHBoxLayout()
         btn_row.setSpacing(2)
         
+        _btn_base = "border: none; border-radius: 3px; font-size: 12px; font-weight: bold; padding: 0px;"
+        
         # Select button
-        select_btn = QPushButton("✓")
-        select_btn.setFixedSize(24, 20)
-        select_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.GREEN};
-                color: {Theme.CRUST};
-                border: none; border-radius: 3px;
-                font-size: 11px; font-weight: bold;
-            }}
-            QPushButton:hover {{ background-color: #B8F0B2; }}
-        """)
+        select_btn = QPushButton("S")
+        select_btn.setFixedSize(28, 20)
+        select_btn.setStyleSheet(
+            f"QPushButton {{ background: {Theme.GREEN}; color: #ffffff; {_btn_base} }}"
+            f"QPushButton:hover {{ background: #B8F0B2; }}"
+        )
         select_btn.setToolTip("Select this image")
         select_btn.clicked.connect(lambda _, t=tag_text: self._on_image_select(t))
         btn_row.addWidget(select_btn)
         
+        # Edit tags button
+        edit_btn = QPushButton("E")
+        edit_btn.setFixedSize(28, 20)
+        edit_btn.setStyleSheet(
+            f"QPushButton {{ background: {Theme.BLUE}; color: #ffffff; {_btn_base} }}"
+            f"QPushButton:hover {{ background: #89B4FA; }}"
+        )
+        edit_btn.setToolTip("Edit tags / Move category")
+        edit_btn.clicked.connect(lambda _, iid=img.id, itags=img.tags, icat=img.category: self._on_edit_image(iid, itags, icat))
+        btn_row.addWidget(edit_btn)
+        
         # Delete button
-        del_btn = QPushButton("✕")
-        del_btn.setFixedSize(24, 20)
-        del_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.RED};
-                color: {Theme.CRUST};
-                border: none; border-radius: 3px;
-                font-size: 11px; font-weight: bold;
-            }}
-            QPushButton:hover {{ background-color: #EBA0AC; }}
-        """)
+        del_btn = QPushButton("X")
+        del_btn.setFixedSize(28, 20)
+        del_btn.setStyleSheet(
+            f"QPushButton {{ background: {Theme.RED}; color: #ffffff; {_btn_base} }}"
+            f"QPushButton:hover {{ background: #EBA0AC; }}"
+        )
         del_btn.setToolTip("Delete from library")
         del_btn.clicked.connect(lambda _, iid=img.id: self._on_delete_image(iid))
         btn_row.addWidget(del_btn)
         
-        layout.addLayout(btn_row)
+        card.card_layout.addLayout(btn_row)
         
         return card
     
@@ -706,12 +700,37 @@ class ImageManagerPopup(BasePopup):
             self, "Select Images", "",
             "Image files (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tiff);;All files (*.*)"
         )
-        if files and self._library:
-            for f in files:
-                tag = Path(f).stem
-                cat = self._selected_category if self._selected_category != "All" else "All"
-                self._library.add_image(f, tags=[tag], category=cat)
-            self._reload_grid()
+        self._add_files_to_library(files)
+    
+    def _add_files_to_library(self, files):
+        """Add image files to library with optional tag input."""
+        if not files or not self._library:
+            return
+        IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff'}
+        valid_files = [f for f in files if Path(f).suffix.lower() in IMAGE_EXTS]
+        if not valid_files:
+            return
+        
+        # Ask user for tags (comma separated)
+        from PySide6.QtWidgets import QInputDialog
+        default_tags = ", ".join(Path(f).stem for f in valid_files[:3])
+        if len(valid_files) > 3:
+            default_tags += ", ..."
+        tags_text, ok = QInputDialog.getText(
+            self, "Add Tags",
+            f"Tags for {len(valid_files)} image(s) (comma separated):",
+            text=default_tags
+        )
+        
+        cat = self._selected_category if self._selected_category != "All" else "All"
+        
+        for f in valid_files:
+            if ok and tags_text.strip():
+                tags = [t.strip() for t in tags_text.split(",") if t.strip()]
+            else:
+                tags = [Path(f).stem]
+            self._library.add_image(f, tags=tags, category=cat)
+        self._reload_grid()
     
     def _on_delete_image(self, image_id: str):
         """Delete image from library."""
@@ -727,11 +746,202 @@ class ImageManagerPopup(BasePopup):
             self._library.add_category(name.strip())
             self._reload_grid()
     
+    def _on_edit_image(self, image_id: str, current_tags: list, current_cat: str):
+        """Edit tags and category for an image."""
+        from PySide6.QtWidgets import QInputDialog, QDialog, QDialogButtonBox, QComboBox
+        
+        # Create a small edit dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("✏️ Edit Image")
+        dialog.setFixedSize(350, 180)
+        dialog.setStyleSheet(f"background-color: {Theme.BASE}; color: {Theme.TEXT};")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+        
+        # Tags input
+        tag_label = QLabel("Tags (comma separated):")
+        tag_label.setStyleSheet(f"color: {Theme.TEXT};")
+        layout.addWidget(tag_label)
+        
+        tag_input = QLineEdit(", ".join(current_tags))
+        tag_input.setMinimumHeight(32)
+        layout.addWidget(tag_input)
+        
+        # Category combo
+        cat_label = QLabel("Category:")
+        cat_label.setStyleSheet(f"color: {Theme.TEXT};")
+        layout.addWidget(cat_label)
+        
+        cat_combo = QComboBox()
+        cat_combo.setStyleSheet(f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT};")
+        if self._library:
+            for cat in self._library.get_categories():
+                cat_combo.addItem(cat)
+            idx = cat_combo.findText(current_cat)
+            if idx >= 0:
+                cat_combo.setCurrentIndex(idx)
+        layout.addWidget(cat_combo)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.Accepted and self._library:
+            # Update tags
+            new_tags = [t.strip() for t in tag_input.text().split(",") if t.strip()]
+            if new_tags:
+                self._library.update_image_tags(image_id, new_tags)
+            # Update category
+            new_cat = cat_combo.currentText()
+            if new_cat != current_cat:
+                self._library.update_image_category(image_id, new_cat)
+            self._reload_grid()
+    
+    def _show_preview(self, image_path: str):
+        """Show full-size image preview dialog."""
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtWidgets import QDialog
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"🖼️ {Path(image_path).name}")
+        dialog.setStyleSheet(f"background-color: {Theme.CRUST};")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(4, 4, 4, 4)
+        
+        pixmap = QPixmap(image_path)
+        if not pixmap.isNull():
+            # Scale to fit screen but max 800x600
+            scaled = pixmap.scaled(800, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            label = QLabel()
+            label.setPixmap(scaled)
+            label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(label)
+            dialog.setFixedSize(scaled.width() + 8, scaled.height() + 8)
+        else:
+            label = QLabel("Cannot load image")
+            label.setStyleSheet(f"color: {Theme.RED};")
+            label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(label)
+        
+        dialog.exec()
+    
     def _on_image_select(self, tag: str):
-        """Handle image selection — callback to insert [tag] in prompt."""
+        """Handle image selection — insert [tag] in prompt without closing."""
         if self._on_select:
             self._on_select(tag)
-        self._on_close()
+
+
+class _DraggableImageCard(QFrame):
+    """Image card that supports drag-out to prompt thumbnails."""
+    
+    def __init__(self, image_path: str, tag_text: str, thumb_size: int = 100):
+        super().__init__()
+        self._image_path = image_path
+        self._tag_text = tag_text
+        self._drag_start_pos = None
+        
+        self.setFixedSize(thumb_size + 16, thumb_size + 50)
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {Theme.SURFACE1};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+            }}
+            QFrame:hover {{
+                border-color: {Theme.BLUE};
+            }}
+        """)
+        self.setCursor(Qt.PointingHandCursor)
+        
+        self.card_layout = QVBoxLayout(self)
+        self.card_layout.setContentsMargins(4, 4, 4, 4)
+        self.card_layout.setSpacing(2)
+        
+        # Thumbnail label
+        self.thumb = QLabel()
+        self.thumb.setFixedSize(thumb_size, thumb_size)
+        self.thumb.setAlignment(Qt.AlignCenter)
+        self.thumb.setStyleSheet("border: none; background: transparent;")
+        self.card_layout.addWidget(self.thumb)
+        
+        # Tag label
+        self.tag_label = QLabel(tag_text)
+        self.tag_label.setAlignment(Qt.AlignCenter)
+        self.tag_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 10px; border: none;")
+        self.tag_label.setWordWrap(False)
+        self.card_layout.addWidget(self.tag_label)
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton) or self._drag_start_pos is None:
+            return
+        
+        # Check minimum drag distance
+        distance = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
+        from PySide6.QtWidgets import QApplication
+        if distance < QApplication.startDragDistance():
+            return
+        
+        from PySide6.QtGui import QDrag, QPixmap
+        from PySide6.QtCore import QMimeData, QUrl
+        
+        drag = QDrag(self)
+        mime = QMimeData()
+        
+        # Set file URL so ImageSlotWidget can accept it
+        mime.setUrls([QUrl.fromLocalFile(self._image_path)])
+        mime.setText(self._tag_text)
+        drag.setMimeData(mime)
+        
+        # Create drag pixmap from thumbnail
+        if self.thumb.pixmap() and not self.thumb.pixmap().isNull():
+            drag.setPixmap(self.thumb.pixmap().scaled(
+                64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        
+        drag.exec(Qt.CopyAction)
+        self._drag_start_pos = None
+
+
+class _DroppableGridWidget(QWidget):
+    """Grid widget that accepts image drops from Explorer."""
+    
+    IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff'}
+    
+    def __init__(self, popup: ImageManagerPopup):
+        super().__init__()
+        self._popup = popup
+        self.setAcceptDrops(True)
+    
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    ext = Path(url.toLocalFile()).suffix.lower()
+                    if ext in self.IMAGE_EXTS:
+                        event.acceptProposedAction()
+                        return
+        event.ignore()
+    
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            files = []
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    files.append(url.toLocalFile())
+            if files:
+                self._popup._add_files_to_library(files)
+                event.acceptProposedAction()
+                return
+        event.ignore()
 
 
 class LicenseExpirationDialog(BasePopup):

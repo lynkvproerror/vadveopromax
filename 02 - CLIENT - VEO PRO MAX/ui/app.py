@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QFrame, QStatusBar, QSizePolicy
 )
-from PySide6.QtCore import Qt, Slot, Signal
+from PySide6.QtCore import Qt, Slot, Signal, QTimer
 from PySide6.QtGui import QFont, QShortcut, QKeySequence
 
 # Add project root to path if needed
@@ -57,6 +57,9 @@ class MainWindow(QMainWindow):
     
     # Thread-safe toast signal: (message, level, duration)
     _toast_signal = Signal(str, str, int)
+    
+    # Thread-safe network status signal: (latency_ms, online)
+    _net_signal = Signal(int, bool)
     
     def __init__(
         self,
@@ -153,6 +156,7 @@ class MainWindow(QMainWindow):
         # Toast notification manager
         self._toast_manager = ToastManager(self)
         self._toast_signal.connect(self._show_toast_on_main_thread)
+        self._net_signal.connect(self._update_network_signal)
     
     def _create_status_bar(self):
         """Create status bar at bottom."""
@@ -166,18 +170,19 @@ class MainWindow(QMainWindow):
         """)
         self.setStatusBar(status_bar)
         
-        # Left side: status message
-        self.status_label = QLabel("Ready")
-        status_bar.addWidget(self.status_label, stretch=1)
+        # Left side: license status
+        license_label = QLabel("🔑 N/A")
+        license_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-right: 8px;")
+        status_bar.addWidget(license_label, stretch=1)
+        self._status_widgets["license"] = license_label
         
         # Right side: permanent widgets
         items = [
-            ("version", "v2.0.0"),
-            ("license", "🔑 N/A"),
+            ("network", "📶 --"),
+            ("version", f"v{self._get_version()}"),
             ("accounts", "🔄 0/0"),
             ("queue", "📋 0"),
             ("memory", "💾 0 MB"),
-            ("progress", "📊 0%"),
         ]
         
         for key, text in items:
@@ -185,6 +190,56 @@ class MainWindow(QMainWindow):
             label.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-right: 8px;")
             status_bar.addPermanentWidget(label)
             self._status_widgets[key] = label
+    
+    def _update_network_signal(self, latency_ms: int, online: bool):
+        """Update network signal widget based on latency."""
+        label = self._status_widgets.get("network")
+        if not label:
+            return
+        if not online:
+            label.setText("❌ Offline")
+            label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px;")
+        elif latency_ms < 100:
+            label.setText(f"📶 {latency_ms}ms")
+            label.setStyleSheet(f"color: {Theme.GREEN}; margin-right: 8px;")
+        elif latency_ms < 300:
+            label.setText(f"📶 {latency_ms}ms")
+            label.setStyleSheet(f"color: {Theme.YELLOW}; margin-right: 8px;")
+        elif latency_ms < 1000:
+            label.setText(f"⚠️ {latency_ms}ms")
+            label.setStyleSheet(f"color: {Theme.PEACH}; margin-right: 8px;")
+        else:
+            label.setText(f"❌ {latency_ms}ms")
+            label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px;")
+    
+    def _check_connectivity_async(self):
+        """Check internet connectivity in a background thread (non-blocking)."""
+        import socket
+        import time
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def _tcp_check():
+            try:
+                start = time.monotonic()
+                sock = socket.create_connection(("8.8.8.8", 53), timeout=3)
+                sock.close()
+                return int((time.monotonic() - start) * 1000), True
+            except Exception:
+                return 9999, False
+        
+        def _on_done(future):
+            try:
+                latency_ms, online = future.result()
+            except Exception:
+                latency_ms, online = 9999, False
+            # Emit signal — safe from any thread, delivers to Qt main thread
+            self._net_signal.emit(latency_ms, online)
+        
+        if not hasattr(self, '_net_executor'):
+            self._net_executor = ThreadPoolExecutor(max_workers=1)
+        
+        future = self._net_executor.submit(_tcp_check)
+        future.add_done_callback(_on_done)
     
     def _bind_hotkeys(self):
         """Bind keyboard shortcuts."""
@@ -208,7 +263,7 @@ class MainWindow(QMainWindow):
                     self.controller.stop_perf_timer()
                 if hasattr(self.controller, '_dev_console'):
                     self.controller._dev_console = None
-            self.set_status("DevConsole hidden")
+            self.show_toast("DevConsole hidden", "info")
         else:
             # Add dev console tab (use actual migrated TabDevConsole)
             dev_widget = TabDevConsole(controller=self.controller)
@@ -223,6 +278,8 @@ class MainWindow(QMainWindow):
                 # Immediately push current browser status + session data + queue state
                 self.controller._push_browser_status()
                 self.controller._push_session_data()
+                self.controller._push_pool_status()
+                self.controller._push_extension_status()
                 self.controller._notify_queue_updated()
                 self.controller.start_perf_timer()
             
@@ -235,13 +292,10 @@ class MainWindow(QMainWindow):
             return
         
         # === CONTROLLER → UI CALLBACKS ===
-        # Status updates
-        self.controller.set_status_callback(self.set_status)
-        
         # Queue updates
         self.controller.set_queue_updated_callback(self._update_queue_status)
         
-        # Task progress
+        # Task progress (forward to queue tab only)
         self.controller.set_progress_callback(self._on_progress)
         
         # Task completed/failed
@@ -250,6 +304,16 @@ class MainWindow(QMainWindow):
         
         # Group completed (notification)
         self.controller.set_group_completed_callback(self._on_group_completed)
+        
+        # === INITIAL STATUS BAR DATA ===
+        self._update_license_widget()
+        self._poll_status_bar()  # Initial populate
+        
+        # === STATUS BAR POLLING TIMER (5s) ===
+        self._status_timer = QTimer(self)
+        self._status_timer.setInterval(5000)
+        self._status_timer.timeout.connect(self._poll_status_bar)
+        self._status_timer.start()
         
         # === UI → CONTROLLER SIGNAL CONNECTIONS ===
         self._connect_tab_signals()
@@ -275,13 +339,7 @@ class MainWindow(QMainWindow):
     
     @Slot(str, int)
     def _on_progress(self, task_id: str, progress: int, status_text: str = ""):
-        """Handle task progress update — status bar + forward to queue tab."""
-        if "progress" in self._status_widgets:
-            if status_text:
-                self._status_widgets["progress"].setText(f"📊 {status_text} {progress}%")
-            else:
-                self._status_widgets["progress"].setText(f"📊 {progress}%")
-        
+        """Handle task progress update — forward to queue tab."""
         # Forward to queue tab for thumbnail slot gradient updates
         queue_tab = self.tab_instances.get('queue')
         if queue_tab and hasattr(queue_tab, '_on_progress_update_from_thread'):
@@ -296,7 +354,7 @@ class MainWindow(QMainWindow):
         prompt = getattr(task, 'prompt', '')
         prompt_short = prompt[:40] + '...' if len(prompt) > 40 else prompt
         
-        self.set_status(f"✅ [{project}] #{idx} completed")
+        # Toast notification only (status_label removed)
         if not self.settings or getattr(self.settings, 'notify_toast_enabled', True):
             self.show_toast(f"✅ [{project}] #{idx}: \"{prompt_short}\"", "success")
     
@@ -307,7 +365,7 @@ class MainWindow(QMainWindow):
         idx = getattr(task, 'prompt_index', 0) + 1
         error_short = error[:50] + '...' if len(error) > 50 else error
         
-        self.set_status(f"❌ [{project}] #{idx} failed: {error_short}")
+        # Toast notification only (status_label removed)
         if not self.settings or getattr(self.settings, 'notify_toast_enabled', True):
             self.show_toast(f"❌ [{project}] #{idx}: {error_short}", "error")
     
@@ -350,12 +408,6 @@ class MainWindow(QMainWindow):
         if "queue" in self._status_widgets:
             total = status.get("total", 0)
             self._status_widgets["queue"].setText(f"📋 {total}")
-        
-        if "progress" in self._status_widgets:
-            completed = status.get("completed", 0)
-            total = status.get("total", 1) or 1
-            pct = int((completed / total) * 100) if total > 0 else 0
-            self._status_widgets["progress"].setText(f"📊 {pct}%")
     
     def update_account_status(self, active: int, total: int):
         """Update account status in status bar."""
@@ -367,12 +419,71 @@ class MainWindow(QMainWindow):
         if "license" in self._status_widgets:
             self._status_widgets["license"].setText(f"🔑 {status}")
     
-    def set_status(self, message: str):
-        """Update status bar message."""
+    def _update_license_widget(self):
+        """Read license status from controller and update widget."""
+        if not self.controller or not hasattr(self.controller, 'get_license_status'):
+            return
         try:
-            self.status_label.setText(message)
-        except RuntimeError:
+            ls = self.controller.get_license_status()
+            if ls.get("is_licensed"):
+                tier = ls.get("tier", "PRO")
+                self.update_license_status(tier)
+            elif ls.get("is_trial"):
+                days = ls.get("days_remaining", 0)
+                self.update_license_status(f"Trial ({days}d)")
+            else:
+                self.update_license_status("N/A")
+        except Exception:
             pass
+    
+    def _poll_status_bar(self):
+        """Poll live data for status bar widgets (called by QTimer every 5s)."""
+        if not self.controller:
+            return
+        
+        # Accounts: ready / total
+        try:
+            acc = self.controller.get_account_summary()
+            self.update_account_status(acc["ready"], acc["total"])
+        except Exception:
+            pass
+        
+        # Memory
+        self._update_memory()
+        
+        # Network connectivity (threaded to avoid blocking UI)
+        self._check_connectivity_async()
+        
+        # Worker pool status → DevConsole
+        if hasattr(self.controller, '_push_pool_status'):
+            self.controller._push_pool_status()
+    
+    def _update_memory(self):
+        """Update memory usage in status bar."""
+        try:
+            import psutil
+            process = psutil.Process()
+            mb = process.memory_info().rss / (1024 * 1024)
+            if "memory" in self._status_widgets:
+                self._status_widgets["memory"].setText(f"💾 {mb:.0f} MB")
+        except Exception:
+            pass
+    
+    @staticmethod
+    def _get_version() -> str:
+        """Read version from pyproject.toml."""
+        try:
+            import tomllib
+            toml_path = Path(__file__).parent.parent / "pyproject.toml"
+            with open(toml_path, "rb") as f:
+                data = tomllib.load(f)
+            return data.get("project", {}).get("version", "?.?.?")
+        except Exception:
+            return "?.?.?"
+    
+    def set_status(self, message: str):
+        """Update status bar message (no-op, status_label removed)."""
+        pass
     
     def show_toast(self, message: str, level: str = "info", duration: int = 4000):
         """Show a floating toast notification (thread-safe).
@@ -427,7 +538,7 @@ class MainWindow(QMainWindow):
             for key, tab_data in tabs_data.items():
                 tab = self.tab_instances.get(key)
                 if tab and hasattr(tab, 'restore_state'):
-                    tab.restore_state(tab_data)
+                    tab.restore_state(tab_data, restore_options=self.settings)
             
             queue_count = data.get("queue", {}).get("task_count", 0)
             saved_at = data.get("saved_at", "unknown")

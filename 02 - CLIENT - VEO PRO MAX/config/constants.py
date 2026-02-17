@@ -284,7 +284,7 @@ class AppConstants:
     DOWNLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
     
     # Polling
-    POLL_INTERVAL = 15         # seconds (matches n8n workflow)
+    POLL_INTERVAL = 30         # seconds (reduced traffic to avoid reCAPTCHA 403)
     MAX_POLL_TIME = 600        # 10 minutes
     
     # Trial limits

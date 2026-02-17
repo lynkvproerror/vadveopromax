@@ -49,6 +49,7 @@ class ImageSlotWidget(QFrame):
         label: str = "",
         parent=None,
         accent_color: str = "",
+        slot_size: int = 0,
     ):
         super().__init__(parent)
         self._label_text = label
@@ -57,8 +58,17 @@ class ImageSlotWidget(QFrame):
         self._image_path: str = ""
         self._library = None  # Lazy init to avoid circular import
         
+        # Allow custom sizing for compact layouts
+        if slot_size > 0:
+            self.SLOT_SIZE = slot_size
+            self.THUMB_SIZE = max(slot_size - 12, 20)
+            # Compact label height for mini slots
+            self._label_h = 14 if slot_size <= 50 else 20
+        else:
+            self._label_h = 28
+        
         self.setAcceptDrops(True)
-        self.setFixedSize(self.SLOT_SIZE + 8, self.SLOT_SIZE + 28)
+        self.setFixedSize(self.SLOT_SIZE + 8, self.SLOT_SIZE + self._label_h)
         self.setCursor(Qt.PointingHandCursor)
         self._setup_ui()
     
@@ -292,12 +302,14 @@ class ImageSlotWidget(QFrame):
         """Handle dropped image file."""
         mime = event.mimeData()
         if mime.hasUrls():
+            # Use tag from mime text if provided (e.g. from ImageLibrary drag)
+            auto_tag = mime.text().strip() if mime.hasText() else ""
             for url in mime.urls():
                 if url.isLocalFile():
                     path = url.toLocalFile()
                     ext = Path(path).suffix.lower()
                     if ext in self.IMAGE_EXTENSIONS:
-                        self.set_image_path(path)
+                        self.set_image_path(path, auto_tag=auto_tag)
                         event.acceptProposedAction()
                         return
         event.ignore()

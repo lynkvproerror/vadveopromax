@@ -15,14 +15,15 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QTextEdit
+    QFrame
 )
 from PySide6.QtCore import Qt, Signal
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
 from ui.components.sidebar_base import ImageSidebar
-from ui.components.prompt_table import PromptTable, PromptRow, ImageMode
+from ui.components.prompt_table import PromptTable, PromptRow, PromptStatus, ImageMode
+from ui.components.drop_widgets import TextFileDropEdit
 
 
 class TabI2I(QWidget):
@@ -145,7 +146,7 @@ class TabI2I(QWidget):
         layout.addWidget(header)
         
         # Text input
-        self.prompt_input = QTextEdit()
+        self.prompt_input = TextFileDropEdit()
         self.prompt_input.setFixedHeight(150)  # Standardized to match other tabs
         self.prompt_input.setPlaceholderText(
             "Enter prompts with [image_tag] references...\n\n"
@@ -161,7 +162,7 @@ class TabI2I(QWidget):
         btn_layout = QHBoxLayout(btn_frame)
         btn_layout.setContentsMargins(8, 4, 8, 0)
         
-        self.import_btn = QPushButton("📥 Import TXT")
+        self.import_btn = QPushButton("📥 Import File")
         self.import_btn.setProperty("variant", "secondary")
         self.import_btn.clicked.connect(self._on_import_txt)
         btn_layout.addWidget(self.import_btn)
@@ -211,6 +212,7 @@ class TabI2I(QWidget):
         )
         self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
         self.prompt_table.delete_clicked.connect(self._on_delete_prompt)
+        self.prompt_table.slot_image_changed.connect(self._on_slot_changed)
         layout.addWidget(self.prompt_table)
         
         return frame
@@ -239,15 +241,21 @@ Image Library:
         HelpTooltipPopup(self, "Image to Image", help_text).exec()
     
     def _on_open_library(self):
-        """Open image library manager."""
+        """Open image library manager (non-modal, singleton)."""
+        if hasattr(self, '_library_popup') and self._library_popup and self._library_popup.isVisible():
+            self._library_popup.raise_()
+            self._library_popup.activateWindow()
+            return
         from ui.popups.complex_popups import ImageManagerPopup
-        ImageManagerPopup(self, on_select=self._handle_library_select).exec()
+        self._library_popup = ImageManagerPopup(self, on_select=self._handle_library_select)
+        self._library_popup.show()
     
     def _handle_library_select(self, tag: str):
-        """Insert selected image tag into prompt input."""
+        """Insert selected image tag into prompt input and refresh table."""
         cursor = self.prompt_input.textCursor()
         cursor.insertText(f"[{tag}] ")
         self.prompt_input.setTextCursor(cursor)
+        self._parse_prompts()
     
     def _on_text_changed(self):
         """Handle text input change."""
@@ -266,10 +274,11 @@ Image Library:
         self.parsed_title.setText(f"📊 PARSED PROMPTS ({len(prompts)})")
     
     def _on_import_txt(self):
-        """Import prompts from TXT file."""
+        """Import prompts from text file (.txt, .md, .csv, .log)."""
         from PySide6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Prompts", "", "Text files (*.txt);;All files (*.*)"
+            self, "Import Prompts", "",
+            "Text files (*.txt *.md *.csv *.log *.text);;All files (*.*)"
         )
         if path:
             with open(path, 'r', encoding='utf-8') as f:
@@ -289,19 +298,15 @@ Image Library:
         self.prompt_input.blockSignals(False)
         self.prompt_count.setText(f"{len(prompts)} prompts")
     
-    def _on_edit_prompt(self, row_index: int):
-        """Handle edit prompt action."""
-        from PySide6.QtWidgets import QInputDialog
+    def _on_slot_changed(self, row_idx: int):
+        """Sync prompt text back to input when a slot image changes."""
         prompts = self.prompt_table.get_prompts()
-        if 0 <= row_index < len(prompts):
-            current_text = prompts[row_index].text
-            new_text, ok = QInputDialog.getMultiLineText(
-                self, "Edit Prompt", "Prompt:", current_text
-            )
-            if ok and new_text:
-                prompts[row_index].text = new_text
-                self.prompt_table.set_prompts(prompts)
-                self._sync_to_input(prompts)
+        self._sync_to_input(prompts)
+    
+    def _on_edit_prompt(self, row_index: int):
+        """Handle edit prompt action — sync updated prompts back to input."""
+        prompts = self.prompt_table.get_prompts()
+        self._sync_to_input(prompts)
     
     def _on_delete_prompt(self, row_index: int):
         """Handle delete prompt action."""
@@ -353,6 +358,13 @@ Image Library:
         
         settings = self.sidebar.get_values()
         
+        # Block if no output folder set
+        if not settings.get("output_folder", "").strip():
+            main_win = self.window()
+            if hasattr(main_win, 'show_toast'):
+                main_win.show_toast("❌ No output folder set — please set one in sidebar before adding to queue!", "error")
+            return
+        
         if self.controller:
             self.controller.add_i2i_batch(prompts, settings)
             self.prompt_table.set_prompts([])
@@ -366,6 +378,7 @@ Image Library:
         """Save tab state for session persistence."""
         prompts = self.prompt_table.get_prompts()
         return {
+            "prompt_input": self.prompt_input.toPlainText(),
             "prompts": [
                 {
                     "index": p.index,
@@ -377,20 +390,42 @@ Image Library:
             "sidebar": self.sidebar.get_values(),
         }
     
-    def restore_state(self, data: dict):
+    def restore_state(self, data: dict, restore_options=None):
         """Restore tab state from saved session data."""
         from ui.components.prompt_table import PromptRow
+        opts = restore_options
         
         if "sidebar" in data:
-            self.sidebar.set_values(data["sidebar"])
+            sidebar_data = dict(data["sidebar"])
+            if opts:
+                if not opts.restore_project_name:
+                    sidebar_data.pop("project_name", None)
+                if not opts.restore_output_folder:
+                    sidebar_data.pop("output_folder", None)
+                if not opts.restore_aspect_ratio:
+                    sidebar_data.pop("aspect_ratio", None)
+                if not opts.restore_outputs_per_prompt:
+                    sidebar_data.pop("outputs_per_prompt", None)
+                if not opts.restore_ai_model:
+                    sidebar_data.pop("model", None)
+                if not opts.restore_download_quality:
+                    sidebar_data.pop("download_quality", None)
+            if sidebar_data:
+                self.sidebar.set_values(sidebar_data)
         
-        if "prompts" in data and data["prompts"]:
+        if (not opts or opts.restore_prompt_input) and "prompt_input" in data:
+            self.prompt_input.blockSignals(True)
+            self.prompt_input.setPlainText(data["prompt_input"])
+            self.prompt_input.blockSignals(False)
+        
+        if (not opts or opts.restore_parsed_prompts) and "prompts" in data and data["prompts"]:
             rows = []
             for pd in data["prompts"]:
+                img_path = pd.get("image_path") if (not opts or opts.restore_prompt_images) else None
                 rows.append(PromptRow(
                     index=pd.get("index", 0),
                     text=pd.get("text", ""),
-                    image_path=pd.get("image_path"),
+                    image_path=img_path,
                 ))
             self.prompt_table.set_prompts(rows)
 

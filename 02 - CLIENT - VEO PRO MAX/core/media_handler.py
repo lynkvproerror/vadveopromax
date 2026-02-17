@@ -40,13 +40,13 @@ class MediaHandler:
     - Base64 image saving
     """
     
-    JPEG_QUALITY = 90
+    JPEG_QUALITY = 95
     MAX_DIMENSION = 2048
     
     @staticmethod
     def image_to_base64(
         image_path: str,
-        convert_to_jpeg: bool = True,
+        convert_to_jpeg: bool = False,
         max_dimension: Optional[int] = None
     ) -> Optional[Tuple[str, str]]:
         """Convert image file to base64.

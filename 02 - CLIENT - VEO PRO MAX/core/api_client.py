@@ -120,6 +120,7 @@ class VEOApiClient:
         self.base_url = base_url
         self._session: Optional[aiohttp.ClientSession] = None
         self._browser_headers = BrowserHeaders()
+        self._call_count = 0  # Track total API calls for performance panel
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -262,7 +263,7 @@ class VEOApiClient:
             import logging
             _log = logging.getLogger(__name__)
             _log.debug(f"[API REQUEST] {method} {url}")
-            _log.debug(f"[API HEADERS] {json.dumps({k: (v[:30] + '...' if len(str(v)) > 30 else v) for k,v in headers.items()}, indent=2, ensure_ascii=False)}")
+            _log.debug(f"[API HEADERS] {json.dumps(dict(headers), indent=2, ensure_ascii=False)}")
             if data:
                 # Show clientContext structure (mask token)
                 ctx = data.get("clientContext", {})
@@ -280,6 +281,7 @@ class VEOApiClient:
                 _log.debug(f"[API BODY FULL] {json.dumps(dump, indent=2, default=str, ensure_ascii=False)}")
             
             async with session.request(method, url, headers=headers, json=data) as resp:
+                self._call_count += 1
                 response_code = resp.status
                 response_text = await resp.text()
                 
@@ -292,18 +294,17 @@ class VEOApiClient:
                             ops = response_data["operations"]
                             _log.info(f"[API RESPONSE] operations count={len(ops)}")
                             if ops:
-                                # Show first operation's keys and structure (truncated)
                                 first_op = ops[0]
                                 _log.info(f"[API RESPONSE] ops[0] keys={list(first_op.keys())}")
-                                _log.info(f"[API RESPONSE] ops[0] = {json.dumps(first_op, default=str, ensure_ascii=False)[:500]}")
+                                _log.info(f"[API RESPONSE] ops[0] = {json.dumps(first_op, default=str, ensure_ascii=False)}")
                         return APIResponse(success=True, data=response_data, response_code=response_code)
                     except json.JSONDecodeError:
-                        _log.warning(f"[API RESPONSE] {response_code} JSON decode failed, raw={response_text[:200]}")
+                        _log.warning(f"[API RESPONSE] {response_code} JSON decode failed, raw={response_text}")
                         return APIResponse(success=True, data={"raw": response_text}, response_code=response_code)
                 else:
                     return APIResponse(
                         success=False,
-                        error=f"HTTP {response_code}: {response_text[:500]}",
+                        error=f"HTTP {response_code}: {response_text}",
                         response_code=response_code
                     )
         except aiohttp.ClientError as e:
@@ -312,45 +313,10 @@ class VEOApiClient:
             return APIResponse(success=False, error=f"Unexpected error: {str(e)}")
     
     # ==================== IMAGE UPLOAD ====================
-    
-    async def upload_image(
-        self,
-        access_token: str,
-        recaptcha_token: str,
-        image_base64: str,
-        mime_type: str = "image/jpeg",
-        aspect_ratio: str = "IMAGE_ASPECT_RATIO_LANDSCAPE",
-        account_headers: Optional[Dict[str, str]] = None,
-    ) -> APIResponse:
-        """Upload image to VEO.
-        
-        Endpoint: /v1:uploadUserImage (Sync)
-        HAR verified: uses "imageInput" nested object, tool="ASSET_MANAGER"
-        
-        Returns: {"mediaGenerationId": {"mediaGenerationId": "..."}, "width": N, "height": N}
-        """
-        data = {
-            "imageInput": {
-                "rawImageBytes": image_base64,
-                "mimeType": mime_type,
-                "isUserUploaded": True,
-                "aspectRatio": aspect_ratio,
-            },
-            "clientContext": self._build_client_context(
-                recaptcha_token,
-                tool="ASSET_MANAGER",
-                include_recaptcha=False,  # HAR: upload does NOT send recaptcha
-            ),
-        }
-        
-        return await self._request(
-            "POST",
-            APIEndpoints.UPLOAD,
-            access_token,
-            recaptcha_token,
-            data,
-            account_headers=account_headers,
-        )
+    # NOTE: upload_image() is defined in the UTILITY ENDPOINTS section (line ~859).
+    # There was previously a duplicate here with incorrect fields (aspectRatio in
+    # imageInput, missing paygate_tier=""). Removed per HAR analysis — the version
+    # below is the canonical one matching HAR ground truth.
     
     # ==================== VIDEO GENERATION ====================
     
@@ -704,9 +670,9 @@ class VEOApiClient:
         }
         model_key = model_map.get(target_resolution, "veo_3_1_upsampler_1080p")
         
-        # Doc §6.13: Upscale clientContext = only sessionId + recaptchaContext
-        # NO projectId, NO userPaygateTier, NO tool (defaults to PINHOLE)
-        # Bug 12 fix: Build minimal context — only sessionId + recaptchaContext
+        # Bug 12 fix: Upscale clientContext = only sessionId + recaptchaContext
+        # NO projectId, NO userPaygateTier, NO tool
+        # HAR verified: website sends minimal context for upscale endpoint
         import time
         upscale_ctx: Dict[str, Any] = {
             "sessionId": f";{int(time.time() * 1000)}",
@@ -848,6 +814,49 @@ class VEOApiClient:
         return await self._request(
             "POST",
             APIEndpoints.IMAGE_UPSCALE_FLOW,
+            access_token,
+            recaptcha_token,
+            data,
+            account_headers=account_headers,
+        )
+    
+    async def upload_image(
+        self,
+        access_token: str,
+        recaptcha_token: str,
+        image_base64: str,
+        mime_type: str,
+        account_headers: Optional[Dict[str, str]] = None,
+    ) -> APIResponse:
+        """Upload a user image to get a mediaGenerationId.
+        
+        Endpoint: /v1:uploadUserImage (Sync)
+        
+        HAR verified:
+        - Request: {imageInput: {rawImageBytes, mimeType, isUserUploaded}, clientContext}
+        - clientContext uses tool="ASSET_MANAGER", NO reCAPTCHA, NO userPaygateTier
+        - Response: {mediaGenerationId: {mediaGenerationId: "CAMaJ..."}, width, height}
+        
+        The returned mediaGenerationId is used as startImage.mediaId in I2V calls,
+        referenceImages[].mediaId in R2V calls, and imageInputs[].name in I2I calls.
+        """
+        data = {
+            "imageInput": {
+                "rawImageBytes": image_base64,
+                "mimeType": mime_type,
+                "isUserUploaded": True,
+            },
+            "clientContext": self._build_client_context(
+                recaptcha_token,
+                tool="ASSET_MANAGER",
+                include_recaptcha=False,
+                paygate_tier="",
+            ),
+        }
+        
+        return await self._request(
+            "POST",
+            APIEndpoints.UPLOAD,
             access_token,
             recaptcha_token,
             data,

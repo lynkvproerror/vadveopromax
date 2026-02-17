@@ -101,6 +101,9 @@ class ImageLibrary:
     
     # === Public API ===
     
+    # Formats Google API supports natively (no conversion needed)
+    _SUPPORTED_FORMATS = {'.jpg', '.jpeg', '.png', '.webp'}
+    
     def add_image(
         self,
         source_path: str,
@@ -110,6 +113,9 @@ class ImageLibrary:
     ) -> LibraryImage:
         """
         Add an image to the library.
+        
+        Unsupported formats (BMP, TIFF, GIF, etc.) are auto-converted
+        to PNG at import time for Google API compatibility.
         
         Args:
             source_path: Path to the source image file
@@ -121,20 +127,29 @@ class ImageLibrary:
             The created LibraryImage
         """
         source = Path(source_path)
+        needs_conversion = source.suffix.lower() not in self._SUPPORTED_FORMATS
         
         if copy_to_library:
             # Copy to library folder
             dest_folder = self._library_path / category
             dest_folder.mkdir(parents=True, exist_ok=True)
-            dest_path = dest_folder / source.name
+            
+            if needs_conversion:
+                # Convert unsupported format → PNG (lossless)
+                dest_path = dest_folder / f"{source.stem}.png"
+            else:
+                dest_path = dest_folder / source.name
             
             # Handle duplicate names
             counter = 1
             while dest_path.exists():
-                dest_path = dest_folder / f"{source.stem}_{counter}{source.suffix}"
+                dest_path = dest_folder / f"{source.stem}_{counter}{dest_path.suffix}"
                 counter += 1
             
-            shutil.copy2(source, dest_path)
+            if needs_conversion:
+                self._convert_to_png(str(source), str(dest_path))
+            else:
+                shutil.copy2(source, dest_path)
             final_path = str(dest_path)
         else:
             final_path = str(source)
@@ -147,6 +162,23 @@ class ImageLibrary:
         self._save_index()
         
         return image
+    
+    @staticmethod
+    def _convert_to_png(source_path: str, dest_path: str):
+        """Convert any image format to PNG (lossless) via PIL."""
+        try:
+            from PIL import Image
+            with Image.open(source_path) as img:
+                # Handle animated GIFs: take first frame
+                if hasattr(img, 'n_frames') and img.n_frames > 1:
+                    img.seek(0)
+                # Convert palette/RGBA modes
+                if img.mode not in ('RGB', 'RGBA'):
+                    img = img.convert('RGBA')
+                img.save(dest_path, 'PNG')
+        except ImportError:
+            # PIL not available — fallback to raw copy
+            shutil.copy2(source_path, dest_path)
     
     def remove_image(self, image_id: str, delete_file: bool = False):
         """
@@ -228,6 +260,13 @@ class ImageLibrary:
         image = next((img for img in self._images if img.id == image_id), None)
         if image:
             image.tags = [t.lower().strip() for t in tags]
+            self._save_index()
+    
+    def update_image_category(self, image_id: str, category: str):
+        """Update category for an image."""
+        image = next((img for img in self._images if img.id == image_id), None)
+        if image:
+            image.category = category
             self._save_index()
     
     def get_all_tags(self) -> List[str]:

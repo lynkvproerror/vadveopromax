@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import time
 import asyncio
+import random
 import sys
 from pathlib import Path
 
@@ -145,7 +146,6 @@ class RecaptchaBrowserSession:
     """
     
     VEO_URL = "https://labs.google/fx/tools/flow"
-    VEO_FALLBACK_URL = "https://aistudio.google.com/app/generate/video"
     RECAPTCHA_SITE_KEY = "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV"
     
     def __init__(self, profile_path: str):
@@ -157,6 +157,7 @@ class RecaptchaBrowserSession:
         self._ready = False
         self._captured_headers: Dict[str, str] = {}
         self._lock = asyncio.Lock()
+        self._recovery_lock = asyncio.Lock()  # Serialize soft_recovery across workers
         self._is_attached = False  # True when reusing debug browser page
     
     @property
@@ -231,10 +232,7 @@ class RecaptchaBrowserSession:
                 # Navigate to VEO only if not already there
                 current_url = self._page.url
                 if "labs.google" not in current_url:
-                    try:
-                        await self._page.goto(self.VEO_URL, wait_until="networkidle", timeout=timeout_ms)
-                    except Exception:
-                        await self._page.goto(self.VEO_FALLBACK_URL, wait_until="networkidle", timeout=timeout_ms)
+                    await self._page.goto(self.VEO_URL, wait_until="networkidle", timeout=timeout_ms)
                 
                 # Wait for reCAPTCHA Enterprise (MUST be before header interception)
                 await self._ensure_recaptcha_enterprise()
@@ -245,10 +243,83 @@ class RecaptchaBrowserSession:
                 self._ready = True
                 print(f"[RecaptchaBrowserSession] ✅ Browser ready for {Path(self._profile_path).name} ({'reconnected' if is_reconnect else 'new'}, port={cdp_port})")
                 
+                # Warmup: simulate human activity to build reCAPTCHA trust
+                await self.warmup()
+                
             except Exception as e:
                 print(f"[RecaptchaBrowserSession] ❌ Failed to start browser: {e}")
                 await self._cleanup()
                 raise
+    
+    async def warmup(self):
+        """Simulate human-like activity to build reCAPTCHA Enterprise trust score.
+        
+        Called after ensure_ready() or attach_to_sync_page() to warm up the browser
+        before any API requests. reCAPTCHA Enterprise scores based on browser behavior,
+        so a "cold" browser with no activity will get a low trust score → 403.
+        
+        Activities: random scrolls, mouse movements, small delays.
+        Total time: ~2-3s.
+        """
+        if not self.is_ready:
+            return
+        
+        try:
+            print("[RecaptchaBrowserSession] 🔥 Warming up browser (simulated activity)...")
+
+            # Small settle delay for reCAPTCHA to register the activity
+            await asyncio.sleep(random.uniform(1.0, 2.0))
+            print("[RecaptchaBrowserSession] ✅ Browser warmup complete")
+        except Exception as e:
+            print(f"[RecaptchaBrowserSession] ⚠️ Warmup failed (non-fatal): {e}")
+    
+    
+    async def soft_recovery(self):
+        """Soft recovery: navigate away and back WITHOUT killing Chrome.
+        
+        Used after consecutive reCAPTCHA 403 failures as first-tier recovery.
+        Much faster than full restart (~5s vs ~15s) and keeps browser alive.
+        
+        Steps:
+        1. Navigate to about:blank (clear page state)
+        2. Wait briefly
+        3. Navigate back to VEO URL
+        4. Re-initialize reCAPTCHA Enterprise
+        5. Run warmup (simulated activity)
+        
+        Returns:
+            True if recovery successful, False otherwise  
+        """
+        if not self.is_ready:
+            return False
+        
+        async with self._recovery_lock:
+            try:
+                print("[RecaptchaBrowserSession] 🔄 Soft recovery: navigating away...")
+            
+                # Step 1: Navigate away
+                await self._page.evaluate("window.location.href = 'about:blank'")
+                await asyncio.sleep(1.5)
+                
+                # Step 2: Navigate back to VEO
+                print("[RecaptchaBrowserSession] 🔄 Soft recovery: navigating back to VEO...")
+                await self._page.evaluate(f"window.location.href = '{self.VEO_URL}'")
+                
+                # Step 3: Wait for page to load
+                await asyncio.sleep(5)
+                
+                # Step 4: Re-initialize reCAPTCHA Enterprise
+                await self._ensure_recaptcha_enterprise()
+                
+                # Step 5: Warmup
+                await self.warmup()
+                
+                print("[RecaptchaBrowserSession] ✅ Soft recovery complete")
+                return True
+                
+            except Exception as e:
+                print(f"[RecaptchaBrowserSession] ❌ Soft recovery failed: {e}")
+                return False
     
     RECAPTCHA_ENTERPRISE_CHECK = (
         "typeof grecaptcha !== 'undefined' && "
@@ -367,7 +438,8 @@ class RecaptchaBrowserSession:
                     print("[RecaptchaBrowserSession] ❌ reCAPTCHA Enterprise still not available")
                     return None
             
-            # Step 3: Execute with discovered site key
+
+            
             print(f"[RecaptchaBrowserSession] 🔑 Executing reCAPTCHA Enterprise with key={site_key[:16]}... action=VIDEO_GENERATION")
             token = await self._page.evaluate(f'''
                 async () => {{
@@ -381,6 +453,9 @@ class RecaptchaBrowserSession:
             ''')
             
             if token:
+                if len(token) < 500:
+                    print(f"[RecaptchaBrowserSession] ⚠️ Token suspiciously short ({len(token)} chars < 500), rejecting")
+                    return None
                 print(f"[RecaptchaBrowserSession] ✅ reCAPTCHA token obtained ({len(token)} chars)")
             else:
                 print("[RecaptchaBrowserSession] ❌ grecaptcha.enterprise.execute() returned null")
@@ -394,41 +469,75 @@ class RecaptchaBrowserSession:
     async def extract_access_token(self) -> tuple:
         """Extract access token from __NEXT_DATA__ (if page is alive).
         
+        Bug 4 fix: Retries up to 5 times with exponential backoff when
+        execution context is destroyed by navigation (race condition with
+        browser thread Steps 4/5/5b which can take up to ~36s total).
+        
+        Backoff: 3s → 5s → 8s → 10s → 10s = 36s max total wait.
+        
         Returns:
             (access_token, email) tuple
         """
         if not self.is_ready:
             return None, None
         
-        try:
-            next_data = await self._page.evaluate('''
-                () => {
-                    const el = document.getElementById('__NEXT_DATA__');
-                    return el ? JSON.parse(el.textContent) : null;
-                }
-            ''')
-            
-            if not next_data:
+        max_retries = 5
+        retry_delays = [3, 5, 8, 10, 10]  # Total: 36s — covers worst-case navigation
+        
+        for attempt in range(max_retries):
+            try:
+                next_data = await self._page.evaluate('''
+                    () => {
+                        const el = document.getElementById('__NEXT_DATA__');
+                        return el ? JSON.parse(el.textContent) : null;
+                    }
+                ''')
+                
+                if not next_data:
+                    if attempt < max_retries - 1:
+                        delay = retry_delays[attempt]
+                        print(f"[RecaptchaBrowserSession] __NEXT_DATA__ empty, waiting {delay}s ({attempt + 1}/{max_retries})...")
+                        await asyncio.sleep(delay)
+                        continue
+                    return None, None
+                
+                props = next_data.get("props", {})
+                page_props = props.get("pageProps", {})
+                
+                session = page_props.get("session", {})
+                access_token = session.get("access_token") or session.get("accessToken")
+                user = session.get("user", {})
+                email = user.get("email")
+                
+                if not access_token:
+                    user_data = page_props.get("user", {})
+                    access_token = user_data.get("accessToken")
+                    email = user_data.get("email")
+                
+                if access_token:
+                    return access_token, email
+                
+                # No token yet — page may still be loading after navigation
+                if attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    print(f"[RecaptchaBrowserSession] Token not in __NEXT_DATA__ yet, waiting {delay}s ({attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(delay)
+                    continue
+                
+                return access_token, email
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                # Bug 4 fix: Navigation destroyed context — wait and retry
+                if ("context was destroyed" in error_str or "navigation" in error_str) and attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    print(f"[RecaptchaBrowserSession] ⚠️ Navigation in progress, waiting {delay}s before retry ({attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(delay)
+                    continue
+                print(f"[RecaptchaBrowserSession] ❌ Access token extraction failed: {e}")
                 return None, None
-            
-            props = next_data.get("props", {})
-            page_props = props.get("pageProps", {})
-            
-            session = page_props.get("session", {})
-            access_token = session.get("access_token") or session.get("accessToken")
-            user = session.get("user", {})
-            email = user.get("email")
-            
-            if not access_token:
-                user_data = page_props.get("user", {})
-                access_token = user_data.get("accessToken")
-                email = user_data.get("email")
-            
-            return access_token, email
-            
-        except Exception as e:
-            print(f"[RecaptchaBrowserSession] ❌ Access token extraction failed: {e}")
-            return None, None
+        
+        return None, None
     
     async def refresh_headers(self):
         """Re-capture x-browser-* headers by triggering a light API interaction."""

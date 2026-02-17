@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, Signal
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
+from ui.components.drop_widgets import FolderDropLineEdit
 
 
 class SidebarBase(QWidget):
@@ -83,8 +84,8 @@ class SidebarBase(QWidget):
         # === OUTPUT FOLDER ===
         self._create_section_label("📂 Output Folder")
         
-        self.output_folder = QLineEdit()
-        self.output_folder.setPlaceholderText("D:/Projects/VEO")
+        self.output_folder = FolderDropLineEdit()
+        self.output_folder.setPlaceholderText("D:/Projects/VEO (or drag folder here)")
         self.output_folder.setMinimumHeight(32)
         self._layout.addWidget(self.output_folder)
         
@@ -176,8 +177,6 @@ class SidebarBase(QWidget):
         value = self.aspect_ratio.currentText()
         if "Landscape" in value:
             return "LANDSCAPE"
-        elif "Square" in value:
-            return "SQUARE"
         return "PORTRAIT"
     
     def get_values(self) -> dict:
@@ -197,7 +196,7 @@ class SidebarBase(QWidget):
         if "aspect_ratio" in data:
             ar = data["aspect_ratio"]
             for i in range(self.aspect_ratio.count()):
-                if ar in self.aspect_ratio.itemText(i):
+                if ar.lower() in self.aspect_ratio.itemText(i).lower():
                     self.aspect_ratio.setCurrentIndex(i)
                     break
 
@@ -329,12 +328,11 @@ class ImageSidebar(SidebarBase):
             }}
         """)
         
-        # Update aspect ratio to include Square
+        # Update aspect ratio for image tabs
         self.aspect_ratio.clear()
         self.aspect_ratio.addItems([
             "16:9 (Landscape)",
             "9:16 (Portrait)",
-            "1:1 (Square)",
         ])
     
     def _create_tab_widgets(self):
@@ -347,6 +345,19 @@ class ImageSidebar(SidebarBase):
         self.outputs_per_prompt.setCurrentText("4 images")
         self.outputs_per_prompt.setMinimumHeight(32)
         self._layout.addWidget(self.outputs_per_prompt)
+        
+        # === DOWNLOAD QUALITY ===
+        # API: /v1/flow/upsampleImage → targetResolution
+        # 1k = direct download (no upscale needed)
+        # 2k = UPSAMPLE_IMAGE_RESOLUTION_2K
+        # 4k = UPSAMPLE_IMAGE_RESOLUTION_4K
+        self._create_section_label("🖼️ Download Quality")
+        
+        self.download_quality = QComboBox()
+        self.download_quality.addItems(["1k", "2k", "4k"])
+        self.download_quality.setCurrentText("1k")
+        self.download_quality.setMinimumHeight(32)
+        self._layout.addWidget(self.download_quality)
         
         # === IMAGE LIBRARY BUTTON ===
         if self._show_image_library:
@@ -365,12 +376,17 @@ class ImageSidebar(SidebarBase):
         value = self.outputs_per_prompt.currentText()
         return int(value.split()[0])
     
+    def get_download_quality(self) -> str:
+        """Get selected download quality."""
+        return self.download_quality.currentText()
+    
     def get_values(self) -> dict:
         """Get all sidebar values as a dictionary (includes image-specific fields)."""
         values = super().get_values()
         values.update({
             "outputs_per_prompt": self.get_outputs_count(),
             "model": "GEM_PIX_2",  # Image model
+            "download_quality": self.get_download_quality(),
         })
         return values
     
@@ -382,3 +398,7 @@ class ImageSidebar(SidebarBase):
                 if self.outputs_per_prompt.itemText(i).startswith(str(data['outputs_per_prompt'])):
                     self.outputs_per_prompt.setCurrentIndex(i)
                     break
+        if "download_quality" in data:
+            idx = self.download_quality.findText(data["download_quality"])
+            if idx >= 0:
+                self.download_quality.setCurrentIndex(idx)
