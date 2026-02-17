@@ -303,6 +303,52 @@ def _do_cdp_extension_install(port: int, extension_path: str, profile_path: str)
         print(f"[ChromeManager] ❌ Extension install failed: {e}")
         return False
 
+# ── Pre-set Developer Mode in Chrome Profile ─────────────────────────────
+# chrome://extensions page hangs when --enable-unsafe-extension-debugging
+# is used with --remote-debugging-port. Pre-setting developer_mode in the
+# profile's Preferences file fixes this and ensures chrome://extensions loads.
+
+def _ensure_developer_mode(profile_path: str):
+    """Pre-set Developer Mode = ON in Chrome profile Preferences.
+    
+    This allows chrome://extensions to load properly and show
+    unpacked extensions installed via CDP. Works for both existing
+    and new profiles.
+    
+    Args:
+        profile_path: Chrome user-data-dir path
+    """
+    prefs_dir = Path(profile_path) / "Default"
+    prefs_file = prefs_dir / "Preferences"
+    
+    try:
+        prefs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Read existing preferences or start fresh
+        prefs = {}
+        if prefs_file.exists():
+            try:
+                raw = prefs_file.read_text(encoding="utf-8")
+                if raw.strip():
+                    prefs = json.loads(raw)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                log.warning("[ChromeManager] ⚠️ Corrupt Preferences file — resetting")
+                prefs = {}
+        
+        # Check if already set
+        ext_prefs = prefs.get("extensions", {}).get("ui", {})
+        if ext_prefs.get("developer_mode") is True:
+            return  # Already enabled
+        
+        # Set developer_mode = true
+        prefs.setdefault("extensions", {}).setdefault("ui", {})["developer_mode"] = True
+        
+        # Write back
+        prefs_file.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+        log.info(f"[ChromeManager] ✅ Developer Mode pre-set for {Path(profile_path).name}")
+        
+    except Exception as e:
+        log.warning(f"[ChromeManager] ⚠️ Could not set developer mode: {e}")
 
 
 # ── Launch Chrome ────────────────────────────────────────────────────────
@@ -338,6 +384,9 @@ def launch_chrome(
 
     if port is None:
         port = allocate_port()
+
+    # Pre-set Developer Mode so chrome://extensions loads properly
+    _ensure_developer_mode(profile_path)
 
     # Resolve Extension path (inside client app directory)
     _client_dir = Path(__file__).resolve().parent.parent  # 02 - CLIENT - VEO PRO MAX/
@@ -543,6 +592,9 @@ def launch_or_reconnect(
         lock = _launch_locks[profile_path]
     
     with lock:
+        # Pre-set Developer Mode for this profile (idempotent, fast)
+        _ensure_developer_mode(profile_path)
+
         # Check if extension needs to be installed
         _client_dir = Path(__file__).resolve().parent.parent
         _extension_dir = _client_dir / "extension"
