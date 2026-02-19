@@ -2547,6 +2547,33 @@ class AppController:
         
         asyncio.run_coroutine_threadsafe(_run(), self._loop)
     
+    def re_download_single_720p(self, task_id: str, video_index: int):
+        """Re-download a single 720p video by index.
+        
+        Called from UI right-click on thumbnail.
+        Runs async engine method on the background event loop.
+        """
+        if not self._loop:
+            return
+        
+        async def _run():
+            account, error = self._get_account_for_reupscale(task_id)
+            if not account:
+                self._notify_status(error)
+                return
+            
+            result = await self._engine.re_download_single_720p(
+                task_id, video_index, account
+            )
+            # Trigger queue refresh so UI updates
+            for cb in self._on_queue_updated:
+                try:
+                    cb({})
+                except Exception:
+                    pass
+        
+        asyncio.run_coroutine_threadsafe(_run(), self._loop)
+    
     def retry_all_failed(self) -> int:
         """Retry all failed tasks."""
         return self._dispatcher.retry_all_failed()

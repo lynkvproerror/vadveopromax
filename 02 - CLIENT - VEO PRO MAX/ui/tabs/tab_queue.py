@@ -2454,6 +2454,12 @@ class TabQueue(QWidget):
                     lambda: self._on_reupscale_single_video(task_id, idx)
                 )
         
+        # === Re-download 720p (per-video) ===
+        redownload_action = menu.addAction(f"⬇️ Re-download 720p (video {idx + 1})")
+        redownload_action.triggered.connect(
+            lambda: self._on_redownload_single_720p(task_id, idx)
+        )
+        
         # === Open in Explorer ===
         if best_file and self._cached_file_exists(best_file):
             menu.addSeparator()
@@ -2471,6 +2477,14 @@ class TabQueue(QWidget):
             main_window = self.window()
             if main_window and hasattr(main_window, 'show_toast'):
                 main_window.show_toast(f"⬆️ Re-upscaling video {video_index + 1}...", "info")
+    
+    def _on_redownload_single_720p(self, task_id: str, video_index: int):
+        """Re-download a single 720p video by index."""
+        if self.controller and hasattr(self.controller, 're_download_single_720p'):
+            self.controller.re_download_single_720p(str(task_id), video_index)
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'show_toast'):
+                main_window.show_toast(f"⬇️ Re-downloading video {video_index + 1} (720p)...", "info")
     
     def _open_file_in_explorer(self, file_path: str):
         """Open file explorer and select the specific file."""

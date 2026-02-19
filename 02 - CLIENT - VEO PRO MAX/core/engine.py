@@ -608,13 +608,15 @@ class Engine:
                                 account.release_slot()
                                 continue
                     
-                    # Chain tasks get more retries — losing 1 root = losing N children
+                    # Adaptive retry: more retries for transient errors.
+                    # Chain tasks get even more — losing 1 root = losing N children
                     base_retries = account.retry_count
-                    if (self._dispatcher.has_children(task.id) or 
-                            task.parent_task_id is not None):
-                        max_retries = max(base_retries, 6)
+                    is_chain = (self._dispatcher.has_children(task.id) or 
+                                task.parent_task_id is not None)
+                    if is_chain:
+                        max_retries = max(base_retries, 15)  # Chain: up to 15
                     else:
-                        max_retries = base_retries
+                        max_retries = max(base_retries, 10)  # Normal: up to 10
                     timeout = account.request_timeout
                     result = None
                     
@@ -833,6 +835,28 @@ class Engine:
                             task.scene_ids = list(result.scene_ids)
                             task.stage = TaskStage.SUBMITTED  # ★ Checkpoint: prompt submitted
                             task.state = TaskState.WAITING_POLL
+                            
+                            # ★ PARTIAL RESPONSE DETECTION: server returned fewer ops
+                            expected = getattr(task, 'output_count', 0) or 0
+                            actual = len(result.operation_names)
+                            if expected > 0 and actual < expected:
+                                variant_letters = "abcdefghijklmnopqrstuvwxyz"
+                                prompt_num = getattr(task, 'prompt_index', 0) + 1
+                                idx_str = str(prompt_num).zfill(3)
+                                # Identify missing variants by letter
+                                present = set(range(actual))
+                                missing = [i for i in range(expected) if i not in present]
+                                missing_labels = [
+                                    f"{idx_str}{variant_letters[i]}" if i < len(variant_letters) else f"{idx_str}?"
+                                    for i in missing
+                                ]
+                                log.warning(
+                                    f"⚠️ PARTIAL SUBMIT: Task {task.id} requested {expected} variants "
+                                    f"but server returned only {actual} operation IDs. "
+                                    f"Missing variants: {', '.join(missing_labels)}. "
+                                    f"These will appear as FAILED in the queue."
+                                )
+                            
                             log.info(
                                 f"[Engine] Task {task.id}: → POLLING {len(result.operation_names)} ops "
                                 f"(first={result.operation_name[:12]}...)"
@@ -2515,6 +2539,134 @@ class Engine:
         log.info(f"Re-download {task_id}: done — {len(local_paths)} files saved")
         return True
     
+    async def re_download_single_720p(
+        self, task_id: str, video_index: int, account: 'AccountManager',
+    ) -> bool:
+        """Re-download a single 720p video by index.
+        
+        Workflow:
+        1. Get operation_name from video_outputs[video_index]
+        2. Re-poll single operation via check_status()
+        3. Download the specific fifeUrl
+        4. Update video_outputs[video_index].file_720p
+        """
+        task = self._dispatcher.get_task(task_id)
+        if not task:
+            log.warning(f"Re-download single {task_id}[{video_index}]: task not found")
+            return False
+        
+        if video_index >= len(task.video_outputs):
+            log.warning(f"Re-download single {task_id}[{video_index}]: index out of range ({len(task.video_outputs)} videos)")
+            return False
+        
+        vo = task.video_outputs[video_index]
+        op_name = vo.operation_name
+        if not op_name:
+            # Fallback: try task-level operation_names
+            if video_index < len(task.operation_names):
+                op_name = task.operation_names[video_index]
+        
+        if not op_name:
+            log.warning(f"Re-download single {task_id}[{video_index}]: no operation_name")
+            return False
+        
+        scene_id = vo.scene_id or ""
+        if not scene_id and video_index < len(task.scene_ids):
+            scene_id = task.scene_ids[video_index]
+        
+        self._dispatcher.update_progress(
+            task.id, 50, f"🔄 Re-polling video {video_index + 1} for download URL..."
+        )
+        
+        # Re-poll single operation
+        ops_to_poll = [{
+            "operation": {"name": op_name},
+            "sceneId": scene_id,
+            "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
+        }]
+        
+        sem = self._get_api_semaphore(account.email)
+        async with sem:
+            response = await self._api_client.check_status(
+                access_token=account.get_access_token(),
+                recaptcha_token="",
+                operations=ops_to_poll,
+                account_headers=account.get_api_headers(),
+            )
+        
+        if not response.success:
+            log.error(f"Re-download single {task_id}[{video_index}]: poll failed — {response.error}")
+            self._dispatcher.update_progress(
+                task.id, 100, f"⚠️ Re-download video {video_index + 1} failed: {response.error}"
+            )
+            return False
+        
+        # Extract fifeUrl from response
+        details = self._extract_output_details(response.data)
+        if not details:
+            log.warning(f"Re-download single {task_id}[{video_index}]: no fifeUrl in response")
+            self._dispatcher.update_progress(
+                task.id, 100, f"⚠️ Re-download video {video_index + 1}: no URL in response"
+            )
+            return False
+        
+        # Use the first URL from the polled operation
+        fife_url = details[0]["fifeUrl"]
+        log.info(f"Re-download single {task_id}[{video_index}]: got fresh fifeUrl — downloading 720p")
+        
+        self._dispatcher.update_progress(
+            task.id, 70, f"⬇️ Re-downloading video {video_index + 1} (720p)..."
+        )
+        
+        # Download single file
+        local_paths = await self._download_outputs(
+            task, [fife_url],
+            quality_subfolder="720p",
+            generate_thumbnails=True,
+        )
+        
+        if not local_paths or not local_paths[0]:
+            log.error(f"Re-download single {task_id}[{video_index}]: download failed")
+            self._dispatcher.update_progress(
+                task.id, 100, f"⚠️ Re-download video {video_index + 1} failed"
+            )
+            return False
+        
+        # Update the specific video output
+        vo.file_720p = local_paths[0]
+        if not vo.file_upscaled:
+            vo.quality = "720p"
+        
+        # Rebuild output_uris
+        final_paths = []
+        for v in task.video_outputs:
+            if v.file_upscaled:
+                final_paths.append(v.file_upscaled)
+            elif v.file_720p:
+                final_paths.append(v.file_720p)
+        if final_paths:
+            task.output_uris = final_paths
+        
+        # Rebuild upscale media ID from response if available
+        media_id = details[0].get("mediaId", "")
+        if media_id and video_index < len(task.upscale_media_ids):
+            task.upscale_media_ids[video_index] = media_id
+        elif media_id and not task.upscale_media_ids:
+            # Initialize list with empty strings, fill this one
+            task.upscale_media_ids = [""] * len(task.video_outputs)
+            task.upscale_media_ids[video_index] = media_id
+        
+        self._dispatcher.update_progress(
+            task.id, 100, f"✅ Re-downloaded video {video_index + 1} (720p)"
+        )
+        
+        if self._on_task_completed:
+            self._on_task_completed(task)
+        self._save_manifest(task)
+        
+        log.info(f"Re-download single {task_id}[{video_index}]: done — {local_paths[0]}")
+        return True
+    
     def _sync_overall_upscale_status(self, task: Task):
         """Sync per-video statuses → task-level upscale_status (backward compat)."""
         if not task.video_outputs:
@@ -2851,7 +3003,7 @@ class Engine:
         ]
         return any(kw in lower for kw in transient_keywords)
     
-    CHAIN_MAX_AUTO_RETRIES = 3  # Max auto-retries for chain roots
+    CHAIN_MAX_AUTO_RETRIES = 8  # Max auto-retries for chain roots (transient errors only)
     
     def _should_auto_retry_chain(self, task: 'Task', error_msg: str) -> bool:
         """Decide if a chain root task should auto-retry.
