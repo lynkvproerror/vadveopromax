@@ -137,47 +137,42 @@ class TabSettings(QWidget):
         self.content_layout = QVBoxLayout(content)
         self.content_layout.setSpacing(16)
         
-        # === CHROME PROFILES SECTION ===
+        # ─────────────── ACCOUNTS ───────────────
         profiles_section = self._create_profiles_section()
         self.content_layout.addWidget(profiles_section)
         
-        # === DEFAULT SETTINGS SECTION ===
-        defaults_section = self._create_defaults_section()
-        self.content_layout.addWidget(defaults_section)
-        
-        # === OUTPUT SETTINGS SECTION ===
-        output_section = self._create_output_section()
-        self.content_layout.addWidget(output_section)
-        
-        # === CONTINUATION FRAME SECTION ===
-        cont_section = self._create_continuation_section()
-        self.content_layout.addWidget(cont_section)
-        
-        # === WORKER SETTINGS SECTION ===
+        # ─────────────── AUTOMATION ───────────────
         worker_section = self._create_worker_section()
         self.content_layout.addWidget(worker_section)
         
-        # === SESSION & DATA SECTION ===
-        session_section = self._create_session_section()
-        self.content_layout.addWidget(session_section)
-        
-        # === NOTIFICATIONS SECTION ===
-        notif_section = self._create_notification_section()
-        self.content_layout.addWidget(notif_section)
-        
-        # === UI SECTION ===
-        ui_section = self._create_ui_section()
-        self.content_layout.addWidget(ui_section)
-        
-        # === PIPELINE OPTIMIZATION SECTION ===
         pipeline_section = self._create_pipeline_section()
         self.content_layout.addWidget(pipeline_section)
         
-        # === IMAGE ENHANCER SECTION ===
+        cont_section = self._create_continuation_section()
+        self.content_layout.addWidget(cont_section)
+        
+        # ─────────────── GENERATION ───────────────
+        defaults_section = self._create_defaults_section()
+        self.content_layout.addWidget(defaults_section)
+        
+        output_section = self._create_output_section()
+        self.content_layout.addWidget(output_section)
+        
+        # ─────────────── ENHANCEMENT ───────────────
         enhancer_section = self._create_enhancer_section()
         self.content_layout.addWidget(enhancer_section)
         
-        # === ACTION BUTTONS (Save, Reset, Export, Import, Reload) ===
+        # ─────────────── APP ───────────────
+        session_section = self._create_session_section()
+        self.content_layout.addWidget(session_section)
+        
+        notif_section = self._create_notification_section()
+        self.content_layout.addWidget(notif_section)
+        
+        ui_section = self._create_ui_section()
+        self.content_layout.addWidget(ui_section)
+        
+        # ─────────────── ACTIONS ───────────────
         action_buttons = self._create_action_buttons()
         self.content_layout.addWidget(action_buttons)
         
