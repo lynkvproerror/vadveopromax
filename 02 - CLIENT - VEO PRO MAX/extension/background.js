@@ -9,11 +9,12 @@
  */
 
 // ── State ──────────────────────────────────────────────────────────────
-const WEBSOCKET_URL = 'ws://127.0.0.1:8765';
+const WEBSOCKET_PORTS = [8765, 8766, 8767]; // Primary + fallback ports
 const RECONNECT_INTERVAL = 3000; // 3 seconds
 
 let ws = null;
 let wsConnected = false;
+let currentPortIndex = 0; // Which port to try next
 
 // Per-tab state: tabId → {email, headers, accessToken}
 const tabState = {};
@@ -40,13 +41,16 @@ function connectWebSocket() {
     return;
   }
 
+  const port = WEBSOCKET_PORTS[currentPortIndex];
+  const url = `ws://127.0.0.1:${port}`;
+
   try {
-    ws = new WebSocket(WEBSOCKET_URL);
+    ws = new WebSocket(url);
 
     ws.onopen = () => {
       wsConnected = true;
       wsReconnectDelay = RECONNECT_INTERVAL; // reset backoff on success
-      console.log('[VEO Bridge] ✅ WebSocket connected to App');
+      console.log(`[VEO Bridge] ✅ WebSocket connected to App on port ${port}`);
 
       // Register all known tabs + immediately push cached data
       for (const [tabId, state] of Object.entries(tabState)) {
@@ -86,20 +90,25 @@ function connectWebSocket() {
     ws.onclose = () => {
       wsConnected = false;
       ws = null;
-      // Use debug instead of log — app not running is normal
-      console.debug(`[VEO Bridge] WebSocket closed, reconnecting in ${wsReconnectDelay / 1000}s...`);
+      // Rotate to next port on disconnect
+      currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
+      const nextPort = WEBSOCKET_PORTS[currentPortIndex];
+      console.debug(`[VEO Bridge] WebSocket closed (port ${port}), trying port ${nextPort} in ${wsReconnectDelay / 1000}s...`);
       setTimeout(connectWebSocket, wsReconnectDelay);
       // Exponential backoff: 3s → 6s → 12s → 24s → max 30s
-      wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
+      // Reset backoff when we've cycled through all ports
+      if (currentPortIndex === 0) {
+        wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
+      }
     };
 
     ws.onerror = () => {
-      // Suppress error — onclose will handle reconnect
-      // Connection refused is expected when app isn't running
-      console.debug('[VEO Bridge] WebSocket connection refused (app not running?)');
+      // Suppress error — onclose will handle reconnect + port rotation
+      console.debug(`[VEO Bridge] WebSocket connection refused on port ${port}`);
     };
   } catch (e) {
     console.debug('[VEO Bridge] WebSocket connection failed:', e.message);
+    currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
     setTimeout(connectWebSocket, wsReconnectDelay);
     wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
   }
@@ -272,6 +281,131 @@ async function handleAppMessage(msg) {
       break;
     }
 
+    case 'assign_email': {
+      // Server tells us which email this browser belongs to
+      // (fallback when content.js email detection fails)
+      const email = msg.email;
+      if (!email) break;
+
+      console.log(`[VEO Bridge] 📧 Server assigned email: ${email}`);
+
+      // First: check if ANY tab already has this email assigned
+      let existingTabId = findTabForEmail(email);
+      if (existingTabId) {
+        console.log(`[VEO Bridge] Email ${email} already assigned to tab ${existingTabId}`);
+        wsSend({ action: 'register', email, tabId: existingTabId });
+        break;
+      }
+
+      // Second: find any VEO tab (broad match including locale prefixes like /vi/)
+      const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+      if (veoTabs.length > 0) {
+        // Use first unassigned VEO tab, or first tab if all assigned
+        let targetTab = veoTabs.find(t => !tabState[t.id]?.email) || veoTabs[0];
+        const tabId = targetTab.id;
+        if (!tabState[tabId]) {
+          tabState[tabId] = { email: null, headers: {}, accessToken: null };
+        }
+        tabState[tabId].email = email;
+        console.log(`[VEO Bridge] Assigned email ${email} to existing VEO tab ${tabId} (${targetTab.url})`);
+        wsSend({ action: 'register', email, tabId });
+      } else {
+        // No VEO tab exists at all — create one, pinned and inactive
+        console.log(`[VEO Bridge] No VEO tab found, creating one for ${email}...`);
+        const newTab = await chrome.tabs.create({
+          url: VEO_URL,
+          active: false,
+          pinned: true,
+        });
+        tabState[newTab.id] = { email, headers: {}, accessToken: null };
+        console.log(`[VEO Bridge] Created VEO tab ${newTab.id} for ${email}`);
+        wsSend({ action: 'register', email, tabId: newTab.id });
+        startZombieTimer(newTab.id);  // Track zombie potential
+      }
+      break;
+    }
+
+    case 'check_recaptcha_ready': {
+      // Layer 1: Check if grecaptcha is initialized and ready on the VEO page.
+      // Returns ready=true only if grecaptcha.enterprise.execute is callable.
+      // This is a lightweight read-only check — no token is generated.
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'recaptcha_ready',
+          requestId: msg.requestId,
+          ready: false,
+          details: { error: `No tab found for ${msg.email}` },
+        });
+        return;
+      }
+
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: () => {
+            // Check grecaptcha availability in page's main JS context
+            const hasGrecaptcha = typeof grecaptcha !== 'undefined';
+            const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
+            const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
+            const pageLoaded = document.readyState === 'complete';
+            const hasRecaptchaScript = !!document.querySelector('script[src*="recaptcha"]');
+
+            return {
+              ready: hasExecute && pageLoaded,
+              grecaptchaLoaded: hasGrecaptcha,
+              enterpriseLoaded: hasEnterprise,
+              executeAvailable: hasExecute,
+              pageLoaded,
+              hasRecaptchaScript,
+            };
+          },
+          args: [],
+        });
+
+        const details = results?.[0]?.result || {};
+        wsSend({
+          action: 'recaptcha_ready',
+          requestId: msg.requestId,
+          ready: details.ready || false,
+          details,
+        });
+      } catch (e) {
+        wsSend({
+          action: 'recaptcha_ready',
+          requestId: msg.requestId,
+          ready: false,
+          details: { error: e.message },
+        });
+      }
+      break;
+    }
+
+    case 'check_tab_alive': {
+      // On-demand check if VEO tab is alive (not discarded/frozen)
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: 'no_tab' });
+        return;
+      }
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => document.readyState,
+        });
+        wsSend({
+          action: 'tab_alive',
+          requestId: msg.requestId,
+          alive: results?.[0]?.result === 'complete',
+          tabState: results?.[0]?.result,
+        });
+      } catch (e) {
+        wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: e.message });
+      }
+      break;
+    }
+
     case 'ping':
       wsSend({ action: 'pong' });
       break;
@@ -346,6 +480,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       tabState[tabId] = { email: null, headers: {}, accessToken: null };
     }
     tabState[tabId].email = msg.email;
+    // Clear zombie timer if was pending
+    if (tabState[tabId]._zombieTimer) {
+      clearTimeout(tabState[tabId]._zombieTimer);
+      delete tabState[tabId]._zombieTimer;
+    }
 
     console.log(`[VEO Bridge] Tab ${tabId} registered: ${msg.email}`);
 
@@ -355,6 +494,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       email: msg.email,
       tabId: tabId,
     });
+
+    sendResponse({ ok: true });
+  }
+
+  // ── Logout Detection from content.js ──
+  if (msg.action === 'tab_logout' && sender.tab) {
+    const tabId = sender.tab.id;
+    const state = tabState[tabId];
+    const email = state?.email;
+
+    console.warn(`[VEO Bridge] 🔴 Tab ${tabId} reported logout: ${msg.reason} (email: ${email || 'unknown'})`);
+
+    if (email) {
+      // Notify app that this account is logged out
+      wsSend({
+        action: 'account_logged_out',
+        email: email,
+        reason: msg.reason || 'unknown',
+        tabId: tabId,
+      });
+
+      // Clear tab state — this tab is no longer useful
+      delete tabState[tabId];
+      console.log(`[VEO Bridge] Cleared state for logged-out tab ${tabId} (${email})`);
+    }
 
     sendResponse({ ok: true });
   }
@@ -372,6 +536,74 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false; // sync response
 });
 
+
+// ── URL-Based Logout Detection + Tab Discard Recovery ──────────────────
+// Monitor VEO tabs for: logout redirects, Memory Saver discards
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const state = tabState[tabId];
+  if (!state) return;
+
+  // ── Tab Discard Detection (Memory Saver) ──
+  // Chrome can discard inactive tabs, killing content scripts.
+  // Detect immediately → notify app → auto-reload.
+  if (changeInfo.discarded === true && state.email) {
+    console.warn(`[VEO Bridge] ⚠️ Tab ${tabId} (${state.email}) DISCARDED by Memory Saver`);
+    wsSend({ action: 'tab_discarded', email: state.email, tabId });
+    // Auto-reload to restore content script
+    setTimeout(() => {
+      chrome.tabs.reload(tabId, { bypassCache: false }).catch(() => { });
+      console.log(`[VEO Bridge] 🔄 Auto-reloaded discarded tab ${tabId}`);
+    }, 1000);
+    return;
+  }
+
+  // ── Tab Restored from Discard — re-inject content.js ──
+  if (changeInfo.discarded === false && changeInfo.status === 'complete' && state.email) {
+    console.log(`[VEO Bridge] ✅ Tab ${tabId} restored from discard — re-injecting content.js`);
+    chrome.scripting.executeScript({
+      target: { tabId }, files: ['content.js'],
+    }).catch(() => { });
+    return;
+  }
+
+  // ── URL-Based Logout Detection ──
+  if (!changeInfo.url) return;
+  if (changeInfo.url.includes('accounts.google.com')) {
+    const email = state.email;
+    if (email) {
+      console.warn(`[VEO Bridge] 🔴 Tab ${tabId} (${email}) navigated to Google login — LOGGED OUT`);
+      wsSend({
+        action: 'account_logged_out',
+        email: email,
+        reason: 'redirect_to_login',
+        tabId: tabId,
+      });
+      delete tabState[tabId];
+    }
+  }
+});
+
+
+// ── Zombie Tab Tracking ────────────────────────────────────────────────
+// When a tab is created/tracked but gets no email within 30s, warn about it
+
+function startZombieTimer(tabId) {
+  if (!tabState[tabId]) return;
+  tabState[tabId]._zombieTimer = setTimeout(() => {
+    const state = tabState[tabId];
+    if (state && !state.email) {
+      console.warn(`[VEO Bridge] ⚠️ Zombie tab ${tabId}: no email assigned after 30s`);
+      // Notify app about unresponsive tab
+      wsSend({
+        action: 'zombie_tab',
+        tabId: tabId,
+        message: 'Tab created but no email detected after 30 seconds',
+      });
+    }
+  }, 30000); // 30 seconds
+}
+
 // Clean up on tab close + auto-reopen VEO tab
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (tabState[tabId]) {
@@ -381,10 +613,16 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     if (email) {
       wsSend({ action: 'tab_closed', email, tabId });
     }
-    // Auto-reopen VEO tab if it was closed
+    // Auto-reopen VEO tab if it was closed AND no other VEO tabs exist
     if (wasVeoTab) {
-      console.log(`[VEO Bridge] VEO tab ${tabId} closed — reopening in 2s...`);
-      setTimeout(() => ensureVeoTab(), 2000);
+      // Check if there are other VEO tabs still open
+      const otherVeoTabs = Object.entries(tabState).filter(([_, s]) => s.email);
+      if (otherVeoTabs.length === 0) {
+        console.log(`[VEO Bridge] Last VEO tab ${tabId} closed — reopening in 2s...`);
+        setTimeout(() => ensureVeoTab(), 2000);
+      } else {
+        console.log(`[VEO Bridge] VEO tab ${tabId} closed — ${otherVeoTabs.length} other VEO tab(s) still open`);
+      }
     }
   }
 });
@@ -537,16 +775,28 @@ async function ensureVeoTab() {
   _ensureVeoTabRunning = true;
 
   try {
-    // Check if any VEO tab already exists
+    // Check if any VEO tab already exists (broad match: any locale/path)
     const existing = await chrome.tabs.query({ url: '*://labs.google/*' });
     if (existing.length > 0) {
       // Pin any unpinned VEO tabs
       for (const tab of existing) {
         if (!tab.pinned) {
-          chrome.tabs.update(tab.id, { pinned: true });
-          console.log(`[VEO Bridge] 📌 Pinned existing VEO tab ${tab.id}`);
+          try {
+            await chrome.tabs.update(tab.id, { pinned: true });
+            console.log(`[VEO Bridge] 📌 Pinned existing VEO tab ${tab.id}: ${tab.url}`);
+          } catch (e) {
+            console.debug(`[VEO Bridge] Could not pin tab ${tab.id}: ${e.message}`);
+          }
         }
       }
+      console.log(`[VEO Bridge] ✅ ${existing.length} VEO tab(s) already exist — skipping creation`);
+      return;
+    }
+
+    // Also check tabState — a tab might be loading and not yet queryable
+    const trackedVeoTabs = Object.entries(tabState).filter(([_, s]) => s.email);
+    if (trackedVeoTabs.length > 0) {
+      console.log(`[VEO Bridge] ✅ ${trackedVeoTabs.length} VEO tab(s) tracked in state — skipping creation`);
       return;
     }
 
@@ -558,6 +808,7 @@ async function ensureVeoTab() {
       pinned: true,
     });
     console.log(`[VEO Bridge] 📌 Created pinned VEO tab ${tab.id}`);
+    startZombieTimer(tab.id);  // Track zombie potential
 
     // Inject content.js after page loads
     setTimeout(async () => {

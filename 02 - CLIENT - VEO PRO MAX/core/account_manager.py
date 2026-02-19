@@ -42,8 +42,8 @@ class AccountManager:
         return self._session.max_slots
     
     def set_max_slots(self, n: int):
-        """Set max concurrent slots (0-4). 0 effectively disables processing."""
-        self._session.max_slots = max(0, min(n, 4))
+        """Set max concurrent slots (0-5). 0 effectively disables processing."""
+        self._session.max_slots = max(0, min(n, 5))
     
     @property
     def retry_count(self) -> int:
@@ -230,8 +230,9 @@ class AccountManager:
         if self._extension_bridge and self._extension_bridge.is_connected(self.email):
             try:
                 result = await self._extension_bridge.request_access_token(self.email, timeout=10)
-                if result and result.get('token'):
-                    token = result['token']
+                # request_access_token() returns token string directly (not a dict)
+                token = result if isinstance(result, str) else (result.get('token') if isinstance(result, dict) else None)
+                if token:
                     # Update session with fresh token (assume ~55 min lifetime)
                     self._session.access_token = token
                     self._session.token_expires = datetime.now() + timedelta(minutes=55)
@@ -245,8 +246,8 @@ class AccountManager:
                 await asyncio.sleep(3)
                 
                 result = await self._extension_bridge.request_access_token(self.email, timeout=10)
-                if result and result.get('token'):
-                    token = result['token']
+                token = result if isinstance(result, str) else (result.get('token') if isinstance(result, dict) else None)
+                if token:
                     self._session.access_token = token
                     self._session.token_expires = datetime.now() + timedelta(minutes=55)
                     log.info(f"[{self.email}] 🔑 Access token refreshed after tab reload")
@@ -258,6 +259,16 @@ class AccountManager:
         # Priority 2: Check if token became valid (e.g., refreshed by another path)
         if not self._session.is_token_expired:
             return self._session.access_token
+        
+        # ─── Priority 3: Active Extension Recovery Loop ───
+        # After hard browser restart, Extension needs time to reconnect.
+        # ALL workers on this account are blocked anyway (no reCAPTCHA either),
+        # so waiting here is the correct behavior — not wasted time.
+        if self._extension_bridge and not self._extension_bridge.is_connected(self.email):
+            log.info(f"[{self.email}] ⏳ Extension disconnected — starting active recovery")
+            token = await self._active_extension_recovery()
+            if token:
+                return token
         
         log.error(f"[{self.email}] ❌ Access token refresh failed — all sources exhausted")
         return None
@@ -295,6 +306,9 @@ class AccountManager:
     async def refresh_recaptcha(self) -> Optional[str]:
         """Get fresh reCAPTCHA token via Extension bridge (extension-only).
         
+        Retries up to 3 times with progressive delay on timeout
+        (CfT cold start or reCAPTCHA script loading may delay first attempts).
+        
         Returns:
             Fresh reCAPTCHA token, or None if extension not connected.
         """
@@ -310,41 +324,46 @@ class AccountManager:
             )
             return None
         
-        try:
-            token = await self._extension_bridge.request_recaptcha(self.email, timeout=15)
-            if token:
-                self._token_cache.set(token)
-                self._session.update_recaptcha(token)
-                log.info(f"[{self.email}] 🧩 reCAPTCHA refreshed via Extension bridge")
-                return token
-            log.warning(f"[{self.email}] Extension bridge returned no reCAPTCHA token")
-        except Exception as e:
-            log.warning(f"[{self.email}] Extension reCAPTCHA failed: {e}")
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                token = await self._extension_bridge.request_recaptcha(self.email, timeout=25)
+                if token:
+                    self._token_cache.set(token)
+                    self._session.update_recaptcha(token)
+                    log.info(f"[{self.email}] 🧩 reCAPTCHA refreshed via Extension bridge (attempt {attempt})")
+                    return token
+                log.warning(f"[{self.email}] Extension bridge returned no reCAPTCHA token (attempt {attempt})")
+            except Exception as e:
+                log.warning(f"[{self.email}] Extension reCAPTCHA failed (attempt {attempt}): {e}")
+            
+            # Progressive delay (reCAPTCHA script may still be loading)
+            if attempt < max_attempts:
+                delay = 3 * attempt  # 3s, 6s
+                log.info(f"[{self.email}] Retrying reCAPTCHA in {delay}s...")
+                await asyncio.sleep(delay)
+        
         return None
     
     async def ensure_browser(self, headless: bool = True):
-        """Start persistent browser if not running.
+        """Attach to debug browser page for TRPCClient access only.
         
-        Called by MultiAccountManager.startup() or lazily before first generate.
+        Extension-only architecture: headers, access tokens, and reCAPTCHA
+        are ALL provided by the Extension bridge. The debug browser page
+        is only needed for TRPCClient project operations.
         
-        Priority:
-        1. If debug browser is already open → attach to its page (no new browser)
-        2. Otherwise → launch headless browser with persistent profile
+        No headless browser is launched — extension handles all runtime data.
         """
         if self._browser_session and self._browser_session.is_ready:
             return
         
         profile_path = self._session.profile_path
         if not profile_path:
-            log.warning(f"[{self.email}] No profile_path set, cannot start browser")
+            log.warning(f"[{self.email}] No profile_path set, cannot attach browser")
             return
         
-        # Priority 1: Try to attach to existing debug browser page
-        # This avoids Chrome profile lock conflict (only 1 process per user-data-dir)
+        # Try to attach to existing debug browser page (for TRPCClient only)
         if self._profiles_controller:
-            # Wait for debug browser to be ready (may be starting on background thread)
-            # Without this wait, we fall through to Priority 2 which crashes
-            # because it tries to launch headless Chrome on the same locked profile dir
             debug_page = self._profiles_controller.get_debug_browser_page(self.email)
             if not debug_page:
                 # Check if debug browser is being opened (entry exists but page not ready)
@@ -358,68 +377,17 @@ class AccountManager:
                             break
             
             if debug_page:
-                log.info(f"[{self.email}] 🔗 Attaching to debug browser (shared profile)")
+                log.info(f"[{self.email}] 🔗 Attaching to debug browser (page access only)")
                 self._browser_session = RecaptchaBrowserSession(profile_path)
                 self._browser_session.attach_to_sync_page(self._profiles_controller, self.email)
-                
-                # Bug 10 fix: Capture x-browser-* headers from debug browser
-                # RecaptchaBrowserSession._SyncPageAsyncWrapper.route() is a no-op,
-                # so captured_headers is always empty. Read directly from
-                # profiles_controller which has real request interception.
-                headers = self._profiles_controller.get_debug_browser_headers(self.email)
-                if headers:
-                    self._session.update_browser_headers(
-                        browser_validation=headers.get("x-browser-validation", ""),
-                        client_data=headers.get("x-client-data", ""),
-                        browser_channel=headers.get("x-browser-channel", "stable"),
-                        browser_copyright=headers.get("x-browser-copyright", ""),
-                        browser_year=headers.get("x-browser-year", ""),
-                    )
-                    log.info(f"[{self.email}] Browser headers captured from debug browser: {list(headers.keys())}")
-                else:
-                    log.warning(f"[{self.email}] ⚠️ Debug browser attached but no x-browser-* headers captured")
-                
-                # Extract access_token from debug browser page
-                if not self._session.access_token:
-                    access_token, email = await self._browser_session.extract_access_token()
-                    if access_token:
-                        self._session.access_token = access_token
-                        self._session.token_expires = datetime.now() + timedelta(hours=1)
-                        log.info(f"[{self.email}] ✅ Access token extracted from debug browser ({len(access_token)} chars)")
-                    else:
-                        log.warning(f"[{self.email}] ⚠️ Could not extract access_token from debug browser")
-                
-                # Warmup: simulate human activity for reCAPTCHA trust
-                await self._browser_session.warmup()
+                # NOTE: No header capture, no token extraction, no warmup.
+                # Extension bridge provides all runtime data.
                 return
         
-        # Priority 2: Launch own headless browser (no debug browser available)
-        self._browser_session = RecaptchaBrowserSession(profile_path)
-        await self._browser_session.ensure_ready(headless=headless)
-        
-        # Extract access_token from __NEXT_DATA__ (page is on VEO)
-        # ChromeProfile does NOT store access_token, so we must get it live
-        if not self._session.access_token:
-            access_token, email = await self._browser_session.extract_access_token()
-            if access_token:
-                self._session.access_token = access_token
-                # Set expiry to 1 hour from now (Google OAuth2 default)
-                self._session.token_expires = datetime.now() + timedelta(hours=1)
-                log.info(f"[{self.email}] ✅ Access token extracted from browser ({len(access_token)} chars)")
-            else:
-                log.warning(f"[{self.email}] ⚠️ Could not extract access_token from browser page")
-        
-        # Capture initial headers — ALL 5 per Protocol Analysis §1.4
-        headers = self._browser_session.captured_headers
-        if headers:
-            self._session.update_browser_headers(
-                browser_validation=headers.get("x-browser-validation", ""),
-                client_data=headers.get("x-client-data", ""),
-                browser_channel=headers.get("x-browser-channel", "stable"),
-                browser_copyright=headers.get("x-browser-copyright", ""),
-                browser_year=headers.get("x-browser-year", ""),
-            )
-            log.info(f"[{self.email}] Browser headers captured: {list(headers.keys())}")
+        # No debug browser available — that's fine in extension-only architecture.
+        # Extension provides headers, tokens, and reCAPTCHA.
+        # TRPCClient will fall back to API-based project creation.
+        log.info(f"[{self.email}] No debug browser — extension-only mode (TRPCClient unavailable)")
     
     async def soft_recover_browser(self):
         """Soft recovery: navigate away and back WITHOUT killing Chrome.
@@ -483,8 +451,16 @@ class AccountManager:
             
             try:
                 self._profiles_controller.open_browser_for_debug(email)
-                log.info(f"[{email}] Chrome relaunch signal sent, waiting for ready...")
-                await asyncio.sleep(10)
+                log.info(f"[{email}] Chrome relaunch signal sent, waiting for Extension...")
+                # Event-driven wait instead of hardcoded sleep(10)
+                if self._extension_bridge:
+                    connected = await self._extension_bridge.wait_for_extension(email, timeout=30)
+                    if connected:
+                        log.info(f"[{email}] ✅ Extension reconnected after restart")
+                    else:
+                        log.warning(f"[{email}] ⚠️ Extension not reconnected within 30s")
+                else:
+                    await asyncio.sleep(10)  # Fallback if no bridge
             except Exception as e:
                 log.error(f"[{email}] open_browser_for_debug error: {e}")
                 return False
@@ -535,6 +511,171 @@ class AccountManager:
             await self._browser_session.close()
             self._browser_session = None
     
+    # ═══════════════════════════════════════════════════════════════
+    # ACTIVE EXTENSION RECOVERY
+    # ═══════════════════════════════════════════════════════════════
+    
+    async def _active_extension_recovery(self) -> Optional[str]:
+        """Actively drive Extension reconnection through all phases.
+        
+        Phase 1: Verify Chrome alive → relaunch if dead
+        Phase 2: Verify Extension loaded via CDP → wait/kill+relaunch
+        Phase 3: Wait for WebSocket registration (event-driven)
+        Phase 4: Extract access token
+        
+        Loops indefinitely until success. Only gives up on confirmed
+        internet loss (120s consecutive down).
+        """
+        email = self.email
+        cycle = 0
+        
+        while True:
+            cycle += 1
+            log.info(f"[{email}] 🔄 Recovery cycle {cycle}")
+            
+            # ── Phase 1: Chrome Process ──
+            chrome_alive = await self._verify_chrome_alive()
+            if not chrome_alive:
+                # Check internet first
+                if not await self._check_internet():
+                    log.warning(f"[{email}] 🌐 Internet appears down — waiting...")
+                    # Wait up to 120s for internet, checking every 10s
+                    inet_restored = False
+                    for _ in range(12):
+                        await asyncio.sleep(10)
+                        if await self._check_internet():
+                            inet_restored = True
+                            break
+                    if not inet_restored:
+                        log.error(f"[{email}] ❌ Internet down for 120s — giving up")
+                        return None
+                
+                # Internet OK → relaunch Chrome
+                if self._profiles_controller:
+                    log.info(f"[{email}] Relaunching Chrome...")
+                    try:
+                        self._profiles_controller.open_browser_for_debug(email)
+                        await asyncio.sleep(3)  # Process startup
+                    except Exception as e:
+                        log.error(f"[{email}] Chrome relaunch failed: {e}")
+                        await asyncio.sleep(5)
+                        continue
+            
+            # ── Phase 2: Extension Loaded (CDP check) ──
+            ext_loaded = False
+            for attempt in range(6):  # 6 × 5s = 30s max
+                if self._is_extension_loaded_check():
+                    ext_loaded = True
+                    break
+                log.debug(f"[{email}] Extension not loaded yet (attempt {attempt + 1}/6)")
+                await asyncio.sleep(5)
+            
+            if not ext_loaded:
+                log.warning(f"[{email}] Extension not loaded after 30s — kill + relaunch")
+                if self._profiles_controller:
+                    try:
+                        self._profiles_controller.kill_debug_browser(email)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(3)
+                continue  # Back to Phase 1
+            
+            # ── Phase 3: WebSocket Registration (event-driven) ──
+            if self._extension_bridge:
+                if self._extension_bridge.is_connected(email):
+                    log.info(f"[{email}] ✅ Extension already connected")
+                else:
+                    log.info(f"[{email}] Waiting for WebSocket registration...")
+                    connected = await self._extension_bridge.wait_for_extension(
+                        email, timeout=30.0
+                    )
+                    if not connected:
+                        log.warning(f"[{email}] WebSocket timeout — retry cycle")
+                        continue  # Back to Phase 1
+                    log.info(f"[{email}] ✅ Extension WebSocket connected")
+            
+            # ── Phase 4: Token Refresh ──
+            for token_attempt in range(3):
+                try:
+                    result = await self._extension_bridge.request_access_token(
+                        email, timeout=10
+                    )
+                    token = (
+                        result if isinstance(result, str)
+                        else (result.get('token') if isinstance(result, dict) else None)
+                    )
+                    if token:
+                        self._session.access_token = token
+                        self._session.token_expires = datetime.now() + timedelta(minutes=55)
+                        log.info(f"[{email}] 🔑 Access token refreshed after recovery (cycle {cycle})")
+                        return token
+                except Exception as e:
+                    log.warning(f"[{email}] Token extract attempt {token_attempt + 1}/3: {e}")
+                await asyncio.sleep(2)
+            
+            log.warning(f"[{email}] Token refresh failed after connection — retry cycle")
+    
+    def _is_extension_loaded_check(self) -> bool:
+        """Check if Extension is loaded in Chrome via CDP /json endpoint."""
+        try:
+            from core.chrome_manager import _is_extension_loaded, _load_pid_file
+            profile_path = self._session.profile_path
+            if not profile_path:
+                return False
+            pid_info = _load_pid_file(profile_path)
+            if not pid_info:
+                return False
+            return _is_extension_loaded(pid_info["port"])
+        except Exception:
+            return False
+    
+    async def _verify_chrome_alive(self) -> bool:
+        """Check if Chrome process is still running for this account."""
+        try:
+            from core.chrome_manager import _is_chrome_process_alive, _load_pid_file
+            profile_path = self._session.profile_path
+            if not profile_path:
+                return False
+            pid_info = _load_pid_file(profile_path)
+            if not pid_info:
+                return False
+            return _is_chrome_process_alive(pid_info["pid"], profile_path)
+        except Exception:
+            return False
+    
+    async def _check_internet(self) -> bool:
+        """Quick internet connectivity check (HEAD to google.com)."""
+        import aiohttp
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.head(
+                    "https://www.google.com",
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    return resp.status < 500
+        except Exception:
+            return False
+    
+    async def _efficiency_mode_watchdog(self):
+        """Re-disable Windows Efficiency Mode every 5 minutes.
+        
+        Windows may re-apply Efficiency Mode after we disable it,
+        especially when the window is hidden or after user interaction
+        with Task Manager. Periodic re-check keeps Chrome responsive.
+        """
+        while True:
+            await asyncio.sleep(300)  # 5 minutes
+            try:
+                from core.chrome_manager import _disable_efficiency_mode, _load_pid_file
+                profile_path = self._session.profile_path
+                if not profile_path:
+                    continue
+                pid_info = _load_pid_file(profile_path)
+                if pid_info:
+                    _disable_efficiency_mode(pid_info["pid"])
+            except Exception:
+                pass
+    
     def get_api_headers(self) -> dict:
         """Get per-account x-browser-* headers for API calls (extension-only).
         
@@ -544,11 +685,26 @@ class AccountManager:
         return self.get_browser_headers()
     
     def get_browser_headers(self) -> dict:
-        """Get x-browser-* headers from Extension bridge (extension-only)."""
+        """Get x-browser-* headers from Extension bridge, with session fallback."""
         if self._extension_bridge:
             ext_headers = self._extension_bridge.get_cached_headers(self.email)
             if ext_headers:
                 return ext_headers
+        # Fallback: use session-stored headers from CDP/debug browser capture
+        if self._session:
+            session_headers = {}
+            if getattr(self._session, 'browser_validation', None):
+                session_headers['x-browser-validation'] = self._session.browser_validation
+            if getattr(self._session, 'client_data', None):
+                session_headers['x-client-data'] = self._session.client_data
+            if getattr(self._session, 'browser_channel', None):
+                session_headers['x-browser-channel'] = self._session.browser_channel
+            if getattr(self._session, 'browser_copyright', None):
+                session_headers['x-browser-copyright'] = self._session.browser_copyright
+            if getattr(self._session, 'browser_year', None):
+                session_headers['x-browser-year'] = self._session.browser_year
+            if session_headers:
+                return session_headers
         return {}
     
     def update_access_token(self, token: str, expires_in: int = TokenLifetime.ACCESS_TOKEN):
