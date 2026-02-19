@@ -24,8 +24,10 @@ class AppSettings:
     
     # === GENERATION DEFAULTS ===
     default_aspect_ratio: str = "LANDSCAPE"
-    default_model: str = "veo_3_1"
-    default_output_count: int = 1
+    default_model: str = "Veo 3.1 - Fast"       # Display name (matches sidebar dropdown)
+    default_output_count: int = 4                # Match sidebar default
+    default_download_quality: str = "1080p"      # Video download quality
+    default_image_quality: str = "1k"            # Image download quality
     auto_enhance_prompt: bool = False
     
     # === QUEUE ===

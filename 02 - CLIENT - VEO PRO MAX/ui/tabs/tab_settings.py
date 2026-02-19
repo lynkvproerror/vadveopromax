@@ -12,8 +12,8 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QComboBox, QLineEdit, QCheckBox,
-    QRadioButton, QButtonGroup, QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QSizePolicy
+    QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem,
+    QHeaderView, QMessageBox, QSizePolicy, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal, Slot, QTimer
 
@@ -725,27 +725,115 @@ class TabSettings(QWidget):
             self._refresh_accounts()
     
     def _create_defaults_section(self) -> QWidget:
-        """Create Default Settings section - matches CTK lines 94-106."""
+        """Create Default Settings section — split into Video + Image sub-sections."""
         section, layout = self._create_section("⚙️ Default Settings")
         
-        # Settings - EXACT from CTK lines 98-103
-        settings = [
-            ("Aspect Ratio", ["16:9 (Landscape)", "9:16 (Portrait)"]),
-            ("Download Quality", ["720p", "1080p", "4K"]),
-            ("AI Model", ["Veo 3.1 - Fast", "Veo 3.1 - Quality", "Veo 2 - Fast"]),
-            ("Outputs per Prompt", ["1", "2", "3", "4"]),
-        ]
+        # Load saved values from AppSettings
+        try:
+            from config.settings import get_settings as _gs
+            _s = _gs()
+        except Exception:
+            _s = None
         
         self.setting_combos = {}
-        for label, options in settings:
-            combo = self._create_setting_row(layout, label, options)
-            self.setting_combos[label] = combo
+        
+        # --- Shared: Aspect Ratio ---
+        ar_options = ["16:9 (Landscape)", "9:16 (Portrait)"]
+        combo = self._create_setting_row(layout, "Aspect Ratio", ar_options)
+        if _s:
+            _ar = getattr(_s, 'default_aspect_ratio', 'LANDSCAPE')
+            combo.setCurrentText("9:16 (Portrait)" if "PORTRAIT" in _ar.upper() else "16:9 (Landscape)")
+        self.setting_combos["Aspect Ratio"] = combo
+        
+        # --- Shared: Outputs per Prompt ---
+        out_options = ["1", "2", "3", "4"]
+        combo = self._create_setting_row(layout, "Outputs per Prompt", out_options)
+        if _s:
+            _cnt = str(getattr(_s, 'default_output_count', 4))
+            if _cnt in out_options:
+                combo.setCurrentText(_cnt)
+        self.setting_combos["Outputs per Prompt"] = combo
+        
+        # ─── 🎬 Video Defaults ───
+        vid_label = QLabel("🎬 Video Defaults")
+        vid_label.setStyleSheet(f"color: {Theme.BLUE}; font-weight: bold; padding-top: 8px;")
+        layout.addWidget(vid_label)
+        
+        # Video: AI Model
+        model_options = [
+            "Veo 3.1 - Fast",
+            "Veo 3.1 - Fast [LP]",
+            "Veo 3.1 - Quality",
+            "Veo 2 - Fast",
+            "Veo 2 - Quality",
+        ]
+        combo = self._create_setting_row(layout, "AI Model", model_options)
+        if _s:
+            _m = getattr(_s, 'default_model', 'Veo 3.1 - Fast')
+            idx = combo.findText(_m)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        self.setting_combos["AI Model"] = combo
+        
+        # Video: Download Quality
+        vq_options = ["720p", "1080p", "4K"]
+        combo = self._create_setting_row(layout, "Download Quality", vq_options)
+        if _s:
+            _vq = getattr(_s, 'default_download_quality', '1080p')
+            if _vq in vq_options:
+                combo.setCurrentText(_vq)
+        self.setting_combos["Download Quality"] = combo
+        
+        # ─── 🖼️ Image Defaults ───
+        img_label = QLabel("🖼️ Image Defaults")
+        img_label.setStyleSheet(f"color: {Theme.PURPLE}; font-weight: bold; padding-top: 8px;")
+        layout.addWidget(img_label)
+        
+        # Image: Download Quality
+        iq_options = ["1k", "2k", "4k"]
+        combo = self._create_setting_row(layout, "Image Quality", iq_options)
+        if _s:
+            _iq = getattr(_s, 'default_image_quality', '1k')
+            if _iq in iq_options:
+                combo.setCurrentText(_iq)
+        self.setting_combos["Image Quality"] = combo
+        
+        # Wire save-on-change for all combos
+        for key, cb in self.setting_combos.items():
+            cb.currentTextChanged.connect(self._save_default_settings)
         
         return section
     
+    def _save_default_settings(self, *args):
+        """Persist default settings to AppSettings."""
+        try:
+            from config.settings import get_settings as _gs
+            settings = _gs()
+            # Aspect Ratio
+            ar_text = self.setting_combos["Aspect Ratio"].currentText()
+            settings.default_aspect_ratio = "PORTRAIT" if "Portrait" in ar_text else "LANDSCAPE"
+            # Outputs per Prompt
+            settings.default_output_count = int(self.setting_combos["Outputs per Prompt"].currentText())
+            # Video: AI Model
+            settings.default_model = self.setting_combos["AI Model"].currentText()
+            # Video: Download Quality
+            settings.default_download_quality = self.setting_combos["Download Quality"].currentText()
+            # Image: Quality
+            settings.default_image_quality = self.setting_combos["Image Quality"].currentText()
+            settings.save()
+        except Exception:
+            pass
+    
     def _create_output_section(self) -> QWidget:
-        """Create Output Settings section - matches CTK lines 108-170."""
+        """Create Output Settings section — folder + filename toggles."""
         section, layout = self._create_section("📁 Output Settings")
+        
+        # Load saved values
+        try:
+            from config.settings import get_settings as _gs
+            _s = _gs()
+        except Exception:
+            _s = None
         
         # Default output folder
         folder_layout = QHBoxLayout()
@@ -758,22 +846,30 @@ class TabSettings(QWidget):
         self.output_folder_entry = QLineEdit()
         self.output_folder_entry.setPlaceholderText("D:/Projects/VEO")
         self.output_folder_entry.setMinimumWidth(300)
+        if _s and getattr(_s, 'output_folder', ''):
+            self.output_folder_entry.setText(_s.output_folder)
         folder_layout.addWidget(self.output_folder_entry)
         
         browse_btn = QPushButton("📂")
         browse_btn.setFixedSize(32, 32)
         browse_btn.setStyleSheet(f"background-color: {Theme.SURFACE2};")
+        browse_btn.clicked.connect(self._browse_output_folder)
         folder_layout.addWidget(browse_btn)
         folder_layout.addStretch()
         
         layout.addLayout(folder_layout)
         
-        # Toggles - EXACT from CTK lines 142-147
+        # Toggles with saved state
+        _ts = getattr(_s, 'include_timestamp', True) if _s else True
+        _qs = getattr(_s, 'include_quality', True) if _s else True
+        _as = getattr(_s, 'auto_start_queue', False) if _s else False
+        _ps = getattr(_s, 'pause_on_error', True) if _s else True
+        
         toggles = [
-            ("Include timestamp in filename", True),
-            ("Include quality in filename", True),
-            ("Auto-start queue when adding", False),
-            ("Pause on error", True),
+            ("Include timestamp in filename", _ts),
+            ("Include quality in filename", _qs),
+            ("Auto-start queue when adding", _as),
+            ("Pause on error", _ps),
         ]
         
         self.output_toggles = {}
@@ -781,10 +877,34 @@ class TabSettings(QWidget):
             checkbox = QCheckBox(label)
             checkbox.setChecked(default)
             checkbox.setStyleSheet(f"color: {Theme.TEXT};")
+            checkbox.toggled.connect(self._save_output_settings)
             layout.addWidget(checkbox)
             self.output_toggles[label] = checkbox
         
+        # Wire folder save
+        self.output_folder_entry.textChanged.connect(self._save_output_settings)
+        
         return section
+    
+    def _browse_output_folder(self):
+        """Open folder picker for default output folder."""
+        folder = QFileDialog.getExistingDirectory(self, "Select Default Output Folder")
+        if folder:
+            self.output_folder_entry.setText(folder)
+    
+    def _save_output_settings(self, *args):
+        """Persist output settings to AppSettings."""
+        try:
+            from config.settings import get_settings as _gs
+            settings = _gs()
+            settings.output_folder = self.output_folder_entry.text()
+            settings.include_timestamp = self.output_toggles.get("Include timestamp in filename").isChecked() if "Include timestamp in filename" in self.output_toggles else True
+            settings.include_quality = self.output_toggles.get("Include quality in filename").isChecked() if "Include quality in filename" in self.output_toggles else True
+            settings.auto_start_queue = self.output_toggles.get("Auto-start queue when adding").isChecked() if "Auto-start queue when adding" in self.output_toggles else False
+            settings.pause_on_error = self.output_toggles.get("Pause on error").isChecked() if "Pause on error" in self.output_toggles else True
+            settings.save()
+        except Exception:
+            pass
     
     # _create_browser_section — REMOVED (headless/persistent profile managed elsewhere)
     
@@ -1760,13 +1880,24 @@ class TabSettings(QWidget):
     
     def _on_reset(self):
         """Reset to default values."""
-        # Reset combos to first value
-        for combo in self.setting_combos.values():
-            combo.setCurrentIndex(0)
-        # Reset toggles
-        for toggle in self.output_toggles.values():
-            toggle.setChecked(False)
-        # browser_toggles removed — no longer needed
+        # Reset defaults section
+        if "Aspect Ratio" in self.setting_combos:
+            self.setting_combos["Aspect Ratio"].setCurrentText("16:9 (Landscape)")
+        if "Outputs per Prompt" in self.setting_combos:
+            self.setting_combos["Outputs per Prompt"].setCurrentText("4")
+        if "AI Model" in self.setting_combos:
+            self.setting_combos["AI Model"].setCurrentText("Veo 3.1 - Fast")
+        if "Download Quality" in self.setting_combos:
+            self.setting_combos["Download Quality"].setCurrentText("1080p")
+        if "Image Quality" in self.setting_combos:
+            self.setting_combos["Image Quality"].setCurrentText("1k")
+        # Reset output toggles
+        if hasattr(self, 'output_toggles'):
+            for key, toggle in self.output_toggles.items():
+                if "timestamp" in key.lower() or "quality" in key.lower() or "Pause" in key:
+                    toggle.setChecked(True)
+                else:
+                    toggle.setChecked(False)
         # Reset worker spinboxes to defaults
         self.retry_count.setValue(3)
         self.request_timeout.setValue(120)
@@ -2461,12 +2592,12 @@ class TabSettings(QWidget):
             "download_quality": self.setting_combos.get("Download Quality").currentText() if "Download Quality" in self.setting_combos else "",
             "ai_model": self.setting_combos.get("AI Model").currentText() if "AI Model" in self.setting_combos else "",
             "outputs_per_prompt": self.setting_combos.get("Outputs per Prompt").currentText() if "Outputs per Prompt" in self.setting_combos else "",
+            "image_quality": self.setting_combos.get("Image Quality").currentText() if "Image Quality" in self.setting_combos else "",
             "output_folder": self.output_folder_entry.text(),
             "include_timestamp": self.output_toggles.get("Include timestamp in filename").isChecked() if "Include timestamp in filename" in self.output_toggles else False,
             "include_quality": self.output_toggles.get("Include quality in filename").isChecked() if "Include quality in filename" in self.output_toggles else False,
             "auto_start_queue": self.output_toggles.get("Auto-start queue when adding").isChecked() if "Auto-start queue when adding" in self.output_toggles else False,
             "pause_on_error": self.output_toggles.get("Pause on error").isChecked() if "Pause on error" in self.output_toggles else False,
-            # browser_toggles removed — headless/persistent managed elsewhere
             "continuation_enabled": self.cont_switch.isToggled(),
             "extract_point_ms": self._parse_extract_point(self.extract_menu.currentText()),
             # Enhancer Image (3-toggle system)
@@ -2484,6 +2615,4 @@ class TabSettings(QWidget):
             # Session & Data
             "restore_queue_on_startup": self.restore_queue_switch.isToggled(),
             "restore_tabs_on_startup": self.restore_tabs_switch.isToggled(),
-            # Font Size (new per docs)
-            # font_size removed — mockup control deleted
         }

@@ -96,10 +96,11 @@ class SidebarBase(QWidget):
         self._layout.addWidget(self.browse_btn)
         
         # Auto-populate from global default settings
+        global_settings = None
         try:
             from config.settings import get_settings
             global_settings = get_settings()
-            if global_settings.output_folder:
+            if global_settings and global_settings.output_folder:
                 self.output_folder.setText(global_settings.output_folder)
         except Exception:
             pass
@@ -110,6 +111,10 @@ class SidebarBase(QWidget):
         self.aspect_ratio = QComboBox()
         self.aspect_ratio.addItems(["16:9 (Landscape)", "9:16 (Portrait)"])
         self.aspect_ratio.setMinimumHeight(32)
+        # Auto-populate from AppSettings
+        if global_settings:
+            _ar = getattr(global_settings, 'default_aspect_ratio', 'LANDSCAPE')
+            self.aspect_ratio.setCurrentText("9:16 (Portrait)" if "PORTRAIT" in _ar.upper() else "16:9 (Landscape)")
         self._layout.addWidget(self.aspect_ratio)
     
     def _create_tab_widgets(self):
@@ -216,12 +221,21 @@ class VideoSidebar(SidebarBase):
     
     def _create_tab_widgets(self):
         """Create video-specific sidebar widgets."""
+        # Load defaults from AppSettings
+        _s = None
+        try:
+            from config.settings import get_settings
+            _s = get_settings()
+        except Exception:
+            pass
+        
         # === OUTPUTS PER PROMPT ===
         self._create_section_label("🎬 Outputs/Prompt")
         
         self.outputs_per_prompt = QComboBox()
         self.outputs_per_prompt.addItems(["1 video", "2 videos", "3 videos", "4 videos"])
-        self.outputs_per_prompt.setCurrentText("4 videos")
+        _oc = getattr(_s, 'default_output_count', 4) if _s else 4
+        self.outputs_per_prompt.setCurrentText(f"{_oc} video" if _oc == 1 else f"{_oc} videos")
         self.outputs_per_prompt.setMinimumHeight(32)
         self._layout.addWidget(self.outputs_per_prompt)
         
@@ -236,6 +250,11 @@ class VideoSidebar(SidebarBase):
             "Veo 2 - Fast",
             "Veo 2 - Quality",
         ])
+        if _s:
+            _m = getattr(_s, 'default_model', 'Veo 3.1 - Fast')
+            idx = self.model.findText(_m)
+            if idx >= 0:
+                self.model.setCurrentIndex(idx)
         self.model.setMinimumHeight(32)
         self._layout.addWidget(self.model)
         
@@ -244,7 +263,9 @@ class VideoSidebar(SidebarBase):
         
         self.download_quality = QComboBox()
         self.download_quality.addItems(["720p", "1080p", "4K"])
-        self.download_quality.setCurrentText("1080p")
+        if _s:
+            _dq = getattr(_s, 'default_download_quality', '1080p')
+            self.download_quality.setCurrentText(_dq)
         self.download_quality.setMinimumHeight(32)
         self._layout.addWidget(self.download_quality)
         
@@ -337,12 +358,21 @@ class ImageSidebar(SidebarBase):
     
     def _create_tab_widgets(self):
         """Create image-specific sidebar widgets."""
+        # Load defaults from AppSettings
+        _s = None
+        try:
+            from config.settings import get_settings
+            _s = get_settings()
+        except Exception:
+            pass
+        
         # === OUTPUTS PER PROMPT ===
         self._create_section_label("🎯 Outputs/Prompt")
         
         self.outputs_per_prompt = QComboBox()
         self.outputs_per_prompt.addItems(["1 image", "2 images", "3 images", "4 images"])
-        self.outputs_per_prompt.setCurrentText("4 images")
+        _oc = getattr(_s, 'default_output_count', 4) if _s else 4
+        self.outputs_per_prompt.setCurrentText(f"{_oc} image" if _oc == 1 else f"{_oc} images")
         self.outputs_per_prompt.setMinimumHeight(32)
         self._layout.addWidget(self.outputs_per_prompt)
         
@@ -355,7 +385,9 @@ class ImageSidebar(SidebarBase):
         
         self.download_quality = QComboBox()
         self.download_quality.addItems(["1k", "2k", "4k"])
-        self.download_quality.setCurrentText("1k")
+        if _s:
+            _iq = getattr(_s, 'default_image_quality', '1k')
+            self.download_quality.setCurrentText(_iq)
         self.download_quality.setMinimumHeight(32)
         self._layout.addWidget(self.download_quality)
         
