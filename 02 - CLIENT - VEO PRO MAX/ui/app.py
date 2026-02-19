@@ -397,14 +397,21 @@ class MainWindow(QMainWindow):
     
     @Slot(dict)
     def _on_settings_changed(self, settings: dict):
-        """Handle settings changed."""
+        """Handle settings changed — propagate to sidebars for live-update."""
         if self.settings:
             # Update settings attributes from dict
             for key, value in settings.items():
                 if hasattr(self.settings, key):
                     setattr(self.settings, key, value)
             self.settings.save()
-            self.show_toast("Settings updated", "success")
+        
+        # Live-update all generation tab sidebars
+        for tab_key in ("t2v", "i2v", "r2v", "t2i", "i2i"):
+            tab = self.tab_instances.get(tab_key)
+            if tab and hasattr(tab, 'sidebar') and hasattr(tab.sidebar, 'apply_defaults'):
+                tab.sidebar.apply_defaults()
+        
+        self.show_toast("Settings updated → all tabs synced", "success")
     
     @Slot(dict)
     def _update_queue_status(self, status: dict):

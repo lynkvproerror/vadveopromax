@@ -204,6 +204,20 @@ class SidebarBase(QWidget):
                 if ar.lower() in self.aspect_ratio.itemText(i).lower():
                     self.aspect_ratio.setCurrentIndex(i)
                     break
+    
+    def apply_defaults(self):
+        """Re-read AppSettings and push defaults to sidebar widgets (live-update)."""
+        try:
+            from config.settings import get_settings
+            s = get_settings()
+            if s.output_folder:
+                self.output_folder.setText(s.output_folder)
+            ar = getattr(s, 'default_aspect_ratio', 'LANDSCAPE')
+            self.aspect_ratio.setCurrentText(
+                "9:16 (Portrait)" if "PORTRAIT" in ar.upper() else "16:9 (Landscape)"
+            )
+        except Exception:
+            pass
 
 
 class VideoSidebar(SidebarBase):
@@ -293,6 +307,26 @@ class VideoSidebar(SidebarBase):
     def get_download_quality(self) -> str:
         """Get selected download quality."""
         return self.download_quality.currentText()
+    
+    def apply_defaults(self):
+        """Re-read AppSettings and push video defaults to sidebar (live-update)."""
+        super().apply_defaults()
+        try:
+            from config.settings import get_settings
+            s = get_settings()
+            # Outputs per prompt
+            oc = getattr(s, 'default_output_count', 4)
+            self.outputs_per_prompt.setCurrentText(f"{oc} video" if oc == 1 else f"{oc} videos")
+            # AI Model
+            m = getattr(s, 'default_model', 'Veo 3.1 - Fast')
+            idx = self.model.findText(m)
+            if idx >= 0:
+                self.model.setCurrentIndex(idx)
+            # Download Quality
+            dq = getattr(s, 'default_download_quality', '1080p')
+            self.download_quality.setCurrentText(dq)
+        except Exception:
+            pass
     
     def get_values(self) -> dict:
         """Get all sidebar values as a dictionary (includes video-specific fields)."""
@@ -411,6 +445,21 @@ class ImageSidebar(SidebarBase):
     def get_download_quality(self) -> str:
         """Get selected download quality."""
         return self.download_quality.currentText()
+    
+    def apply_defaults(self):
+        """Re-read AppSettings and push image defaults to sidebar (live-update)."""
+        super().apply_defaults()
+        try:
+            from config.settings import get_settings
+            s = get_settings()
+            # Outputs per prompt
+            oc = getattr(s, 'default_output_count', 4)
+            self.outputs_per_prompt.setCurrentText(f"{oc} image" if oc == 1 else f"{oc} images")
+            # Image Quality
+            iq = getattr(s, 'default_image_quality', '1k')
+            self.download_quality.setCurrentText(iq)
+        except Exception:
+            pass
     
     def get_values(self) -> dict:
         """Get all sidebar values as a dictionary (includes image-specific fields)."""
