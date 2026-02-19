@@ -1808,30 +1808,41 @@ class TabSettings(QWidget):
             self._enhance_download_btn.setText("🔄 Retry Download")
     
     def _on_install_pytorch(self):
-        """Install PyTorch with CUDA via pip — with logging."""
-        import logging
+        """Install PyTorch with CUDA via pip — auto-detect Python version for correct index."""
+        import logging, sys
         log = logging.getLogger("enhancer")
+        
+        # Pick CUDA index based on Python version
+        py_ver = sys.version_info
+        if py_ver >= (3, 13):
+            cuda_index = "https://download.pytorch.org/whl/cu124"
+            cuda_label = "CUDA 12.4"
+        else:
+            cuda_index = "https://download.pytorch.org/whl/cu121"
+            cuda_label = "CUDA 12.1"
+        
+        pip_cmd = f"pip install torch torchvision torchaudio --index-url {cuda_index}"
         
         reply = QMessageBox.question(
             self,
             "Install PyTorch (CUDA)",
-            "This will install PyTorch with CUDA support (~2.5GB).\n\n"
-            "Command:\npip install torch torchvision torchaudio "
-            "--index-url https://download.pytorch.org/whl/cu121\n\n"
-            "Continue?",
+            f"Python {py_ver.major}.{py_ver.minor} detected → using {cuda_label}\n\n"
+            f"This will install PyTorch with CUDA support (~2.5GB).\n\n"
+            f"Command:\n{pip_cmd}\n\n"
+            f"Continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._enhance_install_btn.setEnabled(False)
             self._enhance_install_btn.setText("⏳ Installing PyTorch...")
-            log.info("Starting PyTorch installation...")
+            log.info(f"Starting PyTorch installation (Python {py_ver.major}.{py_ver.minor}, {cuda_label})...")
             
-            import subprocess, sys, threading
+            import subprocess, threading
             def _install():
                 try:
                     cmd = [sys.executable, '-m', 'pip', 'install',
                            'torch', 'torchvision', 'torchaudio',
-                           '--index-url', 'https://download.pytorch.org/whl/cu121']
+                           '--index-url', cuda_index]
                     log.info(f"Running: {' '.join(cmd)}")
                     result = subprocess.run(
                         cmd, capture_output=True, text=True, timeout=600,
@@ -1862,12 +1873,14 @@ class TabSettings(QWidget):
                 "Please restart the app to enable GPU detection."
             )
         else:
+            import sys as _sys
+            _idx = "cu124" if _sys.version_info >= (3, 13) else "cu121"
             self._enhance_install_btn.setText("❌ Install Failed — Retry")
             QMessageBox.warning(
                 self, "Install Failed",
-                "PyTorch installation failed.\n\n"
-                "Try manually:\npip install torch torchvision torchaudio "
-                "--index-url https://download.pytorch.org/whl/cu121"
+                f"PyTorch installation failed.\n\n"
+                f"Try manually:\npip install torch torchvision torchaudio "
+                f"--index-url https://download.pytorch.org/whl/{_idx}"
             )
     
     def _save_enhancer_settings(self, *args):
