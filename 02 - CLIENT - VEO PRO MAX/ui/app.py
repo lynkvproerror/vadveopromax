@@ -538,24 +538,34 @@ class MainWindow(QMainWindow):
     def _restore_session(self):
         """Restore session state on startup."""
         if not self.controller:
+            print("[App] Session restore SKIPPED: no controller")
             return
         
         try:
             data = self.controller.restore_session()
             if not data:
+                print("[App] Session restore SKIPPED: no session data")
                 return
             
             tabs_data = data.get("tabs", {})
+            restored_count = 0
             for key, tab_data in tabs_data.items():
                 tab = self.tab_instances.get(key)
                 if tab and hasattr(tab, 'restore_state'):
+                    sidebar_data = tab_data.get("sidebar", {})
+                    print(f"[App] Restoring tab '{key}': sidebar keys={list(sidebar_data.keys())}")
                     tab.restore_state(tab_data, restore_options=self.settings)
+                    restored_count += 1
+                else:
+                    print(f"[App] Tab '{key}' not found or no restore_state method")
             
             queue_count = data.get("queue", {}).get("task_count", 0)
             saved_at = data.get("saved_at", "unknown")
-            print(f"[App] Session restored: {len(tabs_data)} tabs, {queue_count} queue tasks (from {saved_at})")
+            print(f"[App] Session restored: {restored_count}/{len(tabs_data)} tabs, {queue_count} queue tasks (from {saved_at})")
         except Exception as e:
-            print(f"[App] Session restore failed: {e}")
+            import traceback
+            print(f"[App] Session restore FAILED: {e}")
+            traceback.print_exc()
 
 
 # For testing

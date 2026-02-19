@@ -136,7 +136,10 @@ class AppController:
         
         # DevConsole reference (set by UI via set_dev_console)
         self._dev_console = None
-        self._settings = None  # AppSettings, set via set_settings()
+        # NOTE: self.settings is set in __init__ line 78 from constructor arg.
+        # self._settings is the PRIVATE alias used by some methods (restore_session, cache).
+        # Wire them to avoid the stale-None bug.
+        self._settings = self.settings
         
         # Performance tracking
         self._start_time = datetime.now()

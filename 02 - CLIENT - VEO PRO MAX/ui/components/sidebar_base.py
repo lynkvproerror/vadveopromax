@@ -384,11 +384,22 @@ class ImageSidebar(SidebarBase):
         """)
         
         # Update aspect ratio for image tabs
+        # Must re-apply saved value after clear/addItems resets index to 0
         self.aspect_ratio.clear()
         self.aspect_ratio.addItems([
             "16:9 (Landscape)",
             "9:16 (Portrait)",
         ])
+        # Re-apply saved aspect ratio from AppSettings (wiped by clear+addItems above)
+        try:
+            from config.settings import get_settings
+            _s = get_settings()
+            _ar = getattr(_s, 'default_aspect_ratio', 'LANDSCAPE')
+            self.aspect_ratio.setCurrentText(
+                "9:16 (Portrait)" if "PORTRAIT" in _ar.upper() else "16:9 (Landscape)"
+            )
+        except Exception:
+            pass
     
     def _create_tab_widgets(self):
         """Create image-specific sidebar widgets."""
