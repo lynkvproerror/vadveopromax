@@ -310,6 +310,16 @@ class Worker:
             if not project_id:
                 return WorkerResult(success=False, error="I2I requires project_id")
             
+            # Build imageInputs from uploaded image mediaGenerationIds
+            # HAR: [{name: "CAMaJ...", imageInputType: "IMAGE_INPUT_TYPE_REFERENCE"}]
+            image_inputs = []
+            if task.image_uris:
+                for uri in task.image_uris:
+                    image_inputs.append({
+                        "name": uri,
+                        "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE",
+                    })
+            
             response = await self._api_client.generate_image(
                 access_token=access_token,
                 recaptcha_token=recaptcha_token,
@@ -318,6 +328,7 @@ class Worker:
                 aspect_ratio=task.aspect_ratio,
                 model=task.model or "GEM_PIX_2",
                 output_count=task.output_count,
+                image_inputs=image_inputs,
                 paygate_tier=paygate_tier,
                 account_headers=account_headers,
             )
@@ -331,14 +342,16 @@ class Worker:
     def _process_response(self, response: APIResponse) -> WorkerResult:
         """Process API response into WorkerResult.
         
-        Extracts ALL operation names and scene IDs in submit order.
+        Handles both:
+        - Async video ops: {operations: [{operation: {name}, sceneId}]}
+        - Sync image gen: {media: [{name, image: {generatedImage: {fifeUrl, mediaGenerationId}}}]}
         """
         if not response.success:
             return WorkerResult(success=False, error=response.error)
         
         data = response.data or {}
         
-        # Extract ALL operation name(s) for async operations (ordered)
+        # Extract ALL operation name(s) for async operations (video, ordered)
         operation_names = []
         scene_ids = []
         if "operations" in data:
@@ -350,9 +363,22 @@ class Worker:
                 sid = op.get("sceneId", "")
                 scene_ids.append(sid)
         
-        # Extract direct outputs for sync operations (like T2I)
+        # Extract direct outputs for sync operations
         output_uris = []
-        if "generatedImages" in data:
+        
+        # HAR: batchGenerateImages returns {media: [{image: {generatedImage: {fifeUrl, ...}}}]}
+        if "media" in data:
+            for item in data["media"]:
+                gen_img = (item.get("image") or {}).get("generatedImage", {})
+                fife_url = gen_img.get("fifeUrl", "")
+                media_id = item.get("name", "")  # Used for upscale
+                if fife_url:
+                    output_uris.append(fife_url)
+                elif media_id:
+                    output_uris.append(media_id)
+        
+        # Fallback: older format with generatedImages
+        if not output_uris and "generatedImages" in data:
             for img in data["generatedImages"]:
                 if "imageUri" in img:
                     output_uris.append(img["imageUri"])

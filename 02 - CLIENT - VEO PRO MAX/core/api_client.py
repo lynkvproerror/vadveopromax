@@ -561,16 +561,19 @@ class VEOApiClient:
         model: str = "GEM_PIX_2",
         output_count: int = 4,
         seed: Optional[int] = None,
+        image_inputs: Optional[List[Dict[str, str]]] = None,
         paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
-        """Text to Image generation.
+        """Text-to-Image / Image-to-Image generation.
         
         Endpoint: /v1/projects/{id}/flowMedia:batchGenerateImages (Sync)
         
         HAR verified:
         - clientContext appears BOTH at top-level AND inside each request item
-        - Each request item has: clientContext, seed, imageModelName, prompt
+        - Each request item has: clientContext, seed, imageModelName, prompt, imageInputs
+        - T2I: imageInputs = []
+        - I2I: imageInputs = [{name: "mediaId", imageInputType: "IMAGE_INPUT_TYPE_REFERENCE"}]
         - Response: {"media": [{"image": {"generatedImage": {...}}}]}
         """
         endpoint = f"/v1/projects/{project_id}/flowMedia:batchGenerateImages"
@@ -580,18 +583,20 @@ class VEOApiClient:
             recaptcha_token, project_id=project_id, paygate_tier="",
         )
         
-        # T2I HAR verified: each request item has its own clientContext + seed
+        # HAR verified: each request item has its own clientContext + seed
         # Field names: "prompt" (not "promptInputs"), "imageAspectRatio" (not "aspectRatio")
         requests_list = []
         for _ in range(min(output_count, 4)):
             actual_seed = seed if seed is not None else generate_random_seed()
-            requests_list.append({
+            req_item = {
                 "clientContext": client_ctx,
                 "seed": validate_seed(actual_seed),
                 "imageModelName": model,
                 "prompt": prompt,
                 "imageAspectRatio": aspect_ratio,
-            })
+                "imageInputs": image_inputs if image_inputs else [],
+            }
+            requests_list.append(req_item)
         
         data = {
             "clientContext": client_ctx,
@@ -831,6 +836,7 @@ class VEOApiClient:
         recaptcha_token: str,
         image_base64: str,
         mime_type: str,
+        aspect_ratio: str = "IMAGE_ASPECT_RATIO_LANDSCAPE",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Upload a user image to get a mediaGenerationId.
@@ -838,7 +844,7 @@ class VEOApiClient:
         Endpoint: /v1:uploadUserImage (Sync)
         
         HAR verified:
-        - Request: {imageInput: {rawImageBytes, mimeType, isUserUploaded}, clientContext}
+        - Request: {imageInput: {rawImageBytes, mimeType, isUserUploaded, aspectRatio}, clientContext}
         - clientContext uses tool="ASSET_MANAGER", NO reCAPTCHA, NO userPaygateTier
         - Response: {mediaGenerationId: {mediaGenerationId: "CAMaJ..."}, width, height}
         
@@ -850,6 +856,7 @@ class VEOApiClient:
                 "rawImageBytes": image_base64,
                 "mimeType": mime_type,
                 "isUserUploaded": True,
+                "aspectRatio": aspect_ratio,
             },
             "clientContext": self._build_client_context(
                 recaptcha_token,

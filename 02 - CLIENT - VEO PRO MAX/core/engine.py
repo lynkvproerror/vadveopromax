@@ -1840,6 +1840,7 @@ class Engine:
                     recaptcha_token="",  # Not used by upload endpoint
                     image_base64=img_b64,
                     mime_type=mime_type,
+                    aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
                     account_headers=account.get_api_headers(),
                 )
                 
