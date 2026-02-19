@@ -1932,12 +1932,110 @@ class TabSettings(QWidget):
         return frame
     
     def _on_save(self):
-        """Save settings and emit signal."""
-        settings = self.get_settings()
-        self.settings_changed.emit(settings)
+        """Save ALL settings to AppSettings and persist to disk."""
+        import logging
+        log = logging.getLogger("settings")
+        
+        try:
+            from config.settings import get_settings, save_settings
+            s = get_settings()
+            
+            # ── Default Settings ──
+            if "Aspect Ratio" in self.setting_combos:
+                ar = self.setting_combos["Aspect Ratio"].currentText()
+                s.default_aspect_ratio = "PORTRAIT" if "Portrait" in ar else "LANDSCAPE"
+            if "Outputs per Prompt" in self.setting_combos:
+                s.default_output_count = int(self.setting_combos["Outputs per Prompt"].currentText())
+            if "AI Model" in self.setting_combos:
+                s.default_model = self.setting_combos["AI Model"].currentText()
+            if "Download Quality" in self.setting_combos:
+                s.default_download_quality = self.setting_combos["Download Quality"].currentText()
+            if "Image Quality" in self.setting_combos:
+                s.default_image_quality = self.setting_combos["Image Quality"].currentText()
+            
+            # ── Output Settings ──
+            s.output_folder = self.output_folder_entry.text()
+            if "Include timestamp in filename" in self.output_toggles:
+                s.include_timestamp = self.output_toggles["Include timestamp in filename"].isChecked()
+            if "Include quality in filename" in self.output_toggles:
+                s.include_quality = self.output_toggles["Include quality in filename"].isChecked()
+            if "Auto-start queue when adding" in self.output_toggles:
+                s.auto_start_queue = self.output_toggles["Auto-start queue when adding"].isChecked()
+            if "Pause on error" in self.output_toggles:
+                s.pause_on_error = self.output_toggles["Pause on error"].isChecked()
+            
+            # ── Continuation ──
+            if hasattr(self, 'cont_switch'):
+                s.continuation_enabled = self.cont_switch.isToggled()
+            if hasattr(self, 'extract_menu'):
+                s.extract_point_ms = self._parse_extract_point(self.extract_menu.currentText())
+            
+            # ── Worker Settings ──
+            if hasattr(self, 'retry_count'):
+                s.retry_count = self.retry_count.value()
+            if hasattr(self, 'request_timeout'):
+                s.request_timeout = self.request_timeout.value()
+            
+            # ── Anti-Detect Spam ──
+            if hasattr(self, 'anti_detect_switch'):
+                s.anti_detect_enabled = self.anti_detect_switch.isToggled()
+            if hasattr(self, 'anti_detect_delay_min'):
+                s.anti_detect_delay_min = self.anti_detect_delay_min.value()
+            if hasattr(self, 'anti_detect_delay_max'):
+                s.anti_detect_delay_max = self.anti_detect_delay_max.value()
+            
+            # ── Session & Data ──
+            if hasattr(self, 'restore_queue_switch'):
+                s.restore_queue_on_startup = self.restore_queue_switch.isToggled()
+            if hasattr(self, 'restore_tabs_switch'):
+                s.restore_tabs_on_startup = self.restore_tabs_switch.isToggled()
+            if hasattr(self, '_restore_sub_toggles'):
+                for attr_name, toggle in self._restore_sub_toggles.items():
+                    setattr(s, attr_name, toggle.isToggled())
+            
+            # ── Notifications ──
+            if hasattr(self, 'notify_toast_toggle'):
+                s.notify_toast_enabled = self.notify_toast_toggle.isToggled()
+            if hasattr(self, 'notify_sound_toggle'):
+                s.notify_sound_enabled = self.notify_sound_toggle.isToggled()
+            if hasattr(self, '_get_selected_sound'):
+                s.notify_sound_file = self._get_selected_sound()
+            
+            # ── Enhancer Toggles ──
+            if hasattr(self, '_enhance_context_toggle'):
+                s.enhance_context_menu = self._enhance_context_toggle.isToggled()
+            if hasattr(self, '_enhance_library_toggle'):
+                s.enhance_library = self._enhance_library_toggle.isToggled()
+            if hasattr(self, '_enhance_auto_toggle'):
+                s.enhance_auto_continuation = self._enhance_auto_toggle.isToggled()
+            
+            # ── UI ──
+            # language is a mockup (no i18n yet)
+            
+            # Persist to disk
+            save_settings()
+            log.info(f"Settings saved to {s._default_path()}")
+            
+            # Show confirmation
+            QMessageBox.information(self, "Saved", "✅ All settings saved successfully.")
+        except Exception as e:
+            log.error(f"Failed to save settings: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to save settings:\n{e}")
+        
+        # Also emit signal for live-update consumers
+        settings_dict = self.get_settings()
+        self.settings_changed.emit(settings_dict)
     
     def _on_reset(self):
-        """Reset to default values."""
+        """Reset to default values and persist."""
+        reply = QMessageBox.question(
+            self, "Reset Defaults",
+            "Reset all settings to factory defaults?\n\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
         # Reset defaults section
         if "Aspect Ratio" in self.setting_combos:
             self.setting_combos["Aspect Ratio"].setCurrentText("16:9 (Landscape)")
@@ -1956,6 +2054,9 @@ class TabSettings(QWidget):
                     toggle.setChecked(True)
                 else:
                     toggle.setChecked(False)
+        # Reset continuation
+        if hasattr(self, 'cont_switch'):
+            self.cont_switch.setToggled(True)
         # Reset worker spinboxes to defaults
         self.retry_count.setValue(3)
         self.request_timeout.setValue(120)
@@ -1973,6 +2074,14 @@ class TabSettings(QWidget):
         # Reset session & data to defaults
         self.restore_queue_switch.setToggled(False)
         self.restore_tabs_switch.setToggled(True)
+        # Reset notifications
+        if hasattr(self, 'notify_toast_toggle'):
+            self.notify_toast_toggle.setToggled(True)
+        if hasattr(self, 'notify_sound_toggle'):
+            self.notify_sound_toggle.setToggled(True)
+        
+        # Persist reset values to disk
+        self._on_save()
     
     def _on_export(self):
         """Export config to file."""
@@ -1987,7 +2096,7 @@ class TabSettings(QWidget):
                 json.dump(settings, f, indent=2)
     
     def _on_import(self):
-        """Import config from file."""
+        """Import config from file and persist."""
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Import Config", "", "JSON Files (*.json)"
@@ -1998,18 +2107,42 @@ class TabSettings(QWidget):
                 settings = json.load(f)
             # Apply settings to widgets
             self._apply_imported_settings(settings)
-            self.settings_changed.emit(settings)
+            # Persist via Save button logic
+            self._on_save()
     
     def _apply_imported_settings(self, settings: dict):
-        """Apply imported settings to UI widgets."""
+        """Apply imported settings to UI widgets — covers ALL sections."""
+        # Default Settings
         if "aspect_ratio" in settings and "Aspect Ratio" in self.setting_combos:
             self.setting_combos["Aspect Ratio"].setCurrentText(settings["aspect_ratio"])
         if "download_quality" in settings and "Download Quality" in self.setting_combos:
             self.setting_combos["Download Quality"].setCurrentText(settings["download_quality"])
         if "ai_model" in settings and "AI Model" in self.setting_combos:
             self.setting_combos["AI Model"].setCurrentText(settings["ai_model"])
+        if "image_quality" in settings and "Image Quality" in self.setting_combos:
+            self.setting_combos["Image Quality"].setCurrentText(settings["image_quality"])
+        if "outputs_per_prompt" in settings and "Outputs per Prompt" in self.setting_combos:
+            self.setting_combos["Outputs per Prompt"].setCurrentText(str(settings["outputs_per_prompt"]))
+        # Output Settings
         if "output_folder" in settings:
             self.output_folder_entry.setText(settings["output_folder"])
+        for key, toggle_name in [
+            ("include_timestamp", "Include timestamp in filename"),
+            ("include_quality", "Include quality in filename"),
+            ("auto_start_queue", "Auto-start queue when adding"),
+            ("pause_on_error", "Pause on error"),
+        ]:
+            if key in settings and toggle_name in self.output_toggles:
+                self.output_toggles[toggle_name].setChecked(bool(settings[key]))
+        # Continuation
+        if "continuation_enabled" in settings and hasattr(self, 'cont_switch'):
+            self.cont_switch.setToggled(bool(settings["continuation_enabled"]))
+        if "extract_point_ms" in settings and hasattr(self, 'extract_menu'):
+            ms = int(settings["extract_point_ms"])
+            for i in range(self.extract_menu.count()):
+                if str(ms) in self.extract_menu.itemText(i):
+                    self.extract_menu.setCurrentIndex(i)
+                    break
         # Worker settings
         if "retry_count" in settings:
             self.retry_count.setValue(int(settings["retry_count"]))
@@ -2027,6 +2160,18 @@ class TabSettings(QWidget):
             self.restore_queue_switch.setToggled(bool(settings["restore_queue_on_startup"]))
         if "restore_tabs_on_startup" in settings:
             self.restore_tabs_switch.setToggled(bool(settings["restore_tabs_on_startup"]))
+        # Notifications
+        if "notify_toast_enabled" in settings and hasattr(self, 'notify_toast_toggle'):
+            self.notify_toast_toggle.setToggled(bool(settings["notify_toast_enabled"]))
+        if "notify_sound_enabled" in settings and hasattr(self, 'notify_sound_toggle'):
+            self.notify_sound_toggle.setToggled(bool(settings["notify_sound_enabled"]))
+        # Enhancer
+        if "enhance_context_menu" in settings and hasattr(self, '_enhance_context_toggle'):
+            self._enhance_context_toggle.setToggled(bool(settings["enhance_context_menu"]))
+        if "enhance_library" in settings and hasattr(self, '_enhance_library_toggle'):
+            self._enhance_library_toggle.setToggled(bool(settings["enhance_library"]))
+        if "enhance_auto_continuation" in settings and hasattr(self, '_enhance_auto_toggle'):
+            self._enhance_auto_toggle.setToggled(bool(settings["enhance_auto_continuation"]))
     
     def _create_setting_row(self, parent_layout, label: str, options: list) -> QComboBox:
         """Create a setting row with dropdown - matches CTK lines 443-465."""
