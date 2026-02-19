@@ -857,53 +857,8 @@ class TabSettings(QWidget):
         extract_layout.addStretch()
         layout.addLayout(extract_layout)
         
-        # === ✨ Enhancer Image — BETA sub-feature ===
-        self.enhancer_switch = self._create_enable_row(
-            "✨ Enhancer Image (beta):", checked=False,
-            bold=True, color=Theme.PURPLE
-        )
-        layout.addLayout(self.enhancer_switch._row_layout)
-        
-        # Collapsible settings for Enhancer
-        self.enhancer_container = QWidget()
-        enhancer_layout = QVBoxLayout(self.enhancer_container)
-        enhancer_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Quality
-        quality_row = QHBoxLayout()
-        quality_label = QLabel("Quality:")
-        quality_label.setFixedWidth(150)
-        quality_label.setStyleSheet(f"color: {Theme.TEXT};")
-        quality_row.addWidget(quality_label)
-        
-        self.enhancer_quality = QComboBox()
-        self.enhancer_quality.addItems(["Low (fast)", "Medium", "High (slow)"])
-        self.enhancer_quality.setCurrentText("Medium")
-        self.enhancer_quality.setFixedWidth(200)
-        quality_row.addWidget(self.enhancer_quality)
-        quality_row.addStretch()
-        enhancer_layout.addLayout(quality_row)
-        
-        # Scale
-        scale_row = QHBoxLayout()
-        scale_label = QLabel("Upscale:")
-        scale_label.setFixedWidth(150)
-        scale_label.setStyleSheet(f"color: {Theme.TEXT};")
-        scale_row.addWidget(scale_label)
-        
-        self.enhancer_scale = QComboBox()
-        self.enhancer_scale.addItems(["1x (enhance only)", "2x", "4x"])
-        self.enhancer_scale.setCurrentText("1x (enhance only)")
-        self.enhancer_scale.setFixedWidth(200)
-        scale_row.addWidget(self.enhancer_scale)
-        scale_row.addStretch()
-        enhancer_layout.addLayout(scale_row)
-        
-        layout.addWidget(self.enhancer_container)
-        
-        # Toggle visibility
-        self.enhancer_container.setVisible(self.enhancer_switch.isToggled())
-        self.enhancer_switch.toggled_signal.connect(self.enhancer_container.setVisible)
+        # ✨ Enhancer Image — see dedicated section below (_create_enhancer_section)
+        # Old Quality/Upscale dropdowns removed; replaced by 3-toggle system
         
         return section
     
@@ -1903,10 +1858,13 @@ class TabSettings(QWidget):
         self.anti_detect_switch.setToggled(True)
         self.anti_detect_delay_min.setValue(3.0)
         self.anti_detect_delay_max.setValue(8.0)
-        # Reset enhancer image to defaults
-        self.enhancer_switch.setToggled(False)
-        self.enhancer_quality.setCurrentText("Medium")
-        self.enhancer_scale.setCurrentText("1x (enhance only)")
+        # Reset enhancer toggles to defaults (new 3-toggle system)
+        if hasattr(self, '_enhance_context_toggle'):
+            self._enhance_context_toggle.setToggled(True)
+        if hasattr(self, '_enhance_library_toggle'):
+            self._enhance_library_toggle.setToggled(True)
+        if hasattr(self, '_enhance_auto_toggle'):
+            self._enhance_auto_toggle.setToggled(False)
         # Reset session & data to defaults
         self.restore_queue_switch.setToggled(False)
         self.restore_tabs_switch.setToggled(True)
@@ -2597,10 +2555,10 @@ class TabSettings(QWidget):
             "auto_retry": self.browser_toggles.get("Enable auto-retry on failure").isChecked() if "Enable auto-retry on failure" in self.browser_toggles else False,
             "continuation_enabled": self.cont_switch.isToggled(),
             "extract_point_ms": self._parse_extract_point(self.extract_menu.currentText()),
-            # Enhancer Image (BETA)
-            "enhancer_enabled": self.enhancer_switch.isToggled(),
-            "enhancer_quality": self.enhancer_quality.currentText(),
-            "enhancer_scale": self.enhancer_scale.currentText(),
+            # Enhancer Image (3-toggle system)
+            "enhance_context_menu": self._enhance_context_toggle.isToggled() if hasattr(self, '_enhance_context_toggle') else True,
+            "enhance_library": self._enhance_library_toggle.isToggled() if hasattr(self, '_enhance_library_toggle') else True,
+            "enhance_auto_continuation": self._enhance_auto_toggle.isToggled() if hasattr(self, '_enhance_auto_toggle') else False,
             "language": self.lang_menu.currentText(),
             # Worker Settings (defaults for new accounts)
             "retry_count": self.retry_count.value(),
