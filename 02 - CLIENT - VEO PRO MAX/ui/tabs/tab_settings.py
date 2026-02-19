@@ -786,13 +786,13 @@ class TabSettings(QWidget):
         
         # Image: AI Model
         img_model_options = [
-            "Imagen 3.5",
-            "Gemini Pix 2",
-            "Gemini Pix (Legacy)",
+            "🔥 Nano Banana Pro",
+            "🔥 Nano Banana",
+            "Imagen 4",
         ]
         combo = self._create_setting_row(layout, "Image AI Model", img_model_options)
         if _s:
-            _im = getattr(_s, 'default_image_model', 'Imagen 3.5')
+            _im = getattr(_s, 'default_image_model', '🔥 Nano Banana Pro')
             idx = combo.findText(_im)
             if idx >= 0:
                 combo.setCurrentIndex(idx)

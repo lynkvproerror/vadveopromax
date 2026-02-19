@@ -415,12 +415,12 @@ class ImageSidebar(SidebarBase):
         
         self.model = QComboBox()
         self.model.addItems([
-            "Imagen 3.5",
-            "Gemini Pix 2",
-            "Gemini Pix (Legacy)",
+            "🔥 Nano Banana Pro",
+            "🔥 Nano Banana",
+            "Imagen 4",
         ])
         if _s:
-            _im = getattr(_s, 'default_image_model', 'Imagen 3.5')
+            _im = getattr(_s, 'default_image_model', '🔥 Nano Banana Pro')
             idx = self.model.findText(_im)
             if idx >= 0:
                 self.model.setCurrentIndex(idx)
@@ -466,9 +466,9 @@ class ImageSidebar(SidebarBase):
     def get_model(self) -> str:
         """Get selected image AI model (API key)."""
         _DISPLAY_TO_API = {
-            "Imagen 3.5": "IMAGEN_3_5",
-            "Gemini Pix 2": "GEM_PIX_2",
-            "Gemini Pix (Legacy)": "GEM_PIX",
+            "🔥 Nano Banana Pro": "GEM_PIX_2",
+            "🔥 Nano Banana": "GEM_PIX",
+            "Imagen 4": "IMAGEN_3_5",
         }
         return _DISPLAY_TO_API.get(self.model.currentText(), "GEM_PIX_2")
     
@@ -482,7 +482,7 @@ class ImageSidebar(SidebarBase):
             oc = getattr(s, 'default_output_count', 4)
             self.outputs_per_prompt.setCurrentText(f"{oc} image" if oc == 1 else f"{oc} images")
             # AI Model
-            im = getattr(s, 'default_image_model', 'Imagen 3.5')
+            im = getattr(s, 'default_image_model', '🔥 Nano Banana Pro')
             idx = self.model.findText(im)
             if idx >= 0:
                 self.model.setCurrentIndex(idx)
@@ -513,9 +513,9 @@ class ImageSidebar(SidebarBase):
         if "model" in data:
             # Try API key → display name mapping
             _API_TO_DISPLAY = {
-                "IMAGEN_3_5": "Imagen 3.5",
-                "GEM_PIX_2": "Gemini Pix 2",
-                "GEM_PIX": "Gemini Pix (Legacy)",
+                "GEM_PIX_2": "🔥 Nano Banana Pro",
+                "GEM_PIX": "🔥 Nano Banana",
+                "IMAGEN_3_5": "Imagen 4",
             }
             display = _API_TO_DISPLAY.get(data["model"], data["model"])
             idx = self.model.findText(display)

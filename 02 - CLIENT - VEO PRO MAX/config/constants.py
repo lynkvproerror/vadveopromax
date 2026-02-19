@@ -112,9 +112,9 @@ class VideoModel(str, Enum):
 # === IMAGE MODELS ===
 class ImageModel(str, Enum):
     """Image generation model keys (HAR-verified)."""
-    GEM_PIX = "GEM_PIX"          # Legacy
-    GEM_PIX_2 = "GEM_PIX_2"      # Default
-    IMAGEN_3_5 = "IMAGEN_3_5"    # Newest
+    GEM_PIX = "GEM_PIX"          # 🔥 Nano Banana
+    GEM_PIX_2 = "GEM_PIX_2"      # 🔥 Nano Banana Pro (default)
+    IMAGEN_3_5 = "IMAGEN_3_5"    # Imagen 4
 
 
 def resolve_model_key(
