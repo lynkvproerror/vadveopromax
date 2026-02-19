@@ -1617,16 +1617,18 @@ class TabSettings(QWidget):
         sep.setStyleSheet(f"background-color: {Theme.OVERLAY0};")
         layout.addWidget(sep)
         
-        # Load saved toggle states from settings
+        # Load saved toggle states from AppSettings
         _ctx_on = True
         _lib_on = True
         _auto_on = False
-        if self.controller:
-            _s = getattr(self.controller, 'settings', None)
-            if _s:
-                _ctx_on = getattr(_s, 'enhance_context_menu', True)
-                _lib_on = getattr(_s, 'enhance_library', True)
-                _auto_on = getattr(_s, 'enhance_auto_continuation', False)
+        try:
+            from config.settings import get_settings as _gs
+            _s = _gs()
+            _ctx_on = getattr(_s, 'enhance_context_menu', True)
+            _lib_on = getattr(_s, 'enhance_library', True)
+            _auto_on = getattr(_s, 'enhance_auto_continuation', False)
+        except Exception:
+            pass
         
         # Toggle 1: Context Menu Enhance
         self._enhance_context_toggle = self._create_enable_row(
@@ -1679,57 +1681,89 @@ class TabSettings(QWidget):
         return section
     
     def _refresh_enhancer_status(self):
-        """Poll GPU detector and model manager status — update UI."""
-        if not self.controller:
-            return
+        """Detect GPU and model status directly — no controller dependency."""
+        import logging
+        log = logging.getLogger("enhancer")
         
-        # GPU detector
-        gpu_det = getattr(self.controller, '_gpu_detector', None)
-        if gpu_det:
-            status = gpu_det.available
-            if status is not None:
-                self._enhance_gpu_status.setText(gpu_det.display_text)
-                if status:
-                    self._enhance_gpu_status.setStyleSheet(f"color: {Theme.GREEN};")
-                else:
-                    self._enhance_gpu_status.setStyleSheet(f"color: {Theme.RED};")
-                    # Show install button if PyTorch missing
-                    if gpu_det.install_hint:
-                        self._enhance_install_btn.setVisible(True)
-                    # Disable toggles if no GPU
-                    self._enhance_context_toggle.setEnabled(False)
-                    self._enhance_library_toggle.setEnabled(False)
-                    self._enhance_auto_toggle.setEnabled(False)
-        
-        # Model manager
-        mdl_mgr = getattr(self.controller, '_model_manager', None)
-        if mdl_mgr:
-            if mdl_mgr.all_installed:
-                self._enhance_model_status.setText(
-                    f"✅ All models installed ({mdl_mgr.total_download_size_mb}MB)"
-                )
-                self._enhance_model_status.setStyleSheet(f"color: {Theme.GREEN};")
-                self._enhance_download_btn.setVisible(False)
+        # ── GPU Detection (try import torch) ──
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                vram = torch.cuda.get_device_properties(0).total_mem // (1024**3)
+                self._enhance_gpu_status.setText(f"✅ {gpu_name} ({vram}GB VRAM)")
+                self._enhance_gpu_status.setStyleSheet(f"color: {Theme.GREEN};")
+                self._enhance_install_btn.setVisible(False)
             else:
-                missing = mdl_mgr.missing_download_size_mb
-                self._enhance_model_status.setText(
-                    f"⬇️ Missing models ({missing}MB)"
-                )
-                self._enhance_model_status.setStyleSheet(f"color: {Theme.YELLOW};")
-                self._enhance_download_btn.setVisible(True)
-                self._enhance_download_btn.setText(f"⬇️ Download ({missing}MB)")
+                self._enhance_gpu_status.setText("⚠️ PyTorch installed but no CUDA GPU detected")
+                self._enhance_gpu_status.setStyleSheet(f"color: {Theme.YELLOW};")
+                self._enhance_install_btn.setVisible(False)
+                # Disable toggles — CPU mode too slow for real-time
+                self._enhance_context_toggle.setEnabled(False)
+                self._enhance_library_toggle.setEnabled(False)
+                self._enhance_auto_toggle.setEnabled(False)
+        except ImportError:
+            self._enhance_gpu_status.setText("❌ PyTorch not installed")
+            self._enhance_gpu_status.setStyleSheet(f"color: {Theme.RED};")
+            self._enhance_install_btn.setVisible(True)
+            self._enhance_context_toggle.setEnabled(False)
+            self._enhance_library_toggle.setEnabled(False)
+            self._enhance_auto_toggle.setEnabled(False)
+        except Exception as e:
+            log.warning(f"GPU detection error: {e}")
+            self._enhance_gpu_status.setText(f"⚠️ Detection error: {e}")
+            self._enhance_gpu_status.setStyleSheet(f"color: {Theme.YELLOW};")
         
-        # Stop polling once both are resolved
-        if gpu_det and gpu_det.available is not None:
-            # Keep slower poll for model status changes
-            self._enhance_check_timer.setInterval(10000)
+        # ── Model Detection (check for Real-ESRGAN weights) ──
+        models_dir = Path.home() / ".veoauto" / "models"
+        esrgan_path = models_dir / "RealESRGAN_x4plus.pth"
+        gfpgan_path = models_dir / "GFPGANv1.4.pth"
+        
+        esrgan_ok = esrgan_path.exists()
+        gfpgan_ok = gfpgan_path.exists()
+        
+        if esrgan_ok and gfpgan_ok:
+            total_mb = round((esrgan_path.stat().st_size + gfpgan_path.stat().st_size) / (1024*1024))
+            self._enhance_model_status.setText(f"✅ All models installed ({total_mb}MB)")
+            self._enhance_model_status.setStyleSheet(f"color: {Theme.GREEN};")
+            self._enhance_download_btn.setVisible(False)
+        else:
+            missing = []
+            missing_mb = 0
+            if not esrgan_ok:
+                missing.append("RealESRGAN")
+                missing_mb += 64
+            if not gfpgan_ok:
+                missing.append("GFPGAN")
+                missing_mb += 348
+            self._enhance_model_status.setText(f"⬇️ Missing: {', '.join(missing)} (~{missing_mb}MB)")
+            self._enhance_model_status.setStyleSheet(f"color: {Theme.YELLOW};")
+            self._enhance_download_btn.setVisible(True)
+            self._enhance_download_btn.setText(f"⬇️ Download ({missing_mb}MB)")
+        
+        # Slow down polling after first check
+        self._enhance_check_timer.setInterval(30000)
     
     def _on_download_enhancer_models(self):
-        """Start downloading AI models in background."""
-        if not self.controller:
-            return
-        mdl_mgr = getattr(self.controller, '_model_manager', None)
-        if not mdl_mgr:
+        """Download Real-ESRGAN + GFPGAN model weights."""
+        import logging, threading, urllib.request
+        log = logging.getLogger("enhancer")
+        
+        models_dir = Path.home() / ".veoauto" / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        
+        MODELS = [
+            ("RealESRGAN_x4plus.pth",
+             "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"),
+            ("GFPGANv1.4.pth",
+             "https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth"),
+        ]
+        
+        # Filter already downloaded
+        to_download = [(name, url) for name, url in MODELS if not (models_dir / name).exists()]
+        if not to_download:
+            self._enhance_model_status.setText("✅ All models already installed")
+            self._enhance_model_status.setStyleSheet(f"color: {Theme.GREEN};")
             return
         
         self._enhance_download_btn.setEnabled(False)
@@ -1738,16 +1772,23 @@ class TabSettings(QWidget):
             self._enhance_progress.setVisible(True)
             self._enhance_progress.setValue(0)
         
-        import threading
         def _download():
-            def _progress(pct, msg):
-                if self._enhance_progress and pct >= 0:
-                    # Thread-safe UI update
-                    QTimer.singleShot(0, lambda: self._enhance_progress.setValue(pct))
-                    QTimer.singleShot(0, lambda: self._enhance_model_status.setText(msg))
-            
-            success = mdl_mgr.download_all(progress_callback=_progress)
-            QTimer.singleShot(0, lambda: self._on_download_complete(success))
+            total = len(to_download)
+            for idx, (name, url) in enumerate(to_download):
+                dest = models_dir / name
+                log.info(f"Downloading {name} from {url}")
+                QTimer.singleShot(0, lambda n=name: self._enhance_model_status.setText(f"⬇️ Downloading {n}..."))
+                try:
+                    urllib.request.urlretrieve(url, str(dest))
+                    pct = int((idx + 1) / total * 100)
+                    if self._enhance_progress:
+                        QTimer.singleShot(0, lambda p=pct: self._enhance_progress.setValue(p))
+                    log.info(f"Downloaded {name} ({dest.stat().st_size // (1024*1024)}MB)")
+                except Exception as e:
+                    log.error(f"Failed to download {name}: {e}")
+                    QTimer.singleShot(0, lambda: self._on_download_complete(False))
+                    return
+            QTimer.singleShot(0, lambda: self._on_download_complete(True))
         
         threading.Thread(target=_download, daemon=True, name="model-download").start()
     
@@ -1767,7 +1808,10 @@ class TabSettings(QWidget):
             self._enhance_download_btn.setText("🔄 Retry Download")
     
     def _on_install_pytorch(self):
-        """Show PyTorch install confirmation dialog."""
+        """Install PyTorch with CUDA via pip — with logging."""
+        import logging
+        log = logging.getLogger("enhancer")
+        
         reply = QMessageBox.question(
             self,
             "Install PyTorch (CUDA)",
@@ -1779,19 +1823,27 @@ class TabSettings(QWidget):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self._enhance_install_btn.setEnabled(False)
-            self._enhance_install_btn.setText("⏳ Installing...")
+            self._enhance_install_btn.setText("⏳ Installing PyTorch...")
+            log.info("Starting PyTorch installation...")
             
             import subprocess, sys, threading
             def _install():
                 try:
+                    cmd = [sys.executable, '-m', 'pip', 'install',
+                           'torch', 'torchvision', 'torchaudio',
+                           '--index-url', 'https://download.pytorch.org/whl/cu121']
+                    log.info(f"Running: {' '.join(cmd)}")
                     result = subprocess.run(
-                        [sys.executable, '-m', 'pip', 'install',
-                         'torch', 'torchvision', 'torchaudio',
-                         '--index-url', 'https://download.pytorch.org/whl/cu121'],
-                        capture_output=True, text=True, timeout=600,
+                        cmd, capture_output=True, text=True, timeout=600,
                     )
+                    if result.stdout:
+                        log.info(f"pip stdout:\n{result.stdout[-2000:]}")
+                    if result.stderr:
+                        log.warning(f"pip stderr:\n{result.stderr[-2000:]}")
                     success = result.returncode == 0
-                except Exception:
+                    log.info(f"PyTorch install {'succeeded' if success else 'failed'} (rc={result.returncode})")
+                except Exception as e:
+                    log.error(f"PyTorch install exception: {e}")
                     success = False
                 QTimer.singleShot(0, lambda: self._on_pytorch_install_complete(success))
             
@@ -1819,18 +1871,16 @@ class TabSettings(QWidget):
             )
     
     def _save_enhancer_settings(self, *args):
-        """Persist enhancer toggle states to AppSettings dataclass."""
-        if not self.controller:
-            return
-        settings = getattr(self.controller, 'settings', None)
-        if settings:
+        """Persist enhancer toggle states to AppSettings."""
+        try:
+            from config.settings import get_settings as _gs
+            settings = _gs()
             settings.enhance_context_menu = self._enhance_context_toggle.isToggled()
             settings.enhance_library = self._enhance_library_toggle.isToggled()
             settings.enhance_auto_continuation = self._enhance_auto_toggle.isToggled()
-            try:
-                settings.save()
-            except Exception:
-                pass
+            settings.save()
+        except Exception:
+            pass
     
     def _create_action_buttons(self) -> QWidget:
         """Create action buttons - matches CTK lines 357-401."""
