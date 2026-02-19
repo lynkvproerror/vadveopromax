@@ -784,6 +784,20 @@ class TabSettings(QWidget):
         img_label.setStyleSheet(f"color: {Theme.PURPLE}; font-weight: bold; padding-top: 8px;")
         layout.addWidget(img_label)
         
+        # Image: AI Model
+        img_model_options = [
+            "Imagen 3.5",
+            "Gemini Pix 2",
+            "Gemini Pix (Legacy)",
+        ]
+        combo = self._create_setting_row(layout, "Image AI Model", img_model_options)
+        if _s:
+            _im = getattr(_s, 'default_image_model', 'Imagen 3.5')
+            idx = combo.findText(_im)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        self.setting_combos["Image AI Model"] = combo
+        
         # Image: Download Quality
         iq_options = ["1k", "2k", "4k"]
         combo = self._create_setting_row(layout, "Image Quality", iq_options)
@@ -813,6 +827,9 @@ class TabSettings(QWidget):
             settings.default_model = self.setting_combos["AI Model"].currentText()
             # Video: Download Quality
             settings.default_download_quality = self.setting_combos["Download Quality"].currentText()
+            # Image: AI Model
+            if "Image AI Model" in self.setting_combos:
+                settings.default_image_model = self.setting_combos["Image AI Model"].currentText()
             # Image: Quality
             settings.default_image_quality = self.setting_combos["Image Quality"].currentText()
             settings.save()
@@ -1950,6 +1967,8 @@ class TabSettings(QWidget):
                 s.default_model = self.setting_combos["AI Model"].currentText()
             if "Download Quality" in self.setting_combos:
                 s.default_download_quality = self.setting_combos["Download Quality"].currentText()
+            if "Image AI Model" in self.setting_combos:
+                s.default_image_model = self.setting_combos["Image AI Model"].currentText()
             if "Image Quality" in self.setting_combos:
                 s.default_image_quality = self.setting_combos["Image Quality"].currentText()
             

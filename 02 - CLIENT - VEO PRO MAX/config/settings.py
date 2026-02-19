@@ -28,6 +28,7 @@ class AppSettings:
     default_output_count: int = 4                # Match sidebar default
     default_download_quality: str = "1080p"      # Video download quality
     default_image_quality: str = "1k"            # Image download quality
+    default_image_model: str = "Imagen 3.5"      # Image AI model display name
     auto_enhance_prompt: bool = False
     
     # === QUEUE ===

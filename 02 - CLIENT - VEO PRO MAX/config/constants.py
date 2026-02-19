@@ -122,6 +122,7 @@ def resolve_model_key(
     workflow: "WorkflowType",
     aspect_ratio: str,
     dual_frame: bool = False,
+    image_model: str = "",
 ) -> str:
     """Auto-map (UI display name + workflow + aspect ratio) → API model key.
     
@@ -130,6 +131,7 @@ def resolve_model_key(
         workflow: WorkflowType enum (T2V, I2V, R2V, F2V, T2I)
         aspect_ratio: "LANDSCAPE" or "PORTRAIT"
         dual_frame: True if I2V with 2 frames (first+last)
+        image_model: API key for image model (e.g. "GEM_PIX_2", "IMAGEN_3_5")
     
     Returns:
         API model key string, e.g. "veo_3_1_t2v_fast_portrait_ultra_relaxed"
@@ -139,6 +141,8 @@ def resolve_model_key(
     
     # T2I uses ImageModel, not VideoModel
     if workflow == WorkflowType.T2I:
+        if image_model and image_model in [e.value for e in ImageModel]:
+            return image_model
         return ImageModel.GEM_PIX_2.value
     
     # Model lookup table: (workflow_key, is_portrait, is_lp) → VideoModel

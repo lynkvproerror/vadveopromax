@@ -410,6 +410,23 @@ class ImageSidebar(SidebarBase):
         self.outputs_per_prompt.setMinimumHeight(32)
         self._layout.addWidget(self.outputs_per_prompt)
         
+        # === AI MODEL ===
+        self._create_section_label("🤖 AI Model")
+        
+        self.model = QComboBox()
+        self.model.addItems([
+            "Imagen 3.5",
+            "Gemini Pix 2",
+            "Gemini Pix (Legacy)",
+        ])
+        if _s:
+            _im = getattr(_s, 'default_image_model', 'Imagen 3.5')
+            idx = self.model.findText(_im)
+            if idx >= 0:
+                self.model.setCurrentIndex(idx)
+        self.model.setMinimumHeight(32)
+        self._layout.addWidget(self.model)
+        
         # === DOWNLOAD QUALITY ===
         # API: /v1/flow/upsampleImage → targetResolution
         # 1k = direct download (no upscale needed)
@@ -446,6 +463,15 @@ class ImageSidebar(SidebarBase):
         """Get selected download quality."""
         return self.download_quality.currentText()
     
+    def get_model(self) -> str:
+        """Get selected image AI model (API key)."""
+        _DISPLAY_TO_API = {
+            "Imagen 3.5": "IMAGEN_3_5",
+            "Gemini Pix 2": "GEM_PIX_2",
+            "Gemini Pix (Legacy)": "GEM_PIX",
+        }
+        return _DISPLAY_TO_API.get(self.model.currentText(), "GEM_PIX_2")
+    
     def apply_defaults(self):
         """Re-read AppSettings and push image defaults to sidebar (live-update)."""
         super().apply_defaults()
@@ -455,6 +481,11 @@ class ImageSidebar(SidebarBase):
             # Outputs per prompt
             oc = getattr(s, 'default_output_count', 4)
             self.outputs_per_prompt.setCurrentText(f"{oc} image" if oc == 1 else f"{oc} images")
+            # AI Model
+            im = getattr(s, 'default_image_model', 'Imagen 3.5')
+            idx = self.model.findText(im)
+            if idx >= 0:
+                self.model.setCurrentIndex(idx)
             # Image Quality
             iq = getattr(s, 'default_image_quality', '1k')
             self.download_quality.setCurrentText(iq)
@@ -466,7 +497,7 @@ class ImageSidebar(SidebarBase):
         values = super().get_values()
         values.update({
             "outputs_per_prompt": self.get_outputs_count(),
-            "model": "GEM_PIX_2",  # Image model
+            "model": self.get_model(),
             "download_quality": self.get_download_quality(),
         })
         return values
@@ -479,6 +510,17 @@ class ImageSidebar(SidebarBase):
                 if self.outputs_per_prompt.itemText(i).startswith(str(data['outputs_per_prompt'])):
                     self.outputs_per_prompt.setCurrentIndex(i)
                     break
+        if "model" in data:
+            # Try API key → display name mapping
+            _API_TO_DISPLAY = {
+                "IMAGEN_3_5": "Imagen 3.5",
+                "GEM_PIX_2": "Gemini Pix 2",
+                "GEM_PIX": "Gemini Pix (Legacy)",
+            }
+            display = _API_TO_DISPLAY.get(data["model"], data["model"])
+            idx = self.model.findText(display)
+            if idx >= 0:
+                self.model.setCurrentIndex(idx)
         if "download_quality" in data:
             idx = self.download_quality.findText(data["download_quality"])
             if idx >= 0:
