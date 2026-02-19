@@ -2302,7 +2302,14 @@ class TabQueue(QWidget):
             lambda: self._on_force_retry_item(task_id)
         )
         
-        # === 2. Re-Upscale options (only for completed tasks with 1080p/4K) ===
+        # === 2. Re-download 720p (for completed tasks) ===
+        if task_status == 'completed' and video_outputs:
+            redownload_action = menu.addAction("⬇️ Re-download 720p")
+            redownload_action.triggered.connect(
+                lambda: self._on_redownload_720p_item(task_id)
+            )
+        
+        # === 3. Re-Upscale options (only for completed tasks with 1080p/4K) ===
         if task_status == 'completed' and has_upscale_quality:
             menu.addSeparator()
             
@@ -2364,6 +2371,14 @@ class TabQueue(QWidget):
             main_window = self.window()
             if main_window and hasattr(main_window, 'show_toast'):
                 main_window.show_toast("⬆️ Re-upscaling all failed videos...", "info")
+    
+    def _on_redownload_720p_item(self, item_id):
+        """Re-download 720p videos for a completed task."""
+        if self.controller and hasattr(self.controller, 're_download_720p'):
+            self.controller.re_download_720p(str(item_id))
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'show_toast'):
+                main_window.show_toast("⬇️ Re-downloading 720p videos...", "info")
     
     def _show_video_context_menu(self, pos, video_info: dict, parent_widget):
         """Right-click context menu on any thumbnail — state-dependent items.

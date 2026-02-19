@@ -2398,6 +2398,123 @@ class Engine:
             task.video_outputs[video_index].upscale_error = task.upscale_error or "Poll failed"
         return False
     
+    async def re_download_720p(
+        self, task_id: str, account: 'AccountManager',
+    ) -> bool:
+        """Re-download 720p videos by re-polling completed operations.
+        
+        Workflow:
+        1. Get task's operation_names (from video_outputs if needed)
+        2. Re-poll via check_status() to obtain fresh fifeUrls
+        3. Download 720p using existing _download_outputs()
+        
+        Use case: 720p files were deleted, corrupted, or download partially failed.
+        """
+        task = self._dispatcher.get_task(task_id)
+        if not task:
+            log.warning(f"Re-download {task_id}: task not found")
+            return False
+        
+        # Collect operation_names — prefer task-level, fallback to video_outputs
+        op_names = list(task.operation_names) if task.operation_names else []
+        scene_ids = list(task.scene_ids) if task.scene_ids else []
+        
+        if not op_names and task.video_outputs:
+            op_names = [vo.operation_name for vo in task.video_outputs if vo.operation_name]
+            scene_ids = [vo.scene_id for vo in task.video_outputs if vo.operation_name]
+            if op_names:
+                log.info(f"Re-download {task_id}: rebuilt operation_names from video_outputs ({len(op_names)})")
+        
+        if not op_names:
+            log.warning(f"Re-download {task_id}: no operation_names — cannot re-poll")
+            return False
+        
+        self._dispatcher.update_progress(task.id, 50, "🔄 Re-polling for download URLs...")
+        
+        # Build poll request (mark all as SUCCESSFUL since they completed before)
+        ops_to_poll = []
+        for i, op_name in enumerate(op_names):
+            sid = scene_ids[i] if i < len(scene_ids) else ""
+            ops_to_poll.append({
+                "operation": {"name": op_name},
+                "sceneId": sid,
+                "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL",
+            })
+        
+        # Re-poll to get fresh fifeUrls
+        sem = self._get_api_semaphore(account.email)
+        async with sem:
+            response = await self._api_client.check_status(
+                access_token=account.get_access_token(),
+                recaptcha_token="",
+                operations=ops_to_poll,
+                account_headers=account.get_api_headers(),
+            )
+        
+        if not response.success:
+            log.error(f"Re-download {task_id}: poll failed — {response.error}")
+            self._dispatcher.update_progress(task.id, 100, f"⚠️ Re-download failed: {response.error}")
+            return False
+        
+        # Extract fifeUrls from poll response
+        details = self._extract_output_details(response.data)
+        if not details:
+            log.warning(f"Re-download {task_id}: no fifeUrls in poll response")
+            self._dispatcher.update_progress(task.id, 100, "⚠️ Re-download failed: no URLs in response")
+            return False
+        
+        fife_urls = [d["fifeUrl"] for d in details]
+        log.info(f"Re-download {task_id}: got {len(fife_urls)} fresh fifeUrls — downloading 720p")
+        
+        self._dispatcher.update_progress(
+            task.id, 70, f"⬇️ Re-downloading {len(fife_urls)} videos (720p)..."
+        )
+        
+        # Download 720p
+        local_paths = await self._download_outputs(
+            task, fife_urls,
+            quality_subfolder="720p",
+            generate_thumbnails=True,
+        )
+        
+        if not local_paths:
+            log.error(f"Re-download {task_id}: download returned no files")
+            self._dispatcher.update_progress(task.id, 100, "⚠️ Re-download failed")
+            return False
+        
+        # Update video_outputs with new 720p paths
+        for i, path in enumerate(local_paths):
+            if path and i < len(task.video_outputs):
+                task.video_outputs[i].file_720p = path
+                if not task.video_outputs[i].file_upscaled:
+                    task.video_outputs[i].quality = "720p"
+        
+        # Update output_uris
+        final_paths = []
+        for vo in task.video_outputs:
+            if vo.file_upscaled:
+                final_paths.append(vo.file_upscaled)
+            elif vo.file_720p:
+                final_paths.append(vo.file_720p)
+        if final_paths:
+            task.output_uris = final_paths
+        
+        # Also rebuild upscale_media_ids from response if available
+        media_ids_from_response = [d.get("mediaId", "") for d in details if d.get("mediaId")]
+        if media_ids_from_response and not task.upscale_media_ids:
+            task.upscale_media_ids = media_ids_from_response
+        
+        self._dispatcher.update_progress(
+            task.id, 100, f"✅ Re-downloaded {len(local_paths)} videos (720p)"
+        )
+        
+        if self._on_task_completed:
+            self._on_task_completed(task)
+        self._save_manifest(task)
+        
+        log.info(f"Re-download {task_id}: done — {len(local_paths)} files saved")
+        return True
+    
     def _sync_overall_upscale_status(self, task: Task):
         """Sync per-video statuses → task-level upscale_status (backward compat)."""
         if not task.video_outputs:
