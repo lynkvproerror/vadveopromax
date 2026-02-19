@@ -878,22 +878,41 @@ class Dispatcher:
         upscale state. Re-queues as READY for fresh generation.
         
         Unlike reset_task(), this accepts ANY state including COMPLETED and RUNNING.
+        
+        Continuation-aware:
+        - PARENT retry: resets + re-registers all children as WAITING
+        - CHILD retry: preserves frame data + account affinity from parent
+        - Protects parent video files that children need for frame extraction
         """
         import os
         task = self._all_tasks.get(task_id)
         if not task:
             return False
         
-        # Delete downloaded video files
-        for path in list(task.output_uris):
-            try:
-                if os.path.isfile(path):
-                    os.remove(path)
-                    print(f"[ForceRetry] Deleted output: {path}")
-            except Exception as e:
-                print(f"[ForceRetry] Could not delete {path}: {e}")
+        # ── Identify continuation children (before deleting outputs) ──
+        children_ids = [
+            t.id for t in self._all_tasks.values()
+            if t.parent_task_id == task_id
+        ]
+        has_children = bool(children_ids)
         
-        # Delete cached thumbnails
+        # ── Delete downloaded video files ──
+        # If this task has children, KEEP video files (children need them
+        # for _re_extract_frame_from_parent). They'll be replaced when
+        # the retried task completes with new outputs.
+        if not has_children:
+            for path in list(task.output_uris):
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                        print(f"[ForceRetry] Deleted output: {path}")
+                except Exception as e:
+                    print(f"[ForceRetry] Could not delete {path}: {e}")
+        else:
+            print(f"[ForceRetry] Keeping {len(task.output_uris)} output files "
+                  f"(needed by {len(children_ids)} children for frame extraction)")
+        
+        # Delete cached thumbnails (always safe to delete)
         for path in list(task.thumbnail_paths):
             try:
                 if os.path.isfile(path):
@@ -903,20 +922,21 @@ class Dispatcher:
                 print(f"[ForceRetry] Could not delete {path}: {e}")
         
         # Delete per-video files from video_outputs (720p, upscaled, thumbnails)
-        # These may differ from task.output_uris (e.g. 720p kept alongside upscaled)
-        deleted = set(task.output_uris) | set(task.thumbnail_paths)
-        for vo in task.video_outputs:
-            for vpath in (vo.file_720p, vo.file_upscaled, vo.thumbnail_path):
-                if vpath and vpath not in deleted:
-                    try:
-                        if os.path.isfile(vpath):
-                            os.remove(vpath)
-                            print(f"[ForceRetry] Deleted video_output file: {vpath}")
-                    except Exception as e:
-                        print(f"[ForceRetry] Could not delete {vpath}: {e}")
-                    deleted.add(vpath)
+        # Skip if children exist (they may need parent 720p for frame extraction)
+        if not has_children:
+            deleted = set(task.output_uris) | set(task.thumbnail_paths)
+            for vo in task.video_outputs:
+                for vpath in (vo.file_720p, vo.file_upscaled, vo.thumbnail_path):
+                    if vpath and vpath not in deleted:
+                        try:
+                            if os.path.isfile(vpath):
+                                os.remove(vpath)
+                                print(f"[ForceRetry] Deleted video_output file: {vpath}")
+                        except Exception as e:
+                            print(f"[ForceRetry] Could not delete {vpath}: {e}")
+                        deleted.add(vpath)
         
-        # Full reset
+        # ── Full reset (common to all tasks) ──
         task.output_uris.clear()
         task.thumbnail_paths.clear()
         task.operation_name = None
@@ -933,17 +953,72 @@ class Dispatcher:
         task.retry_attempts = 0
         task.started_at = None
         task.completed_at = None
-        # Force retry = full reset → no account-bound data remains
-        # (media_ids, operation_names, video_outputs all cleared above)
-        # → any account can pick this task
-        task.assigned_account = None
-        task.required_account = None
+        
+        # ── Continuation-aware account handling ──
+        if task.parent_task_id:
+            # CHILD task: preserve account affinity from parent
+            parent = self._all_tasks.get(task.parent_task_id)
+            if parent and parent.assigned_account:
+                task.required_account = parent.assigned_account
+                print(f"[ForceRetry] Child {task_id}: preserving account affinity "
+                      f"→ {parent.assigned_account}")
+            else:
+                # Parent gone or no account — allow any account
+                task.assigned_account = None
+                task.required_account = None
+            # Keep continuation_frame_local_path for re-upload
+            # Keep parent_task_id for frame re-extraction fallback
+        else:
+            # ROOT/standalone task: any account can pick this up
+            task.assigned_account = None
+            task.required_account = None
+        
+        # ── PARENT: reset + re-register children ──
+        if has_children:
+            for child_id in children_ids:
+                child = self._all_tasks.get(child_id)
+                if not child:
+                    continue
+                
+                # Reset child to WAITING (will be activated when parent completes)
+                child.state = TaskState.WAITING
+                child.stage = TaskStage.INIT
+                child.continuation_frame_uri = None
+                child.continuation_frame_local_path = None
+                child.image_uris.clear()
+                child.output_uris.clear()
+                child.thumbnail_paths.clear()
+                child.video_outputs.clear()
+                child.operation_name = None
+                child.operation_names.clear()
+                child.scene_ids.clear()
+                child.upscale_status = ""
+                child.upscale_error = ""
+                child.upscale_media_ids.clear()
+                child.progress = 0
+                child.error = None
+                child.retry_attempts = 0
+                child.started_at = None
+                child.completed_at = None
+                child.assigned_account = None
+                child.required_account = None
+                
+                # Put back in waiting_tasks
+                self._waiting_tasks[child_id] = child
+                
+                print(f"[ForceRetry] Child {child_id} reset to WAITING")
+            
+            # Re-register parent→children mapping (consumed by previous _resolve_dependencies)
+            self._parent_to_children[task_id] = children_ids
+            print(f"[ForceRetry] Re-registered {len(children_ids)} children "
+                  f"for parent {task_id}")
         
         # Re-queue
         self._enqueue_task(task, priority=0)
         if self._on_task_ready:
             self._on_task_ready(task)
-        print(f"[ForceRetry] Task {task_id} reset and re-queued")
+        print(f"[ForceRetry] Task {task_id} reset and re-queued"
+              f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
         return True
     
     def reset_all_tasks(self) -> int:
