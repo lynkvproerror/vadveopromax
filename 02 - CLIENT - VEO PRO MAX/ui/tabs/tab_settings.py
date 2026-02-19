@@ -141,6 +141,14 @@ class TabSettings(QWidget):
         profiles_section = self._create_profiles_section()
         self.content_layout.addWidget(profiles_section)
         
+        # === DEFAULT SETTINGS SECTION ===
+        defaults_section = self._create_defaults_section()
+        self.content_layout.addWidget(defaults_section)
+        
+        # === OUTPUT SETTINGS SECTION ===
+        output_section = self._create_output_section()
+        self.content_layout.addWidget(output_section)
+        
         # === CONTINUATION FRAME SECTION ===
         cont_section = self._create_continuation_section()
         self.content_layout.addWidget(cont_section)
@@ -596,38 +604,7 @@ class TabSettings(QWidget):
         
         return row
     
-    def _create_accounts_section(self) -> QWidget:
-        """Create Google Accounts management section."""
-        section, layout = self._create_section("👥 Google Accounts")
-        
-        # Description
-        desc = QLabel("Manage accounts for parallel generation (up to 4 workers each)")
-        desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-bottom: 8px;")
-        layout.addWidget(desc)
-        
-        # Accounts list container
-        self.accounts_list = QVBoxLayout()
-        self.accounts_list.setSpacing(4)
-        layout.addLayout(self.accounts_list)
-        
-        # Load existing accounts
-        self._refresh_accounts()
-        
-        # Add account row
-        add_row = QHBoxLayout()
-        self.account_email_input = QLineEdit()
-        self.account_email_input.setPlaceholderText("Enter Google email...")
-        self.account_email_input.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 6px;")
-        add_row.addWidget(self.account_email_input, stretch=1)
-        
-        add_btn = QPushButton("➕ Add")
-        add_btn.setStyleSheet(f"background-color: {Theme.BLUE}; padding: 6px 12px;")
-        add_btn.clicked.connect(self._on_add_account)
-        add_row.addWidget(add_btn)
-        
-        layout.addLayout(add_row)
-        
-        return section
+    # _create_accounts_section — REMOVED (replaced by Chrome Profiles table)
     
     def _refresh_ext_column(self):
         """Lightweight periodic refresh of Extension status column (col 8) only.
@@ -809,26 +786,7 @@ class TabSettings(QWidget):
         
         return section
     
-    def _create_browser_section(self) -> QWidget:
-        """Create Browser Settings section - matches CTK lines 172-202."""
-        section, layout = self._create_section("🌐 Browser Settings")
-        
-        # Toggles - EXACT from CTK lines 176-180
-        toggles = [
-            ("Headless mode", False),
-            ("Use persistent profile", True),
-            ("Enable auto-retry on failure", True),
-        ]
-        
-        self.browser_toggles = {}
-        for label, default in toggles:
-            checkbox = QCheckBox(label)
-            checkbox.setChecked(default)
-            checkbox.setStyleSheet(f"color: {Theme.TEXT};")
-            layout.addWidget(checkbox)
-            self.browser_toggles[label] = checkbox
-        
-        return section
+    # _create_browser_section — REMOVED (headless/persistent profile managed elsewhere)
     
     def _create_continuation_section(self) -> QWidget:
         """Create Continuation Frame section."""
@@ -1321,61 +1279,20 @@ class TabSettings(QWidget):
         return custom_path if custom_path else "default"
     
     def _create_ui_section(self) -> QWidget:
-        """Create UI section - matches CTK lines 301-355."""
+        """Create UI section — Language selector."""
         section, layout = self._create_section("🎨 UI")
         
         row_layout = QHBoxLayout()
         
-        # Theme - CTK lines 308-333
-        theme_label = QLabel("Theme:")
-        theme_label.setStyleSheet(f"color: {Theme.TEXT};")
-        row_layout.addWidget(theme_label)
-        
-        self.theme_group = QButtonGroup(self)
-        
-        dark_radio = QRadioButton("Dark")
-        dark_radio.setChecked(True)
-        dark_radio.setStyleSheet(f"color: {Theme.TEXT};")
-        self.theme_group.addButton(dark_radio)
-        row_layout.addWidget(dark_radio)
-        
-        light_radio = QRadioButton("Light")
-        light_radio.setStyleSheet(f"color: {Theme.TEXT};")
-        self.theme_group.addButton(light_radio)
-        row_layout.addWidget(light_radio)
-        
-        # Separator
-        sep = QFrame()
-        sep.setFixedSize(1, 24)
-        sep.setStyleSheet(f"background-color: {Theme.BORDER};")
-        row_layout.addWidget(sep)
-        
-        # Language - CTK lines 338-355
-        lang_label = QLabel("Language:")
-        lang_label.setStyleSheet(f"color: {Theme.TEXT};")
+        # Language
+        lang_label = QLabel("🌐 Language:")
+        lang_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         row_layout.addWidget(lang_label)
         
         self.lang_menu = QComboBox()
         self.lang_menu.addItems(["Tiếng Việt", "English"])
-        self.lang_menu.setFixedWidth(120)
+        self.lang_menu.setFixedWidth(140)
         row_layout.addWidget(self.lang_menu)
-        
-        # Separator 2
-        sep2 = QFrame()
-        sep2.setFixedSize(1, 24)
-        sep2.setStyleSheet(f"background-color: {Theme.BORDER};")
-        row_layout.addWidget(sep2)
-        
-        # Font Size - per TAB_07_SETTINGS.md spec
-        font_label = QLabel("Font Size:")
-        font_label.setStyleSheet(f"color: {Theme.TEXT};")
-        row_layout.addWidget(font_label)
-        
-        self.font_size_menu = QComboBox()
-        self.font_size_menu.addItems(["Small", "Medium", "Large"])
-        self.font_size_menu.setCurrentIndex(1)  # Default to Medium
-        self.font_size_menu.setFixedWidth(100)
-        row_layout.addWidget(self.font_size_menu)
         
         row_layout.addStretch()
         layout.addLayout(row_layout)
@@ -1849,8 +1766,7 @@ class TabSettings(QWidget):
         # Reset toggles
         for toggle in self.output_toggles.values():
             toggle.setChecked(False)
-        for toggle in self.browser_toggles.values():
-            toggle.setChecked(False)
+        # browser_toggles removed — no longer needed
         # Reset worker spinboxes to defaults
         self.retry_count.setValue(3)
         self.request_timeout.setValue(120)
@@ -2550,9 +2466,7 @@ class TabSettings(QWidget):
             "include_quality": self.output_toggles.get("Include quality in filename").isChecked() if "Include quality in filename" in self.output_toggles else False,
             "auto_start_queue": self.output_toggles.get("Auto-start queue when adding").isChecked() if "Auto-start queue when adding" in self.output_toggles else False,
             "pause_on_error": self.output_toggles.get("Pause on error").isChecked() if "Pause on error" in self.output_toggles else False,
-            "headless": self.browser_toggles.get("Headless mode").isChecked() if "Headless mode" in self.browser_toggles else False,
-            "persistent_profile": self.browser_toggles.get("Use persistent profile").isChecked() if "Use persistent profile" in self.browser_toggles else False,
-            "auto_retry": self.browser_toggles.get("Enable auto-retry on failure").isChecked() if "Enable auto-retry on failure" in self.browser_toggles else False,
+            # browser_toggles removed — headless/persistent managed elsewhere
             "continuation_enabled": self.cont_switch.isToggled(),
             "extract_point_ms": self._parse_extract_point(self.extract_menu.currentText()),
             # Enhancer Image (3-toggle system)
@@ -2571,5 +2485,5 @@ class TabSettings(QWidget):
             "restore_queue_on_startup": self.restore_queue_switch.isToggled(),
             "restore_tabs_on_startup": self.restore_tabs_switch.isToggled(),
             # Font Size (new per docs)
-            "font_size": self.font_size_menu.currentText(),
+            # font_size removed — mockup control deleted
         }
