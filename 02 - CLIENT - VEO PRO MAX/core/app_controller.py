@@ -160,6 +160,17 @@ class AppController:
         # Wire extension bridge into RefreshManager for auto header refresh
         self._refresh_manager.set_extension_bridge(self._extension_bridge)
         
+        # Image Enhancer — GPU detection (background) + model management (portable)
+        from core.gpu_detector import GPUDetector
+        from core.model_manager import ModelManager
+        from core.image_enhancer import ImageEnhancer
+        self._gpu_detector = GPUDetector(auto_start=True)
+        self._model_manager = ModelManager()
+        self._image_enhancer = ImageEnhancer(
+            gpu_detector=self._gpu_detector,
+            model_manager=self._model_manager,
+        )
+        
         # Splash screen callbacks
         self._splash_progress_cb = None   # fn(int, str) → update progress
         self._splash_finish_cb = None     # fn() → close splash

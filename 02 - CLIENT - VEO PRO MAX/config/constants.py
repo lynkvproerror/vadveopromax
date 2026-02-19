@@ -294,3 +294,26 @@ class AppConstants:
     
     # Prompt limits
     MAX_PROMPT_LENGTH = 1000
+
+
+# === IMAGE ENHANCER CONFIG ===
+class EnhanceConfig:
+    """Configuration defaults for the Image Enhancer system."""
+    # Toggle defaults (user can change in Settings)
+    CONTEXT_MENU_ENHANCE = True    # Right-click "Enhance" on image slots
+    LIBRARY_ENHANCE = True         # "Enhance" button in Image Library
+    AUTO_ENHANCE_CONTINUATION = False  # Auto-enhance continuation frames
+    
+    # Model settings
+    DEFAULT_MODE = "upscale_4x"    # Default enhance mode
+    TILE_SIZE = 256                # GPU tile size (px) — lower = less VRAM
+    USE_FP16 = True                # Half-precision for speed
+    WORKER_TIMEOUT = 300           # Max seconds for worker subprocess
+    
+    # Download URLs (from original authors' GitHub Releases)
+    MODEL_URLS = {
+        'RealESRGAN_x4plus.pth': 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth',
+        'RealESRGAN_x2plus.pth': 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth',
+        'GFPGANv1.4.pth': 'https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth',
+    }
+

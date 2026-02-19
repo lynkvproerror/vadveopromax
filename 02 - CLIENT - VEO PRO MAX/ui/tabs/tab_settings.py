@@ -165,6 +165,10 @@ class TabSettings(QWidget):
         pipeline_section = self._create_pipeline_section()
         self.content_layout.addWidget(pipeline_section)
         
+        # === IMAGE ENHANCER SECTION ===
+        enhancer_section = self._create_enhancer_section()
+        self.content_layout.addWidget(enhancer_section)
+        
         # === ACTION BUTTONS (Save, Reset, Export, Import, Reload) ===
         action_buttons = self._create_action_buttons()
         self.content_layout.addWidget(action_buttons)
@@ -1550,6 +1554,276 @@ class TabSettings(QWidget):
         layout.addLayout(jr_row)
         
         return section
+    
+    def _create_enhancer_section(self) -> QWidget:
+        """Create Image Enhancer section — GPU status, 3 toggles, model download."""
+        section, layout = self._create_section("✨ Image Enhancer (AI Upscale)")
+        
+        # GPU Status row
+        gpu_row = QHBoxLayout()
+        gpu_label = QLabel("GPU Status:")
+        gpu_label.setFixedWidth(150)
+        gpu_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        gpu_row.addWidget(gpu_label)
+        
+        self._enhance_gpu_status = QLabel("🔍 Detecting GPU...")
+        self._enhance_gpu_status.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        gpu_row.addWidget(self._enhance_gpu_status)
+        gpu_row.addStretch()
+        layout.addLayout(gpu_row)
+        
+        # Model Status row
+        model_row = QHBoxLayout()
+        model_label = QLabel("AI Models:")
+        model_label.setFixedWidth(150)
+        model_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        model_row.addWidget(model_label)
+        
+        self._enhance_model_status = QLabel("⏳ Checking...")
+        self._enhance_model_status.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        model_row.addWidget(self._enhance_model_status)
+        
+        self._enhance_download_btn = QPushButton("⬇️ Download Models")
+        self._enhance_download_btn.setFixedHeight(28)
+        self._enhance_download_btn.setStyleSheet(
+            f"background-color: {Theme.BLUE}; font-size: 11px; padding: 2px 12px;"
+        )
+        self._enhance_download_btn.clicked.connect(self._on_download_enhancer_models)
+        self._enhance_download_btn.setVisible(False)  # Show only when models missing
+        model_row.addWidget(self._enhance_download_btn)
+        model_row.addStretch()
+        layout.addLayout(model_row)
+        
+        # Download progress bar (hidden by default)
+        self._enhance_progress = None
+        try:
+            from PySide6.QtWidgets import QProgressBar
+            self._enhance_progress = QProgressBar()
+            self._enhance_progress.setFixedHeight(18)
+            self._enhance_progress.setRange(0, 100)
+            self._enhance_progress.setVisible(False)
+            self._enhance_progress.setStyleSheet(f"""
+                QProgressBar {{
+                    background-color: {Theme.SURFACE2};
+                    border-radius: 4px;
+                    text-align: center;
+                    font-size: 10px;
+                    color: {Theme.TEXT};
+                }}
+                QProgressBar::chunk {{
+                    background-color: {Theme.GREEN};
+                    border-radius: 4px;
+                }}
+            """)
+            layout.addWidget(self._enhance_progress)
+        except Exception:
+            pass
+        
+        # Separator
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background-color: {Theme.OVERLAY0};")
+        layout.addWidget(sep)
+        
+        # Toggle 1: Context Menu Enhance
+        self._enhance_context_toggle = self._create_enable_row(
+            "Context Menu", checked=True, badge=""
+        )
+        self._enhance_context_toggle.setToolTip(
+            "Right-click on images to enhance them (upscale/face restore)"
+        )
+        layout.addLayout(self._enhance_context_toggle._row_layout)
+        
+        # Toggle 2: Library Enhance
+        self._enhance_library_toggle = self._create_enable_row(
+            "Library Enhance", checked=True, badge=""
+        )
+        self._enhance_library_toggle.setToolTip(
+            "Add 'Enhance' button to Image Library toolbar"
+        )
+        layout.addLayout(self._enhance_library_toggle._row_layout)
+        
+        # Toggle 3: Auto-Enhance Continuation Frames
+        self._enhance_auto_toggle = self._create_enable_row(
+            "Auto-Enhance", checked=False, badge="BETA"
+        )
+        self._enhance_auto_toggle.setToolTip(
+            "Automatically enhance continuation frames before uploading (may add 5-10s per chain)"
+        )
+        layout.addLayout(self._enhance_auto_toggle._row_layout)
+        
+        # Connect toggles to save
+        self._enhance_context_toggle.toggled_signal.connect(self._save_enhancer_settings)
+        self._enhance_library_toggle.toggled_signal.connect(self._save_enhancer_settings)
+        self._enhance_auto_toggle.toggled_signal.connect(self._save_enhancer_settings)
+        
+        # PyTorch install button (shown only if torch not installed)
+        self._enhance_install_btn = QPushButton("📦 Install PyTorch (CUDA)")
+        self._enhance_install_btn.setFixedHeight(28)
+        self._enhance_install_btn.setStyleSheet(
+            f"background-color: {Theme.YELLOW}; color: {Theme.BASE}; "
+            f"font-size: 11px; font-weight: bold; padding: 2px 12px;"
+        )
+        self._enhance_install_btn.clicked.connect(self._on_install_pytorch)
+        self._enhance_install_btn.setVisible(False)
+        layout.addWidget(self._enhance_install_btn)
+        
+        # Start GPU detection refresh (poll GPUDetector result)
+        self._enhance_check_timer = QTimer(self)
+        self._enhance_check_timer.timeout.connect(self._refresh_enhancer_status)
+        self._enhance_check_timer.start(2000)  # Check every 2s until resolved
+        
+        return section
+    
+    def _refresh_enhancer_status(self):
+        """Poll GPU detector and model manager status — update UI."""
+        if not self.controller:
+            return
+        
+        # GPU detector
+        gpu_det = getattr(self.controller, '_gpu_detector', None)
+        if gpu_det:
+            status = gpu_det.available
+            if status is not None:
+                self._enhance_gpu_status.setText(gpu_det.display_text)
+                if status:
+                    self._enhance_gpu_status.setStyleSheet(f"color: {Theme.GREEN};")
+                else:
+                    self._enhance_gpu_status.setStyleSheet(f"color: {Theme.RED};")
+                    # Show install button if PyTorch missing
+                    if gpu_det.install_hint:
+                        self._enhance_install_btn.setVisible(True)
+                    # Disable toggles if no GPU
+                    self._enhance_context_toggle.setEnabled(False)
+                    self._enhance_library_toggle.setEnabled(False)
+                    self._enhance_auto_toggle.setEnabled(False)
+        
+        # Model manager
+        mdl_mgr = getattr(self.controller, '_model_manager', None)
+        if mdl_mgr:
+            if mdl_mgr.all_installed:
+                self._enhance_model_status.setText(
+                    f"✅ All models installed ({mdl_mgr.total_download_size_mb}MB)"
+                )
+                self._enhance_model_status.setStyleSheet(f"color: {Theme.GREEN};")
+                self._enhance_download_btn.setVisible(False)
+            else:
+                missing = mdl_mgr.missing_download_size_mb
+                self._enhance_model_status.setText(
+                    f"⬇️ Missing models ({missing}MB)"
+                )
+                self._enhance_model_status.setStyleSheet(f"color: {Theme.YELLOW};")
+                self._enhance_download_btn.setVisible(True)
+                self._enhance_download_btn.setText(f"⬇️ Download ({missing}MB)")
+        
+        # Stop polling once both are resolved
+        if gpu_det and gpu_det.available is not None:
+            # Keep slower poll for model status changes
+            self._enhance_check_timer.setInterval(10000)
+    
+    def _on_download_enhancer_models(self):
+        """Start downloading AI models in background."""
+        if not self.controller:
+            return
+        mdl_mgr = getattr(self.controller, '_model_manager', None)
+        if not mdl_mgr:
+            return
+        
+        self._enhance_download_btn.setEnabled(False)
+        self._enhance_download_btn.setText("⏳ Downloading...")
+        if self._enhance_progress:
+            self._enhance_progress.setVisible(True)
+            self._enhance_progress.setValue(0)
+        
+        import threading
+        def _download():
+            def _progress(pct, msg):
+                if self._enhance_progress and pct >= 0:
+                    # Thread-safe UI update
+                    QTimer.singleShot(0, lambda: self._enhance_progress.setValue(pct))
+                    QTimer.singleShot(0, lambda: self._enhance_model_status.setText(msg))
+            
+            success = mdl_mgr.download_all(progress_callback=_progress)
+            QTimer.singleShot(0, lambda: self._on_download_complete(success))
+        
+        threading.Thread(target=_download, daemon=True, name="model-download").start()
+    
+    def _on_download_complete(self, success: bool):
+        """Handle model download completion."""
+        if self._enhance_progress:
+            self._enhance_progress.setVisible(False)
+        self._enhance_download_btn.setEnabled(True)
+        
+        if success:
+            self._enhance_model_status.setText("✅ All models installed")
+            self._enhance_model_status.setStyleSheet(f"color: {Theme.GREEN};")
+            self._enhance_download_btn.setVisible(False)
+        else:
+            self._enhance_model_status.setText("❌ Download failed — retry?")
+            self._enhance_model_status.setStyleSheet(f"color: {Theme.RED};")
+            self._enhance_download_btn.setText("🔄 Retry Download")
+    
+    def _on_install_pytorch(self):
+        """Show PyTorch install confirmation dialog."""
+        reply = QMessageBox.question(
+            self,
+            "Install PyTorch (CUDA)",
+            "This will install PyTorch with CUDA support (~2.5GB).\n\n"
+            "Command:\npip install torch torchvision torchaudio "
+            "--index-url https://download.pytorch.org/whl/cu121\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._enhance_install_btn.setEnabled(False)
+            self._enhance_install_btn.setText("⏳ Installing...")
+            
+            import subprocess, sys, threading
+            def _install():
+                try:
+                    result = subprocess.run(
+                        [sys.executable, '-m', 'pip', 'install',
+                         'torch', 'torchvision', 'torchaudio',
+                         '--index-url', 'https://download.pytorch.org/whl/cu121'],
+                        capture_output=True, text=True, timeout=600,
+                    )
+                    success = result.returncode == 0
+                except Exception:
+                    success = False
+                QTimer.singleShot(0, lambda: self._on_pytorch_install_complete(success))
+            
+            threading.Thread(target=_install, daemon=True, name="pytorch-install").start()
+    
+    def _on_pytorch_install_complete(self, success: bool):
+        """Handle PyTorch install completion."""
+        self._enhance_install_btn.setEnabled(True)
+        if success:
+            self._enhance_install_btn.setVisible(False)
+            self._enhance_gpu_status.setText("🔄 Restart app to detect GPU")
+            self._enhance_gpu_status.setStyleSheet(f"color: {Theme.YELLOW};")
+            QMessageBox.information(
+                self, "PyTorch Installed",
+                "PyTorch installed successfully!\n\n"
+                "Please restart the app to enable GPU detection."
+            )
+        else:
+            self._enhance_install_btn.setText("❌ Install Failed — Retry")
+            QMessageBox.warning(
+                self, "Install Failed",
+                "PyTorch installation failed.\n\n"
+                "Try manually:\npip install torch torchvision torchaudio "
+                "--index-url https://download.pytorch.org/whl/cu121"
+            )
+    
+    def _save_enhancer_settings(self, *args):
+        """Persist enhancer toggle states."""
+        if not self.controller:
+            return
+        settings = getattr(self.controller, 'settings', None)
+        if settings and hasattr(settings, 'set'):
+            settings.set('enhance_context_menu', self._enhance_context_toggle.isToggled())
+            settings.set('enhance_library', self._enhance_library_toggle.isToggled())
+            settings.set('enhance_auto_continuation', self._enhance_auto_toggle.isToggled())
     
     def _create_action_buttons(self) -> QWidget:
         """Create action buttons - matches CTK lines 357-401."""

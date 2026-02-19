@@ -1514,6 +1514,33 @@ class Engine:
                 task.image_upload_status = "error"
                 return None
             
+            # ★ Auto-enhance: upscale continuation frame if feature is enabled
+            try:
+                if (hasattr(self, '_account_manager') and 
+                    hasattr(self._account_manager, '_app_controller')):
+                    ctrl = self._account_manager._app_controller
+                    settings = getattr(ctrl, 'settings', None)
+                    enhancer = getattr(ctrl, '_image_enhancer', None)
+                    if (settings and enhancer and enhancer.available and
+                        getattr(settings, 'get', lambda k, d=None: d)('enhance_auto_continuation', False)):
+                        log.info(f"[AutoEnhance] Upscaling continuation frame: {frame_path}")
+                        self._dispatcher.update_progress(
+                            task.id, task.progress, "✨ Enhancing frame..."
+                        )
+                        from core.image_enhancer import EnhanceMode
+                        result = enhancer.enhance_sync(
+                            frame_path,
+                            mode=EnhanceMode.UPSCALE_2X,
+                            timeout=60,
+                        )
+                        if result.success:
+                            frame_path = result.output_path
+                            log.info(f"[AutoEnhance] Frame enhanced: {frame_path}")
+                        else:
+                            log.warning(f"[AutoEnhance] Enhancement failed: {result.error}")
+            except Exception as enhance_err:
+                log.warning(f"[AutoEnhance] Skipped: {enhance_err}")
+            
             # ★ Early display: set frame path on children BEFORE upload
             # so Queue tab can show thumbnail immediately
             self._dispatcher.set_children_frame_preview(task.id, frame_path)

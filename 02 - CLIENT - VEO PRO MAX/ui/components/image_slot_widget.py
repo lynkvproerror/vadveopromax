@@ -12,7 +12,7 @@ from typing import Optional
 
 from PySide6.QtWidgets import (
     QFrame, QLabel, QVBoxLayout, QHBoxLayout,
-    QPushButton, QFileDialog, QToolTip, QSizePolicy,
+    QPushButton, QFileDialog, QToolTip, QSizePolicy, QMenu,
 )
 from PySide6.QtCore import Qt, Signal, QMimeData, QSize
 from PySide6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QPainter, QColor
@@ -257,10 +257,66 @@ class ImageSlotWidget(QFrame):
     # === EVENTS ===
     
     def mousePressEvent(self, event):
-        """Click empty slot → open file dialog."""
+        """Click empty slot → open file dialog. Right-click → context menu."""
+        if event.button() == Qt.RightButton and self._image_path:
+            self._show_context_menu(event.globalPosition().toPoint())
+            return
         if not self._image_path and event.button() == Qt.LeftButton:
             self._browse_image()
         super().mousePressEvent(event)
+    
+    def _show_context_menu(self, pos):
+        """Show right-click context menu with Enhance option."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.TEXT};
+                border: 1px solid {Theme.OVERLAY0};
+                padding: 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: {Theme.BLUE};
+            }}
+        """)
+        
+        # Enhance action
+        enhance_act = menu.addAction("✨ Enhance Image")
+        menu.addSeparator()
+        copy_act = menu.addAction("📋 Copy Path")
+        clear_act = menu.addAction("✕ Clear")
+        
+        action = menu.exec(pos)
+        if action == enhance_act:
+            self._open_enhance_dialog()
+        elif action == copy_act:
+            from PySide6.QtWidgets import QApplication
+            QApplication.clipboard().setText(self._image_path)
+        elif action == clear_act:
+            self.clear()
+    
+    def _open_enhance_dialog(self):
+        """Open the AI enhance dialog for this image."""
+        if not self._image_path:
+            return
+        try:
+            from ui.components.enhance_dialog import EnhanceDialog
+            # Find enhancer service from app controller
+            enhancer = None
+            app = self.window()
+            if hasattr(app, 'controller') and hasattr(app.controller, '_image_enhancer'):
+                enhancer = app.controller._image_enhancer
+            
+            dialog = EnhanceDialog(
+                image_path=self._image_path,
+                enhancer=enhancer,
+                parent=self,
+            )
+            if dialog.exec() == EnhanceDialog.Accepted and dialog.result_path:
+                # Update slot with enhanced image
+                self.set_image_path(dialog.result_path)
+        except Exception as e:
+            print(f"[ImageSlot] Enhance error: {e}")
     
     def _browse_image(self):
         """Open file dialog to select image."""
