@@ -19,56 +19,29 @@ if (window.__veoContentLoaded) {
     // ── Constants ──────────────────────────────────────────────────────────
     // (reCAPTCHA execution moved to background.js via chrome.scripting.executeScript)
 
-    // Maximum retries for email detection (SPA may render late)
-    const MAX_EMAIL_RETRIES = 5;
-    const EMAIL_RETRY_INTERVAL = 3000; // 3s between retries
-
 
     // ── Tab Registration ───────────────────────────────────────────────────
 
-    function detectAndRegister(retryCount = 0) {
-        // Quick logout check: if page redirected to Google login, user is logged out
-        if (window.location.hostname === 'accounts.google.com' ||
-            window.location.href.includes('accounts.google.com/ServiceLogin') ||
-            window.location.href.includes('accounts.google.com/signin')) {
-            console.warn('[VEO Bridge Content] 🔴 Detected Google login page — user is LOGGED OUT');
-            chrome.runtime.sendMessage({ action: 'tab_logout', reason: 'login_redirect' });
-            return;
-        }
-
+    function detectAndRegister() {
+        // Extract email from page
         const email = extractEmail();
         if (email) {
             chrome.runtime.sendMessage({ action: 'register_tab', email });
-            console.log(`[VEO Bridge Content] ✅ Registered tab with email: ${email}`);
-            return;
-        }
-
-        // Log why detection failed (for debugging)
-        if (retryCount === 0) {
-            console.log('[VEO Bridge Content] ⏳ Email not found yet, retrying...');
-            console.log('[VEO Bridge Content]   URL:', window.location.href);
-            console.log('[VEO Bridge Content]   __NEXT_DATA__:', !!document.getElementById('__NEXT_DATA__'));
-            console.log('[VEO Bridge Content]   [data-email]:', !!document.querySelector('[data-email]'));
-            console.log('[VEO Bridge Content]   avatar [aria-label]:', !!document.querySelector('a[aria-label*="@"], [aria-label*="@"]'));
-            console.log('[VEO Bridge Content]   img[data-src] (Google profile):', !!document.querySelector('img[data-src*="googleusercontent"]'));
-        }
-
-        // Retry with increasing delay (SPA takes time to render)
-        if (retryCount < MAX_EMAIL_RETRIES) {
-            setTimeout(() => detectAndRegister(retryCount + 1), EMAIL_RETRY_INTERVAL);
+            console.log(`[VEO Bridge Content] Registered tab with email: ${email}`);
         } else {
-            console.warn(`[VEO Bridge Content] ❌ Could not detect email after ${MAX_EMAIL_RETRIES} retries on ${window.location.href}`);
-            // NOTIFY background.js that this tab appears logged out
-            chrome.runtime.sendMessage({
-                action: 'tab_logout',
-                reason: 'email_not_found',
-                url: window.location.href,
-            });
+            // Retry after page finishes loading
+            setTimeout(() => {
+                const retryEmail = extractEmail();
+                if (retryEmail) {
+                    chrome.runtime.sendMessage({ action: 'register_tab', email: retryEmail });
+                    console.log(`[VEO Bridge Content] Registered tab (retry): ${retryEmail}`);
+                }
+            }, 3000);
         }
     }
 
     function extractEmail() {
-        // Method 1: From __NEXT_DATA__ (Next.js pages)
+        // Method 1: From __NEXT_DATA__
         const nextDataEl = document.getElementById('__NEXT_DATA__');
         if (nextDataEl) {
             try {
@@ -86,52 +59,11 @@ if (window.__veoContentLoaded) {
         const profileEl = document.querySelector('[data-email]');
         if (profileEl) return profileEl.getAttribute('data-email');
 
-        // Method 3: From aria-label on avatar/account button
-        for (const selector of [
-            'a[aria-label*="@"]',
-            'button[aria-label*="@"]',
-            '[aria-label*="@"]',
-        ]) {
-            const el = document.querySelector(selector);
-            if (el) {
-                const label = el.getAttribute('aria-label');
-                const match = label.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
-                if (match) return match[0];
-            }
-        }
-
-        // Method 4: From Google account switcher / profile image tooltip
-        const googleImgs = document.querySelectorAll('img[alt*="@"]');
-        for (const img of googleImgs) {
-            const alt = img.getAttribute('alt');
-            const match = alt.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+        // Method 3: From aria-label on avatar
+        const avatarEl = document.querySelector('a[aria-label*="@"]');
+        if (avatarEl) {
+            const match = avatarEl.getAttribute('aria-label').match(/[\w.+-]+@[\w-]+\.[\w.]+/);
             if (match) return match[0];
-        }
-
-        // Method 5: Search visible text for email pattern near account elements
-        const accountBtns = document.querySelectorAll(
-            '[data-ogsr-up], [data-authuser], .gb_Fc, .gb_Oc'
-        );
-        for (const btn of accountBtns) {
-            const text = btn.textContent || btn.innerText || '';
-            const match = text.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
-            if (match) return match[0];
-        }
-
-        // Method 6: Deep scan — look for email in any element with specific classes
-        // common in Google apps (account menu, profile)
-        const deepSelectors = [
-            '.gb_lb',           // Google bar email text
-            '[data-identifier]', // Google sign-in identifier
-            '.yDmH0d',          // Google account chip
-        ];
-        for (const sel of deepSelectors) {
-            const els = document.querySelectorAll(sel);
-            for (const el of els) {
-                const text = el.textContent || el.getAttribute('data-identifier') || '';
-                const match = text.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
-                if (match) return match[0];
-            }
         }
 
         return null;
@@ -178,17 +110,6 @@ if (window.__veoContentLoaded) {
             const result = extractAccessToken();
             sendResponse(result);
             return false; // sync
-        }
-
-        // Server can tell us which email this tab belongs to
-        if (msg.action === 'assign_email') {
-            const email = msg.email;
-            if (email) {
-                chrome.runtime.sendMessage({ action: 'register_tab', email });
-                console.log(`[VEO Bridge Content] ✅ Assigned email from server: ${email}`);
-            }
-            sendResponse({ ok: true });
-            return false;
         }
 
         return false;

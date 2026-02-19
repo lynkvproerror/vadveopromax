@@ -116,6 +116,10 @@ class MainWindow(QMainWindow):
         # Tab widget
         self.tabview = QTabWidget()
         self.tabview.setDocumentMode(True)
+        self.tabview.tabBar().setExpanding(True)
+        # Force tab bar to stretch full width
+        from PySide6.QtWidgets import QSizePolicy
+        self.tabview.tabBar().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self.tabview, stretch=1)
         
         # Define tabs with their actual PySide6 classes

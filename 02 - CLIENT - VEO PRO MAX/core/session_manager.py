@@ -99,10 +99,44 @@ class SessionManager:
         except Exception:
             return False
     
+    # ── Path Conversion ───────────────────────────────────────────
+    
+    CACHE_DIR = str(Path.home() / ".veoauto" / "cache")
+    
+    @staticmethod
+    def _to_relative(abs_path: str, base_dir: str) -> str:
+        """Convert absolute path to relative for portable serialization.
+        Skips HTTP URLs — only converts local file paths."""
+        if not abs_path or not base_dir:
+            return abs_path or ""
+        if abs_path.startswith(("http://", "https://")):
+            return abs_path  # URL, not a local path
+        try:
+            return str(Path(abs_path).relative_to(base_dir))
+        except ValueError:
+            return abs_path  # not under base_dir — keep absolute
+    
+    @staticmethod
+    def _to_absolute(rel_path: str, base_dir: str) -> str:
+        """Convert relative path back to absolute on load.
+        Skips HTTP URLs — only converts local file paths."""
+        if not rel_path or not base_dir:
+            return rel_path or ""
+        if rel_path.startswith(("http://", "https://")):
+            return rel_path  # URL, not a local path
+        p = Path(rel_path)
+        if p.is_absolute():
+            return rel_path
+        return str(Path(base_dir) / rel_path)
+    
     # ── Queue Serialization ─────────────────────────────────────
     
     def serialize_queue(self, groups: dict) -> list:
         """Serialize TaskGroup objects to JSON-safe dicts.
+        
+        Video paths are stored RELATIVE to output_folder/project_name.
+        Cache paths (thumbnails, frames) are stored RELATIVE to CACHE_DIR.
+        This makes the journal portable when folders are moved.
         
         Args:
             groups: Dict[str, TaskGroup] from dispatcher
@@ -110,6 +144,7 @@ class SessionManager:
         Returns:
             List of serializable group dicts
         """
+        cache_dir = self.CACHE_DIR
         result = []
         for gid, group in groups.items():
             g_data = {
@@ -119,6 +154,27 @@ class SessionManager:
                 "tasks": []
             }
             for task in group.tasks:
+                # Video base dir: output_folder/project_name
+                output_folder = getattr(task, 'output_folder', '')
+                project_name = getattr(task, 'project_name', '') or "Untitled"
+                video_base = str(Path(output_folder) / project_name) if output_folder else ""
+                
+                # Convert output_uris to relative
+                rel_output_uris = [
+                    self._to_relative(u, video_base) if u else ""
+                    for u in task.output_uris
+                ]
+                
+                # Convert thumbnail_paths to relative (cache-based)
+                rel_thumb_paths = [
+                    self._to_relative(p, cache_dir) if p else ""
+                    for p in getattr(task, 'thumbnail_paths', [])
+                ]
+                
+                # Convert continuation_frame_local_path to relative (cache-based)
+                frame_local = getattr(task, 'continuation_frame_local_path', None)
+                rel_frame = self._to_relative(frame_local, cache_dir) if frame_local else None
+                
                 t_data = {
                     "id": task.id,
                     "workflow_type": task.workflow_type,
@@ -132,7 +188,7 @@ class SessionManager:
                     "image_paths": list(getattr(task, 'image_paths', [])),
                     "parent_task_id": task.parent_task_id,
                     "continuation_frame_uri": getattr(task, 'continuation_frame_uri', None),
-                    "continuation_frame_local_path": getattr(task, 'continuation_frame_local_path', None),
+                    "continuation_frame_local_path": rel_frame,
                     "required_account": getattr(task, 'required_account', None),
                     "extract_point_ms": task.extract_point_ms,
                     "download_quality": task.download_quality,
@@ -141,13 +197,19 @@ class SessionManager:
                     "progress": task.progress,
                     "error": task.error,
                     "retry_attempts": task.retry_attempts,
+                    "chain_retry_count": getattr(task, 'chain_retry_count', 0),
                     "operation_name": task.operation_name,
-                    "output_uris": list(task.output_uris),
-                    "thumbnail_paths": list(getattr(task, 'thumbnail_paths', [])),
+                    "operation_names": list(getattr(task, 'operation_names', [])),
+                    "scene_ids": list(getattr(task, 'scene_ids', [])),
+                    "output_uris": rel_output_uris,
+                    "thumbnail_paths": rel_thumb_paths,
                     "assigned_account": task.assigned_account,
                     "project_id": task.project_id,
-                    "output_folder": getattr(task, 'output_folder', ''),
-                    "project_name": getattr(task, 'project_name', ''),
+                    "output_folder": output_folder,
+                    "project_name": project_name,
+                    "upscale_status": getattr(task, 'upscale_status', ''),
+                    "upscale_media_ids": list(getattr(task, 'upscale_media_ids', [])),
+                    "upscale_error": getattr(task, 'upscale_error', ''),
                     "created_at": task.created_at.isoformat() if hasattr(task.created_at, 'isoformat') else None,
                     "completed_at": task.completed_at.isoformat() if hasattr(task.completed_at, 'isoformat') else None,
                     "video_outputs": [
@@ -156,9 +218,9 @@ class SessionManager:
                             "operation_name": vo.operation_name,
                             "scene_id": vo.scene_id,
                             "media_id": vo.media_id,
-                            "file_720p": vo.file_720p,
-                            "file_upscaled": vo.file_upscaled,
-                            "thumbnail_path": vo.thumbnail_path,
+                            "file_720p": self._to_relative(vo.file_720p, video_base),
+                            "file_upscaled": self._to_relative(vo.file_upscaled, video_base),
+                            "thumbnail_path": self._to_relative(vo.thumbnail_path, cache_dir),
                             "quality": vo.quality,
                             "upscale_status": vo.upscale_status,
                             "upscale_error": vo.upscale_error,

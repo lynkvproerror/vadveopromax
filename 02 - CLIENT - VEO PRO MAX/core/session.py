@@ -83,7 +83,7 @@ class AccountSession:
     # === Internal State ===
     state: AccountState = AccountState.DISCONNECTED
     active_slots: int = 0
-    max_slots: int = 4
+    max_slots: int = 5
     last_activity: Optional[datetime] = None
     
     # === Per-Account Worker Settings ===
@@ -303,7 +303,7 @@ class AccountSession:
             except ValueError:
                 session.state = AccountState.DISCONNECTED
         # Restore per-account worker settings
-        session.max_slots = data.get("max_slots", 4)
+        session.max_slots = data.get("max_slots", 5)
         session.retry_count = data.get("retry_count", 3)
         session.request_timeout = data.get("request_timeout", 120)
         return session

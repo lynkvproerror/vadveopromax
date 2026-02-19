@@ -58,6 +58,9 @@ class EventType(str, Enum):
     LICENSE_VALIDATED = "license_validated"
     LICENSE_EXPIRED = "license_expired"
     TRIAL_WARNING = "trial_warning"
+    
+    # Engine events
+    ENGINE_ERROR = "engine_error"
 
 
 @dataclass

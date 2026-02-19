@@ -190,12 +190,17 @@ class VEOApiClient:
         # (n8n uses a proxy that handles auth differently, we call Google directly)
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
-        # Add x-browser-* headers
-        # Per-account headers take priority over global singleton
+        # Add x-browser-* headers (layered: static → global dynamic → per-account)
+        # 1. Always include static headers (channel, year, copyright)
+        headers.update(BrowserHeaders.STATIC)
+        # 2. Overlay dynamic headers from global singleton (validation, client_data)
+        global_headers = self._browser_headers.get_all_headers()
+        for k, v in global_headers.items():
+            if k not in BrowserHeaders.STATIC and v:  # only dynamic parts
+                headers[k] = v
+        # 3. Per-account headers from extension bridge — highest priority
         if account_headers:
             headers.update(account_headers)
-        else:
-            headers.update(self._browser_headers.get_all_headers())
         # Add extra headers if any
         if extra_headers:
             headers.update(extra_headers)

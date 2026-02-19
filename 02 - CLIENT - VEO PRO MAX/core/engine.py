@@ -28,6 +28,8 @@ from core.worker import Worker, WorkerResult
 from core.api_client import VEOApiClient
 from core.frame_extractor import FrameExtractor
 from core.trpc_client import TRPCClient
+from core.event_manager import emit_event, EventType
+from core.manifest_manager import ManifestManager
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +60,7 @@ class Engine:
         # A1/A2: ProjectManager is now per-account (CHỦ owns it)
         # No longer a shared singleton here
         self._frame_extractor = FrameExtractor()
-        self._profiles_controller = profiles_controller  # For auto re-login
+        self._profiles_controller = profiles_controller  # For Variations copy recovery
         
         # Workers are now created per-account in start() — no global max_workers
         self._process_pool = ProcessPoolExecutor(
@@ -71,7 +73,6 @@ class Engine:
         self._pause_event = asyncio.Event()  # Set = running, Clear = paused
         self._pause_event.set()  # Start unpaused
         self._task_available = asyncio.Event()  # Bug 14: signal workers when new task arrives
-        self._relogin_locks: Dict[str, asyncio.Lock] = {}  # Per-account re-login dedup
         self._browser_recovery_locks: Dict[str, asyncio.Lock] = {}   # Per-account browser recovery dedup
         self._browser_recovery_epoch: Dict[str, int] = {}             # Tracks recovery generation
         self._account_rate_locks: Dict[str, asyncio.Lock] = {}  # Bug 13: per-account rate limiter
@@ -80,14 +81,14 @@ class Engine:
         self._account_api_semaphores: Dict[str, asyncio.Semaphore] = {}
         
         # Tiered 403 recovery state machine per account
-        # Phase 0: accumulate 3x 403 → kill browser
+        # Phase 0: accumulate 3x 403 → kill browser + restart
         # Phase 1: accumulate 3x 403 → copy Variations + warmup tabs
-        # Phase 2: accumulate 3x 403 → delete profile + auto re-login
-        # Phase 3: accumulate 3x 403 → STOP (give up)
-        self._account_recovery_phase: Dict[str, int] = {}    # email → 0-3
+        # Phase 2: give up (all recovery tiers exhausted)
+        self._account_recovery_phase: Dict[str, int] = {}    # email → 0-2
         self._account_phase_403_count: Dict[str, int] = {}   # email → count within current phase
         self._account_403_last_epoch: Dict[str, int] = {}    # email → last epoch when 403 was counted
         self._account_resetting: Dict[str, bool] = {}        # email → True if recovery in progress
+        self._recaptcha_recovery_count: Dict[str, int] = {}  # Layer 4: de-escalation counter per account
         
         # Hot-reload: queue for accounts added while engine is running
         self._pending_accounts: asyncio.Queue = asyncio.Queue()
@@ -110,6 +111,25 @@ class Engine:
         # Same image used by multiple tasks only uploads once per account
         self._upload_cache: Dict[str, str] = {}
         self._upload_cache_lock = asyncio.Lock()
+        
+        # Phase 3A: Decoupled upscale queue (background processing)
+        from core.upscale_queue import UpscaleQueue
+        self._upscale_queue = UpscaleQueue(engine=self)
+        
+        # Manifest manager: portable project data alongside output videos
+        self._manifest = ManifestManager()
+        
+        # Phase 4A: reCAPTCHA token pre-fetch pool
+        from core.recaptcha_pool import RecaptchaPool
+        self._recaptcha_pool = RecaptchaPool()
+        
+        # Phase 4B: Adaptive anti-detect delay
+        from core.adaptive_burst import AdaptiveBurstController
+        self._burst_controller = AdaptiveBurstController()
+        
+        # Wire burst controller into account manager for health-score 403 penalty
+        if hasattr(self._account_manager, 'set_burst_controller'):
+            self._account_manager.set_burst_controller(self._burst_controller)
         
         # Performance counters (read by AppController._push_performance)
         self._download_count = 0   # Total successful downloads
@@ -235,7 +255,7 @@ class Engine:
                 # max_slots mid-run takes effect immediately:
                 #   - Increase: idle workers start acquiring slots → process tasks
                 #   - Decrease: excess workers fail acquire_slot() → idle safely
-                MAX_WORKERS_PER_ACCOUNT = 4
+                MAX_WORKERS_PER_ACCOUNT = 5
                 
                 for account in self._account_manager._accounts:
                     if not account.is_enabled:
@@ -298,7 +318,7 @@ class Engine:
         Runs inside the TaskGroup — uses tg.create_task() to add
         new worker coroutines dynamically without engine restart.
         """
-        MAX_WORKERS_PER_ACCOUNT = 4
+        MAX_WORKERS_PER_ACCOUNT = 5
         
         while not self._stop_event.is_set():
             try:
@@ -354,7 +374,7 @@ class Engine:
         
         # Thread-safe put into asyncio queue
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             if loop.is_running():
                 loop.call_soon_threadsafe(self._pending_accounts.put_nowait, account)
                 log.info(f"Hot-reload queued: {account.email}")
@@ -441,6 +461,18 @@ class Engine:
                     if self._stop_event.is_set():
                         break
                 
+                # Step 0.5: Staggered startup delay — prevents all workers
+                # from requesting reCAPTCHA simultaneously at launch.
+                if not hasattr(worker, '_startup_done'):
+                    worker._startup_done = True
+                    try:
+                        worker_idx = int(worker.worker_id.rsplit('-', 1)[-1])
+                    except (ValueError, IndexError):
+                        worker_idx = 0
+                    if worker_idx > 0:
+                        startup_delay = worker_idx * 1.5  # 0s, 1.5s, 3s, 4.5s, 6s
+                        await asyncio.sleep(startup_delay)
+                
                 # Step 1: Acquire slot from THIS account
                 if not account.acquire_slot():
                     await asyncio.sleep(0.5)
@@ -498,21 +530,24 @@ class Engine:
                     
                     # Step 5: Ensure project exists (CHỦ's ProjectManager)
                     if not account.project_id:
-                        trpc_client = None
-                        if account._browser_session and account._browser_session.is_ready:
-                            trpc_client = TRPCClient(account._browser_session._page)
-                        
-                        project_id = await account.project_manager.get_or_create_project(
-                            email=account.email,
-                            access_token=account.get_access_token(),
-                            api_client=self._api_client,
-                            trpc_client=trpc_client,
-                            title=task.project_name or "VEO Pro Max",
-                        )
-                        if project_id:
-                            account.set_project_id(project_id)
-                        else:
-                            log.warning(f"⚠️ No projectId for {account.email} — generation requests may fail (TRPC createProject returned None)")
+                        try:
+                            trpc_client = None
+                            if account._browser_session and account._browser_session.is_ready:
+                                trpc_client = TRPCClient(account._browser_session._page)
+                            
+                            project_id = await account.project_manager.get_or_create_project(
+                                email=account.email,
+                                access_token=account.get_access_token(),
+                                api_client=self._api_client,
+                                trpc_client=trpc_client,
+                                title=task.project_name or "VEO Pro Max",
+                            )
+                            if project_id:
+                                account.set_project_id(project_id)
+                            else:
+                                log.warning(f"⚠️ No projectId for {account.email} — generation requests may fail (TRPC createProject returned None)")
+                        except Exception as e:
+                            log.warning(f"⚠️ TRPC project creation failed for {account.email}: {e} — continuing without projectId")
                     
                     # Step 5.5: Auto-detect paygate tier (once per account)
                     if account.paygate_tier == "PAYGATE_TIER_TWO":
@@ -521,6 +556,11 @@ class Engine:
                     # Notify UI
                     task.assigned_account = account.email
                     task.project_id = account.project_id
+                    emit_event(EventType.TASK_STARTED, {
+                        "task_id": task.id, "account": account.email,
+                        "workflow": task.workflow_type,
+                        "prompt": (task.prompt or "")[:80],
+                    }, source="engine")
                     if self._on_task_started:
                         self._on_task_started(task)
                     
@@ -553,11 +593,40 @@ class Engine:
                         async with self._account_rate_locks[account.email]:
                             await self._resolve_image_paths(task, account)
                     
-                    max_retries = account.retry_count
+                    # Step 6.6: Re-upload continuation frame for child tasks
+                    # MediaIds expire — always get a fresh one before submit
+                    # Tier 1: re-upload existing frame / Tier 2: re-extract from parent video
+                    if task.parent_task_id and (task.continuation_frame_local_path or task.image_uris):
+                        async with self._account_rate_locks[account.email]:
+                            fresh_uri = await self._re_upload_continuation_frame(task, account)
+                            if fresh_uri:
+                                task.image_uris = [fresh_uri]
+                            elif not task.image_uris:
+                                self._dispatcher.fail_task(
+                                    task.id, "Continuation frame re-upload failed"
+                                )
+                                account.release_slot()
+                                continue
+                    
+                    # Chain tasks get more retries — losing 1 root = losing N children
+                    base_retries = account.retry_count
+                    if (self._dispatcher.has_children(task.id) or 
+                            task.parent_task_id is not None):
+                        max_retries = max(base_retries, 6)
+                    else:
+                        max_retries = base_retries
                     timeout = account.request_timeout
                     result = None
                     
                     for attempt in range(max_retries + 1):
+                        # Re-upload continuation frame on retry (mediaId may have expired)
+                        if (attempt > 0 and task.parent_task_id
+                                and (task.continuation_frame_local_path or task.image_uris)):
+                            async with self._account_rate_locks[account.email]:
+                                fresh_uri = await self._re_upload_continuation_frame(task, account)
+                                if fresh_uri:
+                                    task.image_uris = [fresh_uri]
+                        
                         # Lock: covers anti-detect delay + single API call only
                         async with self._account_rate_locks[account.email]:
                             # Step 6: Anti-Detect Spam — random delay (SERIALIZED per account)
@@ -615,21 +684,53 @@ class Engine:
                             # TIERED 403 RECOVERY STATE MACHINE
                             # Phase 0: 3x 403 → kill browser + restart
                             # Phase 1: 3x 403 → copy Variations + warmup tabs
-                            # Phase 2: 3x 403 → delete profile + auto re-login
-                            # Phase 3: 3x 403 → STOP (all tiers exhausted)
+                            # Phase 2: give up (all tiers exhausted)
                             # Backoff within each phase: 3s, 5s, 8s
                             # ═══════════════════════════════════════════════
                             
-                            # Pre-retry: refresh headers via extension bridge (Fix #7)
-                            # Stale x-browser-* headers are a common cause of 403
-                            if hasattr(account, '_extension_bridge') and account._extension_bridge:
-                                try:
-                                    await account._extension_bridge.refresh_headers(
-                                        account.email, timeout=10
+                            # Layer 4: De-escalated recovery for reCAPTCHA failures.
+                            # DON'T always reload tabs — it destroys grecaptcha widget
+                            # and creates a negative feedback loop.
+                            error_lower = (result.error or "").lower()
+                            recaptcha_fail = "recaptcha" in error_lower
+                            acct_email = account.email
+                            
+                            if recaptcha_fail:
+                                # reCAPTCHA-specific: use readiness probe, NOT tab reload
+                                recovery_count = self._recaptcha_recovery_count.get(acct_email, 0)
+                                if recovery_count == 0:
+                                    # Phase 0: gentle — just wait for grecaptcha ready
+                                    log.info(f"[Recovery] {acct_email}: reCAPTCHA fail → waiting for readiness (no reload)")
+                                    await self._wait_for_recaptcha_ready(account, max_wait=15.0)
+                                elif recovery_count == 1:
+                                    # Phase 1: reload tabs BUT then wait for readiness
+                                    log.info(f"[Recovery] {acct_email}: reCAPTCHA fail x2 → reload + wait")
+                                    if hasattr(account, '_extension_bridge') and account._extension_bridge:
+                                        try:
+                                            await account._extension_bridge.refresh_headers(
+                                                account.email, timeout=10
+                                            )
+                                        except Exception:
+                                            pass
+                                    await self._wait_for_recaptcha_ready(account, max_wait=20.0)
+                                else:
+                                    # Phase 2+: hard browser recovery
+                                    log.warning(f"[Recovery] {acct_email}: reCAPTCHA fail x{recovery_count+1} → hard recovery")
+                                    await self._do_browser_recovery(
+                                        account, worker.worker_id, "hard"
                                     )
-                                    log.info(f"[Recovery] {account.email}: Extension headers refreshed before retry")
-                                except Exception as e:
-                                    log.debug(f"[Recovery] Extension header refresh failed: {e}")
+                                    await self._wait_for_recaptcha_ready(account, max_wait=30.0)
+                                self._recaptcha_recovery_count[acct_email] = recovery_count + 1
+                            else:
+                                # Non-reCAPTCHA errors: refresh headers as before
+                                if hasattr(account, '_extension_bridge') and account._extension_bridge:
+                                    try:
+                                        await account._extension_bridge.refresh_headers(
+                                            account.email, timeout=10
+                                        )
+                                        log.info(f"[Recovery] {account.email}: Extension headers refreshed before retry")
+                                    except Exception as e:
+                                        log.debug(f"[Recovery] Extension header refresh failed: {e}")
                             
                             # Pre-retry: invalidate reCAPTCHA (single-use tokens)
                             account.invalidate_recaptcha()
@@ -681,7 +782,7 @@ class Engine:
                                             )
                                             self._account_resetting[acct_email] = True
                                             try:
-                                                loop = asyncio.get_event_loop()
+                                                loop = asyncio.get_running_loop()
                                                 await loop.run_in_executor(
                                                     None,
                                                     self._profiles_controller.copy_variations_and_warmup,
@@ -696,54 +797,11 @@ class Engine:
                                                 self._account_resetting[acct_email] = False
                                             backoff = 10
                                             
-                                        elif next_phase == 3 and self._profiles_controller:
-                                            # ▶ PHASE 3: Delete profile + auto re-login
-                                            has_creds = False
-                                            try:
-                                                from core.credentials_manager import get_credentials_manager
-                                                has_creds = get_credentials_manager().has_credentials_for(acct_email)
-                                            except Exception:
-                                                pass
-                                            
-                                            if has_creds:
-                                                log.warning(
-                                                    f"🔴 [{acct_email}] Phase 3: Delete profile "
-                                                    f"+ auto re-login (3x 403 in phase 2)"
-                                                )
-                                                self._account_resetting[acct_email] = True
-                                                try:
-                                                    loop = asyncio.get_event_loop()
-                                                    reset_result = await loop.run_in_executor(
-                                                        None,
-                                                        self._profiles_controller.reset_profile_and_relogin,
-                                                        acct_email
-                                                    )
-                                                    if reset_result:
-                                                        log.info(f"✅ Phase 3 re-login OK: {acct_email}")
-                                                        # Sync new profile path
-                                                        updated = self._profiles_controller.get_profile(acct_email)
-                                                        if updated and updated.browser_profile_path:
-                                                            account.browser_profile_path = updated.browser_profile_path
-                                                        await account.restart_browser()
-                                                        self._browser_recovery_epoch[acct_email] = current_epoch + 1
-                                                    else:
-                                                        log.error(f"❌ Phase 3 re-login failed: {acct_email}")
-                                                except Exception as e:
-                                                    log.error(f"Phase 3 recovery error for {acct_email}: {e}")
-                                                finally:
-                                                    self._account_resetting[acct_email] = False
-                                            else:
-                                                log.error(
-                                                    f"❌ [{acct_email}] No credentials stored — "
-                                                    f"cannot do Phase 3 (delete+relogin)"
-                                                )
-                                            backoff = 15
-                                            
-                                        elif next_phase >= 4:
+                                        elif next_phase >= 3:
                                             # ▶ ALL PHASES EXHAUSTED — give up
                                             log.error(
-                                                f"⛔ [{acct_email}] All 3 recovery phases exhausted "
-                                                f"(12x 403). Giving up on this account."
+                                                f"⛔ [{acct_email}] All recovery phases exhausted "
+                                                f"(9x 403). Giving up on this account."
                                             )
                                             backoff = 60
                                 else:
@@ -797,33 +855,49 @@ class Engine:
                         account.release_slot()
                         
                         if self._is_auth_error(error_msg):
-                            # Auth error → attempt auto re-login
-                            log.warning(f"Auth error for {account.email}: {error_msg}")
-                            log.info(f"Attempting auto re-login for {account.email}...")
-                            
-                            relogin_ok = await self._try_auto_relogin(account.email, account)
-                            
-                            if relogin_ok:
-                                log.info(f"✅ Re-login OK for {account.email}, re-queuing task {task.id}")
-                                task.state = TaskState.READY
-                                task.assigned_account = None
-                                self._dispatcher.submit_task(task)
-                            else:
-                                log.error(f"❌ Re-login failed for {account.email}")
-                                self._dispatcher.fail_task(
-                                    task.id,
-                                    f"{error_msg} (auto re-login failed)"
-                                )
-                                self._error_count += 1
-                                if self._on_task_failed:
-                                    self._on_task_failed(task, error_msg)
+                            # Auth error → fail task, manual re-login required
+                            log.warning(f"Auth error for {account.email}: {error_msg} — manual re-login required")
+                            self._dispatcher.fail_task(
+                                task.id,
+                                f"{error_msg} (auth error — please re-login manually via Browser button)"
+                            )
+                            self._error_count += 1
+                            emit_event(EventType.TASK_FAILED, {
+                                "task_id": task.id, "error": error_msg,
+                                "reason": "auth_error",
+                            }, source="engine")
+                            if self._on_task_failed:
+                                self._on_task_failed(task, error_msg)
                         else:
                             # Non-auth error after all retries exhausted
                             retry_info = f" (after {task.retry_attempts} retries)" if task.retry_attempts > 0 else ""
                             final_error = f"{error_msg}{retry_info}"
+                            
+                            # Auto-retry chain roots on transient errors
+                            if self._should_auto_retry_chain(task, error_msg):
+                                delay = random.uniform(30, 60)
+                                task.chain_retry_count += 1
+                                log.warning(
+                                    f"🔄 [ChainRetry] Root {task.id} failed but has chain → "
+                                    f"auto-retry #{task.chain_retry_count}/3 in {delay:.0f}s"
+                                )
+                                account.release_slot()
+                                # Set task to FAILED first — retry_chain() requires FAILED state
+                                task.state = TaskState.FAILED
+                                task.error = final_error
+                                self._dispatcher._running_count = max(0, self._dispatcher._running_count - 1)
+                                await asyncio.sleep(delay)
+                                # Use retry_chain to properly restore dependency tree
+                                self._dispatcher.retry_chain(task.id)
+                                continue  # Back to worker loop, task is re-queued
+                            
                             log.error(f"Task {task.id} PERMANENTLY FAILED: {final_error}")
                             self._dispatcher.fail_task(task.id, final_error)
                             self._error_count += 1
+                            emit_event(EventType.TASK_FAILED, {
+                                "task_id": task.id, "error": final_error,
+                                "reason": "retries_exhausted",
+                            }, source="engine")
                             if self._on_task_failed:
                                 self._on_task_failed(task, final_error)
                     else:
@@ -857,6 +931,10 @@ class Engine:
                             task.id, f"Unexpected error: {e}"
                         )
                         self._error_count += 1
+                        emit_event(EventType.TASK_FAILED, {
+                            "task_id": task.id, "error": str(e),
+                            "reason": "unexpected_exception",
+                        }, source="engine")
                         if self._on_task_failed:
                             self._on_task_failed(task, str(e))
                 except Exception:
@@ -976,6 +1054,12 @@ class Engine:
                     continuation_frame_local_path=continuation_frame_local,
                 )
                 self._download_count += len(task.output_uris or [])
+                emit_event(EventType.TASK_COMPLETED, {
+                    "task_id": task.id,
+                    "outputs": len(task.output_uris or []),
+                    "account": task.assigned_account,
+                    "resumed": True,
+                }, source="engine")
                 if self._on_task_completed:
                     self._on_task_completed(task)
                 return
@@ -1074,6 +1158,10 @@ class Engine:
                     if not completed_results:
                         # All failed
                         self._dispatcher.fail_task(task.id, "All video operations failed")
+                        emit_event(EventType.TASK_FAILED, {
+                            "task_id": task.id, "error": "All video operations failed",
+                            "reason": "all_ops_failed",
+                        }, source="engine")
                         return
                     
                     # ★ Solution 1: Log partial failures clearly
@@ -1141,6 +1229,10 @@ class Engine:
                             task.video_outputs.append(vo)
                     
                     task.stage = TaskStage.GENERATED  # ★ Checkpoint: poll complete
+                    emit_event(EventType.TASK_PROGRESS, {
+                        "task_id": task.id, "stage": "generated",
+                        "progress": 85, "outputs": len(completed_results),
+                    }, source="engine")
                     
                     # === Stage: Download 720p originals (86%) ===
                     self._dispatcher.update_progress(task.id, 86, "⬇️ Downloading 720p")
@@ -1150,33 +1242,83 @@ class Engine:
                     )
                     
                     task.stage = TaskStage.DOWNLOADED_720  # ★ Checkpoint: 720p saved
+                    emit_event(EventType.TASK_PROGRESS, {
+                        "task_id": task.id, "stage": "downloaded_720",
+                        "progress": 87,
+                    }, source="engine")
                     
                     # === Stage: Auto-upscale if needed (88-92%) ===
                     upscale_paths = [None] * len(media_ids)  # None placeholders
                     if task.download_quality != "720p" and media_ids:
-                        task.upscale_media_ids = list(media_ids)
-                        self._dispatcher.update_progress(task.id, 88, "⬆️ Upscaling")
-                        upscale_results = await self._auto_upscale(
-                            task, account, output_uris, media_ids
-                        )
-                        if upscale_results:
-                            # Download upscaled versions (only non-None)
-                            uris_to_download = [u for u in upscale_results if u]
-                            if uris_to_download:
-                                self._dispatcher.update_progress(
-                                    task.id, 92, f"⬇️ Downloading {task.download_quality}"
+                        # Proactive token check: access_token may have expired
+                        # during the 2-5min poll phase. Refresh BEFORE upscale.
+                        if account.session.is_token_expired:
+                            log.info(f"[Upscale] Access token expired for {account.email}, refreshing...")
+                            fresh_token = await account.refresh_access_token()
+                            if not fresh_token:
+                                log.error(f"[Upscale] Token refresh failed for {account.email} — keeping 720p")
+                                # Mark all videos as upscale-skipped
+                                for vo in task.video_outputs:
+                                    vo.upscale_status = "failed"
+                                    vo.upscale_error = "Access token expired, refresh failed"
+                                task.upscale_error = "Access token expired"
+                                self._dispatcher.update_progress(task.id, 90, "⚠️ Upscale skipped (auth expired)")
+                                # Skip upscale, continue to completion with 720p
+                                upscale_paths = [None] * len(media_ids)
+                                media_ids = []  # Empty to skip upscale block below
+                        
+                        # Phase 3A: Enqueue for background upscale (release worker slot)
+                        if media_ids:  # Still has media_ids (not emptied by token failure)
+                            from core.upscale_queue import UpscaleJob
+                            self._upscale_queue.enqueue(UpscaleJob(
+                                task_id=task.id,
+                                account_email=account.email,
+                                media_ids=list(media_ids),
+                                output_uris=list(output_uris),
+                                target_quality=task.download_quality,
+                                aspect_ratio=task.aspect_ratio,
+                            ))
+                            task.upscale_media_ids = list(media_ids)
+                            task.stage = TaskStage.UPSCALING  # ★ Stay in upscaling
+                            self._dispatcher.update_progress(
+                                task.id, 88, f"⬆️ Upscaling {task.download_quality} (queued)"
+                            )
+                            
+                            # Handle continuation frame before worker exits
+                            # EARLY ACTIVATION: Children start immediately after 720p,
+                            # not after upscale completes (~3-5min savings per chain link)
+                            if (
+                                self._continuation_enabled
+                                and self._dispatcher.has_children(task.id)
+                                and output_uris
+                            ):
+                                frame_result = await self._extract_continuation_frame(
+                                    task, account, output_uris[0]
                                 )
-                                dl_paths = await self._download_outputs(
-                                    task, uris_to_download,
-                                    quality_subfolder=task.download_quality,
-                                    generate_thumbnails=False,
-                                )
-                                # Map downloaded paths back to original indices
-                                dl_idx = 0
-                                for i, uri in enumerate(upscale_results):
-                                    if uri and dl_idx < len(dl_paths):
-                                        upscale_paths[i] = dl_paths[dl_idx]
-                                        dl_idx += 1
+                                if frame_result:
+                                    # Note: Don't set continuation_frame on parent task —
+                                    # only children should have it (for Queue UI display).
+                                    # Parent is T2V and should NOT show "Frame" thumbnail.
+                                    
+                                    # Layer 2: Smart cooldown — wait for grecaptcha readiness
+                                    # instead of fixed sleep(3-5s).
+                                    await self._wait_for_recaptcha_ready(account, max_wait=30.0)
+                                    
+                                    # ★ Activate children NOW — don't wait for upscale
+                                    # _resolve_dependencies pops _parent_to_children,
+                                    # so UpscaleQueue's complete_task() won't double-activate
+                                    self._dispatcher.activate_children_early(
+                                        task.id,
+                                        frame_result[0],   # continuation_frame_uri
+                                        frame_result[1],   # continuation_frame_local_path
+                                    )
+                            
+                            # Worker exits — UpscaleQueue will call complete_task()
+                            log.info(
+                                f"[Engine] Task {task.id}: worker releasing slot → "
+                                f"upscale continues in background"
+                            )
+                            return
                     
                     # Per-video quality merge: prefer upscale, fallback 720p
                     # NOTE: local_720p has same length as output_uris, with "" for failed downloads
@@ -1225,14 +1367,12 @@ class Engine:
                         frame_result = await self._extract_continuation_frame(
                             task, account, output_uris[0]
                         )
-                        # Fix 3: Cooldown between parent's API burst and child's I2V submit
+                        # Layer 2: Smart cooldown — readiness-based instead of fixed delay
                         if frame_result:
                             continuation_frame_uri, continuation_frame_local = frame_result
-                            cooldown = random.uniform(3.0, 5.0)
-                            log.info(f"Continuation cooldown: {cooldown:.1f}s before releasing child")
-                            await asyncio.sleep(cooldown)
+                            await self._wait_for_recaptcha_ready(account, max_wait=30.0)
                     
-                    # === Stage: Complete (100%) ===
+                    # === Stage: Complete (100%) — only for non-upscale tasks ===
                     task.stage = TaskStage.COMPLETED  # ★ Checkpoint: all done
                     self._dispatcher.update_progress(task.id, 100, "✅ Done")
                     self._dispatcher.complete_task(
@@ -1241,8 +1381,15 @@ class Engine:
                         continuation_frame_uri=continuation_frame_uri,
                         continuation_frame_local_path=continuation_frame_local,
                     )
+                    emit_event(EventType.TASK_COMPLETED, {
+                        "task_id": task.id,
+                        "outputs": len(output_uris),
+                        "account": task.assigned_account,
+                    }, source="engine")
                     if self._on_task_completed:
                         self._on_task_completed(task)
+                    # Save manifest alongside output videos
+                    self._save_manifest(task)
                     return
                 
                 else:
@@ -1271,6 +1418,10 @@ class Engine:
         
         # Timeout
         self._dispatcher.fail_task(task.id, f"Polling timeout ({max_poll_time}s)")
+        emit_event(EventType.TASK_FAILED, {
+            "task_id": task.id, "error": f"Polling timeout ({max_poll_time}s)",
+            "reason": "poll_timeout",
+        }, source="engine")
     
     def _extract_output_details(self, data: dict) -> list:
         """Extract output details from poll response.
@@ -1320,6 +1471,10 @@ class Engine:
                 log.warning("FFmpeg not available, skipping continuation frame extraction")
                 return None
             
+            # Update status: extracting
+            task.image_upload_status = "extracting"
+            self._dispatcher.update_progress(task.id, task.progress, "📸 Extracting frame...")
+            
             # 1. Download video to temp file
             import aiohttp
             import tempfile
@@ -1328,6 +1483,7 @@ class Engine:
                 async with session.get(video_uri) as resp:
                     if resp.status != 200:
                         log.error(f"Failed to download video: HTTP {resp.status}")
+                        task.image_upload_status = "error"
                         return None
                     video_bytes = await resp.read()
             
@@ -1340,7 +1496,7 @@ class Engine:
             
             # 2. Extract frame via FFmpeg (CPU-bound, run in process pool)
             # C3: VEO only uses start frame input → always extract from END
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             frame_path = await loop.run_in_executor(
                 self._process_pool,
                 self._frame_extractor.extract_frame,
@@ -1355,13 +1511,19 @@ class Engine:
             
             if not frame_path:
                 log.error("Frame extraction failed")
+                task.image_upload_status = "error"
                 return None
+            
+            # ★ Early display: set frame path on children BEFORE upload
+            # so Queue tab can show thumbnail immediately
+            self._dispatcher.set_children_frame_preview(task.id, frame_path)
             
             # 3. Base64 encode via MediaHandler for quality + format
             from core.media_handler import MediaHandler
             frame_result = MediaHandler.image_to_base64(frame_path)
             if not frame_result:
                 log.error("Frame base64 encoding failed")
+                task.image_upload_status = "error"
                 Path(frame_path).unlink(missing_ok=True)
                 return None
             frame_b64, frame_mime = frame_result
@@ -1370,9 +1532,8 @@ class Engine:
             
             # 4. Upload image to VEO API
             # Fix 2: Upload does NOT need reCAPTCHA (HAR verified).
-            # Don't get/refresh reCAPTCHA here — it wastes single-use tokens
-            # needed by the subsequent child I2V generation API call.
-            # (Matching _resolve_image_paths() at line ~1445 which passes "")
+            task.image_upload_status = "uploading"
+            self._dispatcher.update_progress(task.id, task.progress, "📤 Uploading frame...")
             upload_resp = await self._api_client.upload_image(
                 access_token=account.get_access_token(),
                 recaptcha_token="",  # HAR: upload does NOT send recaptcha
@@ -1388,20 +1549,227 @@ class Engine:
                     media_id = mgid.get("mediaGenerationId")
                 else:
                     media_id = mgid  # Fallback if flat string
+                task.image_upload_status = "ready"
                 log.info(f"Continuation frame uploaded: {media_id}")
                 return (media_id, frame_path)
             else:
+                task.image_upload_status = "error"
                 log.error(f"Frame upload failed: {upload_resp.error}")
                 return None
             
         except Exception as e:
+            task.image_upload_status = "error"
             log.error(f"Continuation frame pipeline error: {e}")
+            return None
+    
+    async def _re_upload_continuation_frame(
+        self, task: Task, account: AccountManager
+    ) -> Optional[str]:
+        """Re-upload continuation frame to get fresh mediaId.
+        
+        Two-tier strategy:
+        1. If local frame file exists → encode + upload (fast)
+        2. If frame file missing → re-extract from parent's local video via
+           FFmpeg → upload (slower, but recovers from deleted frames)
+        
+        Returns:
+            Fresh mediaId string, or None on failure.
+        """
+        frame_path = task.continuation_frame_local_path
+        
+        # ── Tier 1: Re-upload existing frame file ──
+        if frame_path and Path(frame_path).exists():
+            result = await self._upload_frame_file(task, account, frame_path)
+            if result:
+                return result
+        
+        # ── Tier 2: Re-extract from parent's downloaded video ──
+        log.info(f"[ReUpload] Frame file missing/failed, attempting re-extract from parent video")
+        re_extracted_path = await self._re_extract_frame_from_parent(task)
+        if re_extracted_path:
+            task.continuation_frame_local_path = re_extracted_path
+            # Update children preview with new frame
+            self._dispatcher.set_children_frame_preview(task.id, re_extracted_path)
+            result = await self._upload_frame_file(task, account, re_extracted_path)
+            if result:
+                return result
+        
+        log.error(f"[ReUpload] All re-upload strategies failed for task {task.id}")
+        task.image_upload_status = "error"
+        return None
+    
+    async def _upload_frame_file(
+        self, task: Task, account: AccountManager, frame_path: str
+    ) -> Optional[str]:
+        """Encode a local frame file and upload to get a mediaId."""
+        try:
+            from core.media_handler import MediaHandler
+            frame_result = MediaHandler.image_to_base64(frame_path)
+            if not frame_result:
+                log.error(f"[ReUpload] Failed to encode frame: {frame_path}")
+                return None
+            frame_b64, frame_mime = frame_result
+            
+            task.image_upload_status = "uploading"
+            self._dispatcher.update_progress(
+                task.id, task.progress, "📤 Re-uploading frame..."
+            )
+            
+            upload_resp = await self._api_client.upload_image(
+                access_token=account.get_access_token(),
+                recaptcha_token="",  # Upload does NOT need reCAPTCHA
+                image_base64=frame_b64,
+                mime_type=frame_mime,
+                account_headers=account.get_api_headers(),
+            )
+            
+            if upload_resp.success:
+                mgid = upload_resp.data.get("mediaGenerationId", {})
+                media_id = mgid.get("mediaGenerationId") if isinstance(mgid, dict) else mgid
+                if media_id:
+                    task.image_upload_status = "ready"
+                    log.info(f"[ReUpload] Fresh mediaId for task {task.id}: {media_id}")
+                    return media_id
+            
+            log.error(f"[ReUpload] Upload failed: {upload_resp.error if upload_resp else 'no response'}")
+            return None
+            
+        except Exception as e:
+            log.error(f"[ReUpload] Upload error: {e}")
+            return None
+    
+    async def _re_extract_frame_from_parent(self, task: Task) -> Optional[str]:
+        """Re-extract continuation frame from parent's local video file.
+        
+        Finds the parent task's first downloaded video (output_uris),
+        runs FFmpeg to extract the last frame, and returns the new frame path.
+        
+        Returns:
+            Path to newly extracted frame file, or None on failure.
+        """
+        if not task.parent_task_id:
+            return None
+        
+        parent = self._dispatcher._all_tasks.get(task.parent_task_id)
+        if not parent or not parent.output_uris:
+            log.warning(f"[ReExtract] Parent task {task.parent_task_id} not found or has no outputs")
+            return None
+        
+        # Find first existing local video from parent
+        parent_video = None
+        for uri in parent.output_uris:
+            if uri and Path(uri).exists() and uri.lower().endswith('.mp4'):
+                parent_video = uri
+                break
+        
+        if not parent_video:
+            log.warning(f"[ReExtract] No local video found in parent outputs: {parent.output_uris[:2]}")
+            return None
+        
+        if not self._frame_extractor.is_available:
+            log.warning("[ReExtract] FFmpeg not available, cannot re-extract")
+            return None
+        
+        try:
+            task.image_upload_status = "extracting"
+            self._dispatcher.update_progress(
+                task.id, task.progress, "📸 Re-extracting frame..."
+            )
+            
+            loop = asyncio.get_running_loop()
+            frame_path = await loop.run_in_executor(
+                self._process_pool,
+                self._frame_extractor.extract_frame,
+                parent_video,
+                None,   # auto-generate output path
+                task.extract_point_ms,
+                True    # from_end=True (VEO start frame = end of previous video)
+            )
+            
+            if frame_path and Path(frame_path).exists():
+                log.info(f"[ReExtract] Frame re-extracted: {frame_path} (from {Path(parent_video).name})")
+                return frame_path
+            
+            log.error("[ReExtract] FFmpeg extraction returned no output")
+            return None
+            
+        except Exception as e:
+            log.error(f"[ReExtract] Error: {e}")
             return None
     
     def clear_upload_cache(self):
         """Clear the upload cache. Call between sessions/batches if needed."""
         self._upload_cache.clear()
         log.debug("[Engine] Upload cache cleared")
+    
+    async def _wait_for_recaptcha_ready(
+        self, account: AccountManager, max_wait: float = 30.0
+    ) -> bool:
+        """Layer 2: Wait until Extension confirms grecaptcha is ready.
+        
+        Polls Extension via check_recaptcha_ready() every 2s with gentle backoff.
+        Once ready, pre-fetches tokens via RecaptchaPool.priority_prefetch().
+        
+        This replaces fixed sleep(3-5s) with deterministic readiness checking.
+        If Extension doesn't support check_recaptcha_ready (old version),
+        falls back to a 5s fixed delay.
+        
+        Args:
+            account: AccountManager with extension bridge reference.
+            max_wait: Maximum seconds to wait before proceeding anyway.
+            
+        Returns:
+            True if grecaptcha confirmed ready, False if timed out.
+        """
+        bridge = getattr(account, '_extension_bridge', None)
+        if not bridge:
+            # No extension bridge — fallback to fixed delay
+            log.info(f"[Engine] No extension bridge, using 5s fixed cooldown")
+            await asyncio.sleep(5.0)
+            return False
+        
+        start = asyncio.get_event_loop().time()
+        interval = 2.0
+        
+        while (asyncio.get_event_loop().time() - start) < max_wait:
+            try:
+                ready = await bridge.check_recaptcha_ready(account.email, timeout=5.0)
+            except Exception:
+                ready = False
+            
+            if ready:
+                elapsed = asyncio.get_event_loop().time() - start
+                log.info(
+                    f"[Engine] ✅ grecaptcha ready for {account.email} "
+                    f"(waited {elapsed:.1f}s)"
+                )
+                
+                # Layer 3: Pre-fetch tokens while grecaptcha is confirmed ready
+                if self._recaptcha_pool:
+                    try:
+                        fetched = await self._recaptcha_pool.priority_prefetch(
+                            account.email, count=2
+                        )
+                        log.info(
+                            f"[Engine] Priority prefetch: {fetched} token(s) "
+                            f"cached for continuation"
+                        )
+                    except Exception as e:
+                        log.debug(f"[Engine] Priority prefetch failed: {e}")
+                
+                # Reset recovery counter on success
+                self._recaptcha_recovery_count[account.email] = 0
+                return True
+            
+            await asyncio.sleep(interval)
+            interval = min(interval * 1.3, 5.0)  # Gentle backoff: 2→2.6→3.4→4.4→5
+        
+        elapsed = asyncio.get_event_loop().time() - start
+        log.warning(
+            f"[Engine] ⏳ grecaptcha not ready after {elapsed:.1f}s — "
+            f"proceeding anyway for {account.email}"
+        )
+        return False
     
     async def _resolve_image_paths(self, task: Task, account: AccountManager):
         """Upload local image files to get mediaGenerationIds.
@@ -1415,6 +1783,8 @@ class Engine:
         """
         log.info(f"Uploading {len(task.image_paths)} image(s) for task {task.id}")
         uploaded_uris = []
+        task.image_upload_status = "uploading"
+        self._dispatcher.update_progress(task.id, task.progress, "📤 Uploading images...")
         
         for path in task.image_paths:
             try:
@@ -1467,7 +1837,10 @@ class Engine:
         
         if uploaded_uris:
             task.image_uris = uploaded_uris
+            task.image_upload_status = "ready"
             log.info(f"  {len(uploaded_uris)} image(s) uploaded successfully")
+        else:
+            task.image_upload_status = "error"
     
     def _auto_retry_partial_failure(
         self, original_task: Task, failed_count: int, failed_labels: list
@@ -1501,6 +1874,8 @@ class Engine:
             project_name=original_task.project_name,
             prompt_index=original_task.prompt_index,  # Same index → naming collision handled by dedup
         )
+        # Pin to same account — reuse project_id, same image_uris (account-bound)
+        retry_task.required_account = original_task.assigned_account
         
         submitted = self._dispatcher.submit_task(retry_task)
         if submitted:
@@ -1556,6 +1931,10 @@ class Engine:
                 continue
             
             try:
+                # Cooldown between sequential upscale submits (prevent reCAPTCHA burst)
+                if idx > 0:
+                    await asyncio.sleep(2.0)
+                
                 # === Submit with retry (5 attempts, browser restart on 3x reCAPTCHA fail) ===
                 resp = None
                 for attempt in range(max_submit_retries):
@@ -1840,6 +2219,7 @@ class Engine:
             self._dispatcher.update_progress(task.id, 100, "✅ Re-upscale done")
             if self._on_task_completed:
                 self._on_task_completed(task)
+            self._save_manifest(task)
             return True
         else:
             self._dispatcher.update_progress(task.id, 100, "⚠️ Re-upscale failed")
@@ -1874,6 +2254,7 @@ class Engine:
             self._dispatcher.update_progress(task.id, 100, "✅ Re-upscale done")
             if self._on_task_completed:
                 self._on_task_completed(task)
+            self._save_manifest(task)
         else:
             self._dispatcher.update_progress(task.id, 100, "⚠️ Re-upscale failed")
         
@@ -2077,6 +2458,15 @@ class Engine:
                         # Check Content-Length header first (if available)
                         async with session.get(uri) as resp:
                             if resp.status != 200:
+                                # Retry on transient HTTP errors (403=URL expired, 5xx=server)
+                                if resp.status in (403, 500, 502, 503) and attempt < MAX_DOWNLOAD_RETRIES:
+                                    log.warning(
+                                        f"Download attempt {attempt}/{MAX_DOWNLOAD_RETRIES}: "
+                                        f"HTTP {resp.status} for {uri[:60]}... "
+                                        f"Retrying in {delay}s..."
+                                    )
+                                    await asyncio.sleep(delay)
+                                    continue
                                 log.error(f"Download failed: HTTP {resp.status} for {uri[:80]}")
                                 break
                             
@@ -2120,6 +2510,18 @@ class Engine:
                                 log.error(f"Failed to delete black file {filepath.name}: {del_err}")
                             # downloaded_ok stays False → skip thumbnail, add "" to local_paths
                             break
+                        
+                        # Phase 2A: Verify content-length vs actual bytes written
+                        if content_length:
+                            expected = int(content_length)
+                            if expected > 0 and file_size != expected and attempt < MAX_DOWNLOAD_RETRIES:
+                                log.warning(
+                                    f"Download attempt {attempt}/{MAX_DOWNLOAD_RETRIES}: "
+                                    f"size mismatch {file_size:,} vs expected {expected:,} bytes "
+                                    f"(truncated download). Retrying in {delay}s..."
+                                )
+                                await asyncio.sleep(delay)
+                                continue
                         
                         downloaded_ok = True
                         break
@@ -2179,6 +2581,60 @@ class Engine:
         
         return local_paths
     
+    # ── Manifest & Thumbnail Helpers ─────────────────────────────
+    
+    def _save_manifest(self, task: Task):
+        """Save/update project manifest alongside output videos.
+        
+        Non-blocking, fire-and-forget — manifest is a bonus, not critical path.
+        """
+        try:
+            self._manifest.save_task_to_manifest(task)
+        except Exception as e:
+            log.debug(f"[Manifest] Save skipped: {e}")
+    
+    def _regenerate_thumbnail(self, task: Task, video_index: int) -> str:
+        """Auto-regenerate missing thumbnail from video file.
+        
+        Called when UI requests a thumbnail that no longer exists on disk.
+        
+        Returns:
+            Path to the regenerated thumbnail, or "" if failed.
+        """
+        if video_index >= len(task.video_outputs):
+            return ""
+        
+        vo = task.video_outputs[video_index]
+        source = vo.file_upscaled or vo.file_720p
+        if not source or not Path(source).exists():
+            return ""
+        
+        try:
+            import subprocess
+            thumb_dir = Path.home() / ".veoauto" / "cache" / "thumbnails"
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            thumb_path = thumb_dir / f"{task.id}_{video_index}.jpg"
+            
+            subprocess.run(
+                ['ffmpeg', '-y', '-i', str(source),
+                 '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                 str(thumb_path)],
+                capture_output=True, timeout=10,
+            )
+            
+            if thumb_path.exists():
+                vo.thumbnail_path = str(thumb_path)
+                # Update task-level list too
+                while len(task.thumbnail_paths) <= video_index:
+                    task.thumbnail_paths.append("")
+                task.thumbnail_paths[video_index] = str(thumb_path)
+                log.info(f"[Thumbnail] Regenerated: {thumb_path.name}")
+                return str(thumb_path)
+        except Exception as e:
+            log.warning(f"[Thumbnail] Regen failed: {e}")
+        
+        return ""
+    
     def _is_auth_error(self, error_msg: str) -> bool:
         """Check if error indicates authentication failure.
         
@@ -2206,6 +2662,53 @@ class Engine:
         ]
         return any(kw in lower for kw in auth_keywords)
     
+    def _is_transient_error(self, error_msg: str) -> bool:
+        """Check if error is transient and may resolve with time.
+        
+        reCAPTCHA failures, rate limits, network issues, timeouts —
+        these may succeed if retried after a cooldown.
+        """
+        if not error_msg:
+            return False
+        lower = error_msg.lower()
+        transient_keywords = [
+            "recaptcha", "403", "429", "rate limit",
+            "timeout", "timed out", "network", "connection",
+            "temporarily", "unavailable", "overloaded",
+            "token too short", "captcha",
+        ]
+        return any(kw in lower for kw in transient_keywords)
+    
+    CHAIN_MAX_AUTO_RETRIES = 3  # Max auto-retries for chain roots
+    
+    def _should_auto_retry_chain(self, task: 'Task', error_msg: str) -> bool:
+        """Decide if a chain root task should auto-retry.
+        
+        Conditions:
+        1. Error is transient (reCAPTCHA, 403, timeout, network)
+        2. Task is a chain root (has children, or had children)
+        3. Haven't exceeded CHAIN_MAX_AUTO_RETRIES
+        4. NOT an auth error (those require manual re-login)
+        """
+        if self._is_auth_error(error_msg):
+            return False
+        if not self._is_transient_error(error_msg):
+            return False
+        if task.chain_retry_count >= self.CHAIN_MAX_AUTO_RETRIES:
+            return False
+        
+        # Check if task is a chain root (has or had descendants)
+        descendants = self._dispatcher._collect_chain_descendants(task.id)
+        if not descendants:
+            # Also check: task might be a chain root whose children were
+            # cascade-failed (parent_to_children already popped)
+            # In that case, check if any task in _all_tasks references this as parent
+            for t in self._dispatcher._all_tasks.values():
+                if t.parent_task_id == task.id:
+                    return True
+            return False
+        return True
+    
     def _is_network_error(self, error_msg: str) -> bool:
         """Check if error indicates a network connectivity failure.
         
@@ -2224,117 +2727,6 @@ class Engine:
         ]
         return any(kw in lower for kw in network_keywords)
     
-    async def _try_auto_relogin(self, email: str, account: 'AccountManager') -> bool:
-        """Attempt auto re-login via ProfilesController.
-        
-        Strategy:
-        1. If debug browser is open → reload page to refresh session, extract
-           fresh access_token from __NEXT_DATA__ (NO new browser needed)
-        2. If no debug browser → close headless, launch new browser for re-login
-        
-        Returns:
-            True if re-login succeeded and tokens updated
-        """
-        if not self._profiles_controller:
-            log.warning("No ProfilesController — cannot auto re-login")
-            return False
-        
-        # Per-account lock — only ONE worker attempts re-login at a time
-        if email not in self._relogin_locks:
-            self._relogin_locks[email] = asyncio.Lock()
-        
-        lock = self._relogin_locks[email]
-        
-        if lock.locked():
-            log.info(f"Re-login already in progress for {email}, waiting...")
-            async with lock:
-                if account._browser_session and account._browser_session.is_ready:
-                    return True
-                return False
-        
-        async with lock:
-            try:
-                # ── Strategy 1: Debug browser is open → refresh token from existing page ──
-                debug_page = self._profiles_controller.get_debug_browser_page(email)
-                if debug_page:
-                    log.info(f"[{email}] Debug browser open — refreshing token via page reload...")
-                    
-                    try:
-                        # Send 'refresh_token' command via queue to reload page and re-extract token
-                        entry = self._profiles_controller._debug_browsers.get(email) if hasattr(self._profiles_controller, '_debug_browsers') else None
-                        if entry and entry.get("cmd_queue"):
-                            entry["cmd_queue"].put("refresh_token")
-                            
-                            # Wait for token to be refreshed (up to 15 seconds)
-                            loop = asyncio.get_event_loop()
-                            for _ in range(30):
-                                await asyncio.sleep(0.5)
-                                # Check if fresh token is available
-                                profile = self._profiles_controller.get_profile(email)
-                                token = getattr(profile, "access_token", None) if profile else None
-                                if token and len(token) > 100:
-                                    account.update_access_token(token, expires_in=3599)
-                                    log.info(f"[{email}] ✅ Access token refreshed from debug browser ({len(token)} chars)")
-                                    
-                                    # Re-attach to debug browser
-                                    await account.ensure_browser(headless=True)
-                                    return True
-                        
-                        # Token refresh via cmd_queue didn't work
-                        # The debug browser cmd_queue runs on its own thread,
-                        # so we CANNOT call page methods from here (different thread = greenlet crash).
-                        # Fall through to Strategy 2 (full re-login).
-                        log.warning(f"[{email}] Could not refresh token from debug browser — falling back to full re-login")
-                        # DON'T return False — fall through to Strategy 2 below
-                        
-                    except Exception as e:
-                        log.error(f"[{email}] Token refresh from debug browser failed: {e}")
-                        # DON'T return False — fall through to Strategy 2 below
-                
-                # ── Strategy 2: No debug browser → full re-login with credentials ──
-                log.info(f"Closing Engine browser for {email} before re-login...")
-                await account.close_browser()
-                
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(
-                    None,
-                    self._profiles_controller.auto_relogin,
-                    email,
-                )
-                
-                if result:
-                    log.info(f"Auto re-login OK for {email}, updating account tokens")
-                    profile = self._profiles_controller.get_profile(email)
-                    access_token = getattr(profile, "access_token", None) if profile else None
-                    if access_token:
-                        account.update_access_token(
-                            access_token,
-                            expires_in=getattr(profile, "expires_in", 3599),
-                        )
-                    
-                    log.info(f"Re-opening headless browser for {email}...")
-                    try:
-                        await account.ensure_browser(headless=True)
-                    except Exception as e:
-                        log.warning(f"Browser re-open failed for {email}: {e}")
-                    
-                    return True
-                
-                # Re-login failed — still re-open browser for reCAPTCHA attempts
-                log.warning(f"Re-login failed for {email}, re-opening browser anyway")
-                try:
-                    await account.ensure_browser(headless=True)
-                except Exception:
-                    pass
-                return False
-                
-            except Exception as e:
-                log.error(f"Auto re-login error for {email}: {e}")
-                try:
-                    await account.ensure_browser(headless=True)
-                except Exception:
-                    pass
-                return False
     
     def set_callbacks(
         self,

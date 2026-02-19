@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QRadioButton, QButtonGroup, QSpinBox, QDoubleSpinBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Qt, Signal, Slot, QTimer
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
@@ -115,6 +115,11 @@ class TabSettings(QWidget):
         if self.controller and hasattr(self.controller, 'set_profiles_controller'):
             self.controller.set_profiles_controller(self.profiles_controller)
         
+        # Periodic refresh timer for Extension status column (lightweight)
+        self._ext_status_timer = QTimer(self)
+        self._ext_status_timer.timeout.connect(self._refresh_ext_column)
+        self._ext_status_timer.start(5000)  # Every 5 seconds
+        
         self._setup_ui()
     
     def _setup_ui(self):
@@ -155,6 +160,14 @@ class TabSettings(QWidget):
         # === UI SECTION ===
         ui_section = self._create_ui_section()
         self.content_layout.addWidget(ui_section)
+        
+        # === PIPELINE OPTIMIZATION SECTION ===
+        pipeline_section = self._create_pipeline_section()
+        self.content_layout.addWidget(pipeline_section)
+        
+        # === ACTION BUTTONS (Save, Reset, Export, Import, Reload) ===
+        action_buttons = self._create_action_buttons()
+        self.content_layout.addWidget(action_buttons)
         
         self.content_layout.addStretch()
         
@@ -239,24 +252,26 @@ class TabSettings(QWidget):
         """
         section, layout = self._create_section("🌐 Chrome Profiles (Account Manager)")
         
-        # Create QTableWidget with 9 columns
+        # Create QTableWidget with 11 columns (added Ext + Retry)
         self.profiles_table = QTableWidget()
-        self.profiles_table.setColumnCount(9)
+        self.profiles_table.setColumnCount(11)
         self.profiles_table.setHorizontalHeaderLabels([
-            "✓", "#", "Email", "Type", "Plan", "Credits", "Status", "Workers", "Actions"
+            "✓", "#", "Email", "Type", "Plan", "Credits", "Status", "Workers", "Ext", "Retry", "Actions"
         ])
         
         # Set column widths per docs spec
         header = self.profiles_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)   # ✓
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)   # #
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch) # Email
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)   # Type
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)   # Plan
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)   # Credits
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)   # Status
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)   # Workers
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)   # Actions
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)    # ✓
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # #
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Email
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)    # Type
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Plan
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Credits
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Status
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Workers
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Ext
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Retry
+        header.setSectionResizeMode(10, QHeaderView.ResizeMode.Fixed)   # Actions
         
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
@@ -265,7 +280,9 @@ class TabSettings(QWidget):
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status
         self.profiles_table.setColumnWidth(7, 60)   # Workers - SpinBox 0-4
-        self.profiles_table.setColumnWidth(8, 260)  # Actions - 5 buttons (32px each + spacing)
+        self.profiles_table.setColumnWidth(8, 50)   # Ext - emoji status
+        self.profiles_table.setColumnWidth(9, 50)   # Retry - number
+        self.profiles_table.setColumnWidth(10, 260) # Actions - 5 buttons
         
         self.profiles_table.setMinimumHeight(80)
         self.profiles_table.setStyleSheet(f"background-color: {Theme.SURFACE2};")
@@ -341,7 +358,7 @@ class TabSettings(QWidget):
         if not accounts:
             placeholder = QTableWidgetItem("No profiles added. Click '🌐 Add Account' to add.")
             self.profiles_table.insertRow(0)
-            self.profiles_table.setSpan(0, 0, 1, 9)  # 9 columns
+            self.profiles_table.setSpan(0, 0, 1, 11)  # 11 columns
             self.profiles_table.setItem(0, 0, placeholder)
             self._adjust_table_height()
             return
@@ -431,7 +448,7 @@ class TabSettings(QWidget):
             
             # Workers SpinBox (col 7) — per-account concurrent worker limit
             slots_spin = QSpinBox()
-            slots_spin.setRange(0, 4)
+            slots_spin.setRange(0, 5)
             slots_spin.setValue(acc.get('max_slots', 4))
             slots_spin.setToolTip("Max concurrent workers for this account (0 = disable processing)")
             slots_spin.setFixedWidth(50)
@@ -441,7 +458,30 @@ class TabSettings(QWidget):
             )
             self.profiles_table.setCellWidget(actual_row, 7, slots_spin)
             
-            # Actions buttons (col 8)
+            # Extension status (col 8) — shows if Extension WebSocket is connected for this email
+            ext_connected = False
+            try:
+                if self.controller and hasattr(self.controller, '_extension_bridge'):
+                    ext_connected = self.controller._extension_bridge.is_connected(email)
+            except Exception:
+                pass
+            ext_icon = "🟢" if ext_connected else "🔴"
+            ext_tip = "Extension connected" if ext_connected else "Extension not connected"
+            ext_item = QTableWidgetItem(ext_icon)
+            ext_item.setFlags(ext_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            ext_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            ext_item.setToolTip(ext_tip)
+            self.profiles_table.setItem(actual_row, 8, ext_item)
+            
+            # Retry count (col 9) — shows retry_count from settings
+            retry_count = acc.get('retry_count', 3)
+            retry_item = QTableWidgetItem(str(retry_count))
+            retry_item.setFlags(retry_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            retry_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            retry_item.setToolTip("Max retries on failure")
+            self.profiles_table.setItem(actual_row, 9, retry_item)
+            
+            # Actions buttons (col 10)
             actions_widget = QWidget()
             actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
@@ -473,18 +513,6 @@ class TabSettings(QWidget):
             pwd_btn.clicked.connect(lambda checked, e=email: self._on_save_password(e))
             actions_layout.addWidget(pwd_btn)
             
-            # Re-login button — only if stored credentials exist
-            try:
-                from core.credentials_manager import get_credentials_manager
-                has_creds = get_credentials_manager().has_credentials_for(email)
-            except Exception:
-                has_creds = False
-            
-            if has_creds:
-                relogin_btn = _action_btn("🔄", "Reset Profile + Re-login", Theme.GREEN)
-                relogin_btn.clicked.connect(lambda checked, e=email: self._on_relogin_profile(e))
-                actions_layout.addWidget(relogin_btn)
-            
             # Refresh button
             refresh_btn = _action_btn("🔃", "Refresh Session", Theme.BLUE)
             refresh_btn.clicked.connect(lambda checked, e=email: self._on_refresh_session(e))
@@ -500,7 +528,7 @@ class TabSettings(QWidget):
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
             
-            self.profiles_table.setCellWidget(actual_row, 8, actions_widget)
+            self.profiles_table.setCellWidget(actual_row, 10, actions_widget)
             
             actual_row += 1
         
@@ -596,6 +624,45 @@ class TabSettings(QWidget):
         layout.addLayout(add_row)
         
         return section
+    
+    def _refresh_ext_column(self):
+        """Lightweight periodic refresh of Extension status column (col 8) only.
+        
+        Runs every 5s via QTimer. Does NOT rebuild the table — just updates
+        the Ext icon cells by checking is_connected() for each row's email.
+        """
+        if not self.controller or not hasattr(self.controller, '_extension_bridge'):
+            return
+        
+        bridge = self.controller._extension_bridge
+        if not bridge:
+            return
+        
+        for row in range(self.profiles_table.rowCount()):
+            email_item = self.profiles_table.item(row, 2)  # Email column
+            if not email_item:
+                continue
+            
+            # Extract raw email from display text (may have 🔑 prefix)
+            email_text = email_item.text().strip()
+            # Remove credential indicator prefix if present
+            if email_text.startswith("🔑 "):
+                email_text = email_text[2:].strip()
+            
+            ext_connected = False
+            try:
+                ext_connected = bridge.is_connected(email_text)
+            except Exception:
+                pass
+            
+            ext_item = self.profiles_table.item(row, 8)
+            if ext_item:
+                new_icon = "🟢" if ext_connected else "🔴"
+                if ext_item.text() != new_icon:
+                    ext_item.setText(new_icon)
+                    ext_item.setToolTip(
+                        "Extension connected" if ext_connected else "Extension not connected"
+                    )
     
     def _refresh_accounts(self):
         """Refresh accounts list from controller."""
@@ -1356,6 +1423,134 @@ class TabSettings(QWidget):
         
         return section
     
+    def _create_pipeline_section(self) -> QWidget:
+        """Create Pipeline Optimization section with live-tunable settings."""
+        section, layout = self._create_section("🔧 Pipeline Optimization")
+        
+        # Load current values from controller
+        ps = {}
+        if self.controller and hasattr(self.controller, 'get_pipeline_settings'):
+            ps = self.controller.get_pipeline_settings()
+        
+        def _update(key):
+            """Factory for pipeline settings callback."""
+            def _cb(value):
+                if self.controller and hasattr(self.controller, 'update_pipeline_settings'):
+                    self.controller.update_pipeline_settings(key, value)
+            return _cb
+        
+        # --- Adaptive Burst ---
+        self.burst_switch = self._create_enable_row(
+            "⚡ Adaptive Burst:", checked=ps.get('adaptive_burst_enabled', True),
+            bold=True, color=Theme.BLUE
+        )
+        layout.addLayout(self.burst_switch._row_layout)
+        
+        burst_container = QWidget()
+        burst_layout = QVBoxLayout(burst_container)
+        burst_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Burst Min Delay
+        bmin_row = QHBoxLayout()
+        bmin_label = QLabel("Min Delay:")
+        bmin_label.setFixedWidth(150)
+        bmin_label.setStyleSheet(f"color: {Theme.TEXT};")
+        bmin_row.addWidget(bmin_label)
+        self.burst_min = QDoubleSpinBox()
+        self.burst_min.setRange(0.5, 10.0)
+        self.burst_min.setSingleStep(0.5)
+        self.burst_min.setDecimals(1)
+        self.burst_min.setValue(ps.get('burst_min_delay', 2.0))
+        self.burst_min.setFixedWidth(80)
+        self.burst_min.setSuffix("s")
+        self.burst_min.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        self.burst_min.valueChanged.connect(_update('burst_min_delay'))
+        bmin_row.addWidget(self.burst_min)
+        bmin_row.addStretch()
+        burst_layout.addLayout(bmin_row)
+        
+        # Burst Max Delay
+        bmax_row = QHBoxLayout()
+        bmax_label = QLabel("Max Delay:")
+        bmax_label.setFixedWidth(150)
+        bmax_label.setStyleSheet(f"color: {Theme.TEXT};")
+        bmax_row.addWidget(bmax_label)
+        self.burst_max = QDoubleSpinBox()
+        self.burst_max.setRange(5.0, 60.0)
+        self.burst_max.setSingleStep(1.0)
+        self.burst_max.setDecimals(1)
+        self.burst_max.setValue(ps.get('burst_max_delay', 15.0))
+        self.burst_max.setFixedWidth(80)
+        self.burst_max.setSuffix("s")
+        self.burst_max.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        self.burst_max.valueChanged.connect(_update('burst_max_delay'))
+        bmax_row.addWidget(self.burst_max)
+        bmax_row.addStretch()
+        burst_layout.addLayout(bmax_row)
+        
+        layout.addWidget(burst_container)
+        burst_container.setVisible(self.burst_switch.isToggled())
+        self.burst_switch.toggled_signal.connect(burst_container.setVisible)
+        
+        # --- reCAPTCHA Pool ---
+        self.pool_switch = self._create_enable_row(
+            "🔄 reCAPTCHA Pool:", checked=ps.get('recaptcha_pool_enabled', True),
+            bold=True, color=Theme.GREEN
+        )
+        self.pool_switch.toggled_signal.connect(_update('recaptcha_pool_enabled'))
+        layout.addLayout(self.pool_switch._row_layout)
+        
+        pool_row = QHBoxLayout()
+        pool_label = QLabel("Pool Size:")
+        pool_label.setFixedWidth(150)
+        pool_label.setStyleSheet(f"color: {Theme.TEXT};")
+        pool_row.addWidget(pool_label)
+        self.pool_size = QSpinBox()
+        self.pool_size.setRange(1, 5)
+        self.pool_size.setValue(ps.get('pool_size', 2))
+        self.pool_size.setFixedWidth(80)
+        self.pool_size.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        self.pool_size.valueChanged.connect(_update('pool_size'))
+        pool_row.addWidget(self.pool_size)
+        pool_row.addStretch()
+        layout.addLayout(pool_row)
+        
+        # --- Watchdog ---
+        wd_row = QHBoxLayout()
+        wd_label = QLabel("🐕 Watchdog Timeout:")
+        wd_label.setFixedWidth(150)
+        wd_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        wd_row.addWidget(wd_label)
+        self.watchdog_timeout = QSpinBox()
+        self.watchdog_timeout.setRange(5, 60)
+        self.watchdog_timeout.setValue(ps.get('watchdog_timeout_min', 10))
+        self.watchdog_timeout.setFixedWidth(80)
+        self.watchdog_timeout.setSuffix(" min")
+        self.watchdog_timeout.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        self.watchdog_timeout.valueChanged.connect(_update('watchdog_timeout_min'))
+        wd_row.addWidget(self.watchdog_timeout)
+        wd_row.addStretch()
+        layout.addLayout(wd_row)
+        
+        # --- Journal ---
+        jr_row = QHBoxLayout()
+        jr_label = QLabel("📓 Journal Auto-save:")
+        jr_label.setFixedWidth(150)
+        jr_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        jr_row.addWidget(jr_label)
+        self.journal_interval = QSpinBox()
+        self.journal_interval.setRange(10, 120)
+        self.journal_interval.setValue(ps.get('journal_save_interval_sec', 30))
+        self.journal_interval.setFixedWidth(80)
+        self.journal_interval.setSuffix("s")
+        self.journal_interval.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        self.journal_interval.valueChanged.connect(_update('journal_save_interval_sec'))
+        jr_row.addWidget(self.journal_interval)
+        jr_row.addStretch()
+        layout.addLayout(jr_row)
+        
+        return section
+    
     def _create_action_buttons(self) -> QWidget:
         """Create action buttons - matches CTK lines 357-401."""
         frame = QFrame()
@@ -1940,75 +2135,11 @@ class TabSettings(QWidget):
         
         msg = reason_messages.get(reason, f"Unknown error: {reason}")
         
-        if can_auto_login and reason in ("profile_missing", "session_expired", "not_logged_in"):
-            # Offer auto-login
-            reply = QMessageBox.question(
-                self,
-                f"⚠️ Session Problem - {email}",
-                f"{msg}\n\n"
-                f"🔑 Stored credentials found.\n"
-                f"Auto re-login now?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                self._start_auto_relogin(email)
-        else:
-            # No auto-login available
-            action = "Please re-login manually using the Browser button." if reason != "credits_api_failed" else "Try refreshing again later."
-            QMessageBox.warning(
-                self,
-                f"⚠️ Session Problem - {email}",
-                f"{msg}\n\n{action}"
-            )
-    
-    def _start_auto_relogin(self, email: str):
-        """Start auto re-login in background thread."""
-        import threading
-        
-        self.setEnabled(False)
-        self._update_row_status(email, "🔑 Re-logging in...", "...")
-        
-        def run_relogin():
-            result_email = self.profiles_controller.auto_relogin(email)
-            
-            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
-            if result_email:
-                QMetaObject.invokeMethod(
-                    self, "_on_auto_relogin_complete",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, email)
-                )
-            else:
-                QMetaObject.invokeMethod(
-                    self, "_on_auto_relogin_failed",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, email)
-                )
-        
-        thread = threading.Thread(target=run_relogin, daemon=True)
-        thread.start()
-    
-    @Slot(str)
-    def _on_auto_relogin_complete(self, email: str):
-        """Called when auto re-login succeeds."""
-        self.setEnabled(True)
-        self._refresh_profiles_table()
-        QMessageBox.information(
-            self,
-            "Auto Re-Login",
-            f"✅ Successfully re-logged in: {email}\n\nSubscription info updated."
-        )
-    
-    @Slot(str)
-    def _on_auto_relogin_failed(self, email: str):
-        """Called when auto re-login fails."""
-        self.setEnabled(True)
-        self._refresh_profiles_table()
+        action = "Please re-login manually using the Browser button." if reason != "credits_api_failed" else "Try refreshing again later."
         QMessageBox.warning(
             self,
-            "Auto Re-Login Failed",
-            f"❌ Failed to re-login: {email}\n\nPlease login manually using the Browser button."
+            f"⚠️ Session Problem - {email}",
+            f"{msg}\n\n{action}"
         )
     
     def _on_save_password(self, email: str):
@@ -2075,47 +2206,6 @@ class TabSettings(QWidget):
         else:
             QMessageBox.warning(self, "Error", "Failed to save credentials.")
     
-    def _on_relogin_profile(self, email: str):
-        """Reset profile (copy Variations) + auto re-login with stored credentials."""
-        import threading
-        
-        reply = QMessageBox.question(
-            self,
-            f"🔄 Reset Profile — {email}",
-            f"This will:\n"
-            f"1. Kill browser for {email}\n"
-            f"2. Copy Variations from working profile\n"
-            f"3. Delete old profile + create new\n"
-            f"4. Auto re-login with saved password\n\n"
-            f"Continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        
-        self.setEnabled(False)
-        self._update_row_status(email, "🔄 Resetting...", "...")
-        
-        def run_reset():
-            result = self.profiles_controller.reset_profile_and_relogin(email)
-            
-            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
-            if result:
-                QMetaObject.invokeMethod(
-                    self, "_on_auto_relogin_complete",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, email)
-                )
-            else:
-                QMetaObject.invokeMethod(
-                    self, "_on_auto_relogin_failed",
-                    Qt.ConnectionType.QueuedConnection,
-                    Q_ARG(str, email)
-                )
-        
-        thread = threading.Thread(target=run_reset, daemon=True)
-        thread.start()
     
     def _on_toggle_account(self, email: str, enabled: bool):
         """Handle toggle switch change - enable/disable account for generation.
@@ -2153,7 +2243,15 @@ class TabSettings(QWidget):
         print(f"[Settings] Account {email} max_slots → {value}")
     
     def _on_delete_profile(self, email: str):
-        """Delete the specified profile after confirmation."""
+        """Delete the specified profile after confirmation.
+        
+        Full cleanup:
+        1. profiles_controller.remove_profile() — kills Chrome, deletes browser folder,
+           credentials, tokens.json entry, removes from _profiles list
+        2. controller.remove_account() — removes from runtime engine (_multi_account),
+           unregisters from session_monitor and refresh_manager
+        3. Push updated data to Dev Console (session + browser panels)
+        """
         reply = QMessageBox.question(
             self, 
             "Delete Profile",
@@ -2162,8 +2260,30 @@ class TabSettings(QWidget):
         )
         if reply == QMessageBox.StandardButton.Yes:
             print(f"[Settings] Deleting profile: {email}")
+            
+            # Step 1: Remove profile (Chrome, browser folder, credentials, tokens.json)
             self.profiles_controller.remove_profile(email)
-            self._refresh_profiles_table()  # Reload table after delete
+            
+            # Step 2: Remove from runtime engine (multi_account, monitors)
+            if self.controller and hasattr(self.controller, 'remove_account'):
+                try:
+                    self.controller.remove_account(email)
+                    print(f"[Settings] ✅ Removed {email} from runtime engine")
+                except Exception as e:
+                    print(f"[Settings] ⚠️ remove_account: {e}")
+            
+            # Step 3: Refresh UI immediately
+            self._refresh_profiles_table()
+            
+            # Step 4: Push updated data to Dev Console
+            if self.controller:
+                try:
+                    if hasattr(self.controller, '_push_session_data'):
+                        self.controller._push_session_data()
+                    if hasattr(self.controller, '_push_browser_status'):
+                        self.controller._push_browser_status()
+                except Exception as e:
+                    print(f"[Settings] ⚠️ Dev Console refresh: {e}")
     
     def _parse_extract_point(self, text: str) -> int:
         """Convert '750ms (recommended)' → 750."""

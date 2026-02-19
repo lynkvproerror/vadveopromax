@@ -8,6 +8,8 @@ FIXED: All 12 audit issues addressed.
 
 from typing import Optional, List, Dict
 import sys
+import time
+from collections import OrderedDict
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -15,8 +17,9 @@ from PySide6.QtWidgets import (
     QFrame, QScrollArea, QProgressBar, QComboBox, QLineEdit,
     QMessageBox, QMenu
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QUrl
-from PySide6.QtGui import QPixmap, QCursor
+from PySide6.QtCore import Qt, Signal, QTimer, QUrl, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QPixmap, QCursor, QPainter, QColor, QFont
+from PySide6.QtWidgets import QGraphicsOpacityEffect
 
 try:
     from PySide6.QtGui import QDesktopServices
@@ -73,11 +76,48 @@ class TabQueue(QWidget):
         self._is_paused = False
         self._start_time = None
         self._retry_pending = []  # Staggered retry queue
+        self._input_pulse_thumbs: List[QLabel] = []  # Thumbnails with pulsing border
+        self._input_pulse_phase = False  # Toggle for pulse animation
+        
+        # ── Phase 1 Performance Caches ──
+        self._pixmap_cache: OrderedDict = OrderedDict()  # path → scaled QPixmap
+        self._pixmap_cache_max = 500
+        self._file_exists_cache: Dict[str, tuple] = {}    # path → (exists_bool, timestamp)
+        self._file_exists_ttl = 10.0  # seconds before re-checking
+        self._progress_throttle_timer = QTimer(self)
+        self._progress_throttle_timer.setSingleShot(True)
+        self._progress_throttle_timer.setInterval(200)  # 200ms debounce
+        self._progress_throttle_timer.timeout.connect(self._flush_throttled_refresh)
+        self._throttled_refresh_pending = False
+        
+        # ── Phase 2 Dynamic Effects ──
+        # Shimmer wave on generating thumbnails
+        self._shimmer_offset = 0.0
+        self._shimmer_active_slots: List[QLabel] = []
+        self._shimmer_timer = QTimer(self)
+        self._shimmer_timer.setInterval(50)  # 20fps shimmer
+        self._shimmer_timer.timeout.connect(self._tick_shimmer)
+        # Completion glow pulse
+        self._glow_slots: Dict[str, dict] = {}  # task_id → {slots, count, phase}
+        self._glow_timer = QTimer(self)
+        self._glow_timer.setInterval(200)  # glow phase toggle
+        self._glow_timer.timeout.connect(self._tick_glow)
+        # Smooth progress tracking
+        self._smooth_progress: Dict[str, float] = {}  # task_id → current animated value
+        # Phase 3: Upscale spinner
+        self._upscale_spinner_slots: List[QLabel] = []  # slots with animated dots
+        self._upscale_spinner_phase = 0
+        self._upscale_spinner_timer = QTimer(self)
+        self._upscale_spinner_timer.setInterval(400)  # dots cycle 400ms
+        self._upscale_spinner_timer.timeout.connect(self._tick_upscale_spinner)
         
         self._setup_ui()
         self._register_controller_callbacks()
-        # Sample data only if no controller
-        if not controller:
+        # Load existing queue data on startup (deferred to ensure UI ready)
+        if controller:
+            QTimer.singleShot(100, self._refresh_queue_from_controller)
+        else:
+            # Sample data only if no controller
             self._add_sample_items()
     
     def _register_controller_callbacks(self):
@@ -95,50 +135,74 @@ class TabQueue(QWidget):
         self._progress_signal.emit(task_id, progress, status_text)
     
     def _on_progress_update(self, task_id: str, progress: int, status_text: str = ""):
-        """Handle progress update — update inline thumbnail slot gradients."""
+        """Handle progress update — shimmer + smooth gradient + glow on complete."""
         widget = self._task_widgets.get(task_id)
         if not widget:
             return
         
-        # Update thumbnail slot gradients during generating phase
+        # During upscale phase: trigger full refresh so thumb overlays update
+        is_upscale_phase = status_text and (
+            "⬆️" in status_text or "Upscal" in status_text
+            or "🔄" in status_text
+        )
+        if is_upscale_phase:
+            if not hasattr(self, '_upscale_refresh_timer'):
+                self._upscale_refresh_timer = QTimer(self)  # parent=self to avoid leak
+                self._upscale_refresh_timer.setSingleShot(True)
+                self._upscale_refresh_timer.timeout.connect(
+                    self._refresh_queue_from_controller
+                )
+            if not self._upscale_refresh_timer.isActive():
+                self._upscale_refresh_timer.start(500)
+        
+        # Phase 2: Smooth progress interpolation
+        smooth_pct = self._get_smooth_progress(task_id, progress) / 100.0
+        smooth_pct = max(0.0, min(1.0, smooth_pct))
+        
+        # Update thumbnail slot gradients + register shimmer
         if hasattr(widget, 'thumb_slots'):
-            pct = max(0, min(100, progress)) / 100.0
             for slot in widget.thumb_slots:
                 try:
-                    # Only update slots that don't have a thumbnail yet
                     if slot.pixmap() and not slot.pixmap().isNull():
-                        continue  # Already has thumbnail, skip
+                        continue
                     slot.setText(f"{progress}%")
-                    slot.setStyleSheet(f"""
-                        QLabel {{
-                            background-color: qlineargradient(
-                                x1:0, y1:1, x2:0, y2:0,
-                                stop:0 #1E3A5E,
-                                stop:{pct:.2f} {Theme.BLUE},
-                                stop:{min(pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
-                                stop:1 {Theme.SURFACE0}
-                            );
-                            border: 1px solid {Theme.BLUE};
-                            border-radius: 4px;
-                            color: {Theme.TEXT};
-                            font-size: 10px;
-                            font-weight: bold;
-                        }}
-                    """)
+                    # Register for shimmer animation (generating phase)
+                    if 0 < progress < 85:
+                        self._register_shimmer_slot(slot)
+                    else:
+                        # Static gradient for non-generating phases
+                        slot.setStyleSheet(f"""
+                            QLabel {{
+                                background-color: qlineargradient(
+                                    x1:0, y1:1, x2:0, y2:0,
+                                    stop:0 #1E3A5E,
+                                    stop:{smooth_pct:.2f} {Theme.BLUE},
+                                    stop:{min(smooth_pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
+                                    stop:1 {Theme.SURFACE0}
+                                );
+                                border: 1px solid {Theme.BLUE};
+                                border-radius: 4px;
+                                color: {Theme.TEXT};
+                                font-size: 10px;
+                                font-weight: bold;
+                            }}
+                        """)
                 except RuntimeError:
-                    continue  # C++ QLabel already deleted, skip
+                    continue
         
-        # Update status label with granular phase from engine
+        # Update status label
         if hasattr(widget, 'status_label'):
             try:
                 if progress >= 100:
                     widget.status_label.setText("✅ DONE")
                     widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
+                    # Phase 2: Trigger completion glow
+                    self._trigger_completion_glow(task_id)
+                    # Cleanup smooth progress
+                    self._smooth_progress.pop(task_id, None)
                 elif progress > 0:
-                    # Use engine's status_text for granular phases
                     display_text = status_text if status_text else "🔥 PROCESSING"
                     widget.status_label.setText(display_text)
-                    # Color by phase
                     if "⬇️" in display_text or "Download" in display_text:
                         phase_color = Theme.SAPPHIRE
                     elif "⬆️" in display_text or "Upscal" in display_text:
@@ -149,20 +213,222 @@ class TabQueue(QWidget):
                         phase_color = Theme.PEACH
                     widget.status_label.setStyleSheet(f"color: {phase_color}; font-size: 10px; font-weight: bold; border: none;")
             except RuntimeError:
-                pass  # C++ QLabel already deleted (group removed mid-update)
+                pass
     
     def _on_queue_updated_from_thread(self, status: Dict):
         """Thread-safe bridge: emit signal from any thread → main thread."""
         self._queue_updated_signal.emit()
     
     def _on_queue_updated(self):
-        """Handle queue update on GUI thread."""
-        self._refresh_queue_from_controller()
+        """Handle queue update on GUI thread — throttled to avoid storms."""
+        self._schedule_throttled_refresh()
+    
+    # ── Phase 1: Performance Cache Helpers ──────────────────────────
+    
+    def _cached_file_exists(self, path: str) -> bool:
+        """Check if file exists with 10s TTL cache to avoid disk I/O on main thread."""
+        if not path:
+            return False
+        now = time.monotonic()
+        entry = self._file_exists_cache.get(path)
+        if entry and (now - entry[1]) < self._file_exists_ttl:
+            return entry[0]
+        exists = Path(path).exists()
+        self._file_exists_cache[path] = (exists, now)
+        return exists
+    
+    def _invalidate_file_cache(self, path: str):
+        """Invalidate file existence cache when a file is newly created."""
+        self._file_exists_cache.pop(path, None)
+    
+    def _get_cached_pixmap(self, path: str, size: int = 40) -> 'QPixmap':
+        """Get scaled QPixmap from LRU cache. Avoids repeated disk decode."""
+        cache_key = f"{path}:{size}"
+        if cache_key in self._pixmap_cache:
+            self._pixmap_cache.move_to_end(cache_key)
+            return self._pixmap_cache[cache_key]
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            return pixmap
+        scaled = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+        self._pixmap_cache[cache_key] = scaled
+        # Evict oldest entries
+        while len(self._pixmap_cache) > self._pixmap_cache_max:
+            self._pixmap_cache.popitem(last=False)
+        return scaled
+    
+    def _schedule_throttled_refresh(self):
+        """Debounce queue refresh — merge multiple updates within 200ms window."""
+        self._throttled_refresh_pending = True
+        if not self._progress_throttle_timer.isActive():
+            self._progress_throttle_timer.start()
+    
+    def _flush_throttled_refresh(self):
+        """Execute throttled refresh if pending."""
+        if self._throttled_refresh_pending:
+            self._throttled_refresh_pending = False
+            self._refresh_queue_from_controller()
+    
+    # ── Phase 2: Dynamic Effects ─────────────────────────────────
+    
+    def _tick_shimmer(self):
+        """Animate shimmer wave across generating thumbnail slots (20fps)."""
+        self._shimmer_offset = (self._shimmer_offset + 0.08) % 2.0
+        alive = []
+        for slot in self._shimmer_active_slots:
+            try:
+                if slot.pixmap() and not slot.pixmap().isNull():
+                    continue  # Has real thumbnail now, skip
+                # Moving gradient highlight (shimmer wave)
+                wave = self._shimmer_offset
+                highlight_pos = max(0.0, min(1.0, wave - 0.5))
+                highlight_end = min(1.0, highlight_pos + 0.25)
+                slot.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: qlineargradient(
+                            x1:0, y1:0, x2:1, y2:0,
+                            stop:0 {Theme.SURFACE0},
+                            stop:{max(0, highlight_pos - 0.01):.2f} {Theme.SURFACE0},
+                            stop:{highlight_pos:.2f} {Theme.BLUE},
+                            stop:{highlight_end:.2f} {Theme.SURFACE0},
+                            stop:1 {Theme.SURFACE0}
+                        );
+                        border: 1px solid {Theme.BLUE};
+                        border-radius: 4px;
+                        color: {Theme.TEXT};
+                        font-size: 10px;
+                        font-weight: bold;
+                    }}
+                """)
+                alive.append(slot)
+            except RuntimeError:
+                continue
+        self._shimmer_active_slots = alive
+        if not alive:
+            self._shimmer_timer.stop()
+    
+    def _register_shimmer_slot(self, slot: QLabel):
+        """Register a thumbnail slot for shimmer animation."""
+        if slot not in self._shimmer_active_slots:
+            self._shimmer_active_slots.append(slot)
+        if not self._shimmer_timer.isActive():
+            self._shimmer_timer.start()
+    
+    def _trigger_completion_glow(self, task_id: str):
+        """Start 3x glow pulse on all thumbnail slots of a completed task."""
+        widget = self._task_widgets.get(task_id)
+        if not widget or not hasattr(widget, 'thumb_slots'):
+            return
+        self._glow_slots[task_id] = {
+            'slots': list(widget.thumb_slots),
+            'count': 0,    # flash count (0-5 = 3 on/off cycles)
+            'phase': True,  # True = glow on
+        }
+        if not self._glow_timer.isActive():
+            self._glow_timer.start()
+    
+    def _tick_glow(self):
+        """Toggle glow border on/off for completing tasks (3x flash)."""
+        done_tasks = []
+        for tid, info in self._glow_slots.items():
+            info['count'] += 1
+            info['phase'] = not info['phase']
+            glow_color = Theme.GREEN if info['phase'] else Theme.SURFACE0
+            for slot in info['slots']:
+                try:
+                    slot.setStyleSheet(f"""
+                        QLabel {{
+                            border: 2px solid {glow_color};
+                            border-radius: 4px;
+                            background-color: {Theme.BASE};
+                            padding: 1px;
+                        }}
+                    """)
+                except RuntimeError:
+                    continue
+            if info['count'] >= 6:  # 3 complete on/off cycles
+                done_tasks.append(tid)
+                # Restore final green border
+                for slot in info['slots']:
+                    try:
+                        slot.setStyleSheet(f"""
+                            QLabel {{
+                                border: 2px solid {Theme.GREEN};
+                                border-radius: 4px;
+                                background-color: {Theme.BASE};
+                                padding: 1px;
+                            }}
+                        """)
+                    except RuntimeError:
+                        continue
+        for tid in done_tasks:
+            del self._glow_slots[tid]
+        if not self._glow_slots:
+            self._glow_timer.stop()
+    
+    def _get_smooth_progress(self, task_id: str, target: int) -> float:
+        """Smooth progress: interpolate toward target value (easing)."""
+        current = self._smooth_progress.get(task_id, 0.0)
+        if current < target:
+            # Ease toward target — 30% of remaining distance per tick
+            current = current + (target - current) * 0.3
+            if target - current < 0.5:
+                current = float(target)
+        elif current > target:
+            current = float(target)  # Reset if target dropped
+        self._smooth_progress[task_id] = current
+        return current
+    
+    # ── Phase 3: Polish Effects ──────────────────────────────────
+    
+    def _fade_in_widget(self, widget: QWidget):
+        """Animate fade-in: opacity 0 → 1 over 300ms (OutCubic easing)."""
+        effect = QGraphicsOpacityEffect(widget)
+        effect.setOpacity(0.0)
+        widget.setGraphicsEffect(effect)
+        anim = QPropertyAnimation(effect, b"opacity", widget)
+        anim.setDuration(300)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        # Remove effect after animation to avoid rendering overhead
+        anim.finished.connect(lambda: widget.setGraphicsEffect(None))
+        anim.start()
+        widget._fade_anim = anim  # prevent GC
+    
+    def _tick_upscale_spinner(self):
+        """Animate upscale overlay: cycle ⬆. → ⬆.. → ⬆... dots."""
+        dots = "." * (self._upscale_spinner_phase % 3 + 1)
+        self._upscale_spinner_phase += 1
+        alive = []
+        for slot in self._upscale_spinner_slots:
+            try:
+                slot.setText(f"⬆{dots}")
+                alive.append(slot)
+            except RuntimeError:
+                continue
+        self._upscale_spinner_slots = alive
+        if not alive:
+            self._upscale_spinner_timer.stop()
+    
+    def _register_upscale_spinner(self, slot: QLabel):
+        """Register a thumbnail slot for upscale spinner animation."""
+        if slot not in self._upscale_spinner_slots:
+            self._upscale_spinner_slots.append(slot)
+        if not self._upscale_spinner_timer.isActive():
+            self._upscale_spinner_timer.start()
     
     def _refresh_queue_from_controller(self):
         """Refresh queue from controller using hierarchical group data."""
         if not self.controller:
             return
+        
+        # Clear stale pulse/animation references (widgets may be rebuilt)
+        self._input_pulse_thumbs.clear()
+        self._shimmer_active_slots.clear()
+        self._upscale_spinner_slots.clear()
+        # Note: glow_slots cleaned naturally by _tick_glow
         
         # Try group-based data first (preferred)
         if hasattr(self.controller, 'get_queue_groups'):
@@ -189,7 +455,9 @@ class TabQueue(QWidget):
         # Update or create groups
         self._queue_items.clear()
         self._item_widgets.clear()
-        self._task_widgets.clear()
+        # NOTE: do NOT clear _task_widgets here — differential update needs it
+        # Stale entries are pruned after rebuild below
+        all_task_ids = set()
         
         for g in groups_data:
             gid = g['id']
@@ -198,7 +466,7 @@ class TabQueue(QWidget):
                 # Update existing group
                 gw = self._group_widgets[gid]
                 self._update_group_header(gw['header'], g)
-                # Rebuild children
+                # Differential rebuild children
                 self._rebuild_group_children(gw, g)
             else:
                 # Create new group
@@ -209,14 +477,21 @@ class TabQueue(QWidget):
                     self.queue_layout.count() - 1, container
                 )
             
-            # Track items for stats
+            # Track items for stats + collect all task IDs
             for td in g.get('tasks', []):
+                all_task_ids.add(str(td['id']))
                 item = QueueItem(
                     id=td['id'], prompt=td['prompt'],
                     status=td['status'], progress=td['progress'],
                     mode=td.get('mode', 'T2V'),
                 )
                 self._queue_items.append(item)
+        
+        # Prune stale entries from _task_widgets and _smooth_progress
+        stale_tids = [tid for tid in self._task_widgets if tid not in all_task_ids]
+        for tid in stale_tids:
+            self._task_widgets.pop(tid, None)
+            self._smooth_progress.pop(tid, None)
     
     def _refresh_flat_items(self):
         """Fallback: refresh using flat item list (no groups)."""
@@ -650,16 +925,53 @@ class TabQueue(QWidget):
             widget.status_label = status_label
             layout.addWidget(status_label)
         else:
-            # Normal status label
-            status_label = QLabel(f"{cfg['icon']} {item.status.upper()}")
+            # Normal status label — enhanced with pipeline stage for running tasks
+            display_status = f"{cfg['icon']} {item.status.upper()}"
+            tooltip_text = ""
+            display_color = cfg['color']
+            
+            if item.status in ("running", "waiting_poll") and task_data:
+                # Show last known stage from status_text (e.g., "⬆️ Submitting 3 upscales...")
+                last_status = task_data.get('status_text', '')
+                if last_status:
+                    # Compact: extract short stage name
+                    display_status = last_status[:18]
+                    if "⬇️" in last_status or "Download" in last_status:
+                        display_color = Theme.SAPPHIRE
+                    elif "⬆️" in last_status or "Upscal" in last_status:
+                        display_color = Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE
+                    elif "🔄" in last_status or "Poll" in last_status:
+                        display_color = Theme.PEACH
+                
+                # Per-video upscale status tooltip
+                video_outputs = task_data.get('video_outputs', [])
+                if video_outputs:
+                    vo_lines = []
+                    for vo in video_outputs:
+                        us = vo.get('upscale_status', '')
+                        idx = vo.get('index', 0) + 1
+                        if us == 'success':
+                            vo_lines.append(f"  Video {idx}: ✅ Upscaled")
+                        elif us == 'polling':
+                            vo_lines.append(f"  Video {idx}: 🔄 Polling")
+                        elif us == 'failed':
+                            vo_lines.append(f"  Video {idx}: ❌ {vo.get('upscale_error', 'Failed')}")
+                        elif us == 'skipped':
+                            vo_lines.append(f"  Video {idx}: ⏭ Skipped")
+                    if vo_lines:
+                        tooltip_text = "Per-video status:\n" + "\n".join(vo_lines)
+            
+            status_label = QLabel(display_status)
             status_label.setFixedWidth(90)
             status_label.setAlignment(Qt.AlignCenter)
             status_label.setStyleSheet(f"""
-                color: {cfg['color']};
+                color: {display_color};
                 font-size: 10px;
                 font-weight: bold;
                 border: none;
             """)
+            if tooltip_text:
+                status_label.setToolTip(tooltip_text)
             widget.status_label = status_label
             layout.addWidget(status_label)
         
@@ -802,6 +1114,10 @@ class TabQueue(QWidget):
         show_pairs = pairs[:3]  # Max 3 shown
         remaining = total_count - 3  # Extra images beyond 3
         
+        # Get image upload status for effects
+        upload_status = task_data.get('image_upload_status', '') if task_data else ''
+        task_status = task_data.get('status', 'pending') if task_data else 'pending'
+        
         for idx, (path, label) in enumerate(show_pairs):
             slot = QWidget()
             slot.setFixedSize(36, 50)
@@ -826,31 +1142,85 @@ class TabQueue(QWidget):
                 "Start": Theme.GREEN, "End": Theme.BLUE,
                 "Frame": Theme.YELLOW if hasattr(Theme, 'YELLOW') else Theme.BLUE,
             }
-            border_c = border_colors.get(label, Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE)
+            base_border = border_colors.get(label, Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE)
             
-            thumb.setStyleSheet(
-                f"border: 2px solid {border_c}; border-radius: 3px;"
-                f"background-color: {Theme.SURFACE0};"
-            )
+            # Status-based styling
+            is_uploading = upload_status in ('uploading', 'extracting')
+            is_ready = upload_status == 'ready'
+            is_error = upload_status == 'error'
+            has_file = path and self._cached_file_exists(path)
             
-            # Load thumbnail if path exists
-            if path and Path(path).exists():
-                pix = QPixmap(path)
+            if is_error and not has_file:
+                # Error: red border + "!" indicator
+                thumb.setText("!")
+                thumb.setStyleSheet(
+                    f"border: 2px solid {Theme.RED}; border-radius: 3px;"
+                    f"background-color: {Theme.SURFACE0};"
+                    f"color: {Theme.RED}; font-size: 12px; font-weight: bold;"
+                )
+                thumb.setToolTip(f"{label}: Upload failed")
+            elif has_file:
+                # Has file — load thumbnail
+                pix = self._get_cached_pixmap(path, 30)
                 if not pix.isNull():
-                    scaled = pix.scaled(30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    thumb.setPixmap(scaled)
+                    thumb.setPixmap(pix)
                 else:
                     thumb.setText("?")
+                
+                if is_uploading:
+                    # Uploading: pulsing border (start phase)
                     thumb.setStyleSheet(
-                        thumb.styleSheet() + f"color: {Theme.SUBTEXT0}; font-size: 10px;"
+                        f"border: 2px solid {Theme.BLUE}; border-radius: 3px;"
+                        f"background-color: {Theme.BASE};"
                     )
+                    thumb.setProperty('pulse_color_a', Theme.BLUE)
+                    thumb.setProperty('pulse_color_b', Theme.SAPPHIRE if hasattr(Theme, 'SAPPHIRE') else Theme.GREEN)
+                    self._input_pulse_thumbs.append(thumb)
+                    self._start_input_pulse_timer()
+                elif is_ready or task_status in ('running', 'completed'):
+                    # Ready / active: green glow border
+                    thumb.setStyleSheet(
+                        f"border: 2px solid {Theme.GREEN}; border-radius: 3px;"
+                        f"background-color: {Theme.BASE};"
+                    )
+                else:
+                    # Default: mode-specific color
+                    thumb.setStyleSheet(
+                        f"border: 2px solid {base_border}; border-radius: 3px;"
+                        f"background-color: {Theme.SURFACE0};"
+                    )
+                
+                thumb.setToolTip(f"{label}: {path}" if path else label)
+            elif label.startswith("Frame") and not has_file:
+                # Frame not extracted yet — animated placeholder
+                thumb.setText("⏳")
+                if is_uploading or upload_status == 'extracting':
+                    thumb.setStyleSheet(
+                        f"border: 2px solid {Theme.YELLOW}; border-radius: 3px;"
+                        f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+                        f"stop:0 {Theme.SURFACE0}, stop:0.5 {Theme.SURFACE1 if hasattr(Theme, 'SURFACE1') else Theme.SURFACE0}, stop:1 {Theme.SURFACE0});"
+                        f"color: {Theme.YELLOW}; font-size: 12px;"
+                    )
+                    thumb.setProperty('pulse_color_a', Theme.YELLOW)
+                    thumb.setProperty('pulse_color_b', Theme.PEACH if hasattr(Theme, 'PEACH') else Theme.YELLOW)
+                    self._input_pulse_thumbs.append(thumb)
+                    self._start_input_pulse_timer()
+                else:
+                    thumb.setStyleSheet(
+                        f"border: 2px solid {Theme.BORDER}; border-radius: 3px;"
+                        f"background-color: {Theme.SURFACE0};"
+                        f"color: {Theme.SUBTEXT0}; font-size: 12px;"
+                    )
+                thumb.setToolTip(f"{label}: Waiting for extraction")
             else:
+                # No file, not a Frame — placeholder
                 thumb.setText("?")
                 thumb.setStyleSheet(
-                    thumb.styleSheet() + f"color: {Theme.SUBTEXT0}; font-size: 10px;"
+                    f"border: 2px solid {Theme.BORDER}; border-radius: 3px;"
+                    f"background-color: {Theme.SURFACE0};"
+                    f"color: {Theme.SUBTEXT0}; font-size: 10px;"
                 )
-            
-            thumb.setToolTip(f"{label}: {path}" if path else label)
+                thumb.setToolTip(label)
             
             # "+N" dark overlay on the 3rd thumbnail when extra images exist
             if idx == 2 and remaining > 0:
@@ -873,18 +1243,58 @@ class TabQueue(QWidget):
             
             slot_lay.addWidget(thumb_container, alignment=Qt.AlignCenter)
             
-            # Label text
+            # Label text — color matches border state
+            label_color = base_border
+            if is_uploading:
+                label_color = Theme.BLUE
+            elif is_ready or task_status in ('running', 'completed'):
+                label_color = Theme.GREEN
+            elif is_error:
+                label_color = Theme.RED
+            
             lbl = QLabel(label)
             lbl.setFixedHeight(12)
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setStyleSheet(
-                f"color: {border_c}; font-size: 8px; font-weight: bold; border: none;"
+                f"color: {label_color}; font-size: 8px; font-weight: bold; border: none;"
             )
             slot_lay.addWidget(lbl)
             
             lay.addWidget(slot)
         
         return container
+    
+    def _start_input_pulse_timer(self):
+        """Start pulsing border timer for input thumbnails (if not already running)."""
+        if not hasattr(self, '_input_pulse_timer'):
+            self._input_pulse_timer = QTimer(self)
+            self._input_pulse_timer.setInterval(500)
+            self._input_pulse_timer.timeout.connect(self._pulse_input_thumbs)
+        if not self._input_pulse_timer.isActive():
+            self._input_pulse_timer.start()
+    
+    def _pulse_input_thumbs(self):
+        """Toggle border color on pulsing input thumbnails."""
+        self._input_pulse_phase = not self._input_pulse_phase
+        alive = []
+        for thumb in self._input_pulse_thumbs:
+            try:
+                color_a = thumb.property('pulse_color_a') or Theme.BLUE
+                color_b = thumb.property('pulse_color_b') or Theme.SAPPHIRE
+                border_c = color_b if self._input_pulse_phase else color_a
+                bg = Theme.BASE
+                # Keep pixmap, only change border
+                thumb.setStyleSheet(
+                    f"border: 2px solid {border_c}; border-radius: 3px;"
+                    f"background-color: {bg};"
+                )
+                alive.append(thumb)
+            except RuntimeError:
+                pass  # Widget deleted
+        
+        self._input_pulse_thumbs = alive
+        if not alive and hasattr(self, '_input_pulse_timer'):
+            self._input_pulse_timer.stop()
     
     def _create_thumb_slot(self, index: int, task_status: str, progress: int,
                            thumb_path: str = None, video_path: str = None,
@@ -901,7 +1311,7 @@ class TabQueue(QWidget):
         slot.setFixedSize(40, 40)
         slot.setAlignment(Qt.AlignCenter)
         
-        has_thumb = thumb_path and Path(thumb_path).exists()
+        has_thumb = thumb_path and self._cached_file_exists(thumb_path)
         is_active = task_status in ('running', 'waiting_poll')
         is_failed = task_status in ('failed', 'cancelled')
         is_done = task_status == 'completed'
@@ -918,16 +1328,40 @@ class TabQueue(QWidget):
             'yellow': Theme.YELLOW,
             'blue':   Theme.BLUE,
             'red':    Theme.RED,
+            'purple': Theme.PURPLE,
         }
         border_color = BORDER_COLORS.get(border_color_name, Theme.BORDER)
         
         if has_thumb:
+            # Check if this video is currently being upscaled
+            is_upscaling = video_info and video_info.get('upscale_status') in (
+                'submitting', 'polling'
+            )
+            
             # Show thumbnail with per-video border color
-            pixmap = QPixmap(thumb_path)
+            pixmap = self._get_cached_pixmap(thumb_path, 40)
             if not pixmap.isNull():
-                scaled = pixmap.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio,
-                                       Qt.TransformationMode.SmoothTransformation)
-                slot.setPixmap(scaled)
+                
+                if is_upscaling:
+                    # Paint semi-transparent dark overlay + upscale icon
+                    overlay_pixmap = QPixmap(pixmap.size())
+                    overlay_pixmap.fill(QColor(0, 0, 0, 0))  # transparent base
+                    painter = QPainter(overlay_pixmap)
+                    painter.drawPixmap(0, 0, pixmap)  # draw thumbnail
+                    painter.fillRect(overlay_pixmap.rect(), QColor(0, 0, 0, 140))  # 55% black
+                    painter.setPen(QColor("#cba6f7"))  # purple text
+                    font = QFont("Segoe UI", 8)
+                    font.setBold(True)
+                    painter.setFont(font)
+                    status_text = "⬆️" if video_info.get('upscale_status') == 'submitting' else "🔄"
+                    painter.drawText(overlay_pixmap.rect(), Qt.AlignCenter, status_text)
+                    painter.end()
+                    slot.setPixmap(overlay_pixmap)
+                    # Phase 3: Register animated upscale spinner
+                    self._register_upscale_spinner(slot)
+                else:
+                    slot.setPixmap(pixmap)
+            
             slot.setStyleSheet(f"""
                 QLabel {{
                     border: 2px solid {border_color};
@@ -942,7 +1376,7 @@ class TabQueue(QWidget):
             
             # Quality tooltip
             quality = video_info.get('quality', '') if video_info else ''
-            if video_path and Path(video_path).exists():
+            if video_path and self._cached_file_exists(video_path):
                 slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
                 tooltip = f"▶ {Path(video_path).name}"
                 if quality:
@@ -968,6 +1402,21 @@ class TabQueue(QWidget):
                     font-size: 14px;
                 }}
             """)
+        elif is_done and video_path and self._cached_file_exists(video_path):
+            # ✅ Completed but thumbnail missing (cache cleared) — regen in background
+            slot.setText("🔄")
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.SURFACE0};
+                    border: 2px solid {Theme.YELLOW};
+                    border-radius: 4px;
+                    color: {Theme.YELLOW};
+                    font-size: 14px;
+                }}
+            """)
+            slot.setToolTip("Regenerating thumbnail...")
+            # Fire-and-forget: spawn FFmpeg to extract first frame
+            self._spawn_thumbnail_regen(thumb_path or "", video_path, video_info)
         elif is_active:
             # 🔄 Generating — gradient progress fill
             pct = max(0, min(100, progress)) / 100.0
@@ -1026,6 +1475,50 @@ class TabQueue(QWidget):
             except Exception:
                 pass
     
+    # ── Thumbnail Auto-Regeneration ──────────────────────────────
+    _regen_in_progress: set = set()  # Dedup: video paths currently being regenerated
+    
+    def _spawn_thumbnail_regen(self, thumb_path: str, video_path: str, video_info: dict = None):
+        """Regenerate missing thumbnail from video file in background thread.
+        
+        Called when a completed task's thumbnail file is missing on disk.
+        FFmpeg extracts first frame → saves to cache → next UI refresh shows it.
+        """
+        if not video_path or video_path in self._regen_in_progress:
+            return
+        self._regen_in_progress.add(video_path)
+        
+        import threading
+        def _regen():
+            try:
+                import subprocess
+                # Determine output path
+                if thumb_path:
+                    out = Path(thumb_path)
+                else:
+                    cache_dir = Path.home() / ".veoauto" / "cache" / "thumbnails"
+                    cache_dir.mkdir(parents=True, exist_ok=True)
+                    out = cache_dir / f"{Path(video_path).stem}_regen.jpg"
+                
+                out.parent.mkdir(parents=True, exist_ok=True)
+                
+                subprocess.run(
+                    ['ffmpeg', '-y', '-i', str(video_path),
+                     '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                     str(out)],
+                    capture_output=True, timeout=10,
+                )
+                
+                if out.exists():
+                    print(f"[Thumbnail] Regenerated: {out.name}")
+            except Exception as e:
+                print(f"[Thumbnail] Regen failed: {e}")
+            finally:
+                self._regen_in_progress.discard(video_path)
+        
+        thread = threading.Thread(target=_regen, daemon=True)
+        thread.start()
+    
     def _update_thumb_slots(self, widget: QFrame, task_data: dict):
         """Update thumbnail slots on an existing row widget during refresh."""
         if not hasattr(widget, 'thumb_slots'):
@@ -1058,7 +1551,7 @@ class TabQueue(QWidget):
                 slot.setPixmap(QPixmap())
                 slot.setText(new_slot.text())
             slot.setToolTip(new_slot.toolTip())
-            if video and Path(video).exists():
+            if video and self._cached_file_exists(video):
                 slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
                 slot.mousePressEvent = lambda e, p=video: self._open_video(p) if e.button() == Qt.MouseButton.LeftButton else None
             # Copy context menu policy for red thumbnails
@@ -1238,6 +1731,7 @@ class TabQueue(QWidget):
                 mode=td.get('mode', 'T2V'),
             )
             row = self._create_queue_item_widget(item, task_data=td)
+            row._task_id = str(td['id'])  # Tag for differential detection
             content_layout.addWidget(row)
             # Register for progress updates
             self._task_widgets[str(td['id'])] = row
@@ -1324,27 +1818,97 @@ class TabQueue(QWidget):
         """)
     
     def _rebuild_group_children(self, gw: dict, group_data: dict):
-        """Rebuild child prompt rows inside an existing group."""
+        """Differential update: reuse existing row widgets, only create/remove as needed."""
         content = gw['content']
         layout = content.layout()
         
-        # Clear existing children
-        while layout.count():
-            child = layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+        # Build set of new task IDs
+        new_tasks = group_data.get('tasks', [])
+        new_task_ids = {str(td['id']) for td in new_tasks}
         
-        # Rebuild
-        for td in group_data.get('tasks', []):
-            item = QueueItem(
-                id=td['id'], prompt=td['prompt'],
-                status=td['status'], progress=td['progress'],
-                mode=td.get('mode', 'T2V'),
-            )
-            row = self._create_queue_item_widget(item, task_data=td)
-            layout.addWidget(row)
-            # Register for progress updates
-            self._task_widgets[str(td['id'])] = row
+        # Remove stale children (tasks no longer in group)
+        existing_ids = set()
+        i = 0
+        while i < layout.count():
+            child = layout.itemAt(i)
+            widget = child.widget() if child else None
+            if widget and hasattr(widget, '_task_id'):
+                if widget._task_id not in new_task_ids:
+                    layout.takeAt(i)
+                    widget.deleteLater()
+                    continue
+                existing_ids.add(widget._task_id)
+            i += 1
+        
+        # Update existing or create new
+        for idx, td in enumerate(new_tasks):
+            tid = str(td['id'])
+            existing_widget = self._task_widgets.get(tid)
+            
+            if existing_widget and tid in existing_ids:
+                # Differential update — just update data on existing widget
+                self._update_task_widget_data(existing_widget, td)
+            else:
+                # New task — create widget
+                item = QueueItem(
+                    id=td['id'], prompt=td['prompt'],
+                    status=td['status'], progress=td['progress'],
+                    mode=td.get('mode', 'T2V'),
+                )
+                row = self._create_queue_item_widget(item, task_data=td)
+                row._task_id = tid  # Tag for differential detection
+                layout.insertWidget(idx, row)
+                self._task_widgets[tid] = row
+                # Phase 3: Fade-in animation for new rows
+                self._fade_in_widget(row)
+    
+    def _update_task_widget_data(self, widget: QFrame, td: dict):
+        """Update an existing task row widget with new data (no destroy/recreate).
+        
+        Updates: status label, progress gradient, thumbnail overlays.
+        """
+        try:
+            # Update status label
+            if hasattr(widget, 'status_label'):
+                status = td.get('status', '')
+                progress = td.get('progress', 0)
+                if progress >= 100:
+                    widget.status_label.setText("✅ DONE")
+                    widget.status_label.setStyleSheet(
+                        f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;"
+                    )
+                elif status in ('running', 'waiting_poll'):
+                    display = td.get('status_text', '🔥 PROCESSING')
+                    widget.status_label.setText(display)
+                    if "⬇️" in display or "Download" in display:
+                        color = Theme.SAPPHIRE
+                    elif "⬆️" in display or "Upscal" in display:
+                        color = Theme.PURPLE
+                    elif "✅" in display:
+                        color = Theme.GREEN
+                    else:
+                        color = Theme.PEACH
+                    widget.status_label.setStyleSheet(
+                        f"color: {color}; font-size: 10px; font-weight: bold; border: none;"
+                    )
+                elif status == 'failed':
+                    widget.status_label.setText("❌ FAILED")
+                    widget.status_label.setStyleSheet(
+                        f"color: {Theme.RED}; font-size: 10px; font-weight: bold; border: none;"
+                    )
+            
+            # Update progress on thumbnail slots
+            if hasattr(widget, 'thumb_slots') and td.get('progress', 0) < 100:
+                pct = max(0, min(100, td.get('progress', 0))) / 100.0
+                for slot in widget.thumb_slots:
+                    try:
+                        if slot.pixmap() and not slot.pixmap().isNull():
+                            continue
+                        slot.setText(f"{td.get('progress', 0)}%")
+                    except RuntimeError:
+                        continue
+        except RuntimeError:
+            pass  # Widget deleted mid-update
     
     def _toggle_group(self, group_id: str):
         """Toggle expand/collapse of a group."""
@@ -1450,6 +2014,39 @@ class TabQueue(QWidget):
             if self.controller and hasattr(self.controller, '_dispatcher'):
                 if self.controller._dispatcher.ready_count == 0:
                     return  # Nothing to process
+            
+            # Pre-flight readiness check — show detailed feedback
+            if self.controller and hasattr(self.controller, 'preflight_check'):
+                check = self.controller.preflight_check()
+                main_window = self.window()
+                
+                if not check["can_start"]:
+                    # BLOCKED — show error with details
+                    details = []
+                    for acc in check["accounts"]:
+                        if acc["issues"]:
+                            details.append(f"{acc['email']}: {', '.join(acc['issues'])}")
+                    msg = f"{check['summary']}\n" + "\n".join(details)
+                    if main_window and hasattr(main_window, 'show_toast'):
+                        main_window.show_toast(msg, "error", duration=8000)
+                    return  # Don't start
+                
+                elif any(acc["warnings"] for acc in check["accounts"]):
+                    # WARNINGS — show but proceed
+                    warns = []
+                    for acc in check["accounts"]:
+                        if acc["warnings"]:
+                            warns.append(f"{acc['email']}: {', '.join(acc['warnings'])}")
+                    if main_window and hasattr(main_window, 'show_toast'):
+                        main_window.show_toast(
+                            f"{check['summary']}\n" + "\n".join(warns),
+                            "warning", duration=5000
+                        )
+                else:
+                    # ALL GOOD
+                    if main_window and hasattr(main_window, 'show_toast'):
+                        main_window.show_toast(check["summary"], "success", duration=3000)
+            
             self.start_all.emit()
             if self.controller:
                 self.controller.start_processing()
@@ -1843,7 +2440,7 @@ class TabQueue(QWidget):
                 )
         
         # === Open in Explorer ===
-        if best_file and Path(best_file).exists():
+        if best_file and self._cached_file_exists(best_file):
             menu.addSeparator()
             open_action = menu.addAction(f"📂 Open in Explorer")
             open_action.triggered.connect(

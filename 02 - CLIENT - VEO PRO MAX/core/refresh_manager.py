@@ -69,7 +69,6 @@ class CookieRefreshManager:
         self._on_refresh_needed: Optional[Callable[[str, str], None]] = None
         self._on_refresh_complete: Optional[Callable[[str, bool], None]] = None
         self._show_refresh_dialog: Optional[Callable[[RefreshRequest], bool]] = None
-        self._on_auto_relogin: Optional[Callable[[str], Optional[str]]] = None
         
         # Extension bridge ref for auto header refresh
         self._extension_bridge = None
@@ -106,13 +105,6 @@ class CookieRefreshManager:
         """Set callback when refresh completes. Callback receives (email, success)."""
         self._on_refresh_complete = callback
     
-    def set_auto_relogin_callback(self, callback: Callable[[str], Optional[str]]):
-        """Set callback for auto re-login when refresh fails.
-        
-        Callback receives email, returns email if success or None.
-        This is typically profiles_controller.auto_relogin().
-        """
-        self._on_auto_relogin = callback
     
     def set_extension_bridge(self, bridge):
         """Set ExtensionBridge reference for auto header refresh."""
@@ -199,17 +191,9 @@ class CookieRefreshManager:
         if self._on_refresh_complete:
             self._on_refresh_complete(email, success)
         
-        # Auto re-login on failure
-        if not success and self._on_auto_relogin:
-            print(f"[RefreshManager] 🔑 Refresh failed for {email}, attempting auto re-login...")
-            try:
-                relogin_result = self._on_auto_relogin(email)
-                if relogin_result:
-                    print(f"[RefreshManager] ✅ Auto re-login successful for {email}")
-                else:
-                    print(f"[RefreshManager] ❌ Auto re-login failed for {email}")
-            except Exception as e:
-                print(f"[RefreshManager] Auto re-login error: {e}")
+        # Log failure for manual action
+        if not success:
+            print(f"[RefreshManager] ⚠️ Refresh failed for {email} — manual re-login required via Browser button")
     
     def cancel_refresh(self, email: str):
         """Cancel a pending refresh request."""
@@ -251,13 +235,15 @@ class CookieRefreshManager:
                     # Headers stale (>12 min) — trigger refresh
                     try:
                         import asyncio
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
+                        try:
+                            loop = asyncio.get_running_loop()
+                            # Already in async context — schedule as task
                             asyncio.ensure_future(
                                 self._extension_bridge.refresh_headers(email, timeout=10)
                             )
-                        else:
-                            loop.run_until_complete(
+                        except RuntimeError:
+                            # No running loop — create one (sync context)
+                            asyncio.run(
                                 self._extension_bridge.refresh_headers(email, timeout=10)
                             )
                     except Exception:

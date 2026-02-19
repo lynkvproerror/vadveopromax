@@ -113,3 +113,11 @@ env/
 !tsconfig.json
 !**/themes/*.json
 nul
+
+# Chrome binaries (large)
+chrome-for-testing/
+**/chrome-for-testing/
+
+# Session data
+sessions/
+**/sessions/

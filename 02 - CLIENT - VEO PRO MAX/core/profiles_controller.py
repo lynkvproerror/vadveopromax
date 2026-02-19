@@ -16,6 +16,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.session import AccountSession, SubscriptionType, PaygateTier
 
 
+def _get_chrome_executable() -> Optional[str]:
+    """Get Chrome for Testing (CfT) executable path for Playwright.
+    
+    CfT supports --load-extension (branded Chrome removed it in v137+).
+    Falls back to None (Playwright will use its own bundled Chromium).
+    """
+    try:
+        from core.chrome_manager import find_chrome_exe
+        exe = find_chrome_exe()
+        if exe:
+            return exe
+    except Exception:
+        pass
+    return None
+
+
 
 
 # ── Win32 API helpers for true browser window hiding ────────────────────
@@ -29,20 +45,32 @@ SW_SHOW = 5
 SW_RESTORE = 9
 
 def _find_hwnds_by_pid(pid: int) -> list:
-    """Find Chrome browser window handles owned by a specific process ID.
+    """Find Chrome browser window handles owned by a process and its children.
     
-    Only captures windows with class 'Chrome_WidgetWin_1' (actual browser UI),
-    filtering out helper/debug/console windows that share the same PID.
+    Chrome for Testing spawns child processes (GPU, renderer) that may own
+    taskbar-visible windows. We scan the entire process tree to catch all
+    Chrome_WidgetWin_1 windows.
     """
     if not pid:
         return []
+    
+    # Build set of PIDs: main process + all children
+    pids_to_check = {pid}
+    try:
+        import psutil
+        parent = psutil.Process(pid)
+        for child in parent.children(recursive=True):
+            pids_to_check.add(child.pid)
+    except Exception:
+        pass  # psutil not available or process gone — fall back to main PID only
+    
     hwnds = []
     
     @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
     def _enum_callback(hwnd, _lparam):
         proc_id = ctypes.wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(proc_id))
-        if proc_id.value == pid:
+        if proc_id.value in pids_to_check:
             class_name = ctypes.create_unicode_buffer(256)
             user32.GetClassNameW(hwnd, class_name, 256)
             if class_name.value == 'Chrome_WidgetWin_1':
@@ -115,7 +143,7 @@ class ChromeProfile:
     subscription_fetched: bool = False  # True if subscription was successfully fetched
     token_expires_at: Optional[str] = None  # ISO datetime when token expires (for status display)
     is_enabled: bool = True  # Account participates in rotation when generating
-    max_slots: int = 4  # Per-account concurrent worker limit (0-4)
+    max_slots: int = 5  # Per-account concurrent worker limit (0-5)
     
     def __post_init__(self):
         if not self.created_at:
@@ -363,9 +391,31 @@ class ProfilesController:
                 except Exception:
                     pass
                 
+                # Cleanup tokens.json entry (stale access tokens)
+                try:
+                    tokens_path = self.storage_path.parent / "tokens.json"
+                    if tokens_path.exists():
+                        with open(tokens_path, 'r', encoding='utf-8') as f:
+                            tokens_data = json.load(f)
+                        if email in tokens_data:
+                            del tokens_data[email]
+                            with open(tokens_path, 'w', encoding='utf-8') as f:
+                                json.dump(tokens_data, f, indent=2, ensure_ascii=False)
+                            print(f"[ProfilesController] 🗑️ Removed {email} from tokens.json")
+                except Exception as e:
+                    print(f"[ProfilesController] ⚠️ tokens.json cleanup: {e}")
+                
+                # Cleanup project cache
+                try:
+                    if hasattr(self, '_project_cache'):
+                        keys_to_remove = [k for k in self._project_cache if k.startswith(f"{email}|")]
+                        for k in keys_to_remove:
+                            del self._project_cache[k]
+                except Exception:
+                    pass
+                
                 self._profiles.pop(i)
                 self.save_profiles()
-                self._notify("profiles_changed")
                 print(f"[ProfilesController] Removed profile: {email}")
                 return True
         
@@ -534,9 +584,10 @@ class ProfilesController:
             
             with sync_playwright() as p:
                 # Headless mode for subscription refresh - no need to show browser
-                context = p.chromium.launch_persistent_context(
+                # Use CfT instead of branded Chrome (supports --load-extension)
+                _chrome_exe = _get_chrome_executable()
+                _launch_kwargs = dict(
                     user_data_dir=profile.browser_profile_path,
-                    channel="chrome",  # Use real Chrome instead of Chromium
                     headless=True,  # Run in background
                     args=[
                         "--disable-blink-features=AutomationControlled",
@@ -544,6 +595,11 @@ class ProfilesController:
                         "--no-default-browser-check"
                     ]
                 )
+                if _chrome_exe:
+                    _launch_kwargs["executable_path"] = _chrome_exe
+                else:
+                    _launch_kwargs["channel"] = "chrome"  # Fallback to branded
+                context = p.chromium.launch_persistent_context(**_launch_kwargs)
                 
                 page = context.new_page()
                 
@@ -855,9 +911,10 @@ class ProfilesController:
             
             with sync_playwright() as p:
                 # Launch VISIBLE browser for user to login
-                context = p.chromium.launch_persistent_context(
+                # Use CfT instead of branded Chrome (supports --load-extension)
+                _chrome_exe = _get_chrome_executable()
+                _launch_kwargs = dict(
                     user_data_dir=str(profile_path),
-                    channel="chrome",  # Use real Chrome instead of Chromium
                     headless=False,  # VISIBLE for user interaction
                     args=[
                         "--disable-blink-features=AutomationControlled",
@@ -866,6 +923,11 @@ class ProfilesController:
                         "--start-maximized"
                     ]
                 )
+                if _chrome_exe:
+                    _launch_kwargs["executable_path"] = _chrome_exe
+                else:
+                    _launch_kwargs["channel"] = "chrome"  # Fallback to branded
+                context = p.chromium.launch_persistent_context(**_launch_kwargs)
                 
                 page = context.new_page()
                 
@@ -1302,6 +1364,34 @@ class ProfilesController:
                             except Exception as e:
                                 print(f"[DEBUG] Step 5b: Alt nav error: {e}")
                         
+                        # Step 6: Compute missing branded headers for CfT
+                        # Chrome for Testing doesn't inject x-browser-* headers.
+                        # We compute them ourselves when they're missing.
+                        if not captured_headers.get("x-browser-validation"):
+                            # x-browser-validation = base64(sha1(chrome_api_key + user_agent))
+                            # Windows Chrome API key (hardcoded in Chrome binary)
+                            CHROME_API_KEY_WIN = "AIzaSyA2KlwBX3mkFo30om9LUFYQhpqLoa_BNhE"
+                            try:
+                                import hashlib
+                                import base64 as b64
+                                # Get UA from the browser
+                                user_agent = page.evaluate("navigator.userAgent")
+                                validation_data = CHROME_API_KEY_WIN + user_agent
+                                sha1_hash = hashlib.sha1(validation_data.encode("utf-8")).digest()
+                                validation_b64 = b64.b64encode(sha1_hash).decode("ascii")
+                                captured_headers["x-browser-validation"] = validation_b64
+                                print(f"[ProfilesController] 🔑 Computed x-browser-validation from UA: {validation_b64[:20]}...")
+                            except Exception as e:
+                                print(f"[ProfilesController] ⚠️ Could not compute x-browser-validation: {e}")
+                        
+                        # Inject static branded headers if missing (CfT doesn't send these)
+                        if "x-browser-channel" not in captured_headers:
+                            captured_headers["x-browser-channel"] = "stable"
+                        if "x-browser-copyright" not in captured_headers:
+                            captured_headers["x-browser-copyright"] = "Copyright 2026 Google LLC. All Rights reserved."
+                        if "x-browser-year" not in captured_headers:
+                            captured_headers["x-browser-year"] = "2026"
+                        
                         # Final result
                         if captured_headers:
                             print(f"[ProfilesController] ✅ Browser headers captured for {email}: {list(captured_headers.keys())}")
@@ -1712,9 +1802,10 @@ class ProfilesController:
             
             
             with sync_playwright() as p:
-                context = p.chromium.launch_persistent_context(
+                # Use CfT instead of branded Chrome (supports --load-extension)
+                _chrome_exe = _get_chrome_executable()
+                _launch_kwargs = dict(
                     user_data_dir=str(profile_path),
-                    channel="chrome",
                     headless=headless,
                     args=[
                         "--disable-blink-features=AutomationControlled",
@@ -1723,6 +1814,11 @@ class ProfilesController:
                         "--start-maximized"
                     ]
                 )
+                if _chrome_exe:
+                    _launch_kwargs["executable_path"] = _chrome_exe
+                else:
+                    _launch_kwargs["channel"] = "chrome"  # Fallback to branded
+                context = p.chromium.launch_persistent_context(**_launch_kwargs)
                 
                 page = context.new_page()
                 
@@ -1983,48 +2079,6 @@ class ProfilesController:
             traceback.print_exc()
             return None
 
-    def auto_relogin(self, email: str) -> Optional[str]:
-        """Auto re-login using stored credentials.
-        
-        Called when browser profile is missing or session expires.
-        Loads encrypted credentials from CredentialsManager and runs auto_login_with_credentials.
-        
-        Args:
-            email: Account email to re-login
-            
-        Returns:
-            Email if successful, None if failed or no credentials stored
-        """
-        try:
-            from core.credentials_manager import get_credentials_manager
-            creds_manager = get_credentials_manager()
-            
-            creds = creds_manager.load_credentials_for(email)
-            if not creds:
-                print(f"[ProfilesController] ❌ No stored credentials for {email}")
-                return None
-            
-            print(f"[ProfilesController] 🔑 Auto re-login for {email} using stored credentials...")
-            result = self.auto_login_with_credentials(
-                email=creds["email"],
-                password=creds["password"],
-                timeout_seconds=120,
-                headless=False  # Show browser — may need 2FA/CAPTCHA interaction
-            )
-            
-            if result:
-                print(f"[ProfilesController] ✅ Auto re-login successful for {email}")
-            else:
-                print(f"[ProfilesController] ❌ Auto re-login failed for {email}")
-            
-            return result
-            
-        except Exception as e:
-            print(f"[ProfilesController] Auto re-login error: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-    
     def copy_variations_and_warmup(self, email: str) -> bool:
         """Phase 2 recovery: Copy Variations from donor + warm up browser with tabs.
         
@@ -2115,9 +2169,10 @@ class ProfilesController:
             
             
             with sync_playwright() as p:
-                context = p.chromium.launch_persistent_context(
+                # Use CfT instead of branded Chrome (supports --load-extension)
+                _chrome_exe = _get_chrome_executable()
+                _launch_kwargs = dict(
                     user_data_dir=str(profile_path),
-                    channel="chrome",
                     headless=False,
                     args=[
                         "--disable-blink-features=AutomationControlled",
@@ -2126,6 +2181,11 @@ class ProfilesController:
                         "--start-maximized",
                     ],
                 )
+                if _chrome_exe:
+                    _launch_kwargs["executable_path"] = _chrome_exe
+                else:
+                    _launch_kwargs["channel"] = "chrome"  # Fallback to branded
+                context = p.chromium.launch_persistent_context(**_launch_kwargs)
                 
                 # Open warmup tabs
                 for url in warmup_urls:
@@ -2219,101 +2279,6 @@ class ProfilesController:
         
         return copied == 2
     
-    def reset_profile_and_relogin(self, email: str) -> Optional[str]:
-        """Full profile reset with Variations copy + auto re-login.
-        
-        3-step recovery for persistent reCAPTCHA 403 errors:
-        1. Kill debug browser (if open)
-        2. Copy 'Local State' + 'Variations' from a working profile
-        3. Delete old profile folder, create new one with Variations, auto re-login
-        
-        Args:
-            email: Account email to reset
-            
-        Returns:
-            Email if successful, None if failed
-        """
-        import shutil
-        import uuid
-        
-        print(f"[ProfilesController] 🔄 Starting full profile reset for {email}...")
-        
-        profile = self.get_profile(email)
-        if not profile:
-            print(f"[ProfilesController] ❌ Profile not found: {email}")
-            return None
-        
-        # Step 1: Kill debug browser
-        print(f"[ProfilesController] Step 1: Killing debug browser for {email}...")
-        try:
-            self.kill_debug_browser(email)
-        except Exception as e:
-            print(f"[ProfilesController] ⚠️ Kill browser warning: {e}")
-        
-        import time
-        time.sleep(2)  # Wait for Chrome process to fully exit
-        
-        # Step 2: Find donor profile and copy Variations
-        print(f"[ProfilesController] Step 2: Finding donor profile for Variations...")
-        donor_path = self._find_donor_profile(exclude_email=email)
-        
-        variations_copied = False
-        temp_variations_dir = None
-        
-        if donor_path:
-            print(f"[ProfilesController] Found donor: {donor_path.name}")
-            # Save Variations files to temp location before deleting profile
-            temp_variations_dir = Path(self.storage_path.parent / "browser_profiles" / "_temp_variations")
-            temp_variations_dir.mkdir(parents=True, exist_ok=True)
-            variations_copied = self._copy_variations_files(donor_path, temp_variations_dir)
-        else:
-            print(f"[ProfilesController] ⚠️ No donor profile found — proceeding without Variations copy")
-        
-        # Step 3: Delete old profile folder
-        old_profile_path = Path(profile.browser_profile_path) if profile.browser_profile_path else None
-        
-        if old_profile_path and old_profile_path.exists():
-            print(f"[ProfilesController] Step 3: Deleting old profile: {old_profile_path.name}")
-            try:
-                shutil.rmtree(str(old_profile_path), ignore_errors=True)
-                print(f"[ProfilesController] ✅ Old profile deleted")
-            except Exception as e:
-                print(f"[ProfilesController] ⚠️ Partial delete: {e}")
-        
-        # Create new profile folder
-        profile_folder = f"browser_session_{uuid.uuid4().hex[:8]}"
-        new_profile_path = self.storage_path.parent / "browser_profiles" / profile_folder
-        new_profile_path.mkdir(parents=True, exist_ok=True)
-        print(f"[ProfilesController] ✅ New profile created: {profile_folder}")
-        
-        # Copy Variations files to new profile
-        if variations_copied and temp_variations_dir and temp_variations_dir.exists():
-            self._copy_variations_files(temp_variations_dir, new_profile_path)
-            # Cleanup temp
-            try:
-                shutil.rmtree(str(temp_variations_dir), ignore_errors=True)
-            except Exception:
-                pass
-            # Bug 5 fix: Wait for Chrome Variations Service to read the seed
-            print(f"[ProfilesController] ⏳ Waiting 5s for Variations seed to settle...")
-            time.sleep(5)
-        
-        # Update profile paths in memory
-        profile.profile_path = str(new_profile_path)
-        profile.browser_profile_path = str(new_profile_path)
-        profile.is_ready = False
-        self.save_profiles()
-        
-        # Step 4: Auto re-login
-        print(f"[ProfilesController] Step 4: Auto re-login with stored credentials...")
-        result = self.auto_relogin(email)
-        
-        if result:
-            print(f"[ProfilesController] ✅ Full profile reset + re-login successful for {email}")
-        else:
-            print(f"[ProfilesController] ❌ Re-login failed for {email}. Manual login may be needed.")
-        
-        return result
 
     def get_tokens(self, email: str) -> Optional[dict]:
         """Get stored tokens for an email."""

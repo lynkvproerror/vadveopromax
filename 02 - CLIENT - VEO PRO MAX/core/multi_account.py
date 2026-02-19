@@ -102,13 +102,81 @@ class MultiAccountManager:
                 return acc
         return None
     
+    def _compute_health_score(self, account: AccountManager) -> int:
+        """Compute health score for load balancing.
+        
+        Score formula:
+          + available_slots × 10   (more free slots = better)
+          - active_slots × 5       (busy accounts penalized)
+          - consecutive_403s × 20  (error-prone accounts avoided)
+          + ext_connected × 15     (extension ready = bonus)
+        
+        Higher score = preferred account.
+        """
+        available = account.available_slots
+        active = account.active_slots
+        
+        # Get 403 count from adaptive burst controller (if set on engine)
+        consecutive_403 = 0
+        if hasattr(account, '_consecutive_403'):
+            consecutive_403 = account._consecutive_403
+        elif hasattr(self, '_burst_controller') and self._burst_controller:
+            stats = self._burst_controller.get_stats()
+            acc_stats = stats.get("accounts", {}).get(account.email, {})
+            consecutive_403 = acc_stats.get("total_403", 0)
+        
+        # Extension connected bonus
+        ext_connected = 0
+        if hasattr(account, '_extension_bridge') and account._extension_bridge:
+            ext_connected = 1 if account._extension_bridge.is_connected(account.email) else 0
+        
+        score = (available * 10) - (active * 5) - (consecutive_403 * 20) + (ext_connected * 15)
+        return score
+    
+    def get_health_scores(self) -> dict:
+        """Get health scores for all accounts (for UI dashboard).
+        
+        Returns:
+            {
+                "accounts": {
+                    "email@gmail.com": {
+                        "score": 85,
+                        "available_slots": 3,
+                        "active_slots": 2,
+                        "max_slots": 5,
+                        "ext_connected": True,
+                        "enabled": True,
+                    }
+                }
+            }
+        """
+        result = {"accounts": {}}
+        for acc in self._accounts:
+            ext_connected = False
+            if hasattr(acc, '_extension_bridge') and acc._extension_bridge:
+                ext_connected = acc._extension_bridge.is_connected(acc.email)
+            
+            result["accounts"][acc.email] = {
+                "score": self._compute_health_score(acc),
+                "available_slots": acc.available_slots,
+                "active_slots": acc.active_slots,
+                "max_slots": acc.max_slots,
+                "ext_connected": ext_connected,
+                "enabled": acc.is_enabled,
+            }
+        return result
+    
+    def set_burst_controller(self, controller):
+        """Set reference to AdaptiveBurstController for health scoring."""
+        self._burst_controller = controller
+    
     async def get_available_account(self) -> Optional[AccountManager]:
         """Get the best available account for a new task.
         
-        Load balancing strategy:
+        Health-score based load balancing:
         1. Filter accounts that are ready (token valid, reCAPTCHA fresh, has slots)
-        2. Prefer account with most available slots
-        3. Among equal slots, prefer least recently used
+        2. Compute health score per account  
+        3. Prefer highest score; break ties with least recently used
         
         Returns None if no account available.
         """
@@ -118,15 +186,21 @@ class MultiAccountManager:
             if not ready:
                 return None
             
-            # Sort by: available_slots (desc), last_activity (asc)
+            # Sort by: health_score (desc), last_activity (asc)
             ready.sort(
                 key=lambda a: (
-                    -a.available_slots,
+                    -self._compute_health_score(a),
                     a.session.last_activity or datetime.min
                 )
             )
             
-            return ready[0]
+            best = ready[0]
+            score = self._compute_health_score(best)
+            log.debug(
+                f"[LoadBalancer] Selected {best.email} "
+                f"(score={score}, slots={best.available_slots}/{best.max_slots})"
+            )
+            return best
     
     async def acquire_slot(self) -> Optional[AccountManager]:
         """Acquire a slot from the best available account.
@@ -171,6 +245,10 @@ class MultiAccountManager:
         
         Note: Each browser uses ~100-200MB RAM.
         """
+        # Seed Variations data to managed profiles BEFORE launching browsers
+        # This ensures Chrome has full x-client-data from the start
+        self._seed_variations_to_profiles()
+        
         log.info(f"Starting browsers for {len(self._accounts)} accounts...")
         for acc in self._accounts:
             try:
@@ -181,6 +259,48 @@ class MultiAccountManager:
         
         # Cross-pollinate x-client-data: share longest value to accounts with short values
         self.fix_short_client_data()
+    
+    def _seed_variations_to_profiles(self):
+        """Copy Chrome Variations data from default profile to managed profiles.
+        
+        x-client-data is computed by Chrome's Variations Service from the seed
+        stored in 'Local State'. Fresh/managed profiles produce short values (8 chars)
+        because they haven't enrolled in Variations yet.
+        
+        By copying Local State from the user's default Chrome, managed profiles
+        inherit the full Variations seed → full x-client-data (50+ chars).
+        """
+        import os
+        import shutil
+        
+        # Find user's default Chrome Local State
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        if not local_app_data:
+            return
+        default_local_state = os.path.join(
+            local_app_data, "Google", "Chrome", "User Data", "Local State"
+        )
+        if not os.path.isfile(default_local_state):
+            log.debug("No default Chrome Local State found — skipping Variations seed")
+            return
+        
+        seeded = 0
+        for acc in self._accounts:
+            profile_path = acc.session.profile_path
+            if not profile_path or not os.path.isdir(profile_path):
+                continue
+            
+            target = os.path.join(profile_path, "Local State")
+            try:
+                # Only copy if managed profile doesn't have it yet or it's very small
+                if not os.path.isfile(target) or os.path.getsize(target) < 1000:
+                    shutil.copy2(default_local_state, target)
+                    seeded += 1
+            except Exception as e:
+                log.debug(f"Failed to seed Variations to {profile_path}: {e}")
+        
+        if seeded:
+            log.info(f"🌱 Seeded Chrome Variations data to {seeded} managed profile(s)")
     
     def get_best_client_data(self) -> str:
         """Get the longest x-client-data from any account.
@@ -207,9 +327,9 @@ class MultiAccountManager:
         Service not loaded), we can safely borrow from another profile
         that has the full value.
         
-        Fallback: If no app account has a good value, extract from
-        the machine's default Chrome profile (which has had time to
-        fully enroll in Variations).
+        Note: No longer launches temp Chrome for extraction — Extension
+        bridge provides x-client-data from the managed browser's headers.
+        Cross-pollination is triggered again when Extension sends fresh data.
         
         This fixes reCAPTCHA 403 errors caused by short x-client-data.
         """
@@ -217,23 +337,11 @@ class MultiAccountManager:
         best = self.get_best_client_data()
         
         if len(best) < MIN_GOOD:
-            # Fallback: Try extracting from default Chrome on this machine
-            log.info("🔍 No app account has good x-client-data, trying machine's Chrome...")
-            try:
-                from core.client_data_extractor import extract_client_data_from_machine
-                machine_cd = extract_client_data_from_machine()
-                if machine_cd and len(machine_cd) >= MIN_GOOD:
-                    best = machine_cd
-                    log.info(f"✅ Extracted x-client-data from machine Chrome ({len(best)} chars)")
-                elif machine_cd:
-                    log.info(f"Machine Chrome also has short x-client-data ({len(machine_cd)} chars)")
-                    if len(machine_cd) > len(best):
-                        best = machine_cd  # Still better than nothing
-            except Exception as e:
-                log.warning(f"Failed to extract x-client-data from machine Chrome: {e}")
-        
-        if len(best) < MIN_GOOD:
-            log.warning(f"⚠️ No account has good x-client-data (best={len(best)} chars)")
+            # Don't launch temp Chrome — Extension will provide data shortly
+            log.info(
+                f"⏳ No account has good x-client-data yet (best={len(best)} chars). "
+                f"Extension bridge will provide fresh value from browser headers."
+            )
             return
         
         fixed = 0

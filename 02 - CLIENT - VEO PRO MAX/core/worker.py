@@ -142,6 +142,12 @@ class Worker:
             account_headers = account.get_api_headers()
             self._report_progress(task.id, 15, "📤 Submitting request")
             
+            # Phase 2B: Idempotency key — prevent duplicate submissions on timeout retry
+            import hashlib
+            idem_key = hashlib.sha256(
+                f"{task.id}:{task.retry_attempts}".encode()
+            ).hexdigest()[:32]
+            
             # Route to appropriate API method
             result = await self._execute_workflow(
                 task,
@@ -150,6 +156,7 @@ class Worker:
                 account.project_id,
                 account_headers=account_headers,
                 paygate_tier=paygate_tier,
+                extra_headers={"x-goog-request-params": idem_key},
             )
             
             # === Stage 4: API Response Received (20%) ===
@@ -172,8 +179,15 @@ class Worker:
         project_id: Optional[str],
         account_headers: Optional[dict] = None,
         paygate_tier: str = "PAYGATE_TIER_TWO",
+        extra_headers: Optional[dict] = None,
     ) -> WorkerResult:
         """Execute the appropriate workflow based on task type."""
+        
+        # Merge extra headers (e.g. idempotency key) into account headers
+        if extra_headers and account_headers:
+            account_headers = {**account_headers, **extra_headers}
+        elif extra_headers:
+            account_headers = extra_headers
         
         # workflow_type is stored as name string ("T2V"), convert to enum
         wt = task.workflow_type

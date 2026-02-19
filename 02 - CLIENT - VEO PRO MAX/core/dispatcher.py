@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.constants import GenerationStatus
+from core.event_manager import emit_event, EventType
 
 
 class TaskState(str, Enum):
@@ -82,6 +83,8 @@ class VideoOutputInfo:
         """Thumbnail border color based on quality state."""
         if self.upscale_status == "failed" or self.quality == "failed":
             return "red"
+        if self.upscale_status in ("submitting", "polling"):
+            return "purple"
         if self.quality in ("1080p", "4K"):
             return "blue"
         if self.quality == "720p":
@@ -126,6 +129,7 @@ class Task:
     progress: int = 0              # 0-100
     error: Optional[str] = None
     retry_attempts: int = 0        # Track retries for UI display
+    chain_retry_count: int = 0     # Auto-retry count for chain root (engine-level)
     
     # Results
     operation_name: Optional[str] = None
@@ -139,6 +143,9 @@ class Task:
     upscale_status: str = ""           # "", "success", "failed"
     upscale_media_ids: List[str] = field(default_factory=list)  # For re-upscale
     upscale_error: str = ""            # Error message for display
+    
+    # Image upload tracking (for UI thumbnail effects)
+    image_upload_status: str = ""      # "" | "extracting" | "uploading" | "ready" | "error"
     
     # Metadata
     created_at: datetime = field(default_factory=datetime.now)
@@ -340,6 +347,9 @@ class Dispatcher:
         
         if self._on_task_completed:
             self._on_task_completed(task)
+        emit_event(EventType.TASK_COMPLETED, {
+            "task_id": task_id, "outputs": len(output_uris),
+        }, source="dispatcher")
     
     def fail_task(self, task_id: str, error: str):
         """Mark a task as failed. C1: Cascade-fail waiting children."""
@@ -354,18 +364,34 @@ class Dispatcher:
         
         if self._on_task_failed:
             self._on_task_failed(task, error)
+        emit_event(EventType.TASK_FAILED, {
+            "task_id": task_id, "error": error,
+        }, source="dispatcher")
         
-        # C1: Cascade-fail children waiting on this parent
-        if task_id in self._parent_to_children:
-            child_ids = self._parent_to_children.pop(task_id)
-            for child_id in child_ids:
-                child = self._waiting_tasks.pop(child_id, None)
-                if child:
-                    child.state = TaskState.FAILED
-                    child.error = f"Parent task failed: {error}"
-                    child.completed_at = datetime.now()
-                    if self._on_task_failed:
-                        self._on_task_failed(child, child.error)
+        # C1: Cascade-fail ALL descendants waiting on this parent (recursive)
+        self._cascade_fail_children(task_id, error)
+    
+    def _cascade_fail_children(self, parent_id: str, root_error: str):
+        """Recursively cascade-fail all descendants of a failed parent.
+        
+        In a continuation chain A→B→C→D, failing A must also fail B, C, D.
+        Without recursion, only B (direct child) would be failed, leaving
+        C and D orphaned in WAITING state forever.
+        """
+        if parent_id not in self._parent_to_children:
+            return
+        
+        child_ids = self._parent_to_children.pop(parent_id)
+        for child_id in child_ids:
+            child = self._waiting_tasks.pop(child_id, None)
+            if child:
+                child.state = TaskState.FAILED
+                child.error = f"Parent task failed: {root_error}"
+                child.completed_at = datetime.now()
+                if self._on_task_failed:
+                    self._on_task_failed(child, child.error)
+                # Recurse: fail this child's own children too
+                self._cascade_fail_children(child_id, root_error)
     
     def cancel_task(self, task_id: str) -> bool:
         """Cancel a task regardless of its current state.
@@ -393,11 +419,75 @@ class Dispatcher:
             self._running_count = max(0, self._running_count - 1)
         
         print(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
+        emit_event(EventType.QUEUE_UPDATED, {
+            "action": "cancel", "task_id": task_id,
+        }, source="dispatcher")
         return True
     
     def has_children(self, task_id: str) -> bool:
         """Check if a task has pending continuation children."""
         return task_id in self._parent_to_children and bool(self._parent_to_children[task_id])
+    
+    def activate_children_early(
+        self,
+        parent_id: str,
+        frame_uri: Optional[str],
+        frame_local_path: Optional[str] = None,
+    ):
+        """Activate waiting children BEFORE parent task is fully completed.
+        
+        Used when upscale is decoupled into UpscaleQueue: children only need
+        the 720p continuation frame, not the upscaled output. Calling this
+        early lets children start generating while parent upscales in background.
+        
+        Safety: _resolve_dependencies() pops _parent_to_children mapping,
+        so when complete_task() runs later (from UpscaleQueue), it won't
+        find any children → no double-activation.
+        
+        TODO [FUTURE — Frame Enhancement Pipeline]:
+            Hiện tại continuation frame được extract trực tiếp từ video 720p.
+            Kế hoạch bổ sung: sau khi extract frame 720p, chạy qua một bước
+            enhancer (AI upscale / denoise) để nâng chất lượng frame trước khi
+            inject vào child task. Flow sẽ thành:
+              extract_frame(720p) → enhance_frame() → activate_children()
+            Khi implement, cần:
+              1. Thêm FrameEnhancer class (có thể dùng Real-ESRGAN hoặc API)
+              2. Thay đổi activate_children_early() để nhận enhanced frame URI
+              3. Cân nhắc timeout/fallback: nếu enhance fail → dùng frame gốc 720p
+        """
+        if parent_id not in self._parent_to_children:
+            return
+        
+        import logging
+        log = logging.getLogger(__name__)
+        child_count = len(self._parent_to_children.get(parent_id, []))
+        log.info(
+            f"[EarlyActivation] Activating {child_count} children of {parent_id} "
+            f"(before upscale, frame={'YES' if frame_uri else 'NO'})"
+        )
+        self._resolve_dependencies(parent_id, frame_uri, frame_local_path)
+    
+    def set_children_frame_preview(self, parent_id: str, frame_local_path: str):
+        """Set frame thumbnail path on children BEFORE upload completes.
+        
+        This allows the Queue tab to display the extracted frame immediately
+        after FFmpeg extraction, without waiting for the upload/mediaId step.
+        Does NOT move children to READY state — that happens in activate_children_early().
+        """
+        child_ids = self._parent_to_children.get(parent_id, [])
+        for child_id in child_ids:
+            task = self._waiting_tasks.get(child_id) or self._all_tasks.get(child_id)
+            if task:
+                task.continuation_frame_local_path = frame_local_path
+                task.image_upload_status = "uploading"
+        
+        # Trigger UI refresh so thumbnails update
+        if child_ids and self._on_queue_updated:
+            self._on_queue_updated({
+                "event": "frame_preview",
+                "parent_id": parent_id,
+                "children": len(child_ids),
+            })
     
     def _resolve_dependencies(self, parent_id: str, frame_uri: Optional[str],
                               frame_local_path: Optional[str] = None):
@@ -429,12 +519,14 @@ class Dispatcher:
                 if self._on_task_ready:
                     self._on_task_ready(task)
             else:
-                # C2: Frame extraction failed — fail child
+                # C2: Frame extraction failed — fail child + all its descendants
                 task.state = TaskState.FAILED
                 task.error = "Continuation frame extraction failed (FFmpeg unavailable or download error)"
                 task.completed_at = datetime.now()
                 if self._on_task_failed:
                     self._on_task_failed(task, task.error)
+                # Recurse: fail this child's descendants too
+                self._cascade_fail_children(child_id, task.error)
     
     def update_progress(self, task_id: str, progress: int, status_text: str = ""):
         """Update task progress and optional status text.
@@ -526,23 +618,143 @@ class Dispatcher:
         ]
     
     def retry_task(self, task_id: str) -> bool:
-        """Retry a failed task by resetting state to READY."""
+        """Retry a failed task by resetting state to READY.
+        
+        If the task is a chain root with failed descendants,
+        automatically uses retry_chain() to preserve continuation identity.
+        """
         task = self._all_tasks.get(task_id)
         if not task:
             return False
         if task.state not in (TaskState.FAILED, TaskState.CANCELLED):
             return False
         
+        # Chain-aware: if this task has failed descendants, use retry_chain
+        if self._has_failed_descendants(task_id):
+            return self.retry_chain(task_id)
+        
         task.state = TaskState.READY
         task.error = None
         task.progress = 0
         task.retry_attempts += 1
+        # D2: Pin retry to same account
+        # INIT stage: prefer same (project_id reuse), SUBMITTED+: require same (operation_name bound)
+        if task.assigned_account:
+            task.required_account = task.assigned_account
         # NOTE: task.stage preserved — worker will resume from checkpoint
         self._enqueue_task(task, priority=0)  # Retry = high priority
         # Wake up engine workers waiting for tasks
         if self._on_task_ready:
             self._on_task_ready(task)
         return True
+    
+    def retry_chain(self, root_task_id: str) -> bool:
+        """Retry a chain root and restore ALL descendant dependencies.
+        
+        Solves the identity loss bug: when retrying a continuation chain,
+        children must go back to WAITING state with proper _parent_to_children
+        mapping — NOT become independent READY tasks.
+        
+        Flow:
+        1. Root → READY (re-queued with high priority)
+        2. All descendants → WAITING with re-registered dependency tracking
+        3. continuation_frame_uri cleared on children → has_dependency = True
+        4. As root completes → _resolve_dependencies fires → child becomes READY
+        """
+        root = self._all_tasks.get(root_task_id)
+        if not root or root.state not in (TaskState.FAILED, TaskState.CANCELLED):
+            return False
+        
+        # Collect all descendants in the chain
+        descendants = self._collect_chain_descendants(root_task_id)
+        
+        # Reset descendants to WAITING with proper dependency tracking
+        for child in descendants:
+            if child.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                continue  # Don't touch actively running tasks
+            
+            child.state = TaskState.WAITING
+            child.error = None
+            child.progress = 0
+            child.stage = TaskStage.INIT
+            child.continuation_frame_uri = None  # Force has_dependency = True
+            child.continuation_frame_local_path = None
+            child.image_uris = []  # Will be injected by _resolve_dependencies
+            child.assigned_account = None  # Will be set by D2 affinity
+            child.completed_at = None
+            child.started_at = None
+            child.operation_name = None
+            child.operation_names = []
+            child.scene_ids = []
+            child.output_uris = []
+            child.video_outputs = []
+            self._waiting_tasks[child.id] = child
+            
+            # Re-register parent→child dependency mapping
+            pid = child.parent_task_id
+            if pid not in self._parent_to_children:
+                self._parent_to_children[pid] = []
+            if child.id not in self._parent_to_children[pid]:
+                self._parent_to_children[pid].append(child.id)
+        
+        # Reset root to READY
+        root.state = TaskState.READY
+        root.error = None
+        root.progress = 0
+        root.stage = TaskStage.INIT
+        root.retry_attempts += 1
+        root.completed_at = None
+        root.started_at = None
+        root.operation_name = None
+        root.operation_names = []
+        root.scene_ids = []
+        root.output_uris = []
+        root.video_outputs = []
+        # D2: Pin retry to same account — project_id is account-bound
+        if root.assigned_account:
+            root.required_account = root.assigned_account
+        self._enqueue_task(root, priority=0)
+        
+        if self._on_task_ready:
+            self._on_task_ready(root)
+        
+        import logging
+        log = logging.getLogger(__name__)
+        log.info(
+            f"[ChainRetry] Root {root_task_id} re-queued with "
+            f"{len(descendants)} descendants restored to WAITING"
+        )
+        return True
+    
+    def _collect_chain_descendants(self, root_id: str) -> List[Task]:
+        """Walk the task graph to find ALL descendants of a root task.
+        
+        Uses parent_task_id links (stored on each Task) rather than
+        _parent_to_children map (which may have been pop'd by cascade-fail).
+        """
+        # Build reverse map: parent_id → [child tasks]
+        by_parent: Dict[str, List[Task]] = {}
+        for t in self._all_tasks.values():
+            if t.parent_task_id:
+                by_parent.setdefault(t.parent_task_id, []).append(t)
+        
+        # BFS from root
+        descendants = []
+        stack = [root_id]
+        while stack:
+            pid = stack.pop()
+            for child in by_parent.get(pid, []):
+                descendants.append(child)
+                stack.append(child.id)
+        return descendants
+    
+    def _has_failed_descendants(self, task_id: str) -> bool:
+        """Check if a task has any failed/cancelled descendants."""
+        descendants = self._collect_chain_descendants(task_id)
+        return any(
+            d.state in (TaskState.FAILED, TaskState.CANCELLED)
+            for d in descendants
+        )
     
     def requeue_task(self, task) -> bool:
         """Re-queue a running task without incrementing retry count.
@@ -622,6 +834,7 @@ class Dispatcher:
         task.started_at = None
         task.completed_at = None
         task.assigned_account = None
+        task.required_account = None  # Full reset → any account OK
         
         # Handle continuation tasks: children must WAIT for parent
         if task.parent_task_id:
@@ -720,7 +933,11 @@ class Dispatcher:
         task.retry_attempts = 0
         task.started_at = None
         task.completed_at = None
+        # Force retry = full reset → no account-bound data remains
+        # (media_ids, operation_names, video_outputs all cleared above)
+        # → any account can pick this task
         task.assigned_account = None
+        task.required_account = None
         
         # Re-queue
         self._enqueue_task(task, priority=0)
@@ -816,6 +1033,44 @@ class Dispatcher:
                 pass
             
             for td in gd.get("tasks", []):
+                # ── Resolve relative paths → absolute ──
+                output_folder = td.get("output_folder", "")
+                project_name = td.get("project_name", "") or "Untitled"
+                video_base = str(Path(output_folder) / project_name) if output_folder else ""
+                cache_dir = str(Path.home() / ".veoauto" / "cache")
+                
+                def _abs_video(p):
+                    """Resolve relative video path to absolute. Skips URLs."""
+                    if not p:
+                        return p
+                    if p.startswith(("http://", "https://")):
+                        return p
+                    if not Path(p).is_absolute() and video_base:
+                        return str(Path(video_base) / p)
+                    return p
+                
+                def _abs_cache(p):
+                    """Resolve relative cache path to absolute. Skips URLs."""
+                    if not p:
+                        return p
+                    if p.startswith(("http://", "https://")):
+                        return p
+                    if not Path(p).is_absolute():
+                        return str(Path(cache_dir) / p)
+                    return p
+                
+                # Resolve output_uris
+                raw_output_uris = td.get("output_uris", [])
+                resolved_output_uris = [_abs_video(u) for u in raw_output_uris]
+                
+                # Resolve thumbnail_paths
+                raw_thumbs = td.get("thumbnail_paths", [])
+                resolved_thumbs = [_abs_cache(p) for p in raw_thumbs]
+                
+                # Resolve continuation_frame_local_path
+                raw_frame = td.get("continuation_frame_local_path")
+                resolved_frame = _abs_cache(raw_frame)
+                
                 task = Task(
                     id=td["id"],
                     workflow_type=td.get("workflow_type", "T2V"),
@@ -829,7 +1084,7 @@ class Dispatcher:
                     image_paths=td.get("image_paths", []),
                     parent_task_id=td.get("parent_task_id"),
                     continuation_frame_uri=td.get("continuation_frame_uri"),
-                    continuation_frame_local_path=td.get("continuation_frame_local_path"),
+                    continuation_frame_local_path=resolved_frame,
                     required_account=td.get("required_account"),
                     extract_point_ms=td.get("extract_point_ms", 750),
                     download_quality=td.get("download_quality", "720p"),
@@ -838,13 +1093,20 @@ class Dispatcher:
                     error=td.get("error"),
                     retry_attempts=td.get("retry_attempts", 0),
                     operation_name=td.get("operation_name"),
-                    output_uris=td.get("output_uris", []),
-                    thumbnail_paths=td.get("thumbnail_paths", []),
+                    output_uris=resolved_output_uris,
+                    thumbnail_paths=resolved_thumbs,
                     assigned_account=td.get("assigned_account"),
                     project_id=td.get("project_id"),
                     output_folder=td.get("output_folder", ""),
                     project_name=td.get("project_name", ""),
                 )
+                # Restore lists that aren't constructor args
+                task.operation_names = td.get("operation_names", [])
+                task.scene_ids = td.get("scene_ids", [])
+                task.chain_retry_count = td.get("chain_retry_count", 0)
+                task.upscale_media_ids = td.get("upscale_media_ids", [])
+                task.upscale_status = td.get("upscale_status", "")
+                task.upscale_error = td.get("upscale_error", "")
                 # Restore timestamps
                 for ts_field in ("created_at", "completed_at"):
                     ts_val = td.get(ts_field)
@@ -861,16 +1123,16 @@ class Dispatcher:
                 except (ValueError, KeyError):
                     task.stage = TaskStage.INIT
                 
-                # Restore video_outputs (VideoOutputInfo list)
+                # Restore video_outputs with resolved paths
                 for vod in td.get("video_outputs", []):
                     vo = VideoOutputInfo(
                         index=vod.get("index", 0),
                         operation_name=vod.get("operation_name", ""),
                         scene_id=vod.get("scene_id", ""),
                         media_id=vod.get("media_id", ""),
-                        file_720p=vod.get("file_720p", ""),
-                        file_upscaled=vod.get("file_upscaled", ""),
-                        thumbnail_path=vod.get("thumbnail_path", ""),
+                        file_720p=_abs_video(vod.get("file_720p", "")),
+                        file_upscaled=_abs_video(vod.get("file_upscaled", "")),
+                        thumbnail_path=_abs_cache(vod.get("thumbnail_path", "")),
                         quality=vod.get("quality", "pending"),
                         upscale_status=vod.get("upscale_status", ""),
                         upscale_error=vod.get("upscale_error", ""),

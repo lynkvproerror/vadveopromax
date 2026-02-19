@@ -89,8 +89,8 @@ class Theme:
     # === WINDOW ===
     WINDOW_MIN_WIDTH = 900
     WINDOW_MIN_HEIGHT = 600
-    WINDOW_DEFAULT_WIDTH = 1200
-    WINDOW_DEFAULT_HEIGHT = 800
+    WINDOW_DEFAULT_WIDTH = 1500
+    WINDOW_DEFAULT_HEIGHT = 900
     
     # === TAB ICONS ===
     TAB_ICONS = {
@@ -482,6 +482,8 @@ QTabWidget::pane {{
     border: 1px solid {cls.BORDER};
     background-color: {cls.BASE};
 }}
+
+
 
 QTabBar::tab {{
     background-color: {cls.SURFACE0};

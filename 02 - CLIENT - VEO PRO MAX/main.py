@@ -5,11 +5,19 @@ Version: 2.0.0
 """
 
 import sys
+import logging
 from pathlib import Path
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# Set root logger to INFO EARLY so all modules' log.info() calls are captured.
+# Without this, Python defaults to WARNING and extension install logs are dropped.
+# NOTE: Do NOT use logging.basicConfig() here! It adds a StreamHandler(sys.stderr)
+# which crashes after _StreamToLogger replaces sys.stderr later. The QtLogHandler
+# (installed by DevConsole) handles all output display.
+logging.getLogger().setLevel(logging.INFO)
 
 
 def main():

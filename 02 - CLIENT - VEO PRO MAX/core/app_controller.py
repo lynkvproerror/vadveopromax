@@ -30,6 +30,7 @@ from core.batch_parser import BatchParser, ParsedPrompt
 from core.import_validator import ImportValidator
 from core.download_manager import DownloadManager
 from core.engine import Engine
+from core.log_exporter import LogExporter
 
 # Services
 from services.license_client import LicenseClient
@@ -103,6 +104,26 @@ class AppController:
             api_client=self._api_client,
         )
         
+        # Task persistence (crash recovery) + stuck task detection
+        from core.task_journal import TaskJournal
+        from core.task_watchdog import TaskWatchdog
+        from core.status_aggregator import StatusAggregator
+        self._task_journal = TaskJournal(
+            dispatcher=self._dispatcher,
+            save_dir=Path("sessions"),
+            interval_sec=30.0,
+        )
+        self._task_watchdog = TaskWatchdog(
+            dispatcher=self._dispatcher,
+            engine=self._engine,
+        )
+        self._status_aggregator = StatusAggregator()
+        
+        # Log exporter — auto-exports structured session logs (TESTER only)
+        self._log_exporter = LogExporter(
+            base_dir=Path("logs")
+        )
+        
         # Event callbacks (set by UI)
         self._on_task_completed: Optional[Callable[[Task], None]] = None
         self._on_task_failed: Optional[Callable[[Task, str], None]] = None
@@ -134,6 +155,7 @@ class AppController:
         self._extension_bridge = ExtensionBridge(port=8765)
         self._extension_bridge.on_headers_update = self._on_extension_headers_update
         self._extension_bridge.on_extension_connect = self._on_extension_connect
+        self._extension_bridge.on_unregistered_connection = self._on_unregistered_extension
         
         # Wire extension bridge into RefreshManager for auto header refresh
         self._refresh_manager.set_extension_bridge(self._extension_bridge)
@@ -191,6 +213,18 @@ class AppController:
         # Check license
         self._update_permissions()
         
+        # Start TaskJournal (event subscriber + periodic save)
+        self._task_journal.start(loop=self._loop)
+        self._status_aggregator.start()
+        
+        # Crash recovery: load journal snapshot if available
+        snapshot = self._task_journal.load_snapshot()
+        if snapshot and snapshot.get("task_count", 0) > 0:
+            recovered = self._dispatcher.import_state(snapshot)
+            if recovered > 0:
+                log.info(f"[AppController] Recovered {recovered} tasks from journal")
+                print(f"[AppController] \u2705 Recovered {recovered} tasks from crash journal")
+        
         self._notify_status("Controller started")
     
     def set_splash_callback(self, cb):
@@ -225,6 +259,11 @@ class AppController:
         self._session_monitor.stop_monitoring()
         self._refresh_manager.stop_auto_check()
         
+        # Stop task journal (final save on shutdown)
+        self._task_journal.stop()
+        self._task_watchdog.stop()
+        self._status_aggregator.stop()
+        
         # Stop Extension bridge
         if self._loop and self._extension_bridge:
             asyncio.run_coroutine_threadsafe(self._extension_bridge.stop(), self._loop)
@@ -247,14 +286,20 @@ class AppController:
                 browser_copyright=headers.get("x-browser-copyright", account._session.browser_copyright),
                 browser_year=headers.get("x-browser-year", account._session.browser_year),
             )
-            # Store full headers dict for get_browser_headers() fallback
-            if account._browser_session:
-                account._browser_session._captured_headers.update(headers)
+            # Extension-only: session stores headers as the authoritative source
             # Store SAPISIDHASH authorization header if provided
             if access_token and access_token.startswith("SAPISIDHASH"):
                 account._session._sapisidhash = access_token
                 log.debug(f"[ExtensionBridge] SAPISIDHASH stored for {email}")
             log.info(f"[ExtensionBridge] Headers updated for {email}: {list(headers.keys())}")
+            
+            # Cross-pollinate: if this account now has good x-client-data,
+            # share it with other accounts that have short values
+            new_cd = headers.get("x-client-data", "")
+            if len(new_cd) >= 20:
+                self._multi_account.fix_short_client_data()
+            
+            self._push_session_data()  # Refresh Dev Console instantly
         else:
             log.debug(f"[ExtensionBridge] No account found for {email} (headers ignored)")
     
@@ -266,17 +311,46 @@ class AppController:
         """
         log.info(f"[ExtensionBridge] Extension connected for {email}")
         self._notify_status(f"Extension connected for {email}")
+        self._push_session_data()  # Instant DevConsole refresh
         
         # Immediate data refresh — don't wait for auto-check
         import asyncio
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(self._refresh_extension_data(email))
-            else:
-                loop.run_until_complete(self._refresh_extension_data(email))
+            loop = asyncio.get_running_loop()
+            asyncio.ensure_future(self._refresh_extension_data(email))
+        except RuntimeError:
+            asyncio.run(self._refresh_extension_data(email))
         except Exception as e:
             log.debug(f"[ExtensionBridge] Startup refresh scheduling failed: {e}")
+    
+    def _on_unregistered_extension(self):
+        """Callback from ExtensionBridge when a connection hasn't registered after 5s.
+        
+        Iterates known profiles and assigns emails to any unregistered connections.
+        This handles late-connecting extensions that missed Step 5's initial assignment.
+        """
+        import asyncio
+        
+        async def _assign_pending():
+            profiles = (
+                self._profiles_controller.get_all_profiles()
+                if hasattr(self, '_profiles_controller') and self._profiles_controller
+                else []
+            )
+            for p in profiles:
+                email = p.get("email")
+                if email and not self._extension_bridge.is_connected(email):
+                    log.info(f"[AutoAssign] 📧 Late-assign email: {email}")
+                    assigned = await self._extension_bridge.assign_email(email)
+                    if assigned:
+                        self._push_browser_status()
+                        self._push_extension_status()
+                        self._push_session_data()
+        
+        try:
+            asyncio.ensure_future(_assign_pending())
+        except Exception as e:
+            log.error(f"[AutoAssign] Failed: {e}")
     
     async def _refresh_extension_data(self, email: str):
         """Request fresh headers + access token from extension immediately."""
@@ -362,6 +436,20 @@ class AppController:
                     log.info("[AutoLaunch] ✅ All accounts connected to browsers")
                 else:
                     log.info("[AutoLaunch] No accounts to connect")
+                
+                # Step 5: Assign emails to unregistered extension connections
+                # (fallback when content.js email detection fails on VEO page)
+                if self._extension_bridge:
+                    await asyncio.sleep(3)  # Wait for extensions to connect
+                    profiles = self._profiles_controller.get_all_profiles() if hasattr(self, '_profiles_controller') and self._profiles_controller else []
+                    for p in profiles:
+                        email = p.get("email")
+                        if email and not self._extension_bridge.is_connected(email):
+                            log.info(f"[AutoLaunch] 📧 Assigning email to unregistered extension: {email}")
+                            await self._extension_bridge.assign_email(email)
+                    
+                    connected = self._extension_bridge.get_connected_emails()
+                    log.info(f"[AutoLaunch] Extension status: {len(connected)} emails registered: {connected}")
                 
                 self._push_browser_status()
                 log.info("[AutoLaunch] ✅ Background browser launch complete")
@@ -455,7 +543,7 @@ class AppController:
         """
         import time
         
-        pc = self.profiles_controller
+        pc = self._profiles_controller
         if not pc:
             log.error("[AppController] No ProfilesController — cannot restart browser")
             return False
@@ -729,22 +817,30 @@ class AppController:
                         except Exception:
                             token_expiry = "✅ Live"
                 else:
-                    # No runtime token — fallback to tokens.json for display
-                    access_token = token_info.get("access_token", "")
-                    if access_token:
-                        expires_at = token_info.get("expires_at", 0)
-                        now_ts = datetime.now().timestamp()
-                        if expires_at and (expires_at - now_ts) <= 0:
-                            hours_ago = int(abs(expires_at - now_ts) / 3600)
+                    # No runtime token — check tokens.json cache
+                    cached_token = token_info.get("access_token", "")
+                    expires_at = token_info.get("expires_at", 0)
+                    now_ts = datetime.now().timestamp()
+                    
+                    # Bug fix: ignore stale cached tokens (>24h old)
+                    # Showing "259h ago" is confusing — treat as no token
+                    cache_age_hours = abs(expires_at - now_ts) / 3600 if expires_at else float('inf')
+                    
+                    if cached_token and expires_at and cache_age_hours <= 24:
+                        # Cached token is recent enough to display
+                        access_token = cached_token
+                        if (expires_at - now_ts) <= 0:
+                            hours_ago = int(cache_age_hours)
                             token_expiry = f"🔄 Cached token ({hours_ago}h ago)"
-                        elif expires_at:
+                        else:
                             mins = int((expires_at - now_ts) / 60)
                             token_expiry = f"✅ Cached ({mins}m left)"
-                        else:
-                            token_expiry = "📁 From cache"
                     elif ext_connected:
+                        # Extension connected — token will be extracted on demand
+                        access_token = ""
                         token_expiry = "🟢 Will extract via Extension on next call"
                     else:
+                        access_token = ""
                         token_expiry = "❌ No token (Extension not connected)"
                 
                 # reCAPTCHA
@@ -766,7 +862,13 @@ class AppController:
                 # Slots
                 slots_display = status.get("slots", "?")
                 
-                data_source = "🔴 Runtime"
+                # Bug fix: dynamic data_source based on actual runtime state
+                if runtime_acc.is_ready:
+                    data_source = "🟢 Runtime"
+                elif ext_connected or runtime_acc.is_enabled:
+                    data_source = "🟡 Runtime"
+                else:
+                    data_source = "🔴 Runtime"
             else:
                 # ═══ FALLBACK: tokens.json cache ═══
                 token_info = tokens_data.get(email, {})
@@ -909,11 +1011,179 @@ class AppController:
         except Exception:
             pass
         
-        # Also refresh extension status on each tick
+        # Also refresh extension status + session data on each tick
         try:
             self._push_extension_status()
         except Exception:
             pass
+        try:
+            self._push_session_data()
+        except Exception:
+            pass
+        
+        # Push Engine Dashboard (aggregated monitoring data)
+        try:
+            dashboard = self.get_engine_dashboard()
+            if dashboard and hasattr(self._dev_console, 'update_engine_dashboard'):
+                self._dev_console.update_engine_dashboard(dashboard)
+        except Exception:
+            pass
+    
+    def get_engine_dashboard(self) -> dict:
+        """Aggregate all monitoring/optimization data for Engine Dashboard.
+        
+        Pulls from:
+        - StatusAggregator: throughput, success rate, active tasks
+        - RecaptchaPool: hit/miss stats
+        - UpscaleQueue: pending/completed stats
+        - AdaptiveBurstController: per-account delay stats
+        - MultiAccountManager: health scores
+        
+        Returns dict consumed by DevConsole.update_engine_dashboard().
+        """
+        dashboard = {
+            "aggregator": {},
+            "recaptcha_pool": {},
+            "upscale_queue": {},
+            "burst_controller": {},
+            "health_scores": {},
+            "bottlenecks": [],
+        }
+        
+        # StatusAggregator
+        try:
+            if hasattr(self, '_status_aggregator') and self._status_aggregator:
+                dashboard["aggregator"] = self._status_aggregator.get_dashboard()
+                dashboard["bottlenecks"] = self._status_aggregator._detect_bottlenecks()
+        except Exception:
+            pass
+        
+        # RecaptchaPool
+        try:
+            if (hasattr(self, '_engine') and self._engine and
+                    hasattr(self._engine, '_recaptcha_pool') and self._engine._recaptcha_pool):
+                dashboard["recaptcha_pool"] = self._engine._recaptcha_pool.get_stats()
+        except Exception:
+            pass
+        
+        # UpscaleQueue
+        try:
+            if (hasattr(self, '_engine') and self._engine and
+                    hasattr(self._engine, '_upscale_queue') and self._engine._upscale_queue):
+                dashboard["upscale_queue"] = self._engine._upscale_queue.get_stats()
+        except Exception:
+            pass
+        
+        # AdaptiveBurstController
+        try:
+            if (hasattr(self, '_engine') and self._engine and
+                    hasattr(self._engine, '_burst_controller') and self._engine._burst_controller):
+                dashboard["burst_controller"] = self._engine._burst_controller.get_stats()
+        except Exception:
+            pass
+        
+        # Health scores
+        try:
+            if hasattr(self, '_multi_account') and self._multi_account:
+                dashboard["health_scores"] = self._multi_account.get_health_scores()
+        except Exception:
+            pass
+        
+        return dashboard
+    
+    def get_pipeline_settings(self) -> dict:
+        """Get current pipeline optimization settings for Settings tab.
+        
+        Returns dict of all tunable parameters.
+        """
+        settings = {
+            "adaptive_burst_enabled": True,
+            "burst_min_delay": 2.0,
+            "burst_max_delay": 15.0,
+            "recaptcha_pool_enabled": True,
+            "pool_size": 2,
+            "watchdog_timeout_min": 10,
+            "journal_save_interval_sec": 30,
+        }
+        
+        try:
+            if (hasattr(self, '_engine') and self._engine and
+                    hasattr(self._engine, '_burst_controller') and self._engine._burst_controller):
+                bc = self._engine._burst_controller
+                settings["burst_min_delay"] = bc._min
+                settings["burst_max_delay"] = bc._max
+                settings["adaptive_burst_enabled"] = True
+        except Exception:
+            pass
+        
+        try:
+            if (hasattr(self, '_engine') and self._engine and
+                    hasattr(self._engine, '_recaptcha_pool') and self._engine._recaptcha_pool):
+                rp = self._engine._recaptcha_pool
+                settings["pool_size"] = rp.POOL_SIZE
+                # Keep default True — pool auto-starts with engine
+                # Only report False if user explicitly stopped it
+                # (runtime _running is False before first start_processing)
+        except Exception:
+            pass
+        
+        try:
+            if hasattr(self, '_task_watchdog') and self._task_watchdog:
+                settings["watchdog_timeout_min"] = getattr(
+                    self._task_watchdog, '_stuck_threshold_min', 10
+                )
+        except Exception:
+            pass
+        
+        try:
+            if hasattr(self, '_task_journal') and self._task_journal:
+                settings["journal_save_interval_sec"] = getattr(
+                    self._task_journal, '_save_interval', 30
+                )
+        except Exception:
+            pass
+        
+        return settings
+    
+    def update_pipeline_settings(self, key: str, value):
+        """Update a single pipeline optimization setting.
+        
+        Args:
+            key: Setting key (e.g. 'burst_min_delay')
+            value: New value
+        """
+        log.info(f"[Pipeline] Setting {key} = {value}")
+        
+        try:
+            if key == "burst_min_delay":
+                if self._engine and self._engine._burst_controller:
+                    self._engine._burst_controller._min = float(value)
+            elif key == "burst_max_delay":
+                if self._engine and self._engine._burst_controller:
+                    self._engine._burst_controller._max = float(value)
+            elif key == "adaptive_burst_enabled":
+                # Toggle is informational — burst controller is always active
+                # but min/max can be set to same value to effectively disable
+                pass
+            elif key == "pool_size":
+                if self._engine and self._engine._recaptcha_pool:
+                    self._engine._recaptcha_pool.POOL_SIZE = int(value)
+            elif key == "recaptcha_pool_enabled":
+                if self._engine and self._engine._recaptcha_pool:
+                    if value and not self._engine._recaptcha_pool._running:
+                        self._engine._recaptcha_pool.start()
+                    elif not value and self._engine._recaptcha_pool._running:
+                        self._engine._recaptcha_pool.stop()
+            elif key == "watchdog_timeout_min":
+                if self._task_watchdog:
+                    self._task_watchdog._stuck_threshold_min = int(value)
+            elif key == "journal_save_interval_sec":
+                if self._task_journal:
+                    self._task_journal._save_interval = int(value)
+            else:
+                log.warning(f"[Pipeline] Unknown setting: {key}")
+        except Exception as e:
+            log.error(f"[Pipeline] Failed to update {key}: {e}")
     
     def start_perf_timer(self):
         """Start performance timer (called when DevConsole opens)."""
@@ -1603,14 +1873,135 @@ class AppController:
         
         self._notify_status("License activation failed")
         return False
+    def preflight_check(self) -> dict:
+        """Pre-flight readiness check before starting engine.
+        
+        Validates each account's readiness for production:
+        - Extension connected (REQUIRED — sole data source)
+        - Access token available
+        - reCAPTCHA freshness
+        - Account enabled/disabled
+        
+        Returns:
+            {
+                "can_start": bool,      # True if at least 1 account is production-ready
+                "accounts": [           # Per-account status
+                    {
+                        "email": str,
+                        "ready": bool,
+                        "issues": [str],   # List of blockers
+                        "warnings": [str], # Non-blocking issues
+                    }
+                ],
+                "summary": str,         # Human-readable summary
+            }
+        """
+        result = {"can_start": False, "accounts": [], "summary": ""}
+        
+        if not self._multi_account or not self._multi_account._accounts:
+            result["summary"] = "❌ Chưa có tài khoản nào được cấu hình"
+            return result
+        
+        ready_count = 0
+        total_count = 0
+        
+        for account in self._multi_account._accounts:
+            total_count += 1
+            acc_info = {
+                "email": account.email,
+                "ready": False,
+                "issues": [],
+                "warnings": [],
+            }
+            
+            # Check 1: Account enabled
+            if not account.is_enabled:
+                acc_info["issues"].append("🔴 Tài khoản đã tắt")
+                result["accounts"].append(acc_info)
+                continue
+            
+            # Check 2: Extension connected (REQUIRED in extension-only architecture)
+            ext_connected = (
+                self._extension_bridge and
+                self._extension_bridge.is_connected(account.email)
+            )
+            if not ext_connected:
+                acc_info["issues"].append("🔴 Extension chưa kết nối — cần mở trình duyệt")
+            
+            # Check 3: Access token
+            has_token = bool(account._session.access_token)
+            token_expired = account._session.is_token_expired
+            if not has_token:
+                if ext_connected:
+                    acc_info["warnings"].append("🟡 Token chưa sẵn sàng — sẽ tự lấy khi chạy task đầu tiên")
+                else:
+                    acc_info["issues"].append("🔴 Không có access token — cần kết nối Extension")
+            elif token_expired:
+                if ext_connected:
+                    acc_info["warnings"].append("🟡 Token hết hạn — Extension sẽ tự refresh")
+                else:
+                    acc_info["issues"].append("🔴 Token hết hạn — Extension chưa kết nối, không thể refresh")
+            
+            # Check 4: reCAPTCHA
+            needs_recaptcha = account._session.needs_recaptcha_refresh
+            if needs_recaptcha:
+                if ext_connected:
+                    acc_info["warnings"].append("🟡 reCAPTCHA cần refresh — sẽ tự refresh khi chạy task")
+                else:
+                    acc_info["issues"].append("🔴 reCAPTCHA hết hạn — Extension chưa kết nối")
+            
+            # Check 5: Browser headers (x-browser-*)
+            has_headers = bool(account._session.browser_validation)
+            if not has_headers:
+                if ext_connected:
+                    acc_info["warnings"].append("🟡 Headers chưa capture — sẽ tự có khi Extension gửi request đầu tiên")
+                else:
+                    acc_info["issues"].append("🔴 Không có headers — cần mở trình duyệt và kết nối Extension")
+            
+            # Verdict for this account
+            if not acc_info["issues"]:
+                acc_info["ready"] = True
+                ready_count += 1
+            
+            result["accounts"].append(acc_info)
+        
+        result["can_start"] = ready_count > 0
+        
+        # Build summary
+        if ready_count == total_count:
+            result["summary"] = f"✅ Tất cả {total_count} tài khoản sẵn sàng"
+        elif ready_count > 0:
+            blocked = total_count - ready_count
+            result["summary"] = f"⚠️ {ready_count}/{total_count} sẵn sàng, {blocked} bị chặn"
+        else:
+            result["summary"] = f"❌ Không có tài khoản nào sẵn sàng ({total_count} tổng)"
+        
+        return result
     
     def start_processing(self):
         """Start processing queue via Engine.
+        
+        Runs a pre-flight readiness check first. If no accounts are
+        production-ready, blocks the start and shows an error toast.
         
         Engine uses asyncio.TaskGroup for proper async worker management.
         The Engine.start() coroutine runs in the background async loop.
         """
         if self.state.is_processing:
+            return
+        
+        # Pre-flight readiness check
+        check = self.preflight_check()
+        log.info(f"[Preflight] {check['summary']}")
+        for acc in check["accounts"]:
+            if acc["issues"]:
+                log.warning(f"[Preflight] {acc['email']}: {', '.join(acc['issues'])}")
+            if acc["warnings"]:
+                log.info(f"[Preflight] {acc['email']}: {', '.join(acc['warnings'])}")
+        
+        if not check["can_start"]:
+            self._notify_status(f"Cannot start: {check['summary']}")
+            self.state.is_processing = False
             return
         
         self.state.is_processing = True
@@ -1644,7 +2035,32 @@ class AppController:
         # Start Engine in the async loop (store Future for clean shutdown)
         self._engine_future = self._run_async(self._engine.start())
         
+        # Start Watchdog (background scan for stuck tasks)
+        self._run_async(self._task_watchdog.start_async())
+        
+        # Phase 3A: Start UpscaleQueue (background upscale processing)
+        self._engine._upscale_queue.start()
+        
+        # Phase 4A: Start reCAPTCHA Pool (background token pre-fetch)
+        # NOTE: start() uses asyncio.create_task() → must run inside the async loop,
+        # not from the GUI thread (which has no running event loop).
+        if (self._engine._recaptcha_pool and
+                not self._engine._recaptcha_pool._running):
+            self._run_async(self._start_recaptcha_pool())
+        
+        # Start log exporter (captures warnings/errors for auto-export)
+        self._log_exporter.start()
+        
         self._notify_status("Processing started")
+    
+    async def _start_recaptcha_pool(self):
+        """Start reCAPTCHA pool inside the async event loop.
+        
+        RecaptchaPool.start() uses asyncio.create_task() internally,
+        which requires a running event loop. This wrapper ensures it
+        runs in the correct async context.
+        """
+        self._engine._recaptcha_pool.start()
     
     def stop_processing(self):
         """Stop processing via Engine.
@@ -1671,7 +2087,41 @@ class AppController:
                 pass
             self._engine_future = None
         
+        # Stop Watchdog
+        self._task_watchdog.stop()
+        
+        # Phase 3A: Stop UpscaleQueue
+        self._engine._upscale_queue.stop()
+        
+        # Phase 4A: Stop reCAPTCHA Pool
+        if (self._engine._recaptcha_pool and
+                self._engine._recaptcha_pool._running):
+            self._engine._recaptcha_pool.stop()
+        
+        # Force-save journal after engine stop
+        self._task_journal.force_save()
+        
+        # Auto-export structured logs (TESTER only)
+        self._auto_export_logs()
+        
+        # Stop log exporter handler
+        self._log_exporter.stop()
+        
         self._notify_status("Processing stopped")
+    
+    def _auto_export_logs(self):
+        """Auto-export structured session logs (TESTER only)."""
+        try:
+            if not self._license_client.can_see_dev_console():
+                return  # Not a TESTER — skip
+            
+            filepath = self._log_exporter.export(
+                dispatcher=self._dispatcher
+            )
+            if filepath:
+                log.info(f"[AutoExport] Session log report: {filepath}")
+        except Exception as e:
+            log.warning(f"[AutoExport] Export failed: {e}")
     
     def pause_processing(self):
         """Pause processing — workers sleep, browsers stay alive.
@@ -1913,6 +2363,7 @@ class AppController:
                         "continuation_frame": t.continuation_frame_local_path or "",
                         "upscale_status": getattr(t, 'upscale_status', ''),
                         "upscale_error": getattr(t, 'upscale_error', ''),
+                        "image_upload_status": getattr(t, 'image_upload_status', ''),
                         "download_quality": getattr(t, 'download_quality', '720p'),
                         "video_outputs": [
                             {
@@ -1975,10 +2426,11 @@ class AppController:
         return self._dispatcher.force_retry_task(task_id)
     
     def _get_account_for_reupscale(self, task_id: str):
-        """Get account for re-upscale: prefer assigned_account, fallback to first.
+        """Get account for re-upscale: MUST use assigned_account.
         
-        Bypasses is_ready check because re-upscale methods handle
-        reCAPTCHA refresh internally (engine.py _re_upscale_single).
+        media_id is account-bound — using a different account will 403.
+        Only falls back to first account for legacy tasks with no
+        assigned_account recorded.
         
         Returns:
             (account, error_msg) tuple. account is None if unavailable.
@@ -1987,18 +2439,18 @@ class AppController:
         if not task:
             return None, f"⚠️ Task {task_id} not found"
         
-        # Priority 1: Same account that processed the original prompt
+        # Priority 1: Same account that processed the original prompt (REQUIRED)
         if task.assigned_account:
             account = self._multi_account.get_account(task.assigned_account)
             if account:
                 return account, None
+            # Account exists in config but not loaded/available
+            return None, (
+                f"⚠️ Account {task.assigned_account} not available. "
+                f"Re-upscale requires the original account (media_id is account-bound)."
+            )
         
-        # Priority 2: Any account with valid token
-        for acc in self._multi_account._accounts:
-            if not acc._session.is_token_expired:
-                return acc, None
-        
-        # Priority 3: First account (re-upscale will refresh tokens)
+        # No assigned_account recorded (legacy tasks before account tracking)
         if self._multi_account._accounts:
             return self._multi_account._accounts[0], None
         

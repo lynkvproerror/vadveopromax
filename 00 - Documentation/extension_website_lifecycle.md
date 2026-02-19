@@ -158,7 +158,6 @@ sequenceDiagram
     participant AM as AccountManager
     participant EB as ExtensionBridge
     participant BG as background.js
-    participant CS as content.js
     participant VEO as VEO Page
 
     W->>AM: refresh_recaptcha()
@@ -167,12 +166,11 @@ sequenceDiagram
         AM->>EB: request_recaptcha(email, timeout=15)
         EB->>BG: {action: "request_recaptcha", email, requestId}
         BG->>BG: findTabForEmail(email)
-        BG->>CS: chrome.tabs.sendMessage(tabId, {action: "get_recaptcha"})
-        CS->>CS: extractSiteKey()
-        CS->>VEO: grecaptcha.enterprise.execute(siteKey, {action: "VIDEO_GENERATION"})
-        VEO-->>CS: token (>500 chars)
-        CS-->>BG: {token}
+        BG->>VEO: chrome.scripting.executeScript(MAIN world)
+        Note over BG,VEO: grecaptcha.enterprise.execute(siteKey, {action: "VIDEO_GENERATION"})
+        VEO-->>BG: token (>500 chars)
         BG-->>EB: {action: "recaptcha_token", token, requestId}
+        Note over EB: Layer 5: Quality Gate — reject token < 1000 chars
         EB-->>AM: token
     end
 
@@ -187,12 +185,49 @@ sequenceDiagram
 | Token hết hạn → refresh | `account.refresh_recaptcha()` → 3-priority chain | ✅ OK | — |
 | Extension bridge request | `request_recaptcha(email)` → WebSocket | ✅ OK | — |
 | Tab lookup | `findTabForEmail(email)` | ✅ OK | — |
-| Execute reCAPTCHA | `grecaptcha.enterprise.execute()` trên real page | ✅ OK | — |
-| Token validation | Check token length > 500 chars | ✅ OK | — |
+| Execute reCAPTCHA | `chrome.scripting.executeScript` MAIN world | ✅ OK | — |
+| **Token quality gate** | Reject token < 1000 chars (garbage from uninitialized `grecaptcha`) | ✅ **MỚI** | — |
+| Token validation | Check token length > 500 chars (Extension side) | ✅ OK | — |
 | Single-use invalidation | `invalidate_recaptcha()` sau mỗi API call | ✅ OK | — |
 
 > [!NOTE]
 > reCAPTCHA flow hoạt động tốt. Extension bridge là priority 1 (highest trust) vì token được tạo trên real page context.
+
+---
+
+### Giai đoạn 3b: reCAPTCHA Readiness Check (5-Layer Defense) `[MỚI]`
+
+```mermaid
+sequenceDiagram
+    participant E as Engine
+    participant EB as ExtensionBridge
+    participant BG as background.js
+    participant VEO as VEO Page
+    participant Pool as RecaptchaPool
+
+    Note over E: Parent task completes → continuation
+    E->>EB: check_recaptcha_ready(email)
+    EB->>BG: WS: {action: "check_recaptcha_ready"}
+    BG->>VEO: chrome.scripting.executeScript(MAIN world)
+    Note over BG,VEO: Check typeof grecaptcha.enterprise.execute === "function"
+    VEO-->>BG: {ready: true, executeAvailable: true, pageLoaded: true}
+    BG-->>EB: WS: {action: "recaptcha_ready", ready: true}
+    EB-->>E: True
+    E->>Pool: priority_prefetch(email, count=2)
+    Note over Pool: Immediately fetch 2 tokens into pool
+    Note over E: Child task starts with pre-cached tokens ✅
+```
+
+| Layer | Nơi implement | Mô tả |
+|-------|--------------|-------|
+| **L1: Readiness Probe** | `extension_bridge.py` + `background.js` | Hỏi Extension: `grecaptcha` sẵn sàng chưa? Không tạo token. |
+| **L2: Smart Cooldown** | `engine.py` `_wait_for_recaptcha_ready()` | Thay `sleep(3-5s)` bằng polling readiness mỗi 2s (backoff tới 5s). |
+| **L3: Priority Prefetch** | `recaptcha_pool.py` `priority_prefetch()` | Khi ready → lập tức fetch 2 token vào pool, bypass interval 5s. |
+| **L4: De-escalated Recovery** | `engine.py` recovery loop | Fail 1: chỉ chờ readiness. Fail 2: reload tab + chờ. Fail 3+: hard restart. |
+| **L5: Quality Gate** | `extension_bridge.py` `MIN_TOKEN_LENGTH=1000` | Reject token < 1000 chars → tránh garbage từ `grecaptcha` chưa init. |
+
+> [!IMPORTANT]
+> **Vấn đề cũ #7 (ĐÃ FIX)**: Engine recovery loop gọi `refresh_headers()` (reload tab) mỗi lần reCAPTCHA fail → phá huỷ `grecaptcha` widget → negative feedback loop. Layer 4 de-escalation giải quyết bằng cách không reload tab lần đầu.
 
 ---
 
@@ -351,9 +386,12 @@ sequenceDiagram
 
 | Tình huống | Xử lý hiện tại | Cần bổ sung |
 |-----------|----------------|------------|
-| 403 do stale x-browser-* | Retry with cùng headers | 🔴 Trigger `refresh_headers()` trước retry |
+| 403 do stale x-browser-* | Retry → `refresh_headers()` cho non-reCAPTCHA errors | ✅ Đã có |
 | 403 do stale x-client-data | Retry (có thể cross-pollinate) | 🟡 Extension refresh nhanh hơn cross-pollinate |
 | Access token expired | `get_access_token()` → null → task fails | 🔴 Auto-refresh via extension `request_access_token` |
+| reCAPTCHA fail (1st) | Layer 4: chờ readiness, KHÔNG reload tab | ✅ **MỚI** — De-escalated |
+| reCAPTCHA fail (2nd) | Layer 4: reload tab + chờ readiness | ✅ **MỚI** |
+| reCAPTCHA fail (3rd+) | Layer 4: hard browser restart + chờ readiness | ✅ **MỚI** |
 | reCAPTCHA expired | `refresh_recaptcha()` via extension | ✅ Đã có |
 | Cookie expired | Auto re-login via ProfilesController | ✅ Đã có |
 
@@ -369,7 +407,7 @@ sequenceDiagram
 | 4 | Access token auto-refresh qua extension thiếu | 🔴 Critical | [account_manager.py#L198-L217](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/account_manager.py#L198-L217) | Token hết hạn → account "chết" |
 | 5 | Cached headers không check freshness | 🟡 Medium | [extension_bridge.py](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/extension_bridge.py) | Headers cũ vẫn được trả |
 | 6 | `refresh_headers()` chưa được gọi tự động | 🟡 Medium | [app_controller.py](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/app_controller.py), [engine.py](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/engine.py) | Method có nhưng chưa integrate |
-| 7 | 403 retry không refresh headers trước | 🔴 Critical | [engine.py](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/engine.py) | Retry cùng stale headers = loop fail |
+| 7 | ~~403 retry không refresh headers trước~~ | ✅ **ĐÃ FIX** | [engine.py](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/engine.py) | 5-Layer reCAPTCHA Defense: readiness probe + quality gate + de-escalated recovery |
 | 8 | Tab closed → tab state cleanup | 🟡 Low | [background.js](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/extension/background.js) | Cần verify `tabState` cleanup |
 | 9 | TRPC cookie expired → no auto-refresh | 🟡 Low | [trpc_client.py](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/trpc_client.py) | Cookie-based auth không có refresh |
 | 10 | `get_browser_headers()` ở AM khác `get_api_headers()` | 🟡 Low | [account_manager.py](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/core/account_manager.py) | 2 functions: `get_browser_headers` (3-priority) vs `get_api_headers` (chỉ session) |

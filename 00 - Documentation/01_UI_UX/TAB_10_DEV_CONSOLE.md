@@ -2,7 +2,7 @@
 
 > **Framework**: PySide6 (Qt6)  
 > **Reference**: [00_DESIGN_SYSTEM.md](./00_DESIGN_SYSTEM.md)  
-> **Version**: 3.0 - PySide6 Migration
+> **Version**: 4.0 — Sidebar Navigation Redesign
 
 ---
 
@@ -29,240 +29,153 @@ When enabled:
 
 ---
 
-## 🎨 Layout (Sidebar + Multi-Panel)
+## 🎨 Layout (Sidebar + Content Workspace)
 
 ```
-┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ VEO Pro Max │ Text to Video │ Image to Video │ Ingredients │ Text to Image │ Image to Image │ Queue │ Settings │ License │ About │[Dev]│
-├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ 📋 SECTIONS   │ 📝 LOG VIEWER                                                                   │
-├───────────────┼──────────────────────────────────────────────────────────────────────────────────┤
-│ [📝] Logs     │ 17:35:21 [INFO] Worker started for prompt_001                                   │
-│ [📦] Queue    │ 17:35:22 [DEBUG] Uploading image: char_hero.png (512KB)                         │
-│ [📊] Perf     │ 17:35:25 [DEBUG] Selector: MODE_DROPDOWN found in 0.3s                          │
-│ [🔗] Select.  │ 17:35:26 [WARN] Prompt #2: Image [ocean] not found                              │
-│ [🍪] Cookies  │ 17:35:28 [ERROR] Worker: TimeoutException at CREATE_BTN                         │
-│               │ 17:35:28 [INFO] Retry: Attempt 2/3 for prompt_002                               │
-│               ├──────────────────────────────────────────────────────────────────────────────────┤
-│               │ Filter: [🔴 Err] [🟡 Warn] [🔵 Info] [⚪ Log]  │ [🗑️ Clear] [💾 Export]         │
-├───────────────┴──────────────────────────────────────────────────────────────────────────────────┤
-│ 📦 QUEUE INSPECTOR                                                                              │
-├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ JOB: job_001 (T2V-Batch)                                             Status: 🔄 Running        │
-│ Tasks:                                                                                          │
-│ ├─ ✅ task_001: "A sunset scene..." (completed in 45s)                                         │
-│ ├─ ✅ task_002: "Camera pans..." (completed in 52s)                                            │
-│ ├─ 🔄 task_003: "Birds flying..." (generating 45%)                                             │
-│ └─ ⏳ task_004: "Mountain view..." (queued)                                                     │
-├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ 📊 PERFORMANCE METRICS                                                                          │
-├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Average Times:                                                                                  │
-│ │ Phase         │ Time  │ Bar                                        │                         │
-│ │ Image Upload  │ 3.5s  │ ████████░░░░░░░░░░░░                       │                         │
-│ │ Navigation    │ 1.2s  │ ███░░░░░░░░░░░░░░░░░                       │                         │
-│ │ Generation    │ 45s   │ ████████████████████████████████████████   │                         │
-│ │ Download      │ 2.1s  │ █████░░░░░░░░░░░░░░░                       │                         │
-├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ QStatusBar                                                                                      │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ 🛠️ DEVELOPER CONSOLE                                  42 logs  │
+├────────────┬─────────────────────────────────────────────────────┤
+│            │                                                     │
+│ 📊 Dashboard│  ┌──────────────────┐ ┌──────────────────┐        │
+│            │  │ 🏭 Throughput    │ │ 👥 Account Health│        │
+│ 📋 Queue   │  │ Tasks/hr: 15    │ │ Email  Score Ext │        │
+│            │  │ ✅ Done: 42     │ │ acc1@  98%   ✅  │        │
+│ 👥 Accounts│  │ ❌ Fail: 2      │ │ acc2@  95%   ✅  │        │
+│            │  └──────────────────┘ └──────────────────┘        │
+│ 📝 Logs    │  ┌──────────────────┐ ┌──────────────────┐        │
+│            │  │ 🔧 Subsystems   │ │ ⚠️ Bottlenecks   │        │
+│ 🌐 Network │  │ • reCAPTCHA: OK │ │ ✅ No bottlenecks│        │
+│            │  │ • Upscale: 3/0  │ │                  │        │
+│            │  └──────────────────┘ └──────────────────┘        │
+│            │                                                     │
+├────────────┴─────────────────────────────────────────────────────┤
+│ Engine: 🟢 Active | 3 running | 42/50 done              21:05  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🧩 Widget Specifications
+## 📑 Sidebar Sections
 
-### Section Navigation (Sidebar)
+### 📊 Dashboard (Page 0 — Default)
 
-| Widget | Type | Section |
-|--------|------|---------|
-| `logs_btn` | `QPushButton` | Log Viewer |
-| `queue_btn` | `QPushButton` | Queue Inspector |
-| `perf_btn` | `QPushButton` | Performance |
-| `selectors_btn` | `QPushButton` | Selectors |
-| `cookies_btn` | `QPushButton` | Cookie Manager |
+Engine metrics in a 2×2 card grid.
 
-### Log Viewer Section
+| Card | Content | Data Source |
+|------|---------|-------------|
+| 🏭 Throughput | Tasks/hr, active, completed, failed, success rate, avg time | `aggregator` |
+| 👥 Account Health | Per-account table: email, slots, score, burst delay, extension | `health_scores` + `burst_controller` |
+| 🔧 Subsystems | reCAPTCHA pool hits/misses/rate, Upscale Queue stats, Adaptive Burst | `recaptcha_pool`, `upscale_queue`, `burst_controller` |
+| ⚠️ Bottlenecks | Live warning list or "✅ No bottlenecks" | `bottlenecks` |
 
-| Widget | Type | Description |
-|--------|------|-------------|
-| `log_viewer` | `QTextEdit` (read-only) | Log output |
-| `filter_errors` | `QPushButton` (toggle) | 🔴 Errors |
-| `filter_warnings` | `QPushButton` (toggle) | 🟡 Warnings |
-| `filter_info` | `QPushButton` (toggle) | 🔵 Info |
-| `filter_log` | `QPushButton` (toggle) | ⚪ Log |
-| `clear_btn` | `QPushButton` | Clear logs |
-| `export_btn` | `QPushButton` | Export to file |
-
-### Queue Inspector Section
-
-| Widget | Type | Description |
-|--------|------|-------------|
-| `job_tree` | `QTreeWidget` | Job → Task hierarchy |
-| `json_preview` | `QTextEdit` (read-only) | JSON config preview |
-| `copy_btn` | `QPushButton` | Copy JSON |
-| `validate_btn` | `QPushButton` | Validate schema |
-| `test_send_btn` | `QPushButton` | Send to queue (test) |
-
-### Performance Section
-
-| Widget | Type | Description |
-|--------|------|-------------|
-| `metrics_table` | `QTableWidget` | Phase timing |
-| `phase_bars` | `QProgressBar` per phase | Visual timing |
-| `bottleneck_label` | `QLabel` | Optimization hints |
-
-### Selectors Section
-
-| Widget | Type | Description |
-|--------|------|-------------|
-| `selectors_table` | `QTableWidget` | CSS selectors status |
-| `screenshot_btn` | `QPushButton` | Take screenshot |
-| `inspect_btn` | `QPushButton` | Inspect element |
-| `retry_btn` | `QPushButton` | Retry failed selector |
-| `export_btn` | `QPushButton` | Export selectors |
+**API**: `update_engine_dashboard(data)` → `DashboardPage.update_dashboard(data)`
 
 ---
 
-## 🔧 Code Implementation
+### 📋 Queue & Performance (Page 1)
 
-```python
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QGroupBox,
-    QPushButton, QLabel, QTextEdit, QTreeWidget, QTreeWidgetItem,
-    QTableWidget, QTableWidgetItem, QProgressBar
-)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+Vertical split: queue state (top) + system performance (bottom).
 
-class DevConsoleTab(QWidget):
-    """Tab 10: Developer Console - Debug and monitoring"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setup_ui()
-    
-    def setup_ui(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Splitter for sidebar + content
-        splitter = QSplitter(Qt.Horizontal)
-        layout.addWidget(splitter)
-        
-        # Sidebar navigation
-        sidebar = QWidget()
-        sidebar.setFixedWidth(120)
-        nav_layout = QVBoxLayout(sidebar)
-        
-        sections = [
-            ("📝 Logs", "logs"),
-            ("📦 Queue", "queue"),
-            ("📊 Perf", "perf"),
-            ("🔗 Selectors", "selectors"),
-            ("🍪 Cookies", "cookies"),
-        ]
-        for text, section_id in sections:
-            btn = QPushButton(text)
-            btn.clicked.connect(lambda _, s=section_id: self.show_section(s))
-            nav_layout.addWidget(btn)
-        nav_layout.addStretch()
-        
-        splitter.addWidget(sidebar)
-        
-        # Content area
-        content = QWidget()
-        self.content_layout = QVBoxLayout(content)
-        
-        # Log Viewer (default)
-        self.setup_log_viewer()
-        
-        splitter.addWidget(content)
-        splitter.setSizes([120, 800])
-    
-    def setup_log_viewer(self):
-        group = QGroupBox("📝 LOG VIEWER")
-        layout = QVBoxLayout(group)
-        
-        # Log text area
-        self.log_viewer = QTextEdit()
-        self.log_viewer.setReadOnly(True)
-        self.log_viewer.setFont(QFont("Consolas", 10))
-        layout.addWidget(self.log_viewer)
-        
-        # Filters
-        filter_layout = QHBoxLayout()
-        filter_layout.addWidget(QLabel("Filter:"))
-        
-        filters = [("🔴 Errors", True), ("🟡 Warnings", True), 
-                   ("🔵 Info", True), ("⚪ Log", False)]
-        for text, checked in filters:
-            btn = QPushButton(text)
-            btn.setCheckable(True)
-            btn.setChecked(checked)
-            filter_layout.addWidget(btn)
-        
-        filter_layout.addStretch()
-        self.clear_logs_btn = QPushButton("🗑️ Clear")
-        self.export_logs_btn = QPushButton("💾 Export")
-        filter_layout.addWidget(self.clear_logs_btn)
-        filter_layout.addWidget(self.export_logs_btn)
-        layout.addLayout(filter_layout)
-        
-        self.content_layout.addWidget(group)
-    
-    def show_section(self, section_id: str):
-        """Switch to different section"""
-        # Clear current content and show selected section
-        pass
-    
-    def append_log(self, level: str, message: str):
-        """Append log entry with color coding"""
-        colors = {
-            "ERROR": "#f38ba8",
-            "WARN": "#f9e2af",
-            "INFO": "#89b4fa",
-            "DEBUG": "#a6adc8",
-        }
-        color = colors.get(level, "#cdd6f4")
-        
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        html = f'<span style="color:{color}">{timestamp} [{level}] {message}</span><br>'
-        self.log_viewer.insertHtml(html)
+| Section | Fields |
+|---------|--------|
+| 📊 Queue State | Total, Pending, Processing, Completed, Failed, Status |
+| ⚡ Performance | Uptime, CPU%, RAM MB, Threads, API Calls, Downloads, Errors |
+
+**API**: `update_queue_state(state)`, `update_performance(data)` → `QueuePerfPage`
+
+---
+
+### 👥 Accounts (Page 2)
+
+Per-account scrollable cards consolidating **3 data sources**:
+
+| Data | Source |
+|------|--------|
+| Plan, Credits, Slots, Session, Token, Expiry, reCAPTCHA | `update_session_data(accounts)` |
+| Browser state, Enabled status | `update_browser_status(accounts)` |
+| Extension connection, Headers | `update_extension_status(status)` |
+
+**Card layout per account:**
+```
+┌─ account@gmail.com ──────────────────────────┐
+│ Plan: 3M  |  Credits: 50,000  |  Slots: 3/5  │
+│ Session: ✅ Valid                              │
+│ Token  : abc1234...xyz789                     │
+│ Expiry : 14:30                                │
+│ reCAPTCHA: ✅ Valid (len=1203)                 │
+│ Extension: 🟢 Connected → 5 headers           │
+│ Cookies: 45 (google.com: 30, labs: 15)        │
+│ Browser: 🟢 Visible  |  Enabled: ✅           │
+└───────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📊 Log Entry Format
+### 📝 Logs (Page 3)
 
-```python
-@dataclass
-class LogEntry:
-    timestamp: str
-    level: str  # ERROR, WARN, INFO, DEBUG
-    message: str
-    source: str = ""
-```
+Full-height workspace: live logs (~70%) + JSON preview (~30%).
 
-### Log Level Colors
+| Widget | Type | Description |
+|--------|------|-------------|
+| `_log_text` | `QPlainTextEdit` (read-only) | Live log output (auto-trim 1500 lines) |
+| `_json_text` | `QPlainTextEdit` (read-only) | Last submitted task JSON |
+| `_search_input` | `QLineEdit` | Text filter (case-insensitive) |
+| `_level_combo` | `QComboBox` | Min level: DEBUG/INFO/WARNING/ERROR |
+| `_api_btn` | `QPushButton` (toggle) | 📡 API Debug ON/OFF |
+| `_scroll_btn` | `QPushButton` (toggle) | 📌 Auto-scroll ON/OFF |
+| Clear / Export | `QPushButton` | 🗑️ Clear all / 📤 Export to file |
 
-| Level | Color | Hex |
-|-------|-------|-----|
-| ERROR | Pink | `#f38ba8` |
-| WARN | Yellow | `#f9e2af` |
-| INFO | Blue | `#89b4fa` |
-| DEBUG | Subtext | `#a6adc8` |
+**Toolbar** is embedded in the Logs page header — only visible when Logs is active.
+
+**API**: `append_log(msg, level)`, `update_json_preview(data)` → `LogsPage`
 
 ---
 
-## 🪟 Popups
+### 🌐 Network (Page 4)
 
-| Popup | Trigger | PySide6 Widget |
-|-------|---------|----------------|
-| JSON Preview | Click task | `QDialog` with `QTextEdit` |
-| Screenshot | Click `[📸]` | Save file dialog |
-| Error Details | Click error row | `QMessageBox.information()` |
+Extension Bridge status + API activity log.
+
+| Section | Content |
+|---------|---------|
+| 🧩 Extension Bridge | WebSocket status, port, connections, registered tabs, cached headers per email |
+| 📡 API Activity | Filtered API/HTTP log entries (last 200 lines, auto-scroll) |
+
+**API**: `update_extension_status(status)` → `NetworkPage`
+
+---
+
+## 🧩 Architecture
+
+```
+tab_devconsole.py
+├── Logging infra (QtLogHandler, _StreamToLogger — unchanged)
+├── TabDevConsole (QWidget)
+│   ├── Toolbar (QFrame, 40px)
+│   ├── QSplitter (horizontal)
+│   │   ├── Sidebar (QListWidget, 180px, Mantle bg)
+│   │   └── QStackedWidget
+│   │       ├── [0] DashboardPage  ← page_dashboard.py
+│   │       ├── [1] QueuePerfPage  ← page_queue.py
+│   │       ├── [2] AccountsPage   ← page_accounts.py
+│   │       ├── [3] LogsPage       ← page_logs.py
+│   │       └── [4] NetworkPage    ← page_network.py
+│   └── Status Bar (QFrame, 28px)
+└── Public API methods (route to pages)
+```
+
+### File Structure
+
+```
+ui/tabs/
+├── tab_devconsole.py           # Main tab: sidebar + logging infra
+└── devconsole/                 # Page widgets
+    ├── __init__.py
+    ├── page_dashboard.py       # 📊 Engine metrics cards
+    ├── page_queue.py           # 📋 Queue + Performance
+    ├── page_accounts.py        # 👥 Session + Browser + Extension
+    ├── page_logs.py            # 📝 Live logs + JSON
+    └── page_network.py         # 🌐 Extension bridge + API
+```
 
 ---
 
@@ -271,8 +184,8 @@ class LogEntry:
 | Document | Description |
 |----------|-------------|
 | [00_DESIGN_SYSTEM.md](./00_DESIGN_SYSTEM.md) | Design system |
-| [MULTITHREADING_ARCHITECTURE.md](../03_Backend/MULTITHREADING_ARCHITECTURE.md) | Queue logic |
+| [ENGINE_PIPELINE_ARCHITECTURE.md](../02_Architecture/ENGINE_PIPELINE_ARCHITECTURE.md) | Engine pipeline |
 
 ---
 
-**Status**: ✅ Migrated to PySide6
+**Status**: ✅ v4.0 — Sidebar Navigation Redesign (2026-02-18)

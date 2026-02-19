@@ -89,13 +89,14 @@ class _SyncPageAsyncWrapper:
     async def evaluate(self, expression, arg=None):
         """Execute JS on debug browser page via command queue."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         # execute_js_on_debug_browser is thread-safe (queue + Event)
         # but blocks the calling thread — run in executor to avoid blocking async loop
+        # Timeout 30s: TRPC fetch calls have 15s AbortController + queue overhead
         result = await loop.run_in_executor(
             None,
             lambda: self._profiles_controller.execute_js_on_debug_browser(
-                self._email, expression, arg=arg, timeout=15.0
+                self._email, expression, arg=arg, timeout=30.0
             )
         )
         return result

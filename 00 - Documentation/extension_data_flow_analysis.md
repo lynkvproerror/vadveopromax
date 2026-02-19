@@ -52,7 +52,8 @@ graph TB
 | `x-browser-year` | `webRequest.onBeforeSendHeaders` | Same listener |
 | `x-client-data` | `webRequest.onBeforeSendHeaders` | Same listener |
 | `SAPISIDHASH` | `Authorization` header capture | [background.js:240](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/extension/background.js#L240) |
-| reCAPTCHA Enterprise | `grecaptcha.enterprise.execute(siteKey)` | [content.js:147](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/extension/content.js#L147) |
+| reCAPTCHA Enterprise | `grecaptcha.enterprise.execute(siteKey)` via `chrome.scripting` MAIN world | [background.js:148-198](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/extension/background.js#L148-L198) |
+| reCAPTCHA Readiness | `check_recaptcha_ready` → checks `grecaptcha.enterprise.execute` availability | [background.js:328-385](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/extension/background.js#L328-L385) |
 | Access token (OAuth2) | `__NEXT_DATA__` JSON parse | [content.js:162-186](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/extension/content.js#L162-L186) |
 | Email | `__NEXT_DATA__` JSON parse | [content.js:48-74](file:///d:/NEW%20VEO%20PRO%20MAX/veo-pro-max/02%20-%20CLIENT%20-%20VEO%20PRO%20MAX/extension/content.js#L48-L74) |
 
@@ -124,8 +125,15 @@ Tất cả generation endpoints yêu cầu: **Access Token + reCAPTCHA + x-brows
 │     → api_client._build_headers() → API call                │
 │                                                             │
 │  reCAPTCHA pipeline:                                         │
-│     App → WS request → background.js → content.js           │
+│     App → WS request → background.js (MAIN world)           │
 │     → grecaptcha.enterprise.execute() → token → WS → App   │
 │     → api_client._build_client_context() → body             │
+│                                                             │
+│  reCAPTCHA 5-Layer Defense [CURRENT]:                        │
+│     L1: Readiness Probe (check_recaptcha_ready)             │
+│     L2: Smart Cooldown (_wait_for_recaptcha_ready)          │
+│     L3: Priority Prefetch (RecaptchaPool.priority_prefetch) │
+│     L4: De-escalated Recovery (no tab reload on 1st fail)   │
+│     L5: Token Quality Gate (reject < 1000 chars)            │
 └─────────────────────────────────────────────────────────────┘
 ```
