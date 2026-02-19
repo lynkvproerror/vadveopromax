@@ -1625,9 +1625,20 @@ class TabSettings(QWidget):
         sep.setStyleSheet(f"background-color: {Theme.OVERLAY0};")
         layout.addWidget(sep)
         
+        # Load saved toggle states from settings
+        _ctx_on = True
+        _lib_on = True
+        _auto_on = False
+        if self.controller:
+            _s = getattr(self.controller, 'settings', None)
+            if _s:
+                _ctx_on = getattr(_s, 'enhance_context_menu', True)
+                _lib_on = getattr(_s, 'enhance_library', True)
+                _auto_on = getattr(_s, 'enhance_auto_continuation', False)
+        
         # Toggle 1: Context Menu Enhance
         self._enhance_context_toggle = self._create_enable_row(
-            "Context Menu", checked=True, badge=""
+            "Context Menu", checked=_ctx_on, badge=""
         )
         self._enhance_context_toggle.setToolTip(
             "Right-click on images to enhance them (upscale/face restore)"
@@ -1636,7 +1647,7 @@ class TabSettings(QWidget):
         
         # Toggle 2: Library Enhance
         self._enhance_library_toggle = self._create_enable_row(
-            "Library Enhance", checked=True, badge=""
+            "Library Enhance", checked=_lib_on, badge=""
         )
         self._enhance_library_toggle.setToolTip(
             "Add 'Enhance' button to Image Library toolbar"
@@ -1645,7 +1656,7 @@ class TabSettings(QWidget):
         
         # Toggle 3: Auto-Enhance Continuation Frames
         self._enhance_auto_toggle = self._create_enable_row(
-            "Auto-Enhance", checked=False, badge="BETA"
+            "Auto-Enhance", checked=_auto_on, badge="BETA"
         )
         self._enhance_auto_toggle.setToolTip(
             "Automatically enhance continuation frames before uploading (may add 5-10s per chain)"
@@ -1816,14 +1827,18 @@ class TabSettings(QWidget):
             )
     
     def _save_enhancer_settings(self, *args):
-        """Persist enhancer toggle states."""
+        """Persist enhancer toggle states to AppSettings dataclass."""
         if not self.controller:
             return
         settings = getattr(self.controller, 'settings', None)
-        if settings and hasattr(settings, 'set'):
-            settings.set('enhance_context_menu', self._enhance_context_toggle.isToggled())
-            settings.set('enhance_library', self._enhance_library_toggle.isToggled())
-            settings.set('enhance_auto_continuation', self._enhance_auto_toggle.isToggled())
+        if settings:
+            settings.enhance_context_menu = self._enhance_context_toggle.isToggled()
+            settings.enhance_library = self._enhance_library_toggle.isToggled()
+            settings.enhance_auto_continuation = self._enhance_auto_toggle.isToggled()
+            try:
+                settings.save()
+            except Exception:
+                pass
     
     def _create_action_buttons(self) -> QWidget:
         """Create action buttons - matches CTK lines 357-401."""

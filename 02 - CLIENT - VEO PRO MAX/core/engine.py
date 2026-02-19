@@ -1522,7 +1522,7 @@ class Engine:
                     settings = getattr(ctrl, 'settings', None)
                     enhancer = getattr(ctrl, '_image_enhancer', None)
                     if (settings and enhancer and enhancer.available and
-                        getattr(settings, 'get', lambda k, d=None: d)('enhance_auto_continuation', False)):
+                        getattr(settings, 'enhance_auto_continuation', False)):
                         log.info(f"[AutoEnhance] Upscaling continuation frame: {frame_path}")
                         self._dispatcher.update_progress(
                             task.id, task.progress, "✨ Enhancing frame..."
@@ -1530,7 +1530,7 @@ class Engine:
                         from core.image_enhancer import EnhanceMode
                         result = enhancer.enhance_sync(
                             frame_path,
-                            mode=EnhanceMode.UPSCALE_2X,
+                            mode=EnhanceMode.UPSCALE_4X,
                             timeout=60,
                         )
                         if result.success:

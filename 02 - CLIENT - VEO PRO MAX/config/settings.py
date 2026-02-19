@@ -66,10 +66,10 @@ class AppSettings:
     continuation_enabled: bool = True
     extract_point_ms: int = 750
     
-    # === ENHANCER IMAGE (BETA) ===
-    enhancer_enabled: bool = False
-    enhancer_quality: str = "Medium"  # "Low (fast)" | "Medium" | "High (slow)"
-    enhancer_scale: str = "1x (enhance only)"  # "1x (enhance only)" | "2x" | "4x"
+    # === ENHANCER IMAGE (AI Upscale — Real-ESRGAN + GFPGAN) ===
+    enhance_context_menu: bool = True        # Toggle 1: Right-click → ✨ Enhance Image
+    enhance_library: bool = True             # Toggle 2: Library toolbar enhance button
+    enhance_auto_continuation: bool = False  # Toggle 3: Auto-enhance continuation frames (BETA)
     
     # === UI ===
     developer_mode: bool = False

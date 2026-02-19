@@ -280,9 +280,17 @@ class ImageSlotWidget(QFrame):
             }}
         """)
         
-        # Enhance action
-        enhance_act = menu.addAction("✨ Enhance Image")
-        menu.addSeparator()
+        # Enhance action (only if toggle enabled in Settings)
+        enhance_act = None
+        _show_enhance = True
+        try:
+            from config.settings import get_settings
+            _show_enhance = getattr(get_settings(), 'enhance_context_menu', True)
+        except Exception:
+            pass
+        if _show_enhance:
+            enhance_act = menu.addAction("✨ Enhance Image")
+            menu.addSeparator()
         copy_act = menu.addAction("📋 Copy Path")
         clear_act = menu.addAction("✕ Clear")
         
