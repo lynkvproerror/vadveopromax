@@ -1229,6 +1229,11 @@ class Engine:
                             task.video_outputs.append(vo)
                     
                     task.stage = TaskStage.GENERATED  # ★ Checkpoint: poll complete
+                    
+                    # Always save media_ids early — needed for re-upscale
+                    # even if upscale block is skipped (720p or token failure)
+                    task.upscale_media_ids = list(media_ids)
+                    
                     emit_event(EventType.TASK_PROGRESS, {
                         "task_id": task.id, "stage": "generated",
                         "progress": 85, "outputs": len(completed_results),
@@ -2213,8 +2218,19 @@ class Engine:
         Uses stored media_ids — only retries videos with upscale_status='failed'.
         """
         task = self._dispatcher.get_task(task_id)
-        if not task or not task.upscale_media_ids:
-            log.warning(f"Re-upscale {task_id}: no task or no media_ids")
+        if not task:
+            log.warning(f"Re-upscale {task_id}: task not found")
+            return False
+        
+        # Fallback: rebuild upscale_media_ids from video_outputs if missing
+        if not task.upscale_media_ids and task.video_outputs:
+            rebuilt = [vo.media_id for vo in task.video_outputs if vo.media_id]
+            if rebuilt:
+                task.upscale_media_ids = rebuilt
+                log.info(f"Re-upscale {task_id}: rebuilt media_ids from video_outputs ({len(rebuilt)} IDs)")
+        
+        if not task.upscale_media_ids:
+            log.warning(f"Re-upscale {task_id}: no media_ids (video_outputs also empty)")
             return False
         
         # Determine which videos need re-upscale
@@ -2261,8 +2277,19 @@ class Engine:
         Called from UI when user right-clicks a red thumbnail.
         """
         task = self._dispatcher.get_task(task_id)
-        if not task or not task.upscale_media_ids:
-            log.warning(f"Re-upscale single {task_id}[{video_index}]: no task or no media_ids")
+        if not task:
+            log.warning(f"Re-upscale single {task_id}[{video_index}]: task not found")
+            return False
+        
+        # Fallback: rebuild upscale_media_ids from video_outputs if missing
+        if not task.upscale_media_ids and task.video_outputs:
+            rebuilt = [vo.media_id for vo in task.video_outputs if vo.media_id]
+            if rebuilt:
+                task.upscale_media_ids = rebuilt
+                log.info(f"Re-upscale single {task_id}[{video_index}]: rebuilt media_ids from video_outputs ({len(rebuilt)} IDs)")
+        
+        if not task.upscale_media_ids:
+            log.warning(f"Re-upscale single {task_id}[{video_index}]: no media_ids (video_outputs also empty)")
             return False
         
         if video_index >= len(task.upscale_media_ids):
