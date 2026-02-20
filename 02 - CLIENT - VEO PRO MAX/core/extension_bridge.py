@@ -93,11 +93,20 @@ class ExtensionBridge:
         self._headers_debounce_latest: Dict[str, tuple] = {}  # email → (headers, access_token)
         self._connection_events: Dict[str, asyncio.Event] = {}  # email → Event for wait_for_extension()
 
+        # Content heartbeat tracking
+        self._content_heartbeats: Dict[str, float] = {}  # email → last heartbeat timestamp
+        self._recaptcha_readiness: Dict[str, bool] = {}  # email → True if reCAPTCHA is warm
+
+        # Short token tracking: auto-reload tab after repeated garbage tokens
+        self._short_token_counts: Dict[str, int] = {}  # email → consecutive short token count
+        self._SHORT_TOKEN_RELOAD_THRESHOLD = 3
+
         # Callbacks (set by AccountManager/AppController)
         self.on_headers_update: Optional[Callable] = None    # (email, headers, access_token)
         self.on_extension_connect: Optional[Callable] = None  # (email)
         self.on_extension_disconnect: Optional[Callable] = None  # (email)
         self.on_unregistered_connection: Optional[Callable] = None  # () — called when a new connection hasn't registered after delay
+        self._on_readiness_token: Optional[Callable] = None  # (email, token) — cache trial-execute token
 
     @property
     def port(self) -> int:
@@ -322,6 +331,9 @@ class ExtensionBridge:
 
         Sends request to Extension → Extension calls grecaptcha.execute()
         on the real VEO page → returns fresh token.
+        
+        Auto-simulates activity if tab has been idle >60s to prevent
+        cold-start failures.
 
         Args:
             email: Account email to get token for
@@ -330,15 +342,26 @@ class ExtensionBridge:
         Returns:
             reCAPTCHA token string, or None if failed
         """
-        # Serialize: only one reCAPTCHA request per account at a time.
-        # Extension can only process one grecaptcha.execute() per tab.
-        lock = self._recaptcha_locks.setdefault(email, asyncio.Lock())
-        async with lock:
-            conn = self._find_connection(email)
-            if not conn:
-                log.warning(f"[ExtensionBridge] No Extension connected for {email}")
-                return None
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] No connection for {email} — cannot request reCAPTCHA")
+            return None
 
+        # Pre-warm: simulate activity if tab has been idle >60s
+        last_hb = self._content_heartbeats.get(email, 0)
+        if last_hb and (time.time() - last_hb) > 60:
+            log.debug(f"[ExtensionBridge] Tab idle >60s for {email} — simulating activity before reCAPTCHA")
+            try:
+                await self.simulate_activity(email, timeout=3.0)
+                await asyncio.sleep(0.5)  # Brief pause after simulation
+            except Exception:
+                pass  # Best effort — don't block reCAPTCHA
+
+        # Serialize reCAPTCHA requests per account to avoid race conditions
+        if email not in self._recaptcha_locks:
+            self._recaptcha_locks[email] = asyncio.Lock()
+
+        async with self._recaptcha_locks[email]:
             request_id = str(uuid.uuid4())
             future = asyncio.get_running_loop().create_future()
             self._pending_requests[request_id] = future
@@ -354,26 +377,148 @@ class ExtensionBridge:
                 token = result.get('token')
                 error = result.get('error')
 
-                if error:
-                    log.warning(f"[ExtensionBridge] reCAPTCHA failed for {email}: {error}")
-                    return None
-
                 if token:
-                    # Layer 5: Token quality gate — reject short/garbage tokens
+                    # Layer 5: Validate token length
                     if len(token) < self.MIN_TOKEN_LENGTH:
+                        # Track consecutive short tokens
+                        self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
+                        count = self._short_token_counts[email]
                         log.warning(
-                            f"[ExtensionBridge] reCAPTCHA failed for {email}: "
-                            f"Token too short ({len(token)} chars)"
+                            f"[ExtensionBridge] ❌ reCAPTCHA token too short for {email}: "
+                            f"{len(token)} chars (min {self.MIN_TOKEN_LENGTH}) — "
+                            f"consecutive #{count}"
                         )
+                        # Auto-reload tab after threshold consecutive short tokens
+                        if count >= self._SHORT_TOKEN_RELOAD_THRESHOLD:
+                            log.warning(
+                                f"[ExtensionBridge] 🔄 Triggering tab reload for {email} — "
+                                f"{count} consecutive short tokens (reCAPTCHA widget broken)"
+                            )
+                            self._short_token_counts[email] = 0
+                            # Reload via refresh_headers (reloads VEO tab)
+                            asyncio.create_task(self._reload_tab_for_recaptcha(email))
                         return None
+                    # Valid token — reset counter
+                    self._short_token_counts[email] = 0
                     log.info(f"[ExtensionBridge] ✅ reCAPTCHA token for {email}: {len(token)} chars")
-                return token
-
+                    return token
+                else:
+                    # Check if this is a "too short" error from extension
+                    # Extension sends token=null with error="Token too short (330 chars)"
+                    if error and 'too short' in str(error).lower():
+                        self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
+                        count = self._short_token_counts[email]
+                        log.warning(
+                            f"[ExtensionBridge] ❌ reCAPTCHA token too short for {email}: "
+                            f"{error} — consecutive #{count}"
+                        )
+                        # Auto-reload tab after threshold consecutive short tokens
+                        if count >= self._SHORT_TOKEN_RELOAD_THRESHOLD:
+                            log.warning(
+                                f"[ExtensionBridge] 🔄 Triggering tab reload for {email} — "
+                                f"{count} consecutive short tokens (reCAPTCHA widget broken)"
+                            )
+                            self._short_token_counts[email] = 0
+                            asyncio.create_task(self._reload_tab_for_recaptcha(email))
+                    else:
+                        log.warning(f"[ExtensionBridge] reCAPTCHA failed for {email}: {error}")
+                    return None
             except asyncio.TimeoutError:
                 log.error(f"[ExtensionBridge] reCAPTCHA request timed out for {email} ({timeout}s)")
                 return None
             finally:
                 self._pending_requests.pop(request_id, None)
+
+    async def _reload_tab_for_recaptcha(self, email: str):
+        """Reload VEO tab to re-initialize broken reCAPTCHA widget.
+        
+        Called when consecutive short tokens (330 chars) indicate the
+        grecaptcha Enterprise widget is partially initialized.
+        Sends refresh_headers to extension → chrome.tabs.reload → wait for re-init.
+        """
+        try:
+            conn = self._find_connection(email)
+            if not conn:
+                log.debug(f"[ExtensionBridge] Cannot reload tab for {email}: no connection")
+                return
+            
+            request_id = str(uuid.uuid4())
+            future = asyncio.get_running_loop().create_future()
+            self._pending_requests[request_id] = future
+            
+            await self._ws_send(conn, {
+                'action': 'refresh_headers',
+                'requestId': request_id,
+                'email': email,
+            })
+            
+            try:
+                await asyncio.wait_for(future, timeout=10)
+                log.info(
+                    f"[ExtensionBridge] 🔄 Tab reloaded for {email} — "
+                    f"waiting 6s for reCAPTCHA re-init"
+                )
+            except asyncio.TimeoutError:
+                log.debug(f"[ExtensionBridge] Tab reload response timed out for {email}")
+            finally:
+                self._pending_requests.pop(request_id, None)
+            
+            # Wait for page + reCAPTCHA script to fully initialize
+            await asyncio.sleep(6)
+        except Exception as e:
+            log.debug(f"[ExtensionBridge] Tab reload failed for {email}: {e}")
+
+    async def reload_extension(self, email: str, timeout: float = 15.0) -> bool:
+        """Hot-reload the extension from disk via chrome.runtime.reload().
+        
+        This reloads background.js + content.js without killing Chrome.
+        The extension will disconnect its WebSocket, then reconnect after reload.
+        
+        Args:
+            email: Account email to find the connection
+            timeout: Max seconds to wait for reconnection after reload
+            
+        Returns:
+            True if extension reloaded and reconnected successfully.
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] Cannot reload extension for {email}: no connection")
+            return False
+        
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+        
+        try:
+            log.info(f"[ExtensionBridge] 🔄 Reloading extension for {email}...")
+            await self._ws_send(conn, {
+                'action': 'reload_extension',
+                'requestId': request_id,
+            })
+            
+            # Wait for ack (extension sends it before reload)
+            try:
+                await asyncio.wait_for(future, timeout=3)
+            except asyncio.TimeoutError:
+                pass  # Extension may have reloaded before sending ack
+            finally:
+                self._pending_requests.pop(request_id, None)
+            
+            # Wait for extension to reload and reconnect
+            log.info(f"[ExtensionBridge] ⏳ Waiting for extension reconnection ({timeout}s)...")
+            reconnected = await self.wait_for_extension(email, timeout=timeout)
+            
+            if reconnected:
+                log.info(f"[ExtensionBridge] ✅ Extension reloaded and reconnected for {email}")
+            else:
+                log.warning(f"[ExtensionBridge] ⚠️ Extension reloaded but did not reconnect within {timeout}s")
+            return reconnected
+            
+        except Exception as e:
+            log.error(f"[ExtensionBridge] Extension reload failed for {email}: {e}")
+            self._pending_requests.pop(request_id, None)
+            return False
 
     async def check_recaptcha_ready(self, email: str, timeout: float = 10.0) -> bool:
         """Layer 1: Ask Extension if grecaptcha is ready on the VEO page.
@@ -391,6 +536,7 @@ class ExtensionBridge:
         """
         conn = self._find_connection(email)
         if not conn:
+            log.info(f"[ExtensionBridge] reCAPTCHA check: no connection for {email}")
             return False
         
         request_id = str(uuid.uuid4())
@@ -405,17 +551,58 @@ class ExtensionBridge:
             })
             result = await asyncio.wait_for(future, timeout=timeout)
             ready = result.get('ready', False)
+            
             if ready:
-                log.debug(f"[ExtensionBridge] ✅ grecaptcha ready for {email}")
+                # Trial-execute returned a valid token — cache it
+                token = result.get('token')
+                details = result.get('details', {})
+                token_len = details.get('tokenLength', 0)
+                
+                # Sanity check: if extension says "ready" but trial token is
+                # 0 or too short, the widget is NOT actually ready.
+                # This catches the old background.js bug where Promise chains
+                # weren't properly serialized via chrome.scripting.
+                if token_len == 0 or (token and len(token) < 500):
+                    log.warning(
+                        f"[ExtensionBridge] ⚠️ grecaptcha reports ready but trial token "
+                        f"is {token_len} chars — overriding to NOT ready for {email}"
+                    )
+                    return False
+                
+                log.info(
+                    f"[ExtensionBridge] ✅ grecaptcha ready for {email} "
+                    f"(trial token: {token_len} chars)"
+                )
+                # Pass token to callback for caching in reCAPTCHA pool
+                if token and len(token) > self.MIN_TOKEN_LENGTH:
+                    if hasattr(self, '_on_readiness_token') and self._on_readiness_token:
+                        try:
+                            self._on_readiness_token(email, token)
+                            log.debug(
+                                f"[ExtensionBridge] Cached readiness-check token "
+                                f"for {email} ({len(token)} chars)"
+                            )
+                        except Exception as e:
+                            log.debug(f"[ExtensionBridge] Token cache callback failed: {e}")
             else:
                 details = result.get('details', {})
-                log.debug(
+                error = details.get('error', '')
+                token_len = details.get('tokenLength', 0)
+                log.info(
                     f"[ExtensionBridge] ⏳ grecaptcha NOT ready for {email}: "
-                    f"{details}"
+                    f"loaded={details.get('grecaptchaLoaded', '?')} "
+                    f"enterprise={details.get('enterpriseLoaded', '?')} "
+                    f"execute={details.get('executeAvailable', '?')} "
+                    f"page={details.get('pageLoaded', '?')} "
+                    f"tokenLen={token_len}"
+                    f"{f' error={error}' if error else ''}"
                 )
             return ready
         except asyncio.TimeoutError:
-            log.debug(f"[ExtensionBridge] check_recaptcha_ready timed out for {email}")
+            log.warning(
+                f"[ExtensionBridge] check_recaptcha_ready TIMEOUT ({timeout}s) for {email} — "
+                f"extension did not respond (tab may be frozen/suspended)"
+            )
             return False
         finally:
             self._pending_requests.pop(request_id, None)
@@ -509,8 +696,79 @@ class ExtensionBridge:
             log.info(f"[ExtensionBridge] 🔄 Refreshed headers: {tabs_reloaded} tab(s) reloaded")
             return tabs_reloaded
         except asyncio.TimeoutError:
-            log.error(f"[ExtensionBridge] Header refresh timed out ({timeout}s)")
+            log.warning(f"[ExtensionBridge] Header refresh timed out ({timeout}s) — non-fatal, CDP may capture headers directly")
             return 0
+        finally:
+            self._pending_requests.pop(request_id, None)
+
+    async def refresh_headers_lightweight(self, email: str = None, timeout: float = 10.0) -> bool:
+        """Lightweight header refresh — trigger fetch() instead of page reload.
+
+        Content.js fires a small fetch to VEO API, which triggers
+        onBeforeSendHeaders in background.js to capture fresh headers.
+        Much faster and less disruptive than full page reload.
+
+        Falls back to full refresh_headers() if lightweight fails.
+        """
+        if not self._connections:
+            return False
+
+        conn = self._find_connection(email) if email else self._connections[0]
+        if not conn:
+            return False
+
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+
+        try:
+            await self._ws_send(conn, {
+                'action': 'refresh_headers_lightweight',
+                'requestId': request_id,
+                'email': email,
+            })
+
+            result = await asyncio.wait_for(future, timeout=timeout)
+            success = result.get('success', False)
+            if success:
+                log.debug(f"[ExtensionBridge] 🔄 Lightweight header refresh OK for {email}")
+                return True
+            else:
+                # Fall back to full reload
+                log.debug(f"[ExtensionBridge] Lightweight refresh failed, falling back to full reload")
+                await self.refresh_headers(email)
+                return True
+        except asyncio.TimeoutError:
+            log.debug(f"[ExtensionBridge] Lightweight refresh timed out for {email}")
+            return False
+        finally:
+            self._pending_requests.pop(request_id, None)
+
+    async def simulate_activity(self, email: str, timeout: float = 5.0) -> bool:
+        """Ask Extension to simulate mouse/scroll activity on the VEO tab.
+
+        Useful before reCAPTCHA requests to wake up idle tabs and
+        prevent Chrome from considering the page inactive.
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            return False
+
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+
+        try:
+            await self._ws_send(conn, {
+                'action': 'simulate_activity',
+                'requestId': request_id,
+                'email': email,
+            })
+
+            result = await asyncio.wait_for(future, timeout=timeout)
+            return result.get('success', False)
+        except (asyncio.TimeoutError, Exception):
+            return False
         finally:
             self._pending_requests.pop(request_id, None)
 
@@ -665,6 +923,32 @@ class ExtensionBridge:
         elif action == 'pong':
             pass  # Keepalive response
 
+        elif action == 'content_heartbeat':
+            # Content script is alive — track per-email
+            email = msg.get('email', '')
+            if email:
+                self._content_heartbeats[email] = time.time()
+                conn.last_activity = time.time()
+
+        elif action == 'recaptcha_warmth':
+            # Content script reports reCAPTCHA readiness
+            email = msg.get('email', '')
+            ready = msg.get('ready', False)
+            if email:
+                self._recaptcha_readiness[email] = ready
+                conn.last_activity = time.time()
+                if ready:
+                    log.debug(f"[ExtensionBridge] 🔥 reCAPTCHA warm for {email}")
+
+        elif action == 'tab_frozen':
+            # Background detected frozen tab (missed heartbeats)
+            email = msg.get('email', '')
+            elapsed = msg.get('elapsedMs', 0)
+            log.warning(
+                f"[ExtensionBridge] 🥶 Tab frozen for {email} "
+                f"(no heartbeat for {elapsed // 1000}s) — auto-reloading"
+            )
+
         elif action == 'recaptcha_ready':
             # Layer 1: Response to check_recaptcha_ready request
             request_id = msg.get('requestId')
@@ -675,6 +959,22 @@ class ExtensionBridge:
 
         elif action == 'headers_refreshed':
             # Response to refresh_headers request
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
+        elif action == 'headers_refreshed_lightweight':
+            # Response to refresh_headers_lightweight request
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
+        elif action == 'activity_simulated':
+            # Response to simulate_activity request
             request_id = msg.get('requestId')
             if request_id and request_id in self._pending_requests:
                 future = self._pending_requests[request_id]
@@ -705,6 +1005,14 @@ class ExtensionBridge:
 
         elif action == 'tab_alive':
             # Response to check_tab_alive request
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
+        elif action == 'extension_reloaded':
+            # Response to reload_extension request (sent just before chrome.runtime.reload())
             request_id = msg.get('requestId')
             if request_id and request_id in self._pending_requests:
                 future = self._pending_requests[request_id]
@@ -806,7 +1114,10 @@ class ExtensionBridge:
         """App-level heartbeat — send ping + detect zombie connections.
         
         Sends ping every 15s. Also checks last_activity to detect
-        zombie connections (WS alive but Extension unresponsive for 90s+).
+        zombie connections (WS alive but Extension unresponsive for 45s+).
+        
+        With content.js sending heartbeats every 20s, missing 2 consecutive
+        heartbeats (45s) indicates a frozen or dead connection.
         """
         while True:
             try:
@@ -817,9 +1128,10 @@ class ExtensionBridge:
                         dead.append(conn)
                         continue
                     
-                    # Zombie detection: no activity for 90s+ (3 missed pings)
+                    # Zombie detection: no activity for 45s+ (reduced from 90s
+                    # because content.js now sends heartbeats every 20s)
                     since_last = time.time() - conn.last_activity
-                    if since_last > 90:
+                    if since_last > 45:
                         log.warning(
                             f"[ExtensionBridge] ⚠️ Zombie connection: "
                             f"{conn.registered_emails} (no activity {since_last:.0f}s)"
@@ -848,6 +1160,7 @@ class ExtensionBridge:
 
     def get_status(self) -> dict:
         """Get bridge status for DevConsole."""
+        now = time.time()
         return {
             'running': self._server is not None,
             'port': self._port,
@@ -858,4 +1171,13 @@ class ExtensionBridge:
                 for conn in self._connections
                 for email, headers in conn.headers.items()
             },
+            'content_heartbeats': {
+                email: f"{now - ts:.0f}s ago"
+                for email, ts in self._content_heartbeats.items()
+            },
+            'recaptcha_readiness': dict(self._recaptcha_readiness),
         }
+
+    def is_recaptcha_ready(self, email: str) -> bool:
+        """Check if reCAPTCHA is warm/ready for an email (from content.js reports)."""
+        return self._recaptcha_readiness.get(email, False)

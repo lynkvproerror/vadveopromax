@@ -129,6 +129,9 @@ class UpscaleJob:
     target_quality: str             # "1080p" or "4K"
     aspect_ratio: str
     created_at: datetime = field(default_factory=datetime.now)
+    retry_count: int = 0            # Job-level retry counter
+    max_retries: int = 3            # Max job-level retries before permanent fail
+    retry_indices: List[int] = field(default_factory=list)  # Which video indices to retry (empty = all)
 
 
 class UpscaleQueue:
@@ -223,6 +226,12 @@ class UpscaleQueue:
                 # Clean up completed job tasks
                 active_jobs = [t for t in active_jobs if not t.done()]
                 
+                # Workload priority: pause if prompts_first mode active
+                if self._engine.should_upscale_wait():
+                    log.info(f"[UpscaleQueue] {email}: pausing — prompts_first priority")
+                    await asyncio.sleep(5)
+                    continue
+                
                 # If at capacity, wait for one to finish
                 if len(active_jobs) >= MAX_CONCURRENT_JOBS:
                     if active_jobs:
@@ -235,6 +244,10 @@ class UpscaleQueue:
                                 log.error(f"[UpscaleQueue] Job error: {t.exception()}")
                         active_jobs = [t for t in active_jobs if not t.done()]
                     continue
+                
+                # Account cooldown: wait if on cooldown before picking up jobs
+                if self._engine.is_account_on_cooldown(email):
+                    await self._engine.wait_for_cooldown(email)
                 
                 # Wait for next job (with timeout to allow graceful shutdown)
                 try:
@@ -301,6 +314,23 @@ class UpscaleQueue:
             self._total_failed += 1
             return
         
+        # Auto-inject extension bridge if missing (can happen after browser restart)
+        if not account._extension_bridge:
+            bridge = None
+            # Source 1: Direct reference on engine
+            bridge = getattr(self._engine, '_app_extension_bridge', None)
+            # Source 2: Steal from sibling account that has it
+            if not bridge:
+                for acc in self._engine._account_manager._accounts:
+                    if acc._extension_bridge:
+                        bridge = acc._extension_bridge
+                        break
+            if bridge:
+                account._extension_bridge = bridge
+                log.info(f"[UpscaleQueue] Injected extension bridge into {job.account_email}")
+            else:
+                log.warning(f"[UpscaleQueue] No extension bridge source found — reCAPTCHA will fail")
+        
         total = len(job.media_ids)
         log.info(
             f"[UpscaleQueue] Processing task {job.task_id}: "
@@ -341,12 +371,16 @@ class UpscaleQueue:
         # =====================================================
         # PHASE 1: Sequential Submit (reCAPTCHA per video)
         # =====================================================
-        # Mark all videos as submitting for UI overlay
-        for vi in range(len(task.video_outputs)):
-            if vi < total and job.media_ids[vi]:
-                task.video_outputs[vi].upscale_status = "submitting"
+        # Mark all target videos as submitting for UI overlay
+        # For retry jobs, only mark the retried indices
+        target_indices = job.retry_indices if job.retry_indices else list(range(total))
+        for vi in target_indices:
+            if vi < len(task.video_outputs) and vi < total:
+                if not job.retry_indices or job.media_ids[target_indices.index(vi)]:
+                    task.video_outputs[vi].upscale_status = "submitting"
+        submit_label = f"{len(target_indices)}" if job.retry_indices else f"{total}"
         self._engine._dispatcher.update_progress(
-            task.id, 88, f"⬆️ Submitting {total} upscales...")
+            task.id, 88, f"⬆️ Submitting {submit_label} upscales...")
         if self._engine._on_task_completed:
             try:
                 self._engine._on_task_completed(task)  # Trigger UI refresh
@@ -354,20 +388,22 @@ class UpscaleQueue:
                 pass
         
         # Collect: (idx, op_name, scene_id) for successful submits
-        pending_ops = []  # list of (idx, op_name, scene_id, media_id)
+        pending_ops = []  # list of (orig_idx, op_name, scene_id, media_id)
         max_submit_retries = 5
         
-        for idx, media_id in enumerate(job.media_ids):
-            video_label = f"{idx + 1}/{total}"
+        for local_idx, media_id in enumerate(job.media_ids):
+            # Map local index back to original video_outputs position
+            orig_idx = job.retry_indices[local_idx] if job.retry_indices else local_idx
+            video_label = f"{orig_idx + 1}/{len(task.video_outputs)}"
             if not media_id:
                 log.warning(f"Upscale {video_label}: no mediaId, skipping")
-                if idx < len(task.video_outputs):
-                    task.video_outputs[idx].upscale_status = "skipped"
+                if orig_idx < len(task.video_outputs):
+                    task.video_outputs[orig_idx].upscale_status = "skipped"
                 continue
             
             try:
                 # Cooldown between sequential submits
-                if idx > 0:
+                if local_idx > 0:
                     await asyncio.sleep(2.0)
                 
                 # Submit with retry
@@ -378,6 +414,19 @@ class UpscaleQueue:
                     recaptcha_token = await account.refresh_recaptcha() or ""
                     if not recaptcha_token:
                         recaptcha_token = account.get_recaptcha_token() or ""
+                    
+                    # Fix 3: Validate token quality — 330-char tokens are garbage
+                    # from uninitialized grecaptcha widget after browser restart
+                    if recaptcha_token and len(recaptcha_token) < 500:
+                        log.warning(
+                            f"Upscale {video_label}: garbage reCAPTCHA token "
+                            f"({len(recaptcha_token)} chars < 500), skipping submit"
+                        )
+                        account.invalidate_recaptcha()
+                        if attempt < max_submit_retries - 1:
+                            delay = min(5 * (attempt + 1), 15)
+                            await asyncio.sleep(delay)
+                        continue
                     
                     sem = self._engine._get_api_semaphore(account.email)
                     async with sem:
@@ -394,6 +443,7 @@ class UpscaleQueue:
                     await asyncio.sleep(1.0)
                     
                     if resp.success:
+                        self._engine.clear_account_cooldown(job.account_email)
                         break
                     
                     log.warning(
@@ -401,67 +451,131 @@ class UpscaleQueue:
                         f"failed: {resp.error}"
                     )
                     
-                    # Browser recovery on reCAPTCHA failures
+                    # Fix 1+2: Browser recovery on reCAPTCHA/403 failures
+                    # Widened detection: HTTP 403 may not mention 'recaptcha'
                     error_lower = (resp.error or "").lower()
-                    if "recaptcha" in error_lower:
-                        if attempt == 1:
-                            try:
-                                await account.soft_recover_browser()
-                            except Exception:
-                                pass
-                        elif attempt == 2:
-                            try:
-                                await account.restart_browser()
-                                self._engine._account_manager.fix_short_client_data()
-                            except Exception:
-                                pass
+                    is_403 = "403" in error_lower
+                    if "recaptcha" in error_lower or is_403:
+                        # Set account cooldown on 403
+                        if is_403:
+                            self._engine.set_account_cooldown(
+                                job.account_email, f"upscale submit 403"
+                            )
+                            # Wait for cooldown before next attempt
+                            await self._engine.wait_for_cooldown(job.account_email)
+                        
+                        # GUARD: Only do browser recovery if NO videos submitted OK yet.
+                        # If pending_ops has successes, recovery would disrupt their polls.
+                        if not pending_ops:
+                            if attempt == 1:
+                                try:
+                                    await account.soft_recover_browser()
+                                    await asyncio.sleep(8)
+                                    await self._engine._wait_for_recaptcha_ready(
+                                        account, max_wait=20.0
+                                    )
+                                except Exception:
+                                    pass
+                            elif attempt == 2:
+                                try:
+                                    await account.restart_browser()
+                                    self._engine._account_manager.fix_short_client_data()
+                                    await asyncio.sleep(10)
+                                    await self._engine._wait_for_recaptcha_ready(
+                                        account, max_wait=30.0
+                                    )
+                                except Exception:
+                                    pass
+                        else:
+                            # Videos already submitted — skip recovery, just mark this one failed
+                            log.warning(
+                                f"Upscale {video_label}: 403 but {len(pending_ops)} videos already "
+                                f"submitted OK — skipping browser recovery to protect them"
+                            )
+                            if orig_idx < len(task.video_outputs):
+                                task.video_outputs[orig_idx].upscale_status = "failed"
+                                task.video_outputs[orig_idx].upscale_error = f"403 (skipped recovery — {len(pending_ops)} videos OK)"
+                            break  # Exit retry loop for this video, proceed to Phase 2
                     
                     if attempt < max_submit_retries - 1:
                         delay = min(5 * (attempt + 1), 15)
                         await asyncio.sleep(delay)
                 else:
-                    # All retries exhausted
-                    if idx < len(task.video_outputs):
-                        task.video_outputs[idx].upscale_status = "failed"
-                        task.video_outputs[idx].upscale_error = f"Submit failed after {max_submit_retries} retries"
+                    # All submit retries exhausted for this video
+                    if orig_idx < len(task.video_outputs):
+                        task.video_outputs[orig_idx].upscale_status = "failed"
+                        task.video_outputs[orig_idx].upscale_error = f"Submit failed after {max_submit_retries} retries"
                     continue
                 
                 # Extract operation ID
                 ops = resp.data.get("operations", [])
                 if not ops:
-                    if idx < len(task.video_outputs):
-                        task.video_outputs[idx].upscale_status = "failed"
-                        task.video_outputs[idx].upscale_error = "No operation returned"
+                    if orig_idx < len(task.video_outputs):
+                        task.video_outputs[orig_idx].upscale_status = "failed"
+                        task.video_outputs[orig_idx].upscale_error = "No operation returned"
                     continue
                 
                 op_name = ops[0].get("operation", {}).get("name", "")
                 scene_id = ops[0].get("sceneId", "")
                 if not op_name:
-                    if idx < len(task.video_outputs):
-                        task.video_outputs[idx].upscale_status = "failed"
+                    if orig_idx < len(task.video_outputs):
+                        task.video_outputs[orig_idx].upscale_status = "failed"
                     continue
                 
                 log.info(f"[UpscaleQueue] Upscale {video_label} submitted: op={op_name}")
-                if idx < len(task.video_outputs):
-                    task.video_outputs[idx].upscale_status = "polling"
-                pending_ops.append((idx, op_name, scene_id, media_id))
+                if orig_idx < len(task.video_outputs):
+                    task.video_outputs[orig_idx].upscale_status = "polling"
+                pending_ops.append((orig_idx, op_name, scene_id, media_id))
                 # Update progress per-video submit
                 submitted = len(pending_ops)
                 self._engine._dispatcher.update_progress(
-                    task.id, 88, f"⬆️ Submitted {submitted}/{total} upscales"
+                    task.id, 88, f"⬆️ Submitted {submitted}/{len(target_indices)} upscales"
                 )
                 
             except Exception as e:
-                if idx < len(task.video_outputs):
-                    task.video_outputs[idx].upscale_status = "failed"
-                    task.video_outputs[idx].upscale_error = str(e)
+                if orig_idx < len(task.video_outputs):
+                    task.video_outputs[orig_idx].upscale_status = "failed"
+                    task.video_outputs[orig_idx].upscale_error = str(e)
                 log.error(f"Upscale {video_label} submit error: {e}")
         
+        # ── Identify failed video indices for potential partial retry ──
+        # For retry jobs, check only the target indices; for fresh jobs, check all
+        check_indices = target_indices
+        failed_indices = [
+            i for i in check_indices
+            if i < len(task.video_outputs)
+            and task.video_outputs[i].upscale_status == "failed"
+        ]
+        
         if not pending_ops:
-            log.warning(f"[UpscaleQueue] No successful submits for task {job.task_id}")
+            # ALL submits failed — try full job retry
+            if job.retry_count < job.max_retries:
+                job.retry_count += 1
+                retry_delay = 30 * (2 ** (job.retry_count - 1))
+                log.warning(
+                    f"[UpscaleQueue] No successful submits for task {job.task_id} — "
+                    f"re-enqueue attempt {job.retry_count}/{job.max_retries} "
+                    f"in {retry_delay}s"
+                )
+                # Reset ONLY the failed videos for retry
+                for i in failed_indices:
+                    task.video_outputs[i].upscale_status = "pending"
+                    task.video_outputs[i].upscale_error = ""
+                self._engine._dispatcher.update_progress(
+                    task.id, 87, f"🔁 Upscale retry {job.retry_count}/{job.max_retries} in {retry_delay}s..."
+                )
+                if self._engine._on_task_completed:
+                    try:
+                        self._engine._on_task_completed(task)
+                    except Exception:
+                        pass
+                await asyncio.sleep(retry_delay)
+                self.enqueue(job)
+                return
+            
+            log.warning(f"[UpscaleQueue] All retries exhausted for task {job.task_id}")
             self._engine._sync_overall_upscale_status(task)
             self._total_failed += 1
-            # Complete the task even on failure (720p still available)
             from core.dispatcher import TaskStage
             task.stage = TaskStage.COMPLETED
             self._engine._dispatcher.update_progress(task.id, 100, "⚠️ Upscale failed — 720p saved")
@@ -474,6 +588,37 @@ class UpscaleQueue:
                 except Exception as e:
                     log.error(f"[UpscaleQueue] UI callback error: {e}")
             return
+        
+        # ── PARTIAL RETRY: Some submitted OK, some failed ──
+        # Schedule retry job for ONLY the failed indices (don't wait for it)
+        if failed_indices and job.retry_count < job.max_retries:
+            retry_media_ids = [job.media_ids[i] for i in failed_indices]
+            retry_job = UpscaleJob(
+                task_id=job.task_id,
+                account_email=job.account_email,
+                media_ids=retry_media_ids,
+                output_uris=job.output_uris,
+                target_quality=job.target_quality,
+                aspect_ratio=job.aspect_ratio,
+                retry_count=job.retry_count + 1,
+                max_retries=job.max_retries,
+                retry_indices=failed_indices,  # Map back to original positions
+            )
+            retry_delay = 30 * (2 ** job.retry_count)
+            log.info(
+                f"[UpscaleQueue] Partial retry: {len(failed_indices)} failed videos "
+                f"(indices {failed_indices}) will retry in {retry_delay}s. "
+                f"{len(pending_ops)} videos proceeding to poll now."
+            )
+            # Reset failed statuses for upcoming retry
+            for i in failed_indices:
+                task.video_outputs[i].upscale_status = "pending"
+                task.video_outputs[i].upscale_error = ""
+            
+            async def _delayed_retry():
+                await asyncio.sleep(retry_delay)
+                self.enqueue(retry_job)
+            asyncio.create_task(_delayed_retry())
         
         # =====================================================
         # PHASE 2: Parallel Poll (all videos simultaneously)
@@ -554,7 +699,7 @@ class UpscaleQueue:
                 # Failed
                 if idx < len(task.video_outputs):
                     task.video_outputs[idx].upscale_status = "failed"
-                    task.video_outputs[idx].upscale_error = task.upscale_error or "Poll failed"
+                    task.video_outputs[idx].upscale_error = task._upscale_error or "Poll failed"
                 return (idx, None)
             finally:
                 self._burst.release()

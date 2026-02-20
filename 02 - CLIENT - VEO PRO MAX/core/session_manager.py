@@ -190,6 +190,7 @@ class SessionManager:
                     "continuation_frame_uri": getattr(task, 'continuation_frame_uri', None),
                     "continuation_frame_local_path": rel_frame,
                     "required_account": getattr(task, 'required_account', None),
+                    "prompt_index": getattr(task, 'prompt_index', 0),
                     "extract_point_ms": task.extract_point_ms,
                     "download_quality": task.download_quality,
                     "stage": task.stage.value if hasattr(task.stage, 'value') else "init",
@@ -227,6 +228,7 @@ class SessionManager:
                         }
                         for vo in (task.video_outputs if hasattr(task, 'video_outputs') else [])
                     ],
+                    "replace_target": list(task.replace_target) if getattr(task, 'replace_target', None) else None,
                 }
                 g_data["tasks"].append(t_data)
             result.append(g_data)

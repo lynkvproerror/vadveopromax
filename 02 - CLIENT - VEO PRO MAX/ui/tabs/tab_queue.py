@@ -110,6 +110,10 @@ class TabQueue(QWidget):
         self._upscale_spinner_timer = QTimer(self)
         self._upscale_spinner_timer.setInterval(400)  # dots cycle 400ms
         self._upscale_spinner_timer.timeout.connect(self._tick_upscale_spinner)
+        # Auto-refresh timer: periodic full queue refresh while engine is running
+        self._auto_refresh_timer = QTimer(self)
+        self._auto_refresh_timer.setInterval(2000)  # every 2s
+        self._auto_refresh_timer.timeout.connect(self._on_auto_refresh_tick)
         
         self._setup_ui()
         self._register_controller_callbacks()
@@ -138,14 +142,16 @@ class TabQueue(QWidget):
         """Handle progress update — shimmer + smooth gradient + glow on complete."""
         widget = self._task_widgets.get(task_id)
         if not widget:
+            # Check if this is a hidden replacement task — forward to original slot
+            self._forward_replacement_progress(task_id, progress, status_text)
             return
         
-        # During upscale phase: trigger full refresh so thumb overlays update
-        is_upscale_phase = status_text and (
+        # During download/upscale phase: trigger full refresh so thumb overlays update
+        is_refresh_phase = status_text and (
             "⬆️" in status_text or "Upscal" in status_text
-            or "🔄" in status_text
+            or "🔄" in status_text or "📥" in status_text
         )
-        if is_upscale_phase:
+        if is_refresh_phase:
             if not hasattr(self, '_upscale_refresh_timer'):
                 self._upscale_refresh_timer = QTimer(self)  # parent=self to avoid leak
                 self._upscale_refresh_timer.setSingleShot(True)
@@ -159,43 +165,39 @@ class TabQueue(QWidget):
         smooth_pct = self._get_smooth_progress(task_id, progress) / 100.0
         smooth_pct = max(0.0, min(1.0, smooth_pct))
         
-        # Update thumbnail slot gradients + register shimmer
+        # Update thumbnail slot gradients via unified _apply_thumb_effect
         if hasattr(widget, 'thumb_slots'):
+            # Get task status from widget (stored during creation)
+            task_status = getattr(widget, '_task_status', 'running')
             for slot in widget.thumb_slots:
                 try:
-                    if slot.pixmap() and not slot.pixmap().isNull():
-                        continue
-                    slot.setText(f"{progress}%")
-                    # Register for shimmer animation (generating phase)
-                    if 0 < progress < 85:
-                        self._register_shimmer_slot(slot)
-                    else:
-                        # Static gradient for non-generating phases
-                        slot.setStyleSheet(f"""
-                            QLabel {{
-                                background-color: qlineargradient(
-                                    x1:0, y1:1, x2:0, y2:0,
-                                    stop:0 #1E3A5E,
-                                    stop:{smooth_pct:.2f} {Theme.BLUE},
-                                    stop:{min(smooth_pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
-                                    stop:1 {Theme.SURFACE0}
-                                );
-                                border: 1px solid {Theme.BLUE};
-                                border-radius: 4px;
-                                color: {Theme.TEXT};
-                                font-size: 10px;
-                                font-weight: bold;
-                            }}
-                        """)
+                    self._apply_thumb_effect(slot, progress, task_status)
                 except RuntimeError:
                     continue
+        
+        # Auto-refresh: when progress hits 100%, trigger delayed refresh
+        # so thumbnails load from just-generated files without right-click
+        if progress >= 100:
+            QTimer.singleShot(500, self._refresh_queue_from_controller)
         
         # Update status label
         if hasattr(widget, 'status_label'):
             try:
                 if progress >= 100:
-                    widget.status_label.setText("✅ DONE")
-                    widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
+                    # Check if any videos are retrying (via thumb_slots metadata)
+                    retrying_count = 0
+                    if hasattr(widget, 'thumb_slots'):
+                        for slot in widget.thumb_slots:
+                            vi = getattr(slot, '_video_info', None)
+                            if vi and vi.get('quality') == 'retrying':
+                                retrying_count += 1
+                    if retrying_count > 0:
+                        total = len(widget.thumb_slots) if hasattr(widget, 'thumb_slots') else '?'
+                        widget.status_label.setText(f"♻️ RETRYING {retrying_count}/{total}")
+                        widget.status_label.setStyleSheet(f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;")
+                    else:
+                        widget.status_label.setText("✅ DONE")
+                        widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
                     # Phase 2: Trigger completion glow
                     self._trigger_completion_glow(task_id)
                     # Cleanup smooth progress
@@ -212,6 +214,35 @@ class TabQueue(QWidget):
                     else:
                         phase_color = Theme.PEACH
                     widget.status_label.setStyleSheet(f"color: {phase_color}; font-size: 10px; font-weight: bold; border: none;")
+            except RuntimeError:
+                pass
+    
+    def _forward_replacement_progress(self, task_id: str, progress: int, status_text: str = ""):
+        """Forward progress from a hidden replacement task to the original task's video slot.
+        
+        Replacement tasks (per-video retries) are hidden from UI but still emit progress.
+        This finds the original task's widget and updates ONLY the specific video slot.
+        """
+        if not self.controller or not hasattr(self.controller, 'get_replace_target'):
+            return
+        
+        target = self.controller.get_replace_target(task_id)
+        if not target:
+            return
+        
+        orig_task_id, video_index = target
+        widget = self._task_widgets.get(orig_task_id)
+        if not widget or not hasattr(widget, 'thumb_slots'):
+            return
+        
+        # Update only the specific video slot
+        if video_index < len(widget.thumb_slots):
+            slot = widget.thumb_slots[video_index]
+            try:
+                # Store retry progress on slot for _apply_thumb_effect to use
+                slot._retry_progress = progress
+                task_status = getattr(widget, '_task_status', 'completed')
+                self._apply_thumb_effect(slot, progress, task_status)
             except RuntimeError:
                 pass
     
@@ -270,37 +301,104 @@ class TabQueue(QWidget):
             self._throttled_refresh_pending = False
             self._refresh_queue_from_controller()
     
+    def _on_auto_refresh_tick(self):
+        """Periodic queue refresh while engine is running (every 2s).
+        
+        Keeps the queue UI in sync with task state changes (READY→RUNNING→COMPLETED)
+        that happen during engine processing but don't have explicit callbacks.
+        """
+        self._refresh_queue_from_controller()
+        # Auto-stop timer if engine no longer processing
+        if self.controller and hasattr(self.controller, 'state'):
+            if not self.controller.state.is_processing:
+                self._auto_refresh_timer.stop()
+                self._is_processing = False
+                self._is_paused = False
+                self._update_button_states()
+    
     # ── Phase 2: Dynamic Effects ─────────────────────────────────
     
+    def _slot_border(self, slot: QLabel, fallback: str = None) -> str:
+        """Get the per-slot border color, falling back to provided color or Theme.BLUE."""
+        BORDER_COLORS = {
+            'gray': Theme.BORDER, 'yellow': Theme.YELLOW,
+            'blue': Theme.BLUE, 'red': Theme.RED,
+            'green': Theme.GREEN, 'purple': Theme.PURPLE,
+        }
+        name = getattr(slot, '_border_color_name', None)
+        if name:
+            return BORDER_COLORS.get(name, fallback or Theme.BLUE)
+        return fallback or Theme.BLUE
+    
     def _tick_shimmer(self):
-        """Animate shimmer wave across generating thumbnail slots (20fps)."""
+        """Animate shimmer wave across generating thumbnail slots (20fps).
+        
+        Combines progress fill (bottom→top) with shimmer highlight sweep.
+        Uses per-slot stored progress and border color for independent rendering.
+        """
         self._shimmer_offset = (self._shimmer_offset + 0.08) % 2.0
         alive = []
         for slot in self._shimmer_active_slots:
             try:
                 if slot.pixmap() and not slot.pixmap().isNull():
                     continue  # Has real thumbnail now, skip
-                # Moving gradient highlight (shimmer wave)
+                
+                # Per-slot state
+                pct = getattr(slot, '_progress_pct', 0.0)
+                border = self._slot_border(slot)
+                
+                # Shimmer wave position (sweeps bottom→top)
                 wave = self._shimmer_offset
                 highlight_pos = max(0.0, min(1.0, wave - 0.5))
-                highlight_end = min(1.0, highlight_pos + 0.25)
-                slot.setStyleSheet(f"""
-                    QLabel {{
-                        background-color: qlineargradient(
-                            x1:0, y1:0, x2:1, y2:0,
-                            stop:0 {Theme.SURFACE0},
-                            stop:{max(0, highlight_pos - 0.01):.2f} {Theme.SURFACE0},
-                            stop:{highlight_pos:.2f} {Theme.BLUE},
-                            stop:{highlight_end:.2f} {Theme.SURFACE0},
-                            stop:1 {Theme.SURFACE0}
-                        );
-                        border: 1px solid {Theme.BLUE};
-                        border-radius: 4px;
-                        color: {Theme.TEXT};
-                        font-size: 10px;
-                        font-weight: bold;
-                    }}
-                """)
+                highlight_end = min(1.0, highlight_pos + 0.20)
+                
+                fill_color = "#1E3A5E"  # dark blue fill
+                shimmer_color = Theme.BLUE
+                empty_color = Theme.SURFACE0
+                
+                if pct <= 0.01:
+                    # No progress yet — just shimmer sweep
+                    slot.setStyleSheet(f"""
+                        QLabel {{
+                            background-color: qlineargradient(
+                                x1:0, y1:1, x2:0, y2:0,
+                                stop:0 {empty_color},
+                                stop:{max(0, highlight_pos - 0.01):.2f} {empty_color},
+                                stop:{highlight_pos:.2f} {shimmer_color},
+                                stop:{highlight_end:.2f} {empty_color},
+                                stop:1 {empty_color}
+                            );
+                            border: 1px solid {border};
+                            border-radius: 4px;
+                            color: {Theme.TEXT};
+                            font-size: 10px;
+                            font-weight: bold;
+                        }}
+                    """)
+                else:
+                    # Progress fill + shimmer within fill area
+                    shimmer_in_fill = min(highlight_pos, pct)
+                    shimmer_end_in_fill = min(highlight_end, pct)
+                    
+                    slot.setStyleSheet(f"""
+                        QLabel {{
+                            background-color: qlineargradient(
+                                x1:0, y1:1, x2:0, y2:0,
+                                stop:0 {fill_color},
+                                stop:{max(0, shimmer_in_fill - 0.01):.2f} {fill_color},
+                                stop:{shimmer_in_fill:.2f} {shimmer_color},
+                                stop:{shimmer_end_in_fill:.2f} {fill_color},
+                                stop:{pct:.2f} {fill_color},
+                                stop:{min(pct + 0.01, 1.0):.2f} {empty_color},
+                                stop:1 {empty_color}
+                            );
+                            border: 1px solid {border};
+                            border-radius: 4px;
+                            color: {Theme.TEXT};
+                            font-size: 10px;
+                            font-weight: bold;
+                        }}
+                    """)
                 alive.append(slot)
             except RuntimeError:
                 continue
@@ -314,6 +412,186 @@ class TabQueue(QWidget):
             self._shimmer_active_slots.append(slot)
         if not self._shimmer_timer.isActive():
             self._shimmer_timer.start()
+    
+    def _unregister_shimmer_slot(self, slot: QLabel):
+        """Remove a thumbnail slot from shimmer animation."""
+        try:
+            self._shimmer_active_slots.remove(slot)
+        except ValueError:
+            pass
+    
+    def _apply_thumb_effect(self, slot: QLabel, progress: int, task_status: str):
+        """Single source of truth for thumbnail slot rendering.
+        
+        Uses per-slot stored _border_color_name and _progress_pct for independent rendering.
+        Each slot can have different border color and progress based on its video_info.
+        
+        Upscale overlay: When a slot has a real thumbnail (from 720p download) AND is
+        in upscale phase (submitting/polling), paints a dark overlay with status icon
+        instead of returning early.
+        
+        Args:
+            slot: The QLabel thumbnail slot
+            progress: 0-100 progress percentage
+            task_status: Task state (running, waiting_poll, completed, etc.)
+        """
+        has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
+        
+        # Check if slot is in upscale phase (has thumbnail + upscale active)
+        vi = getattr(slot, '_video_info', None)
+        upscale_status = vi.get('upscale_status', '') if vi else ''
+        is_upscaling = upscale_status in ('submitting', 'polling')
+        
+        if has_pixmap and is_upscaling:
+            # Upscale overlay: dark tint + status icon on existing thumbnail
+            self._apply_upscale_overlay(slot, upscale_status)
+            return
+        
+        if has_pixmap and not is_upscaling:
+            return  # Has real thumbnail, upscale done — don't override
+        
+        # ── Per-video upscale status (no thumbnail yet) ──
+        # Border-only status indication — no emoji text inside slots
+        if upscale_status in ('success', 'failed', 'submitting', 'polling'):
+            self._unregister_shimmer_slot(slot)
+            slot.setText('')  # Clear any previous text
+            if upscale_status == 'success':
+                bc = self._slot_border(slot, Theme.GREEN)
+            elif upscale_status == 'failed':
+                bc = self._slot_border(slot, Theme.RED)
+            elif upscale_status in ('submitting', 'polling'):
+                bc = self._slot_border(slot, Theme.PURPLE)
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.SURFACE0};
+                    border: 2px solid {bc};
+                    border-radius: 4px;
+                }}
+            """)
+            return
+        
+        # ── Per-video retrying state (♻️ + progress) ──
+        quality = vi.get('quality', '') if vi else ''
+        if quality == 'retrying':
+            # Retrying: purple border + gradient fill, no emoji
+            retry_pct = getattr(slot, '_retry_progress', 0) / 100.0
+            retry_pct = max(0.0, min(1.0, retry_pct))
+            if retry_pct > 0:
+                slot.setText(f"{int(retry_pct * 100)}%")
+                self._register_shimmer_slot(slot)
+            else:
+                slot.setText('')
+            bc = self._slot_border(slot, Theme.PURPLE)
+            fill_color = "#3D2A5E"  # Purple-tinted fill for retry
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: qlineargradient(
+                        x1:0, y1:1, x2:0, y2:0,
+                        stop:0 {fill_color},
+                        stop:{retry_pct:.2f} {fill_color},
+                        stop:{min(retry_pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
+                        stop:1 {Theme.SURFACE0}
+                    );
+                    border: 2px solid {bc};
+                    border-radius: 4px;
+                    color: {Theme.PURPLE};
+                    font-size: 10px;
+                    font-weight: bold;
+                }}
+            """)
+            return
+        
+        is_active = task_status in ('running', 'waiting_poll')
+        
+        if not is_active:
+            # Not generating — unregister shimmer, leave current style
+            self._unregister_shimmer_slot(slot)
+            return
+        
+        # Update text
+        slot.setText(f"{progress}%")
+        
+        # Store progress on slot for shimmer to use
+        pct = max(0, min(100, progress)) / 100.0
+        slot._progress_pct = pct
+        
+        # Per-slot border color
+        border = self._slot_border(slot)
+        
+        if 0 < progress < 85:
+            # Shimmer phase — register for animated sweep + set base gradient
+            self._register_shimmer_slot(slot)
+            # Set initial progress fill gradient (shimmer will override periodically)
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: qlineargradient(
+                        x1:0, y1:1, x2:0, y2:0,
+                        stop:0 #1E3A5E,
+                        stop:{pct:.2f} #1E3A5E,
+                        stop:{min(pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
+                        stop:1 {Theme.SURFACE0}
+                    );
+                    border: 1px solid {border};
+                    border-radius: 4px;
+                    color: {Theme.TEXT};
+                    font-size: 10px;
+                    font-weight: bold;
+                }}
+            """)
+        else:
+            # Static gradient phase (≥85% or 0%) — unregister shimmer
+            self._unregister_shimmer_slot(slot)
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: qlineargradient(
+                        x1:0, y1:1, x2:0, y2:0,
+                        stop:0 #1E3A5E,
+                        stop:{pct:.2f} {Theme.BLUE},
+                        stop:{min(pct + 0.01, 1.0):.2f} {Theme.SURFACE0},
+                        stop:1 {Theme.SURFACE0}
+                    );
+                    border: 1px solid {border};
+                    border-radius: 4px;
+                    color: {Theme.TEXT};
+                    font-size: 10px;
+                    font-weight: bold;
+                }}
+            """)
+    
+    def _apply_upscale_overlay(self, slot: QLabel, upscale_status: str):
+        """Paint dark overlay + upscale status icon on an existing thumbnail.
+        
+        Called during upscale phase when the slot already has a 720p thumbnail.
+        Preserves the thumbnail underneath with a semi-transparent dark tint.
+        """
+        # Get the original thumbnail pixmap (before any overlay)
+        original_key = '_original_pixmap'
+        if not hasattr(slot, original_key) or getattr(slot, original_key) is None:
+            # Store original pixmap on first overlay call
+            slot._original_pixmap = QPixmap(slot.pixmap())
+        
+        base = slot._original_pixmap
+        if base.isNull():
+            return
+        
+        overlay = QPixmap(base.size())
+        overlay.fill(QColor(0, 0, 0, 0))  # transparent base
+        painter = QPainter(overlay)
+        painter.drawPixmap(0, 0, base)  # draw original thumbnail
+        painter.fillRect(overlay.rect(), QColor(0, 0, 0, 140))  # 55% dark tint
+        painter.end()
+        
+        slot.setPixmap(overlay)
+        
+        # Purple border during upscale (no emoji text)
+        slot.setStyleSheet(f"""
+            QLabel {{
+                border: 2px solid {Theme.PURPLE};
+                border-radius: 4px;
+                background-color: {Theme.BASE};
+                padding: 1px;
+            }}
+        """)
     
     def _trigger_completion_glow(self, task_id: str):
         """Start 3x glow pulse on all thumbnail slots of a completed task."""
@@ -329,7 +607,10 @@ class TabQueue(QWidget):
             self._glow_timer.start()
     
     def _tick_glow(self):
-        """Toggle glow border on/off for completing tasks (3x flash)."""
+        """Toggle glow border on/off for completing tasks (3x flash).
+        
+        Uses per-slot _border_color_name for final border (per-video independence).
+        """
         done_tasks = []
         for tid, info in self._glow_slots.items():
             info['count'] += 1
@@ -349,12 +630,13 @@ class TabQueue(QWidget):
                     continue
             if info['count'] >= 6:  # 3 complete on/off cycles
                 done_tasks.append(tid)
-                # Restore final green border
+                # Restore final per-video border color
                 for slot in info['slots']:
                     try:
+                        bc = self._slot_border(slot, Theme.GREEN)
                         slot.setStyleSheet(f"""
                             QLabel {{
-                                border: 2px solid {Theme.GREEN};
+                                border: 2px solid {bc};
                                 border-radius: 4px;
                                 background-color: {Theme.BASE};
                                 padding: 1px;
@@ -398,13 +680,15 @@ class TabQueue(QWidget):
         widget._fade_anim = anim  # prevent GC
     
     def _tick_upscale_spinner(self):
-        """Animate upscale overlay: cycle ⬆. → ⬆.. → ⬆... dots."""
-        dots = "." * (self._upscale_spinner_phase % 3 + 1)
+        """Animate upscale overlay: pulse border brightness.
+        
+        No emoji text — status indicated by purple border only.
+        """
         self._upscale_spinner_phase += 1
         alive = []
         for slot in self._upscale_spinner_slots:
             try:
-                slot.setText(f"⬆{dots}")
+                # No text update — purple border is sufficient
                 alive.append(slot)
             except RuntimeError:
                 continue
@@ -737,7 +1021,7 @@ class TabQueue(QWidget):
             ("#", 40, 0, False), ("Mode", 55, 0, False),
             ("Images", 120, 0, False),
             ("Prompt", 0, 1, False), 
-            ("Progress", 180, 0, True), ("Status", 90, 0, True),
+            ("Progress", 180, 0, True), ("Status", 120, 0, True),
             ("Actions", 68, 0, True),
         ]
         for label_text, width, stretch, center in cols:
@@ -888,12 +1172,35 @@ class TabQueue(QWidget):
         layout.addWidget(progress_wrapper)
         
         # Col 5: Status badge — 90px
-        # Check if this is an upscale-failed task (completed but upscale failed)
+        # Check per-video states for smart badge display
+        video_outputs = task_data.get('video_outputs', []) if task_data else []
         upscale_status = task_data.get('upscale_status', '') if task_data else ''
         
-        if item.status == "completed" and upscale_status == "failed":
+        # ── Per-video retry badge: ♻️ 3/4 ──
+        retrying_count = sum(1 for vo in video_outputs if vo.get('quality') == 'retrying')
+        
+        if item.status == "completed" and retrying_count > 0:
+            total_count = len(video_outputs) or 1
+            done_count = total_count - retrying_count
+            status_text = f"♻️ {done_count}/{total_count}"
+            
+            status_label = QLabel(status_text)
+            status_label.setFixedWidth(120)
+            status_label.setAlignment(Qt.AlignCenter)
+            status_label.setToolTip(
+                f"{retrying_count} video(s) retrying\n"
+                f"{done_count} video(s) done"
+            )
+            status_label.setStyleSheet(f"""
+                color: {Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE};
+                font-size: 10px;
+                font-weight: bold;
+                border: none;
+            """)
+            widget.status_label = status_label
+            layout.addWidget(status_label)
+        elif item.status == "completed" and upscale_status == "failed":
             # Status label showing per-video fail count (re-upscale via right-click menu)
-            video_outputs = task_data.get('video_outputs', []) if task_data else []
             failed_count = sum(1 for vo in video_outputs if vo.get('upscale_status') == 'failed')
             total_count = len(video_outputs) or 1
             download_quality = task_data.get('download_quality', '?') if task_data else '?'
@@ -904,7 +1211,7 @@ class TabQueue(QWidget):
                 status_text = f"⚠️ {failed_count}/{total_count} FAIL"
             
             status_label = QLabel(status_text)
-            status_label.setFixedWidth(90)
+            status_label.setFixedWidth(120)
             status_label.setAlignment(Qt.AlignCenter)
             
             # Tooltip with per-video error details
@@ -962,7 +1269,7 @@ class TabQueue(QWidget):
                         tooltip_text = "Per-video status:\n" + "\n".join(vo_lines)
             
             status_label = QLabel(display_status)
-            status_label.setFixedWidth(90)
+            status_label.setFixedWidth(120)
             status_label.setAlignment(Qt.AlignCenter)
             status_label.setStyleSheet(f"""
                 color: {display_color};
@@ -1311,10 +1618,23 @@ class TabQueue(QWidget):
         slot.setFixedSize(40, 40)
         slot.setAlignment(Qt.AlignCenter)
         
+        # Store per-video metadata for independent rendering
+        slot._video_info = video_info
+        slot._border_color_name = video_info.get('border_color', 'gray') if video_info else 'gray'
+        slot._progress_pct = 0.0
+        
         has_thumb = thumb_path and self._cached_file_exists(thumb_path)
         is_active = task_status in ('running', 'waiting_poll')
         is_failed = task_status in ('failed', 'cancelled')
         is_done = task_status == 'completed'
+        
+        # Per-video quality overrides task-level flags
+        # A video with quality='retrying' must show ♻️ even if task is 'completed'
+        video_quality = video_info.get('quality', '') if video_info else ''
+        if video_quality == 'retrying':
+            has_thumb = False  # Don't show stale cached thumbnail
+            is_done = False    # Override task-level 'completed' status
+            is_failed = False  # Not failed — it's retrying
         
         # Determine border color from video_info (per-video) or fallback
         border_color_name = "gray"  # default
@@ -1343,21 +1663,15 @@ class TabQueue(QWidget):
             if not pixmap.isNull():
                 
                 if is_upscaling:
-                    # Paint semi-transparent dark overlay + upscale icon
+                    # Paint semi-transparent dark overlay (no emoji text)
                     overlay_pixmap = QPixmap(pixmap.size())
                     overlay_pixmap.fill(QColor(0, 0, 0, 0))  # transparent base
                     painter = QPainter(overlay_pixmap)
                     painter.drawPixmap(0, 0, pixmap)  # draw thumbnail
                     painter.fillRect(overlay_pixmap.rect(), QColor(0, 0, 0, 140))  # 55% black
-                    painter.setPen(QColor("#cba6f7"))  # purple text
-                    font = QFont("Segoe UI", 8)
-                    font.setBold(True)
-                    painter.setFont(font)
-                    status_text = "⬆️" if video_info.get('upscale_status') == 'submitting' else "🔄"
-                    painter.drawText(overlay_pixmap.rect(), Qt.AlignCenter, status_text)
                     painter.end()
                     slot.setPixmap(overlay_pixmap)
-                    # Phase 3: Register animated upscale spinner
+                    # Purple border indicates upscale in progress
                     self._register_upscale_spinner(slot)
                 else:
                     slot.setPixmap(pixmap)
@@ -1384,41 +1698,47 @@ class TabQueue(QWidget):
                 slot.setToolTip(tooltip)
                 slot.mousePressEvent = lambda e, p=video_path: self._open_video(p) if e.button() == Qt.MouseButton.LeftButton else None
             
-            # Right-click context menu for ALL thumbnails with video_info
-            if video_info:
-                slot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-                slot.customContextMenuRequested.connect(
-                    lambda pos, vi=video_info, s=slot: self._show_video_context_menu(pos, vi, s)
-                )
+
         elif is_failed:
-            # ❌ Failed — red border with X
-            slot.setText("❌")
+            # Failed — red border only, no emoji
+            slot.setText('')
             slot.setStyleSheet(f"""
                 QLabel {{
                     background-color: {Theme.RED_BG};
                     border: 2px solid {Theme.RED};
                     border-radius: 4px;
-                    color: {Theme.RED};
-                    font-size: 14px;
                 }}
             """)
+        elif video_info and video_info.get('quality') == 'retrying':
+            # Retrying — purple border with shimmer, no emoji
+            slot.setText('')
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.SURFACE0};
+                    border: 2px solid {Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE};
+                    border-radius: 4px;
+                }}
+            """)
+            slot.setToolTip("Retrying this video...")
+            # Register for shimmer animation
+            slot._border_color_name = 'purple'
+            slot._progress_pct = 0.0
+            self._register_shimmer_slot(slot)
         elif is_done and video_path and self._cached_file_exists(video_path):
-            # ✅ Completed but thumbnail missing (cache cleared) — regen in background
-            slot.setText("🔄")
+            # Completed but thumbnail missing — regen in background, yellow border
+            slot.setText('')
             slot.setStyleSheet(f"""
                 QLabel {{
                     background-color: {Theme.SURFACE0};
                     border: 2px solid {Theme.YELLOW};
                     border-radius: 4px;
-                    color: {Theme.YELLOW};
-                    font-size: 14px;
                 }}
             """)
             slot.setToolTip("Regenerating thumbnail...")
             # Fire-and-forget: spawn FFmpeg to extract first frame
             self._spawn_thumbnail_regen(thumb_path or "", video_path, video_info)
         elif is_active:
-            # 🔄 Generating — gradient progress fill
+            # Generating — gradient progress fill (keep N% text)
             pct = max(0, min(100, progress)) / 100.0
             slot.setText(f"{progress}%")
             slot.setStyleSheet(f"""
@@ -1438,17 +1758,23 @@ class TabQueue(QWidget):
                 }}
             """)
         else:
-            # ⏳ Pending — dark placeholder
-            slot.setText("⏳")
+            # Pending — dark placeholder, gray border
+            slot.setText('')
             slot.setStyleSheet(f"""
                 QLabel {{
                     background-color: {Theme.SURFACE0};
                     border: 1px solid {Theme.BORDER};
                     border-radius: 4px;
-                    color: {Theme.OVERLAY0};
-                    font-size: 14px;
                 }}
             """)
+        
+        # Right-click context menu for ALL thumbnail slots with video_info
+        # (placed after all styling branches so every state gets the video menu)
+        if video_info:
+            slot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            slot.customContextMenuRequested.connect(
+                lambda pos, vi=video_info, s=slot: self._show_video_context_menu(pos, vi, s)
+            )
         
         return slot
     
@@ -1483,6 +1809,8 @@ class TabQueue(QWidget):
         
         Called when a completed task's thumbnail file is missing on disk.
         FFmpeg extracts first frame → saves to cache → next UI refresh shows it.
+        
+        Naming convention matches engine.py: {task_id}_{index}.jpg
         """
         if not video_path or video_path in self._regen_in_progress:
             return
@@ -1492,18 +1820,25 @@ class TabQueue(QWidget):
         def _regen():
             try:
                 import subprocess
-                # Determine output path
+                # Determine output path — use original thumb_path if available,
+                # otherwise use engine-consistent naming: {task_id}_{index}.jpg
                 if thumb_path:
                     out = Path(thumb_path)
                 else:
                     cache_dir = Path.home() / ".veoauto" / "cache" / "thumbnails"
                     cache_dir.mkdir(parents=True, exist_ok=True)
-                    out = cache_dir / f"{Path(video_path).stem}_regen.jpg"
+                    # Use task_id + video index for consistent naming with engine.py
+                    task_id = video_info.get('task_id', '') if video_info else ''
+                    vid_idx = video_info.get('index', 0) if video_info else 0
+                    if task_id:
+                        out = cache_dir / f"{task_id}_{vid_idx}.jpg"
+                    else:
+                        out = cache_dir / f"{Path(video_path).stem}_regen.jpg"
                 
                 out.parent.mkdir(parents=True, exist_ok=True)
                 
                 subprocess.run(
-                    ['ffmpeg', '-y', '-i', str(video_path),
+                    ['ffmpeg', '-y', '-ss', '1', '-i', str(video_path),
                      '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
                      str(out)],
                     capture_output=True, timeout=10,
@@ -1511,6 +1846,8 @@ class TabQueue(QWidget):
                 
                 if out.exists():
                     print(f"[Thumbnail] Regenerated: {out.name}")
+                    # Invalidate file cache so next refresh picks it up
+                    self._invalidate_file_cache(str(out))
             except Exception as e:
                 print(f"[Thumbnail] Regen failed: {e}")
             finally:
@@ -1835,6 +2172,10 @@ class TabQueue(QWidget):
             if widget and hasattr(widget, '_task_id'):
                 if widget._task_id not in new_task_ids:
                     layout.takeAt(i)
+                    # Clean stale shimmer slots before destroy
+                    if hasattr(widget, 'thumb_slots'):
+                        for s in widget.thumb_slots:
+                            self._unregister_shimmer_slot(s)
                     widget.deleteLater()
                     continue
                 existing_ids.add(widget._task_id)
@@ -1857,6 +2198,7 @@ class TabQueue(QWidget):
                 )
                 row = self._create_queue_item_widget(item, task_data=td)
                 row._task_id = tid  # Tag for differential detection
+                row._task_status = td['status']  # Track status for _apply_thumb_effect
                 layout.insertWidget(idx, row)
                 self._task_widgets[tid] = row
                 # Phase 3: Fade-in animation for new rows
@@ -1868,15 +2210,31 @@ class TabQueue(QWidget):
         Updates: status label, progress gradient, thumbnail overlays.
         """
         try:
+            # Track current status on widget for _apply_thumb_effect
+            widget._task_status = td.get('status', 'running')
             # Update status label
             if hasattr(widget, 'status_label'):
                 status = td.get('status', '')
                 progress = td.get('progress', 0)
                 if progress >= 100:
-                    widget.status_label.setText("✅ DONE")
-                    widget.status_label.setStyleSheet(
-                        f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;"
+                    # Check if any videos are still retrying
+                    video_outputs = td.get('video_outputs', [])
+                    retrying_count = sum(
+                        1 for vo in video_outputs
+                        if vo.get('quality') == 'retrying'
                     )
+                    if retrying_count > 0:
+                        widget.status_label.setText(
+                            f"♻️ RETRYING {retrying_count}/{len(video_outputs)}"
+                        )
+                        widget.status_label.setStyleSheet(
+                            f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;"
+                        )
+                    else:
+                        widget.status_label.setText("✅ DONE")
+                        widget.status_label.setStyleSheet(
+                            f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;"
+                        )
                 elif status in ('running', 'waiting_poll'):
                     display = td.get('status_text', '🔥 PROCESSING')
                     widget.status_label.setText(display)
@@ -1892,21 +2250,153 @@ class TabQueue(QWidget):
                         f"color: {color}; font-size: 10px; font-weight: bold; border: none;"
                     )
                 elif status == 'failed':
+                    error_msg = td.get('error', '')
                     widget.status_label.setText("❌ FAILED")
+                    if error_msg:
+                        widget.status_label.setToolTip(error_msg)
                     widget.status_label.setStyleSheet(
                         f"color: {Theme.RED}; font-size: 10px; font-weight: bold; border: none;"
                     )
+                else:
+                    # Handle ready, pending, waiting, cancelled states
+                    status_icons = {
+                        'ready': '⏳', 'pending': '⏳',
+                        'waiting': '🔗', 'cancelled': '⛔',
+                    }
+                    icon = status_icons.get(status, '⏳')
+                    color = Theme.YELLOW if status == 'waiting' else Theme.SUBTEXT0
+                    widget.status_label.setText(f"{icon} {status.upper()}")
+                    widget.status_label.setStyleSheet(
+                        f"color: {color}; font-size: 10px; font-weight: bold; border: none;"
+                    )
             
-            # Update progress on thumbnail slots
-            if hasattr(widget, 'thumb_slots') and td.get('progress', 0) < 100:
-                pct = max(0, min(100, td.get('progress', 0))) / 100.0
-                for slot in widget.thumb_slots:
-                    try:
-                        if slot.pixmap() and not slot.pixmap().isNull():
+            # Sync per-video info onto each slot FIRST (before any effect rendering)
+            if hasattr(widget, 'thumb_slots'):
+                progress = td.get('progress', 0)
+                thumbnails = td.get('thumbnails', [])
+                video_outputs = td.get('video_outputs', [])
+                
+                # Step 1: Sync per-slot metadata from video_outputs
+                for i, slot in enumerate(widget.thumb_slots):
+                    vi = video_outputs[i] if i < len(video_outputs) else None
+                    slot._video_info = vi
+                    if vi:
+                        slot._border_color_name = vi.get('border_color', 'gray')
+                
+                # Step 2: Apply per-slot rendering based on task progress
+                # Force-retried tasks: clear stale thumbnails when task was reset
+                status = td.get('status', '')
+                if progress == 0 and status in ('ready', 'pending') and not video_outputs:
+                    for slot in widget.thumb_slots:
+                        try:
+                            # Clear any existing pixmap from previous completion
+                            slot.clear()
+                            slot.setText('')
+                            # Reset per-slot metadata (stale from previous completion)
+                            slot._border_color_name = 'gray'
+                            slot._video_info = None
+                            slot._progress_pct = 0.0
+                            slot._original_pixmap = None
+                            slot.setStyleSheet(f"""
+                                QLabel {{
+                                    background-color: {Theme.SURFACE0};
+                                    border: 1px solid {Theme.SURFACE1};
+                                    border-radius: 4px;
+                                    color: {Theme.SUBTEXT0};
+                                    font-size: 10px;
+                                }}
+                            """)
+                            self._unregister_shimmer_slot(slot)
+                        except RuntimeError:
                             continue
-                        slot.setText(f"{td.get('progress', 0)}%")
-                    except RuntimeError:
-                        continue
+                elif progress >= 100:
+                    # Completed: show thumbnails or styled checkmarks per-video
+                    for i, slot in enumerate(widget.thumb_slots):
+                        try:
+                            vi = video_outputs[i] if i < len(video_outputs) else None
+                            # Clean up upscale overlay state
+                            slot._original_pixmap = None
+                            
+                            # Find best thumbnail path
+                            thumb_path = None
+                            if vi:
+                                thumb_path = vi.get('thumbnail_path', '')
+                            if not thumb_path and i < len(thumbnails):
+                                thumb_path = thumbnails[i]
+                            
+                            # Invalidate file cache — thumbnail may have just been generated
+                            if thumb_path:
+                                self._invalidate_file_cache(thumb_path)
+                            
+                            # ── Per-video border color from video_outputs ──
+                            # VideoOutputInfo.border_color: red=fail, blue=1080p/4K, 
+                            # yellow=720p, purple=upscaling, gray=pending
+                            if vi:
+                                bc_name = vi.get('border_color', '')
+                                if bc_name:
+                                    slot._border_color_name = bc_name
+                            
+                            bc = self._slot_border(slot, Theme.GREEN)
+                            is_failed = vi and vi.get('upscale_status') == 'failed'
+                            
+                            # Set tooltip with per-video quality info
+                            quality = vi.get('quality', '') if vi else ''
+                            us = vi.get('upscale_status', '') if vi else ''
+                            ue = vi.get('upscale_error', '') if vi else ''
+                            tip_parts = [f"Video {i+1}"]
+                            if quality:
+                                tip_parts.append(f"Quality: {quality}")
+                            if us:
+                                tip_parts.append(f"Upscale: {us}")
+                            if ue:
+                                tip_parts.append(f"Error: {ue}")
+                            slot.setToolTip(" | ".join(tip_parts))
+                            
+                            if thumb_path and self._cached_file_exists(thumb_path):
+                                pix = self._get_cached_pixmap(thumb_path, 40)
+                                if not pix.isNull():
+                                    slot.setPixmap(pix)
+                                    slot.setStyleSheet(
+                                        f"QLabel {{ border: 2px solid {bc}; border-radius: 4px;"
+                                        f"background-color: {Theme.BASE}; padding: 1px; }}"
+                                        f"QLabel:hover {{ border-color: {Theme.LAVENDER}; }}"
+                                    )
+                                    # Unregister from shimmer (has real thumbnail now)
+                                    self._unregister_shimmer_slot(slot)
+                            elif not (slot.pixmap() and not slot.pixmap().isNull()):
+                                # No thumbnail — border-only status, no emoji
+                                slot.setText('')
+                                if is_failed:
+                                    border_c = Theme.RED
+                                    bg = Theme.RED_BG if hasattr(Theme, 'RED_BG') else Theme.SURFACE0
+                                else:
+                                    border_c = bc
+                                    bg = Theme.SURFACE0
+                                slot.setStyleSheet(f"""
+                                    QLabel {{
+                                        background-color: {bg};
+                                        border: 2px solid {border_c};
+                                        border-radius: 4px;
+                                    }}
+                                """)
+                                self._unregister_shimmer_slot(slot)
+                        except RuntimeError:
+                            continue
+                else:
+                    # In-progress: apply per-slot gradient + shimmer
+                    status = td.get('status', 'running')
+                    for i, slot in enumerate(widget.thumb_slots):
+                        try:
+                            # Sync per-slot video_info (upscale_status changes during upscale phase)
+                            if i < len(video_outputs):
+                                slot._video_info = video_outputs[i]
+                                # Update border color from latest video_info
+                                bc_name = video_outputs[i].get('border_color', '')
+                                if bc_name:
+                                    slot._border_color_name = bc_name
+                            self._apply_thumb_effect(slot, progress, status)
+                        except RuntimeError:
+                            continue
         except RuntimeError:
             pass  # Widget deleted mid-update
     
@@ -2052,18 +2542,21 @@ class TabQueue(QWidget):
                 self.controller.start_processing()
             self._is_processing = self.controller.state.is_processing if self.controller else True
             self._is_paused = False
+            self._auto_refresh_timer.start()
         elif self._is_paused:
             # Paused → Resume
             self.resume_all.emit()
             if self.controller:
                 self.controller.resume_processing()
             self._is_paused = False
+            self._auto_refresh_timer.start()
         else:
             # Running → Pause
             self.pause_all.emit()
             if self.controller:
                 self.controller.pause_processing()
             self._is_paused = True
+            self._auto_refresh_timer.stop()
         
         self._update_button_states()
     
@@ -2071,6 +2564,7 @@ class TabQueue(QWidget):
         """Stop all processing immediately."""
         self._is_processing = False
         self._is_paused = False
+        self._auto_refresh_timer.stop()
         self.stop_all.emit()
         if self.controller:
             self.controller.stop_processing()
@@ -2206,23 +2700,6 @@ class TabQueue(QWidget):
         if main_window and hasattr(main_window, 'show_toast'):
             main_window.show_toast(f"Reset {count} prompts — cache cleared, re-queued", "info")
     
-    def _on_reset_item(self, item_id):
-        """Reset a single task — delete its downloads/cache, re-queue."""
-        if self.controller and hasattr(self.controller, 'reset_task'):
-            if self.controller.reset_task(str(item_id)):
-                # Update local state
-                for item in self._queue_items:
-                    if item.id == item_id:
-                        item.status = "pending"
-                        item.progress = 0
-                        self._refresh_item_widget(item)
-                        break
-                self._update_stats()
-                
-                main_window = self.window()
-                if main_window and hasattr(main_window, 'show_toast'):
-                    main_window.show_toast(f"Reset prompt #{item_id} — cache cleared", "info")
-    
     def _on_retry_item(self, item_id):
         """Retry a specific failed item."""
         if self.controller and hasattr(self.controller, 'retry_task'):
@@ -2240,15 +2717,8 @@ class TabQueue(QWidget):
                 if main_window and hasattr(main_window, 'show_toast'):
                     main_window.show_toast(f"Cannot retry prompt #{item_id}", "warning")
     
-    def _show_task_context_menu(self, pos, task_id, widget):
-        """Show right-click context menu for a task row.
-        
-        Menu items are context-sensitive based on task state:
-        - Force Retry: always available (re-generate from scratch)
-        - Re-Upscale Failed: when any video has upscale_status='failed'
-        - Re-Upscale All: when task completed with 1080p/4K quality
-        - Reset Task: always available (delete cache + re-queue)
-        """
+    def _create_styled_menu(self) -> 'QMenu':
+        """Create a QMenu with unified Catppuccin styling."""
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet(f"""
@@ -2274,37 +2744,60 @@ class TabQueue(QWidget):
                 margin: 4px 8px;
             }}
         """)
+        return menu
+    
+    def _show_task_context_menu(self, pos, task_id, widget):
+        """Right-click context menu for a TASK ROW — whole-prompt actions.
+        
+        Actions:
+        - ♻️ Retry Failed Videos (smart: only failed, or full if all failed)
+        - ⬇️ Re-download All 720p
+        - ⬆️ Re-Upscale Failed / All
+        - 📂 Open Output Folder
+        """
+        menu = self._create_styled_menu()
         
         # Fetch LIVE task data from controller
         task_data = None
+        group_data = None
         if self.controller and hasattr(self.controller, 'get_queue_groups'):
             for group in self.controller.get_queue_groups():
                 for td in group.get('tasks', []):
                     if str(td.get('id', '')) == str(task_id):
                         task_data = td
+                        group_data = group
                         break
                 if task_data:
                     break
         
         task_status = task_data.get('status', '') if task_data else ''
-        upscale_status = task_data.get('upscale_status', '') if task_data else ''
         download_quality = task_data.get('download_quality', '720p') if task_data else '720p'
         video_outputs = task_data.get('video_outputs', []) if task_data else []
         has_upscale_quality = download_quality in ('1080p', '4K')
         
         # Count per-video statuses
+        failed_count = sum(
+            1 for vo in video_outputs
+            if vo.get('quality') in ('failed', 'pending', '')
+            or vo.get('upscale_status') == 'failed'
+        )
         failed_upscale_count = sum(1 for vo in video_outputs if vo.get('upscale_status') == 'failed')
         total_videos = len(video_outputs)
         
-        # === 1. Force Retry (always) ===
-        force_retry_action = menu.addAction("🔄 Force Retry (re-generate)")
-        force_retry_action.triggered.connect(
-            lambda: self._on_force_retry_item(task_id)
-        )
+        # === 1. Retry (smart per-video or full) — hidden for running tasks ===
+        if task_status != 'running':
+            if failed_count > 0 and failed_count < total_videos:
+                retry_label = f"♻️ Retry {failed_count} Failed Video(s)"
+            else:
+                retry_label = "🔄 Force Retry (re-generate all)"
+            force_retry_action = menu.addAction(retry_label)
+            force_retry_action.triggered.connect(
+                lambda: self._on_force_retry_item(task_id)
+            )
         
-        # === 2. Re-download 720p (for completed tasks) ===
+        # === 2. Re-download All 720p (for completed tasks) ===
         if task_status == 'completed' and video_outputs:
-            redownload_action = menu.addAction("⬇️ Re-download 720p")
+            redownload_action = menu.addAction("⬇️ Re-download All 720p")
             redownload_action.triggered.connect(
                 lambda: self._on_redownload_720p_item(task_id)
             )
@@ -2314,63 +2807,134 @@ class TabQueue(QWidget):
             menu.addSeparator()
             
             if failed_upscale_count > 0:
-                # Re-upscale only failed videos
                 re_up_failed = menu.addAction(
                     f"⬆️ Re-Upscale Failed ({failed_upscale_count}/{total_videos}) → {download_quality}"
                 )
                 re_up_failed.triggered.connect(
-                    lambda: self._on_reupscale_item(task_id)
+                    lambda: self._on_reupscale_item(task_id, failed_only=True)
                 )
             
-            # Re-upscale ALL videos (regardless of current status)
             re_up_all = menu.addAction(f"⬆️ Re-Upscale All → {download_quality}")
             re_up_all.triggered.connect(
-                lambda: self._on_reupscale_item(task_id)
+                lambda: self._on_reupscale_item(task_id, failed_only=False)
             )
         
-        # === 3. Reset Task ===
-        menu.addSeparator()
-        reset_action = menu.addAction("🗑️ Reset (delete cache + re-queue)")
-        reset_action.triggered.connect(
-            lambda: self._on_reset_item(task_id)
-        )
+        # === 4. Open Output Folder ===
+        output_folder = group_data.get('output_folder', '') if group_data else ''
+        if output_folder:
+            menu.addSeparator()
+            open_folder_action = menu.addAction("📂 Open Output Folder")
+            open_folder_action.triggered.connect(
+                lambda: self._open_group_folder(output_folder)
+            )
         
         menu.exec(widget.mapToGlobal(pos))
     
     def _on_force_retry_item(self, item_id):
-        """Force retry a task regardless of state (including completed)."""
+        """Force retry a task — smart per-video retry for failed videos only.
+        
+        If task has video_outputs with some successes, retries only failed/pending videos
+        individually via force_retry_video. Falls back to full force_retry_task if task
+        has no video_outputs (never completed) or all videos need retry.
+        """
+        task_id = str(item_id)
+        
+        # Check if we can do smart per-video retry
+        task_data = None
+        if hasattr(self.controller, 'get_queue_groups'):
+            groups = self.controller.get_queue_groups()
+            for g in groups:
+                for td in g.get('tasks', []):
+                    if td.get('id') == task_id:
+                        task_data = td
+                        break
+                if task_data:
+                    break
+        
+        video_outputs = task_data.get('video_outputs', []) if task_data else []
+        
+        # Smart retry: retry only failed/pending videos if there are successful ones
+        if video_outputs and self.controller and hasattr(self.controller, 'force_retry_video'):
+            failed_indices = []
+            for i, vo in enumerate(video_outputs):
+                q = vo.get('quality', '')
+                us = vo.get('upscale_status', '')
+                if q in ('failed', 'pending', '') or us == 'failed':
+                    failed_indices.append(i)
+            
+            if failed_indices and len(failed_indices) < len(video_outputs):
+                # Partial retry — only retry failed videos, keep successful ones
+                retried = 0
+                for idx in failed_indices:
+                    if self.controller.force_retry_video(task_id, idx):
+                        retried += 1
+                
+                if retried > 0:
+                    self._refresh_queue_from_controller()
+                    self._update_stats()
+                    main_window = self.window()
+                    if main_window and hasattr(main_window, 'show_toast'):
+                        main_window.show_toast(
+                            f"♻️ Retrying {retried} failed video(s), keeping {len(video_outputs) - retried} successful",
+                            "info"
+                        )
+                    return
+        
+        # Fallback: full retry (no video_outputs, or all videos failed)
         if self.controller and hasattr(self.controller, 'force_retry_task'):
-            success = self.controller.force_retry_task(str(item_id))
+            success = self.controller.force_retry_task(task_id)
             if success:
                 self._refresh_queue_from_controller()
                 self._update_stats()
-                
                 main_window = self.window()
                 if main_window and hasattr(main_window, 'show_toast'):
-                    main_window.show_toast(f"Force retrying prompt #{item_id}", "info")
+                    main_window.show_toast(f"🔄 Force retrying entire prompt #{item_id}", "info")
             else:
                 main_window = self.window()
                 if main_window and hasattr(main_window, 'show_toast'):
                     main_window.show_toast(f"Cannot force retry prompt #{item_id}", "warning")
     
     def _on_delete_item(self, item_id):
-        """Delete a specific item."""
-        if self.controller and hasattr(self.controller, 'cancel_task'):
-            self.controller.cancel_task(str(item_id))
+        """Delete a specific task — cancel, remove from dispatcher, refresh UI."""
+        task_id = str(item_id)
         
-        self._queue_items = [i for i in self._queue_items if i.id != item_id]
-        widget = self._item_widgets.pop(item_id, None)
-        if widget:
-            widget.deleteLater()
+        # 1. Cancel via dispatcher (handles state, running count, etc.)
+        if self.controller and hasattr(self.controller, 'cancel_task'):
+            self.controller.cancel_task(task_id)
+        
+        # 2. Fully remove from dispatcher internals so task won't reappear on refresh
+        if self.controller and hasattr(self.controller, '_dispatcher'):
+            disp = self.controller._dispatcher
+            # Remove from _all_tasks
+            disp._all_tasks.pop(task_id, None)
+            # Remove from parent TaskGroup.tasks list
+            for group in disp._task_groups.values():
+                group.tasks = [t for t in group.tasks if t.id != task_id]
+        
+        # 3. Remove widget from group-based tracking
+        tw = self._task_widgets.pop(task_id, None)
+        if tw:
+            tw.deleteLater()
+        # Also clean old flat-model dicts (defensive)
+        self._item_widgets.pop(item_id, None)
+        self._queue_items = [i for i in self._queue_items if str(i.id) != task_id]
+        
+        # 4. Refresh to keep group headers/stats in sync
+        self._refresh_queue_from_controller()
         self._update_stats()
     
-    def _on_reupscale_item(self, item_id):
-        """Re-upscale ALL failed videos in a completed task."""
+    def _on_reupscale_item(self, item_id, failed_only: bool = True):
+        """Re-upscale videos in a completed task.
+        
+        Args:
+            failed_only: If True, only re-upscale failed videos. If False, re-upscale all.
+        """
         if self.controller and hasattr(self.controller, 're_upscale_task'):
-            self.controller.re_upscale_task(str(item_id))
+            self.controller.re_upscale_task(str(item_id), failed_only=failed_only)
+            label = "failed" if failed_only else "all"
             main_window = self.window()
             if main_window and hasattr(main_window, 'show_toast'):
-                main_window.show_toast("⬆️ Re-upscaling all failed videos...", "info")
+                main_window.show_toast(f"⬆️ Re-upscaling {label} videos...", "info")
     
     def _on_redownload_720p_item(self, item_id):
         """Re-download 720p videos for a completed task."""
@@ -2381,38 +2945,16 @@ class TabQueue(QWidget):
                 main_window.show_toast("⬇️ Re-downloading 720p videos...", "info")
     
     def _show_video_context_menu(self, pos, video_info: dict, parent_widget):
-        """Right-click context menu on any thumbnail — state-dependent items.
+        """Right-click context menu on a THUMBNAIL SLOT — per-video actions.
         
-        Border colors → menu items:
-        - yellow (720p only): Upscale → target quality
-        - blue (upscaled OK): Re-Upscale → target quality
-        - red (upscale failed): Re-Upscale → target quality (with error info)
-        - gray (pending/no download): info only
+        Actions:
+        - Info header (status + quality)
+        - ♻️ Retry This Video (for failed/pending)
+        - ⬆️ Upscale / Re-Upscale (per-video)
+        - ⬇️ Re-download 720p (per-video)
+        - 📂 Open in Explorer (if file exists)
         """
-        menu = QMenu(self)
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background-color: {Theme.SURFACE1};
-                color: {Theme.TEXT};
-                border: 1px solid {Theme.SURFACE2};
-                padding: 4px;
-            }}
-            QMenu::item {{
-                padding: 6px 20px;
-            }}
-            QMenu::item:selected {{
-                background-color: {Theme.BLUE};
-                color: {Theme.CRUST};
-            }}
-            QMenu::item:disabled {{
-                color: {Theme.SUBTEXT0};
-            }}
-            QMenu::separator {{
-                height: 1px;
-                background: {Theme.SURFACE2};
-                margin: 4px 8px;
-            }}
-        """)
+        menu = self._create_styled_menu()
         
         idx = video_info.get('index', 0)
         border_color = video_info.get('border_color', 'gray')
@@ -2423,44 +2965,55 @@ class TabQueue(QWidget):
         task_id = video_info.get('task_id', '')
         best_file = video_info.get('best_file', '')
         has_upscale_quality = target_quality in ('1080p', '4K')
+        is_failed = (border_color == 'red' or quality in ('failed', 'retrying')
+                     or upscale_status == 'failed')
         
         # === Info header (disabled) ===
-        if border_color == 'red':
-            info_text = f"❌ Video {idx + 1}: {upscale_error or 'upscale failed'}"
-        elif border_color == 'blue':
-            info_text = f"✅ Video {idx + 1}: {quality}"
-        elif border_color == 'yellow':
-            info_text = f"🟡 Video {idx + 1}: 720p"
-        else:
-            info_text = f"⏳ Video {idx + 1}: pending"
+        status_map = {
+            'red': f"❌ Video {idx + 1}: {upscale_error or 'failed'}",
+            'blue': f"✅ Video {idx + 1}: {quality}",
+            'yellow': f"🟡 Video {idx + 1}: 720p",
+            'purple': f"♻️ Video {idx + 1}: retrying",
+        }
+        info_text = status_map.get(border_color, f"⏳ Video {idx + 1}: pending")
         info_action = menu.addAction(info_text)
         info_action.setEnabled(False)
-        
         menu.addSeparator()
         
-        # === Upscale / Re-Upscale ===
+        # === 1. Retry / Re-generate This Video (always available) ===
+        if is_failed:
+            retry_label = "♻️ Retry This Video (re-generate)"
+        elif quality == 'retrying':
+            retry_label = "🔄 Re-generate This Video (cancel current retry)"
+        else:
+            retry_label = "🔄 Re-generate This Video"
+        retry_action = menu.addAction(retry_label)
+        retry_action.triggered.connect(
+            lambda checked=False, t=task_id, i=idx, s=parent_widget: self._on_retry_single_video(t, i, s)
+        )
+        
+        # === 2. Upscale / Re-Upscale ===
         if has_upscale_quality:
             if border_color == 'yellow':
-                # 720p only → offer upscale
                 up_action = menu.addAction(f"⬆️ Upscale → {target_quality}")
                 up_action.triggered.connect(
-                    lambda: self._on_reupscale_single_video(task_id, idx)
+                    lambda checked=False, t=task_id, i=idx, s=parent_widget: self._on_reupscale_single_video(t, i, s)
                 )
             elif border_color in ('red', 'blue'):
-                # Failed or already upscaled → offer re-upscale
                 label = "Re-Upscale" if border_color == 'blue' else "Re-Upscale (retry)"
                 re_up_action = menu.addAction(f"⬆️ {label} → {target_quality}")
                 re_up_action.triggered.connect(
-                    lambda: self._on_reupscale_single_video(task_id, idx)
+                    lambda checked=False, t=task_id, i=idx, s=parent_widget: self._on_reupscale_single_video(t, i, s)
                 )
         
-        # === Re-download 720p (per-video) ===
-        redownload_action = menu.addAction(f"⬇️ Re-download 720p (video {idx + 1})")
-        redownload_action.triggered.connect(
-            lambda: self._on_redownload_single_720p(task_id, idx)
-        )
+        # === 3. Re-download 720p (only if video has been generated) ===
+        if quality not in ('', 'pending', 'retrying', 'failed'):
+            redownload_action = menu.addAction(f"⬇️ Re-download 720p")
+            redownload_action.triggered.connect(
+                lambda checked=False, t=task_id, i=idx, s=parent_widget: self._on_redownload_single_720p(t, i, s)
+            )
         
-        # === Open in Explorer ===
+        # === 4. Open in Explorer ===
         if best_file and self._cached_file_exists(best_file):
             menu.addSeparator()
             open_action = menu.addAction(f"📂 Open in Explorer")
@@ -2470,21 +3023,89 @@ class TabQueue(QWidget):
         
         menu.exec(parent_widget.mapToGlobal(pos))
     
-    def _on_reupscale_single_video(self, task_id: str, video_index: int):
-        """Re-upscale a single video by index."""
+    def _on_reupscale_single_video(self, task_id: str, video_index: int, slot: QLabel = None):
+        """Re-upscale a single video by index. Shows visual effect on slot."""
         if self.controller and hasattr(self.controller, 're_upscale_single_video'):
             self.controller.re_upscale_single_video(str(task_id), video_index)
+            # Apply upscale visual effect on the specific slot
+            if slot:
+                self._apply_processing_overlay(slot, "⬆️", Theme.PURPLE)
+                slot._border_color_name = 'purple'
+                self._register_upscale_spinner(slot)
             main_window = self.window()
             if main_window and hasattr(main_window, 'show_toast'):
                 main_window.show_toast(f"⬆️ Re-upscaling video {video_index + 1}...", "info")
     
-    def _on_redownload_single_720p(self, task_id: str, video_index: int):
-        """Re-download a single 720p video by index."""
+    def _on_retry_single_video(self, task_id: str, video_index: int, slot: QLabel = None):
+        """Retry a single failed video — creates 1-video replacement task."""
+        if self.controller and hasattr(self.controller, 'force_retry_video'):
+            success = self.controller.force_retry_video(task_id, video_index)
+            if success and slot:
+                self._apply_processing_overlay(slot, "♻️", Theme.PURPLE)
+            
+            self._refresh_queue_from_controller()
+            self._update_stats()
+            
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'show_toast'):
+                if success:
+                    main_window.show_toast(
+                        f"♻️ Retrying video {video_index + 1} — new 1-video task created", "info"
+                    )
+                else:
+                    main_window.show_toast(
+                        f"Cannot retry video {video_index + 1}", "warning"
+                    )
+    
+    def _on_redownload_single_720p(self, task_id: str, video_index: int, slot: QLabel = None):
+        """Re-download a single 720p video by index. Shows visual effect on slot."""
         if self.controller and hasattr(self.controller, 're_download_single_720p'):
             self.controller.re_download_single_720p(str(task_id), video_index)
+            # Apply download visual effect on the specific slot
+            if slot:
+                self._apply_processing_overlay(slot, "⬇️", Theme.SAPPHIRE)
+                slot._border_color_name = 'blue'
             main_window = self.window()
             if main_window and hasattr(main_window, 'show_toast'):
                 main_window.show_toast(f"⬇️ Re-downloading video {video_index + 1} (720p)...", "info")
+    
+    def _apply_processing_overlay(self, slot: QLabel, icon: str, color: str):
+        """Apply a dark overlay with icon on a thumbnail slot to indicate processing.
+        
+        Works on both slots with pixmaps (thumb) and without (checkmark/text).
+        """
+        try:
+            if slot.pixmap() and not slot.pixmap().isNull():
+                # Has thumbnail — darken it and overlay icon
+                from PySide6.QtGui import QPainter, QColor, QFont
+                pixmap = slot.pixmap().copy()
+                overlay = QPixmap(pixmap.size())
+                overlay.fill(QColor(0, 0, 0, 0))
+                painter = QPainter(overlay)
+                painter.drawPixmap(0, 0, pixmap)
+                painter.fillRect(overlay.rect(), QColor(0, 0, 0, 140))
+                painter.setPen(QColor(color))
+                font = QFont("Segoe UI", 10)
+                font.setBold(True)
+                painter.setFont(font)
+                painter.drawText(overlay.rect(), Qt.AlignCenter, icon)
+                painter.end()
+                slot.setPixmap(overlay)
+            else:
+                # No thumbnail — border-only, no text
+                slot.setText('')
+            
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.SURFACE0};
+                    border: 2px solid {color};
+                    border-radius: 4px;
+                    color: {color};
+                    font-size: 14px;
+                }}
+            """)
+        except (RuntimeError, Exception):
+            pass
     
     def _open_file_in_explorer(self, file_path: str):
         """Open file explorer and select the specific file."""
@@ -2735,17 +3356,20 @@ class TabQueue(QWidget):
         
         count = 0
         for task in group.tasks:
-            if hasattr(self.controller, 'reset_task'):
-                if self.controller.reset_task(str(task.id)):
+            # Skip completed and running tasks — only retry failed/pending/cancelled
+            if task.state.value in ('completed', 'running', 'waiting_poll'):
+                continue
+            if hasattr(self.controller, 'force_retry_task'):
+                if self.controller.force_retry_task(str(task.id)):
                     count += 1
         
         self._refresh_queue_from_controller()
         self._update_stats()
-        print(f"[Queue] Reset group {group_id}: {count}/{total} tasks")
+        print(f"[Queue] Force-retried group {group_id}: {count}/{total} tasks")
         
         main_window = self.window()
         if main_window and hasattr(main_window, 'show_toast'):
-            main_window.show_toast(f"Reset {count} prompts — cache cleared, re-queued", "info")
+            main_window.show_toast(f"Force-retried {count} prompts — re-queued", "info")
     
     def _on_delete_group(self, group_id: str):
         """Delete an entire task group and all its tasks."""

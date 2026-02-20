@@ -255,15 +255,15 @@ class TabSettings(QWidget):
     def _create_profiles_section(self) -> QWidget:
         """Create Chrome Profiles section - per TAB_07_SETTINGS.md spec.
         
-        9 columns: ✓, #, Email, Type, Plan, Credits, Status, Workers, Actions
+        9 columns: ✓, #, Email, Plan, Credits, Status, Workers, Ext, Retry, Actions
         """
         section, layout = self._create_section("🌐 Chrome Profiles (Account Manager)")
         
-        # Create QTableWidget with 11 columns (added Ext + Retry)
+        # Create QTableWidget with 10 columns
         self.profiles_table = QTableWidget()
-        self.profiles_table.setColumnCount(11)
+        self.profiles_table.setColumnCount(10)
         self.profiles_table.setHorizontalHeaderLabels([
-            "✓", "#", "Email", "Type", "Plan", "Credits", "Status", "Workers", "Ext", "Retry", "Actions"
+            "✓", "#", "Email", "Plan", "Credits", "Status", "Workers", "Ext", "Retry", "Actions"
         ])
         
         # Set column widths per docs spec
@@ -271,25 +271,23 @@ class TabSettings(QWidget):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)    # ✓
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # #
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Email
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)    # Type
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Plan
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Credits
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Status
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Workers
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Ext
-        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Retry
-        header.setSectionResizeMode(10, QHeaderView.ResizeMode.Fixed)   # Actions
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)    # Plan
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Credits
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Status
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Workers
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Ext
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Retry
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Actions
         
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
-        self.profiles_table.setColumnWidth(3, 120)  # Type - browser toggle button
-        self.profiles_table.setColumnWidth(4, 80)   # Plan
-        self.profiles_table.setColumnWidth(5, 80)   # Credits
-        self.profiles_table.setColumnWidth(6, 110)  # Status
-        self.profiles_table.setColumnWidth(7, 60)   # Workers - SpinBox 0-4
-        self.profiles_table.setColumnWidth(8, 50)   # Ext - emoji status
-        self.profiles_table.setColumnWidth(9, 50)   # Retry - number
-        self.profiles_table.setColumnWidth(10, 260) # Actions - 5 buttons
+        self.profiles_table.setColumnWidth(3, 80)   # Plan
+        self.profiles_table.setColumnWidth(4, 80)   # Credits
+        self.profiles_table.setColumnWidth(5, 110)  # Status
+        self.profiles_table.setColumnWidth(6, 60)   # Workers - SpinBox 0-4
+        self.profiles_table.setColumnWidth(7, 50)   # Ext - emoji status
+        self.profiles_table.setColumnWidth(8, 50)   # Retry - number
+        self.profiles_table.setColumnWidth(9, 290)  # Actions - 6 buttons
         
         self.profiles_table.setMinimumHeight(80)
         self.profiles_table.setStyleSheet(f"background-color: {Theme.SURFACE2};")
@@ -334,20 +332,20 @@ class TabSettings(QWidget):
         for row in range(self.profiles_table.rowCount()):
             email_item = self.profiles_table.item(row, 2)  # Email is col 2
             if email_item and email_item.text() == email:
-                # Update Status (col 6)
-                status_item = self.profiles_table.item(row, 6)
+                # Update Status (col 5)
+                status_item = self.profiles_table.item(row, 5)
                 if status_item:
                     status_item.setText(status)
                 
-                # Update Credits if provided (col 5)
+                # Update Credits if provided (col 4)
                 if credits is not None:
-                    credits_item = self.profiles_table.item(row, 5)
+                    credits_item = self.profiles_table.item(row, 4)
                     if credits_item:
                         credits_item.setText(credits)
                 
-                # Update Plan to show loading (col 4)
+                # Update Plan to show loading (col 3)
                 if credits is not None:
-                    plan_item = self.profiles_table.item(row, 4)
+                    plan_item = self.profiles_table.item(row, 3)
                     if plan_item:
                         plan_item.setText("⏳ Wait")
                 
@@ -365,7 +363,7 @@ class TabSettings(QWidget):
         if not accounts:
             placeholder = QTableWidgetItem("No profiles added. Click '🌐 Add Account' to add.")
             self.profiles_table.insertRow(0)
-            self.profiles_table.setSpan(0, 0, 1, 11)  # 11 columns
+            self.profiles_table.setSpan(0, 0, 1, 10)  # 10 columns
             self.profiles_table.setItem(0, 0, placeholder)
             self._adjust_table_height()
             return
@@ -406,54 +404,30 @@ class TabSettings(QWidget):
             email_item.setFlags(email_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.profiles_table.setItem(actual_row, 2, email_item)
             
-            # Type (col 3) - Toggle 🌐/👁️ button to show/hide browser
-            type_btn = QPushButton("🌐 Open")
-            type_btn.setToolTip("Click to open browser with this profile")
-            type_btn.setFixedSize(75, 34)
-            type_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {Theme.SURFACE2};
-                    border: 1px solid {Theme.OVERLAY0};
-                    border-radius: 6px;
-                    font-size: 13px;
-                    font-weight: bold;
-                    padding: 2px 8px;
-                }}
-                QPushButton:hover {{
-                    background-color: {Theme.BLUE};
-                    border-color: {Theme.BLUE};
-                }}
-            """)
-            email_for_browser = acc.get('email', '')
-            type_btn.clicked.connect(
-                lambda checked, e=email_for_browser: self._on_open_debug_browser(e)
-            )
-            self.profiles_table.setCellWidget(actual_row, 3, type_btn)
-            
-            # Plan (col 4) - tier_display already formatted - centered
+            # Plan (col 3) - tier_display already formatted - centered
             plan_item = QTableWidgetItem(acc.get('tier', '👤 Free'))
             plan_item.setFlags(plan_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             plan_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(actual_row, 4, plan_item)
+            self.profiles_table.setItem(actual_row, 3, plan_item)
             
-            # Credits (col 5) - credits_display already formatted - centered
+            # Credits (col 4) - credits_display already formatted - centered
             credits_item = QTableWidgetItem(acc.get('credits', 'N/A'))
             credits_item.setFlags(credits_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             credits_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(actual_row, 5, credits_item)
+            self.profiles_table.setItem(actual_row, 4, credits_item)
             
-            # Status (col 6) - Uses enhanced status_display from ChromeProfile - centered
+            # Status (col 5) - Uses enhanced status_display from ChromeProfile - centered
             # Status values: 🔴 Expired, 🟠 Expiring, 🟡 Login, 🟢 Ready
             status = acc.get('status', '🟡 Login')
             status_item = QTableWidgetItem(status)
             status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(actual_row, 6, status_item)
+            self.profiles_table.setItem(actual_row, 5, status_item)
             
             # Get email for action handlers
             email = acc.get('email', '')
             
-            # Workers SpinBox (col 7) — per-account concurrent worker limit
+            # Workers SpinBox (col 6) — per-account concurrent worker limit
             slots_spin = QSpinBox()
             slots_spin.setRange(0, 5)
             slots_spin.setValue(acc.get('max_slots', 4))
@@ -463,32 +437,44 @@ class TabSettings(QWidget):
             slots_spin.valueChanged.connect(
                 lambda value, e=email: self._on_slots_changed(e, value)
             )
-            self.profiles_table.setCellWidget(actual_row, 7, slots_spin)
+            self.profiles_table.setCellWidget(actual_row, 6, slots_spin)
             
-            # Extension status (col 8) — shows if Extension WebSocket is connected for this email
+            # Extension status (col 7) — 3-state: 🟢 has headers, 🟡 connecting, 🔴 disconnected
             ext_connected = False
+            ext_has_headers = False
             try:
                 if self.controller and hasattr(self.controller, '_extension_bridge'):
-                    ext_connected = self.controller._extension_bridge.is_connected(email)
+                    bridge = self.controller._extension_bridge
+                    ext_connected = bridge.is_connected(email)
+                    if ext_connected:
+                        headers = bridge.get_cached_headers(email, max_age_seconds=300)
+                        ext_has_headers = bool(headers)
             except Exception:
                 pass
-            ext_icon = "🟢" if ext_connected else "🔴"
-            ext_tip = "Extension connected" if ext_connected else "Extension not connected"
+            if ext_has_headers:
+                ext_icon = "🟢"
+                ext_tip = "Extension connected — headers ready"
+            elif ext_connected:
+                ext_icon = "🟡"
+                ext_tip = "Extension connecting — waiting for headers..."
+            else:
+                ext_icon = "🔴"
+                ext_tip = "Extension not connected"
             ext_item = QTableWidgetItem(ext_icon)
             ext_item.setFlags(ext_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             ext_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             ext_item.setToolTip(ext_tip)
-            self.profiles_table.setItem(actual_row, 8, ext_item)
+            self.profiles_table.setItem(actual_row, 7, ext_item)
             
-            # Retry count (col 9) — shows retry_count from settings
+            # Retry count (col 8) — shows retry_count from settings
             retry_count = acc.get('retry_count', 3)
             retry_item = QTableWidgetItem(str(retry_count))
             retry_item.setFlags(retry_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             retry_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             retry_item.setToolTip("Max retries on failure")
-            self.profiles_table.setItem(actual_row, 9, retry_item)
+            self.profiles_table.setItem(actual_row, 8, retry_item)
             
-            # Actions buttons (col 10)
+            # Actions buttons (col 9)
             actions_widget = QWidget()
             actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
@@ -525,17 +511,50 @@ class TabSettings(QWidget):
             refresh_btn.clicked.connect(lambda checked, e=email: self._on_refresh_session(e))
             actions_layout.addWidget(refresh_btn)
             
+            # Show/Hide Browser toggle button
+            browser_state = "hidden"
+            if hasattr(self, 'profiles_controller') and self.profiles_controller:
+                browser_state = self.profiles_controller.get_debug_browser_state(email)
+            is_visible = (browser_state == "visible")
+            toggle_text = "👁️" if is_visible else "🌐"
+            toggle_color = Theme.GREEN if is_visible else Theme.YELLOW
+            toggle_tip = "Browser VISIBLE — click to HIDE" if is_visible else "Browser HIDDEN — click to SHOW"
+            toggle_btn = QPushButton(toggle_text)
+            toggle_btn.setFixedSize(32, 32)
+            toggle_btn.setToolTip(toggle_tip)
+            toggle_btn.setObjectName(f"toggle_vis_{email}")
+            toggle_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {toggle_color};
+                    border: 1px solid rgba(255,255,255,0.15);
+                    border-radius: 6px;
+                    font-size: 15px;
+                    padding: 0px;
+                    {f'color: {Theme.CRUST};' if not is_visible else ''}
+                }}
+                QPushButton:hover {{
+                    border: 1px solid rgba(255,255,255,0.5);
+                }}
+            """)
+            toggle_btn.clicked.connect(lambda checked, e=email: self._on_toggle_browser_visibility(e))
+            actions_layout.addWidget(toggle_btn)
+            
             # Restart Browser button
             restart_btn = _action_btn("🔁", "Restart Browser (Kill + Relaunch)", "#FF6B00")
             restart_btn.clicked.connect(lambda checked, e=email: self._on_restart_browser(e))
             actions_layout.addWidget(restart_btn)
+            
+            # Reload Extension button
+            ext_btn = _action_btn("🧩", "Reload Extension (hot-reload from disk)", "#9B59B6")
+            ext_btn.clicked.connect(lambda checked, e=email: self._on_reload_extension(e))
+            actions_layout.addWidget(ext_btn)
             
             # Delete button
             delete_btn = _action_btn("🗑️", "Delete Profile", Theme.RED)
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
             
-            self.profiles_table.setCellWidget(actual_row, 10, actions_widget)
+            self.profiles_table.setCellWidget(actual_row, 9, actions_widget)
             
             actual_row += 1
         
@@ -619,26 +638,38 @@ class TabSettings(QWidget):
             if not email_item:
                 continue
             
-            # Extract raw email from display text (may have 🔑 prefix)
+            # Extract raw email from display text (may have 🔑 or 🔓 prefix)
             email_text = email_item.text().strip()
             # Remove credential indicator prefix if present
-            if email_text.startswith("🔑 "):
-                email_text = email_text[2:].strip()
+            for prefix in ("🔑 ", "🔓 "):
+                if email_text.startswith(prefix):
+                    email_text = email_text[len(prefix):].strip()
+                    break
             
             ext_connected = False
+            ext_has_headers = False
             try:
                 ext_connected = bridge.is_connected(email_text)
+                if ext_connected:
+                    headers = bridge.get_cached_headers(email_text, max_age_seconds=300)
+                    ext_has_headers = bool(headers)
             except Exception:
                 pass
             
-            ext_item = self.profiles_table.item(row, 8)
+            ext_item = self.profiles_table.item(row, 7)
             if ext_item:
-                new_icon = "🟢" if ext_connected else "🔴"
+                if ext_has_headers:
+                    new_icon = "🟢"
+                    new_tip = "Extension connected — headers ready"
+                elif ext_connected:
+                    new_icon = "🟡"
+                    new_tip = "Extension connecting — waiting for headers..."
+                else:
+                    new_icon = "🔴"
+                    new_tip = "Extension not connected"
                 if ext_item.text() != new_icon:
                     ext_item.setText(new_icon)
-                    ext_item.setToolTip(
-                        "Extension connected" if ext_connected else "Extension not connected"
-                    )
+                    ext_item.setToolTip(new_tip)
     
     def _refresh_accounts(self):
         """Refresh accounts list from controller."""
@@ -1557,6 +1588,35 @@ class TabSettings(QWidget):
         jr_row.addStretch()
         layout.addLayout(jr_row)
         
+        # --- Workload Priority ---
+        wp_row = QHBoxLayout()
+        wp_label = QLabel("⚡ Workload Priority:")
+        wp_label.setFixedWidth(150)
+        wp_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        wp_row.addWidget(wp_label)
+        self.workload_priority = QComboBox()
+        self.workload_priority.addItems([
+            "⚖️ Balanced",
+            "📝 Prompts First",
+            "⬆️ Upscale First"
+        ])
+        self.workload_priority.setFixedWidth(160)
+        self.workload_priority.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px;")
+        # Map display names to engine values
+        self._wp_map = {0: 'balanced', 1: 'prompts_first', 2: 'upscale_first'}
+        current_wp = ps.get('workload_priority', 'balanced')
+        reverse_map = {v: k for k, v in self._wp_map.items()}
+        self.workload_priority.setCurrentIndex(reverse_map.get(current_wp, 0))
+        self.workload_priority.currentIndexChanged.connect(
+            lambda idx: _update('workload_priority')(self._wp_map.get(idx, 'balanced'))
+        )
+        wp_row.addWidget(self.workload_priority)
+        wp_hint = QLabel("Controls resource allocation")
+        wp_hint.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; margin-left: 8px;")
+        wp_row.addWidget(wp_hint)
+        wp_row.addStretch()
+        layout.addLayout(wp_row)
+        
         return section
     
     def _create_enhancer_section(self) -> QWidget:
@@ -2212,109 +2272,6 @@ class TabSettings(QWidget):
         
         return combo
     
-    def _on_open_debug_browser(self, email: str):
-        """Toggle browser state for an account (3-state cycle).
-        
-        - closed  → open (visible)
-        - visible → hide (minimized, still running)
-        - hidden  → show (restore window)
-        """
-        state = self.profiles_controller.get_debug_browser_state(email)
-        
-        if state == "closed":
-            # Not running → Open browser
-            print(f"[Settings] Opening browser for {email}...")
-            self._update_browser_button_state(email, "visible")
-            
-            def on_state_change(changed_email, new_state):
-                """Called by ProfilesController when browser state changes."""
-                from PySide6.QtCore import QMetaObject, Qt
-                QMetaObject.invokeMethod(
-                    self, "_refresh_browser_buttons",
-                    Qt.ConnectionType.QueuedConnection
-                )
-            
-            success = self.profiles_controller.open_browser_for_debug(
-                email, on_state_change=on_state_change
-            )
-            if not success:
-                self._update_browser_button_state(email, "closed")
-                from PySide6.QtCore import QMetaObject, Qt
-                QMetaObject.invokeMethod(
-                    self, "_on_debug_browser_failed",
-                    Qt.ConnectionType.QueuedConnection
-                )
-            self._push_dev_console_status()
-            
-        elif state == "visible":
-            # Running & visible → Hide (minimize, keep running)
-            print(f"[Settings] Hiding browser for {email}...")
-            self.profiles_controller.hide_debug_browser(email)
-            self._update_browser_button_state(email, "hidden")
-            self._push_dev_console_status()
-            
-        elif state == "hidden":
-            # Running & hidden → Show (restore window)
-            print(f"[Settings] Showing browser for {email}...")
-            self.profiles_controller.show_debug_browser(email)
-            self._update_browser_button_state(email, "visible")
-            self._push_dev_console_status()
-    
-    def _update_browser_button_state(self, email: str, state: str):
-        """Update button appearance for 3 states: visible/hidden/closed."""
-        for row in range(self.profiles_table.rowCount()):
-            email_item = self.profiles_table.item(row, 2)
-            if email_item and email in email_item.text():
-                btn = self.profiles_table.cellWidget(row, 3)
-                if btn and isinstance(btn, QPushButton):
-                    if state == "visible":
-                        btn.setText("👁️ Visible")
-                        btn.setToolTip("Browser is VISIBLE — click to HIDE")
-                        btn.setStyleSheet(f"""
-                            QPushButton {{
-                                background-color: {Theme.GREEN};
-                                border: 1px solid {Theme.GREEN};
-                                border-radius: 6px;
-                                font-size: 13px;
-                                font-weight: bold;
-                            }}
-                            QPushButton:hover {{
-                                background-color: {Theme.SAPPHIRE};
-                            }}
-                        """)
-                    elif state == "hidden":
-                        btn.setText("🔇 Hidden")
-                        btn.setToolTip("Browser is HIDDEN (running in background) — click to SHOW")
-                        btn.setStyleSheet(f"""
-                            QPushButton {{
-                                background-color: {Theme.YELLOW};
-                                border: 1px solid {Theme.YELLOW};
-                                border-radius: 6px;
-                                font-size: 13px;
-                                font-weight: bold;
-                                color: {Theme.CRUST};
-                            }}
-                            QPushButton:hover {{
-                                background-color: {Theme.PEACH};
-                            }}
-                        """)
-                    else:  # closed
-                        btn.setText("🌐 Open")
-                        btn.setToolTip("Click to open browser with this profile")
-                        btn.setStyleSheet(f"""
-                            QPushButton {{
-                                background-color: {Theme.SURFACE2};
-                                border: 1px solid {Theme.OVERLAY0};
-                                border-radius: 6px;
-                                font-size: 13px;
-                                font-weight: bold;
-                            }}
-                            QPushButton:hover {{
-                                background-color: {Theme.BLUE};
-                                border-color: {Theme.BLUE};
-                            }}
-                        """)
-                break
     
     @Slot()
     def _refresh_browser_buttons(self):
@@ -2332,9 +2289,119 @@ class TabSettings(QWidget):
             email = parts[-1].strip() if len(parts) > 1 else text.strip()
             
             state = self.profiles_controller.get_debug_browser_state(email)
-            self._update_browser_button_state(email, state)
+            self._update_visibility_toggle_btn(email, state)
         
         self._push_dev_console_status()
+    
+    def _on_toggle_browser_visibility(self, email: str):
+        """Toggle browser visibility for an account.
+        
+        3-state: closed → open (visible), visible → hide, hidden → show.
+        """
+        state = self.profiles_controller.get_debug_browser_state(email)
+        
+        if state == "closed":
+            # Not running → Open browser
+            print(f"[Settings] 🌐 Opening browser for {email}...")
+            self._update_visibility_toggle_btn(email, "visible")
+            
+            def on_state_change(changed_email, new_state):
+                from PySide6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(
+                    self, "_refresh_browser_buttons",
+                    Qt.ConnectionType.QueuedConnection
+                )
+            
+            success = self.profiles_controller.open_browser_for_debug(
+                email, on_state_change=on_state_change
+            )
+            if not success:
+                self._update_visibility_toggle_btn(email, "closed")
+                from PySide6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(
+                    self, "_on_debug_browser_failed",
+                    Qt.ConnectionType.QueuedConnection
+                )
+            self._push_dev_console_status()
+        
+        elif state == "visible":
+            # Visible → Hide
+            print(f"[Settings] 🌐 Hiding browser for {email}...")
+            self.profiles_controller.hide_debug_browser(email)
+            self._update_visibility_toggle_btn(email, "hidden")
+            self._push_dev_console_status()
+        
+        else:
+            # Hidden → Show
+            print(f"[Settings] 👁️ Showing browser for {email}...")
+            self.profiles_controller.show_debug_browser(email)
+            self._update_visibility_toggle_btn(email, "visible")
+            self._push_dev_console_status()
+    
+    def _update_visibility_toggle_btn(self, email: str, state: str):
+        """Update the visibility toggle button appearance based on browser state."""
+        # Find the toggle button by objectName in the actions widget
+        for row in range(self.profiles_table.rowCount()):
+            email_item = self.profiles_table.item(row, 2)
+            if not email_item or email not in email_item.text():
+                continue
+            actions_widget = self.profiles_table.cellWidget(row, 9)
+            if not actions_widget:
+                break
+            toggle_btn = actions_widget.findChild(QPushButton, f"toggle_vis_{email}")
+            if not toggle_btn:
+                break
+            
+            is_visible = (state == "visible")
+            is_closed = (state == "closed")
+            
+            if is_closed:
+                toggle_btn.setText("⬛")
+                toggle_btn.setToolTip("Browser not running")
+                toggle_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {Theme.SURFACE2};
+                        border: 1px solid rgba(255,255,255,0.15);
+                        border-radius: 6px;
+                        font-size: 15px;
+                        padding: 0px;
+                    }}
+                    QPushButton:hover {{
+                        border: 1px solid rgba(255,255,255,0.5);
+                    }}
+                """)
+            elif is_visible:
+                toggle_btn.setText("👁️")
+                toggle_btn.setToolTip("Browser VISIBLE — click to HIDE")
+                toggle_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {Theme.GREEN};
+                        border: 1px solid rgba(255,255,255,0.15);
+                        border-radius: 6px;
+                        font-size: 15px;
+                        padding: 0px;
+                    }}
+                    QPushButton:hover {{
+                        border: 1px solid rgba(255,255,255,0.5);
+                    }}
+                """)
+            else:  # hidden
+                toggle_btn.setText("🌐")
+                toggle_btn.setToolTip("Browser HIDDEN — click to SHOW")
+                toggle_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {Theme.YELLOW};
+                        border: 1px solid rgba(255,255,255,0.15);
+                        border-radius: 6px;
+                        font-size: 15px;
+                        padding: 0px;
+                        color: {Theme.CRUST};
+                    }}
+                    QPushButton:hover {{
+                        border: 1px solid rgba(255,255,255,0.5);
+                    }}
+                """)
+            break
     
     def _push_dev_console_status(self):
         """Push browser status and session data to DevConsole via controller."""
@@ -2597,6 +2664,47 @@ class TabSettings(QWidget):
             QMessageBox.warning(
                 self, "Restart Browser",
                 f"❌ Failed to restart browser for {email}"
+            )
+
+    def _on_reload_extension(self, email: str):
+        """Hot-reload the Chrome extension for this account."""
+        import threading
+        
+        print(f"[Settings] 🧩 Reloading extension for: {email}")
+        self._update_row_status(email, "⏳ Reloading ext...")
+        self.setEnabled(False)
+        
+        def _do_reload():
+            ok = False
+            if self.controller:
+                ok = self.controller.reload_extension_for(email)
+            
+            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
+            QMetaObject.invokeMethod(
+                self, "_on_extension_reloaded",
+                Qt.ConnectionType.QueuedConnection,
+                Q_ARG(str, email),
+                Q_ARG(str, "ok" if ok else "fail"),
+            )
+        
+        thread = threading.Thread(target=_do_reload, daemon=True)
+        thread.start()
+
+    @Slot(str, str)
+    def _on_extension_reloaded(self, email: str, result: str):
+        """Called when extension reload completes (from background thread)."""
+        self.setEnabled(True)
+        self._refresh_profiles_table()
+        if result == "ok":
+            QMessageBox.information(
+                self, "Reload Extension",
+                f"✅ Extension reloaded for {email}"
+            )
+        else:
+            QMessageBox.warning(
+                self, "Reload Extension",
+                f"⚠️ Extension reload may have failed for {email}\n"
+                f"Try restarting the browser instead."
             )
     
     def _on_reload_app(self):

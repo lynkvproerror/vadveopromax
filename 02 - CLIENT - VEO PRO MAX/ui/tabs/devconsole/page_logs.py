@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
     QFrame, QSplitter, QPushButton, QLineEdit, QComboBox,
     QFileDialog,
 )
-from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtCore import Qt, Signal, Slot, QEvent
+from PySide6.QtGui import QFont, QTextCursor, QKeySequence, QGuiApplication
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
@@ -40,7 +40,7 @@ LEVEL_COLORS = {
 }
 
 # Max lines kept in log buffer
-MAX_BUFFER = 2000
+MAX_BUFFER = 3000
 # Max lines in QPlainTextEdit (auto-trim old lines)
 MAX_DISPLAY_LINES = 1500
 # Batch flush interval (ms)
@@ -61,6 +61,7 @@ class LogsPage(QWidget):
         self._api_debug = True
         self._search_filter = ""
         self._level_filter = "DEBUG"
+        self._flush_paused = False  # Pause flush during copy
         self._setup_ui()
         self._setup_flush_timer()
 
@@ -157,6 +158,8 @@ class LogsPage(QWidget):
             f"border: none; padding: 4px;"
         )
         self._log_text.setPlainText("Waiting for log output...\n")
+        # Intercept Ctrl+C to prevent freeze from concurrent flush
+        self._log_text.installEventFilter(self)
         splitter.addWidget(self._log_text)
 
         # JSON Preview
@@ -215,9 +218,36 @@ class LogsPage(QWidget):
 
     # ── Flush / Render ────────────────────────────────────────
 
+    def eventFilter(self, obj, event):
+        """Intercept Ctrl+C on log text to copy safely without freeze."""
+        if obj is self._log_text and event.type() == QEvent.KeyPress:
+            if event.matches(QKeySequence.Copy):
+                self._safe_copy()
+                return True  # Consumed
+        return super().eventFilter(obj, event)
+
+    def _safe_copy(self):
+        """Copy selected text with flush paused to prevent deadlock."""
+        self._flush_paused = True
+        try:
+            cursor = self._log_text.textCursor()
+            selected = cursor.selectedText()
+            if selected:
+                # QPlainTextEdit uses \u2029 as paragraph separator
+                selected = selected.replace('\u2029', '\n')
+                QGuiApplication.clipboard().setText(selected)
+        finally:
+            self._flush_paused = False
+
     def _flush_pending(self):
         """Batch-flush all pending logs to display."""
         if not self._pending_logs:
+            return
+        # Pause flush while user is copying text
+        if self._flush_paused:
+            return
+        # Skip flush if user has active text selection (avoids cursor conflicts)
+        if self._log_text.textCursor().hasSelection():
             return
 
         level_order = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}

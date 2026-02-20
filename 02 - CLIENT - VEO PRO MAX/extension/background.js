@@ -6,6 +6,9 @@
  * 2. Maintain WebSocket connection to Python app (ws://127.0.0.1:8765)
  * 3. Relay reCAPTCHA token requests from App → content.js → App
  * 4. Auto-push captured headers when they change
+ * 5. Track content.js heartbeats for health monitoring
+ * 6. Relay activity simulation commands to content.js
+ * 7. Lightweight header refresh without full page reload
  */
 
 // ── State ──────────────────────────────────────────────────────────────
@@ -16,7 +19,7 @@ let ws = null;
 let wsConnected = false;
 let currentPortIndex = 0; // Which port to try next
 
-// Per-tab state: tabId → {email, headers, accessToken}
+// Per-tab state: tabId → {email, headers, accessToken, lastHeartbeat, recaptchaReady}
 const tabState = {};
 
 // Headers we care about (per Protocol Analysis §1.4)
@@ -30,6 +33,15 @@ const BROWSER_HEADERS = [
 
 // Pending reCAPTCHA requests: requestId → {tabId, resolve}
 const pendingRecaptcha = {};
+
+// Short token tracking: tabId → consecutive short token count
+// When >= 3, auto-reload tab to re-initialize reCAPTCHA widget
+const shortTokenCounts = {};
+const SHORT_TOKEN_RELOAD_THRESHOLD = 3;
+
+// Content heartbeat tracking
+const HEARTBEAT_TIMEOUT = 45000;  // 45s without heartbeat = frozen tab
+let _heartbeatCheckTimer = null;
 
 
 // ── WebSocket Connection ───────────────────────────────────────────────
@@ -148,7 +160,7 @@ async function handleAppMessage(msg) {
         const results = await chrome.scripting.executeScript({
           target: { tabId },
           world: 'MAIN',
-          func: (siteKey) => {
+          func: async (siteKey) => {
             // This runs in the page's main JS context — full access to grecaptcha
             if (typeof grecaptcha === 'undefined' ||
               typeof grecaptcha.enterprise === 'undefined' ||
@@ -184,20 +196,48 @@ async function handleAppMessage(msg) {
               return { token: null, error: 'Could not extract reCAPTCHA site key' };
             }
 
-            // Return a promise — chrome.scripting handles async results
-            return grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' })
-              .then(token => {
-                if (token && token.length > 500) {
-                  return { token };
-                }
-                return { token: null, error: `Token too short (${token ? token.length : 0} chars)` };
-              })
-              .catch(err => ({ token: null, error: err.message }));
+            // Use async/await for proper Promise resolution by chrome.scripting
+            try {
+              const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
+              if (token && token.length > 500) {
+                return { token, tokenLength: token.length };
+              }
+              return { token: null, error: `Token too short (${token ? token.length : 0} chars)`, tokenLength: token ? token.length : 0 };
+            } catch (err) {
+              return { token: null, error: err.message, tokenLength: 0 };
+            }
           },
           args: [msg.siteKey || null],
         });
 
         const result = results?.[0]?.result;
+
+        // Track consecutive short tokens per tab — auto-reload after threshold
+        if (result?.error?.includes('too short')) {
+          shortTokenCounts[tabId] = (shortTokenCounts[tabId] || 0) + 1;
+          console.warn(
+            `[VEO Bridge] ⚠️ Short token #${shortTokenCounts[tabId]} for tab ${tabId} ` +
+            `(${result.tokenLength || 0} chars)`
+          );
+          if (shortTokenCounts[tabId] >= SHORT_TOKEN_RELOAD_THRESHOLD) {
+            console.warn(
+              `[VEO Bridge] 🔄 Auto-reloading tab ${tabId} — ` +
+              `${shortTokenCounts[tabId]} consecutive short tokens (reCAPTCHA widget broken)`
+            );
+            shortTokenCounts[tabId] = 0;
+            try {
+              await chrome.tabs.reload(tabId, { bypassCache: true });
+              // Wait for page to reload and reCAPTCHA to re-initialize
+              await new Promise(r => setTimeout(r, 5000));
+            } catch (reloadErr) {
+              console.debug(`[VEO Bridge] Tab reload failed: ${reloadErr.message}`);
+            }
+          }
+        } else if (result?.token) {
+          // Valid token — reset short token counter
+          shortTokenCounts[tabId] = 0;
+        }
+
         wsSend({
           action: 'recaptcha_token',
           requestId: msg.requestId,
@@ -281,6 +321,68 @@ async function handleAppMessage(msg) {
       break;
     }
 
+    case 'refresh_headers_lightweight': {
+      // Lightweight refresh — tell content.js to trigger a fetch (no page reload)
+      console.log('[VEO Bridge] App requested lightweight header refresh');
+      const tabId = findTabForEmail(msg.email);
+      if (tabId) {
+        try {
+          await chrome.tabs.sendMessage(tabId, { action: 'lightweight_header_refresh' });
+          wsSend({
+            action: 'headers_refreshed_lightweight',
+            requestId: msg.requestId || null,
+            email: msg.email || null,
+            success: true,
+          });
+        } catch (e) {
+          // Content script not responding — fall back to full reload
+          console.log('[VEO Bridge] Lightweight refresh failed, falling back to full reload');
+          const refreshed = await reloadVeoTabs(msg.email);
+          wsSend({
+            action: 'headers_refreshed',
+            requestId: msg.requestId || null,
+            email: msg.email || null,
+            tabsReloaded: refreshed,
+          });
+        }
+      } else {
+        wsSend({
+          action: 'headers_refreshed_lightweight',
+          requestId: msg.requestId || null,
+          email: msg.email || null,
+          success: false,
+          error: 'No tab found',
+        });
+      }
+      break;
+    }
+
+    case 'simulate_activity': {
+      // App requests activity simulation on a specific tab
+      const tabId = findTabForEmail(msg.email);
+      if (tabId) {
+        try {
+          await chrome.tabs.sendMessage(tabId, { action: 'simulate_activity' });
+          console.log(`[VEO Bridge] 🖱️ Activity simulated for ${msg.email}`);
+          wsSend({
+            action: 'activity_simulated',
+            requestId: msg.requestId || null,
+            email: msg.email,
+            success: true,
+          });
+        } catch (e) {
+          wsSend({
+            action: 'activity_simulated',
+            requestId: msg.requestId || null,
+            email: msg.email,
+            success: false,
+            error: e.message,
+          });
+        }
+      }
+      break;
+    }
+
     case 'assign_email': {
       // Server tells us which email this browser belongs to
       // (fallback when content.js email detection fails)
@@ -304,7 +406,7 @@ async function handleAppMessage(msg) {
         let targetTab = veoTabs.find(t => !tabState[t.id]?.email) || veoTabs[0];
         const tabId = targetTab.id;
         if (!tabState[tabId]) {
-          tabState[tabId] = { email: null, headers: {}, accessToken: null };
+          tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
         }
         tabState[tabId].email = email;
         console.log(`[VEO Bridge] Assigned email ${email} to existing VEO tab ${tabId} (${targetTab.url})`);
@@ -317,7 +419,7 @@ async function handleAppMessage(msg) {
           active: false,
           pinned: true,
         });
-        tabState[newTab.id] = { email, headers: {}, accessToken: null };
+        tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
         console.log(`[VEO Bridge] Created VEO tab ${newTab.id} for ${email}`);
         wsSend({ action: 'register', email, tabId: newTab.id });
         startZombieTimer(newTab.id);  // Track zombie potential
@@ -326,9 +428,12 @@ async function handleAppMessage(msg) {
     }
 
     case 'check_recaptcha_ready': {
-      // Layer 1: Check if grecaptcha is initialized and ready on the VEO page.
-      // Returns ready=true only if grecaptcha.enterprise.execute is callable.
-      // This is a lightweight read-only check — no token is generated.
+      // Layer 1: Deep readiness check — trial-execute a real token.
+      // A simple `typeof execute === 'function'` check is NOT sufficient:
+      // it returns true before the widget is fully initialized, causing
+      // 330-char garbage tokens. Instead, we actually call execute() and
+      // check that the returned token is > 500 chars.
+      // The valid token is sent back for caching (not wasted).
       const tabId = findTabForEmail(msg.email);
       if (!tabId) {
         wsSend({
@@ -341,37 +446,124 @@ async function handleAppMessage(msg) {
       }
 
       try {
-        const results = await chrome.scripting.executeScript({
+        // Race: trial-execute vs 8s timeout (execute itself takes 3-5s)
+        const scriptPromise = chrome.scripting.executeScript({
           target: { tabId },
           world: 'MAIN',
-          func: () => {
-            // Check grecaptcha availability in page's main JS context
+          func: async () => {
             const hasGrecaptcha = typeof grecaptcha !== 'undefined';
             const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
             const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
             const pageLoaded = document.readyState === 'complete';
             const hasRecaptchaScript = !!document.querySelector('script[src*="recaptcha"]');
 
-            return {
-              ready: hasExecute && pageLoaded,
-              grecaptchaLoaded: hasGrecaptcha,
-              enterpriseLoaded: hasEnterprise,
-              executeAvailable: hasExecute,
-              pageLoaded,
-              hasRecaptchaScript,
-            };
+            // Quick bail: no point trial-executing if basics fail
+            if (!hasExecute || !pageLoaded) {
+              return {
+                ready: false,
+                grecaptchaLoaded: hasGrecaptcha,
+                enterpriseLoaded: hasEnterprise,
+                executeAvailable: hasExecute,
+                pageLoaded,
+                hasRecaptchaScript,
+                token: null,
+                tokenLength: 0,
+              };
+            }
+
+            // Extract site key (same logic as request_recaptcha)
+            let siteKey = null;
+            for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+              const m = s.src.match(/render=([^&]+)/);
+              if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
+            }
+            if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
+              for (const id in ___grecaptcha_cfg.clients) {
+                const client = ___grecaptcha_cfg.clients[id];
+                for (const key in client) {
+                  const obj = client[key];
+                  if (obj && typeof obj === 'object') {
+                    for (const k2 in obj) {
+                      const v = obj[k2];
+                      if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
+                    }
+                  }
+                  if (siteKey) break;
+                }
+                if (siteKey) break;
+              }
+            }
+
+            if (!siteKey) {
+              return {
+                ready: false,
+                grecaptchaLoaded: hasGrecaptcha,
+                enterpriseLoaded: hasEnterprise,
+                executeAvailable: hasExecute,
+                pageLoaded,
+                hasRecaptchaScript,
+                token: null,
+                tokenLength: 0,
+                error: 'Could not extract site key',
+              };
+            }
+
+            // Trial execute — the real test (async/await for proper serialization)
+            try {
+              const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
+              return {
+                ready: !!(token && token.length > 500),
+                grecaptchaLoaded: true,
+                enterpriseLoaded: true,
+                executeAvailable: true,
+                pageLoaded: true,
+                hasRecaptchaScript: true,
+                token: (token && token.length > 500) ? token : null,
+                tokenLength: token ? token.length : 0,
+              };
+            } catch (err) {
+              return {
+                ready: false,
+                grecaptchaLoaded: true,
+                enterpriseLoaded: true,
+                executeAvailable: true,
+                pageLoaded: true,
+                hasRecaptchaScript: true,
+                token: null,
+                tokenLength: 0,
+                error: err.message,
+              };
+            }
           },
           args: [],
         });
 
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('executeScript timeout (8s) — tab may be frozen')), 8000)
+        );
+
+        const results = await Promise.race([scriptPromise, timeoutPromise]);
         const details = results?.[0]?.result || {};
         wsSend({
           action: 'recaptcha_ready',
           requestId: msg.requestId,
           ready: details.ready || false,
+          token: details.token || null,
           details,
         });
       } catch (e) {
+        console.warn(`[VEO Bridge] check_recaptcha_ready failed for ${msg.email}: ${e.message}`);
+
+        // If tab is frozen, try to wake it up by reloading
+        if (e.message.includes('timeout') || e.message.includes('frozen')) {
+          console.log(`[VEO Bridge] 🔄 Attempting to wake frozen tab ${tabId}...`);
+          try {
+            await chrome.tabs.reload(tabId, { bypassCache: false });
+          } catch (reloadErr) {
+            console.debug(`[VEO Bridge] Tab reload failed: ${reloadErr.message}`);
+          }
+        }
+
         wsSend({
           action: 'recaptcha_ready',
           requestId: msg.requestId,
@@ -403,6 +595,22 @@ async function handleAppMessage(msg) {
       } catch (e) {
         wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: e.message });
       }
+      break;
+    }
+
+    case 'reload_extension': {
+      // Hot-reload extension from disk — reloads background.js + content.js
+      // without killing Chrome. Used when extension code is updated.
+      console.log('[VEO Bridge] 🔄 Reloading extension (chrome.runtime.reload)...');
+      wsSend({
+        action: 'extension_reloaded',
+        requestId: msg.requestId || null,
+        success: true,
+      });
+      // Small delay to ensure the WS message is sent before reload kills this context
+      setTimeout(() => {
+        chrome.runtime.reload();
+      }, 200);
       break;
     }
 
@@ -477,9 +685,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'register_tab' && sender.tab) {
     const tabId = sender.tab.id;
     if (!tabState[tabId]) {
-      tabState[tabId] = { email: null, headers: {}, accessToken: null };
+      tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
     }
     tabState[tabId].email = msg.email;
+    tabState[tabId].lastHeartbeat = Date.now();
     // Clear zombie timer if was pending
     if (tabState[tabId]._zombieTimer) {
       clearTimeout(tabState[tabId]._zombieTimer);
@@ -495,6 +704,41 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       tabId: tabId,
     });
 
+    sendResponse({ ok: true });
+  }
+
+  // ── Content Heartbeat ──
+  if (msg.action === 'content_heartbeat' && sender.tab) {
+    const tabId = sender.tab.id;
+    const state = tabState[tabId];
+    if (state) {
+      state.lastHeartbeat = Date.now();
+      // Forward heartbeat to Python app for tracking
+      wsSend({
+        action: 'content_heartbeat',
+        email: state.email || msg.email,
+        tabId,
+        timestamp: msg.timestamp,
+        readyState: msg.readyState,
+      });
+    }
+    sendResponse({ ok: true });
+  }
+
+  // ── reCAPTCHA Warmth Report ──
+  if (msg.action === 'recaptcha_warmth' && sender.tab) {
+    const tabId = sender.tab.id;
+    const state = tabState[tabId];
+    if (state) {
+      state.recaptchaReady = msg.ready;
+      // Forward to Python app
+      wsSend({
+        action: 'recaptcha_warmth',
+        email: state.email || msg.email,
+        ready: msg.ready,
+        details: msg.details,
+      });
+    }
     sendResponse({ ok: true });
   }
 
@@ -529,7 +773,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       connected: wsConnected,
       tabs: Object.entries(tabState)
         .filter(([_, s]) => s.email)
-        .map(([id, s]) => ({ tabId: parseInt(id), email: s.email, headerCount: Object.keys(s.headers).length })),
+        .map(([id, s]) => ({
+          tabId: parseInt(id),
+          email: s.email,
+          headerCount: Object.keys(s.headers).length,
+          lastHeartbeat: s.lastHeartbeat || 0,
+          recaptchaReady: s.recaptchaReady || false,
+        })),
     });
   }
 
@@ -583,6 +833,46 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
   }
 });
+
+
+// ── Heartbeat Check — Detect Frozen Tabs ───────────────────────────────
+
+function checkHeartbeats() {
+  const now = Date.now();
+  for (const [tabId, state] of Object.entries(tabState)) {
+    if (!state.email || !state.lastHeartbeat) continue;
+
+    const elapsed = now - state.lastHeartbeat;
+    if (elapsed > HEARTBEAT_TIMEOUT) {
+      console.warn(
+        `[VEO Bridge] ⚠️ Tab ${tabId} (${state.email}) missed heartbeat ` +
+        `(${Math.floor(elapsed / 1000)}s ago) — possible freeze`
+      );
+
+      // Notify Python app about the frozen tab
+      wsSend({
+        action: 'tab_frozen',
+        email: state.email,
+        tabId: parseInt(tabId),
+        lastHeartbeat: state.lastHeartbeat,
+        elapsedMs: elapsed,
+      });
+
+      // Try to wake it up by reloading
+      chrome.tabs.reload(parseInt(tabId), { bypassCache: false }).then(() => {
+        console.log(`[VEO Bridge] 🔄 Auto-reloaded frozen tab ${tabId}`);
+        state.lastHeartbeat = now; // Reset to avoid immediate re-trigger
+      }).catch(e => {
+        console.debug(`[VEO Bridge] Tab ${tabId} reload failed: ${e.message}`);
+      });
+    }
+  }
+}
+
+// Start heartbeat check every 20s
+if (!_heartbeatCheckTimer) {
+  _heartbeatCheckTimer = setInterval(checkHeartbeats, 20000);
+}
 
 
 // ── Zombie Tab Tracking ────────────────────────────────────────────────
@@ -675,9 +965,10 @@ const KEEPALIVE_ALARM = 'ws-keepalive';
 const HEADER_REFRESH_ALARM = 'header-refresh';
 
 // Chrome suspends service workers after ~30s of inactivity.
-chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
-// Refresh headers every 5 minutes by reloading VEO tabs
-chrome.alarms.create(HEADER_REFRESH_ALARM, { periodInMinutes: 5 });
+// Reduced from 30s to 20s for faster keepalive.
+chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.33 });
+// Refresh headers every 3 minutes via lightweight fetch (instead of 5 min full reload)
+chrome.alarms.create(HEADER_REFRESH_ALARM, { periodInMinutes: 3 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === KEEPALIVE_ALARM) {
@@ -689,10 +980,31 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 
   if (alarm.name === HEADER_REFRESH_ALARM) {
-    console.log('[VEO Bridge] ⏰ Periodic header refresh');
-    reloadVeoTabs();
+    console.log('[VEO Bridge] ⏰ Periodic header refresh (lightweight)');
+    // Use lightweight refresh first — content.js triggers a fetch
+    // which causes onBeforeSendHeaders to fire and capture fresh headers
+    lightweightRefreshAll();
   }
 });
+
+// Lightweight refresh all tabs (no page reload)
+async function lightweightRefreshAll() {
+  for (const [tabId, state] of Object.entries(tabState)) {
+    if (!state.email) continue;
+    try {
+      await chrome.tabs.sendMessage(parseInt(tabId), { action: 'lightweight_header_refresh' });
+      console.log(`[VEO Bridge] 🔄 Lightweight refresh for tab ${tabId} (${state.email})`);
+    } catch (e) {
+      // Content script not responding — try full reload as fallback
+      console.debug(`[VEO Bridge] Lightweight refresh failed for tab ${tabId}, using full reload`);
+      try {
+        await chrome.tabs.reload(parseInt(tabId), { bypassCache: false });
+      } catch (re) {
+        console.debug(`[VEO Bridge] Full reload also failed for tab ${tabId}: ${re.message}`);
+      }
+    }
+  }
+}
 
 
 // ── Reload VEO Tabs (shared by periodic + on-demand) ──────────────────
@@ -834,7 +1146,7 @@ async function ensureVeoTab() {
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[VEO Bridge] Extension installed/updated');
-  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
+  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.33 });
   connectWebSocket();
   // Inject into already-open VEO tabs, then ensure one exists
   injectExistingTabs().then(() => ensureVeoTab());

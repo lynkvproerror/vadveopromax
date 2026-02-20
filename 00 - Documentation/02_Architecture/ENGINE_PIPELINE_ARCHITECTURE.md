@@ -1,8 +1,9 @@
 # 🏭 Engine Pipeline Architecture — Mô Hình Nhà Xưởng
 
-> **Version**: 7.2 • **Updated**: 2026-02-19  
+> **Version**: 8.0 • **Updated**: 2026-02-21  
 > **Scope**: Orchestration Engine — component roles, data flow, pipeline, rate limiting, token, data integrity, fault tolerance.  
-> **Convention**: `[CURRENT]` = đã implement. `[TARGET]` = đề xuất, chưa implement.
+> **Convention**: `[CURRENT]` = đã implement. `[TARGET]` = đề xuất, chưa implement.  
+> **See also**: [CONCURRENCY_MODEL.md](./CONCURRENCY_MODEL.md) — ĐẠI CHỦ/CHỦ/THẦU/THỢ hierarchy, video-based units, account isolation.
 
 ---
 
@@ -24,8 +25,8 @@ graph TB
     end
 
     subgraph "TẦNG THỰC THI"
-        AM["CHỦ<br/>AccountManager ×N<br/>1 browser + tokens + 5 slots"]
-        W["THỢ<br/>Worker ×5/CHỦ<br/>API Submit"]
+        AM["CHỦ<br/>AccountManager ×N<br/>1 browser + tokens + 20 workers"]
+        W["THỢ<br/>Worker ×5 THẦU/CHỦ<br/>4 THỢ/THẦU = 20 videos"]
     end
 
     subgraph "TẦNG HẠ TẦNG"
@@ -59,11 +60,11 @@ graph TB
 | Vai trò | Class | File | Trách nhiệm CHÍNH | Trách nhiệm PHỤ | Giao tiếp với |
 |---------|-------|------|--------------------|------------------|---------------|
 | **Tổng quản** | `AppController` | `app_controller.py` | Lifecycle (start/stop), UI↔Core bridge, browser auto-launch | Splash screen, event wiring, session save/load | Tất cả components |
-| **ĐẠI CHỦ** | `MultiAccountManager` | `multi_account.py` | Pool N accounts, load balancing (most-available-slots), browser lifecycle | x-client-data sharing, capacity tracking | `AccountManager` ×N |
-| **CHỦ** | `AccountManager` | `account_manager.py` | 1 account: session, token refresh, slot semaphore (max 5), reCAPTCHA cache | Project ID cache, paygate tier, enable/disable | `ExtensionBridge`, `VEOApiClient`, `ProjectManager` |
-| **THẦU** | `Dispatcher` | `dispatcher.py` | Task queue (PriorityQueue), state machine, dependency tracking | Progress storage, group management, session export/import | `Engine`, `QueueController` |
-| **Engine** | `Engine` | `engine.py` | **Pipeline orchestrator**: worker loops, poll, download, upscale, continuation, retry, 403 recovery | Rate locks, API semaphores, staggered startup | `Dispatcher`, `MultiAccountManager`, `Worker`, `VEOApiClient` |
-| **THỢ** | `Worker` | `worker.py` | API payload construction + submit (single call) | Response parsing (operation_names, scene_ids) | `VEOApiClient`, `AccountManager` |
+| **ĐẠI CHỦ** | `MultiAccountManager` | `multi_account.py` | Pool N accounts (100+), load balancing (most-available-workers `[T]`), browser lifecycle | x-client-data sharing, capacity tracking (N × 20 videos) | `AccountManager` ×N |
+| **CHỦ** | `AccountManager` | `account_manager.py` | 1 account: session, token refresh, worker pool (max 20 `[T]`/max 5 `[C]`), reCAPTCHA cache, **asset ownership** | Project ID, paygate tier, enable/disable | `ExtensionBridge`, `VEOApiClient`, `ProjectManager` |
+| **THẦU** | `Dispatcher` + Worker coroutine | `dispatcher.py`, `engine.py` | Task queue, state machine, dependency tracking. Worker coroutine manages 4 THỢ per group | Progress storage, group management, session export/import | `Engine`, `QueueController` |
+| **Engine** | `Engine` | `engine.py` | **Pipeline orchestrator**: worker loops (5 THẦU/CHỦ), poll, download, upscale, continuation, retry, 403 recovery | Rate locks, API semaphores, staggered startup, two-phase admission `[T]` | `Dispatcher`, `MultiAccountManager`, `Worker`, `VEOApiClient` |
+| **THỢ** | `Worker` + `VideoOutputInfo` | `worker.py`, `dispatcher.py` | API payload construction + submit. Per-video state tracking (1 THỢ = 1 video = 1 `VideoOutputInfo`) | Response parsing, video lifecycle management | `VEOApiClient`, `AccountManager` |
 | **Queue UI** | `QueueController` | `queue_controller.py` | Queue display/filter, task actions (cancel/retry/priority), download mgmt | Batch operations, export list, event emission | `Dispatcher`, `DownloadManager`, `UpscaleHandler` |
 | **WebSocket** | `ExtensionBridge` | `extension_bridge.py` | Chrome Extension ↔ Python bridge: headers, reCAPTCHA, access token | Connection management, email assignment, tab reload | `AccountManager` |
 | **API** | `VEOApiClient` | `api_client.py` | All REST API calls: generate, poll, upscale, upload image, get credits | Browser header management, client context builder | `Engine`, `Worker` |
@@ -255,17 +256,17 @@ Cùng cơ chế poll như generation. Mỗi video upscale:
 | **API Semaphore** | `Semaphore(2)` | 2/account | All API calls | `engine.py` L126-134 | `[CURRENT]` |
 | **Upscale Burst** | `AdaptiveBurstController` | 4→20 global | Upscale poll concurrency | `upscale_queue.py` L30-120 | `[CURRENT]` |
 
-**Rate Lock:** Khi THỢ 0 trong lock (delay + API call), THỢ 1-4 đợi. Lock release sau API → THỢ tiếp theo vào. 5 THỢ submit trong ~25-40s thay vì cùng lúc.
+**Rate Lock:** Khi THẦU 0 trong lock (delay + API call), THẦU 1-4 đợi. Lock release sau API → THẦU tiếp theo vào. 5 THẦU submit trong ~25-40s thay vì cùng lúc.
 
-**API Semaphore(2):** Max 2 API call đồng thời per account (1 submit + 1 poll). Tránh burst khi nhiều worker poll cùng lúc.
+**API Semaphore(2):** Max 2 API call đồng thời per account (1 submit + 1 poll). Tránh burst khi nhiều THẦU poll cùng lúc.
 
 ### 4.2 Staggered Startup `[CURRENT]`
 
-5 THỢ per CHỦ start delay `1.5s × worker_index` (0s, 1.5s, 3s, 4.5s, 6s). Tránh 5 reCAPTCHA đồng thời khi engine start. File: `engine.py` L444-455.
+5 THẦU per CHỦ start delay `1.5s × worker_index` (0s, 1.5s, 3s, 4.5s, 6s). Tránh 5 reCAPTCHA đồng thời khi engine start. File: `engine.py` L444-455.
 
 ### 4.3 Burst tự giảm tự nhiên
 
-Poll phase 2-5min → tất cả THỢ poll, không submit → server rate window reset. THỢ hoàn thành ở thời điểm khác nhau → re-submit rải đều → burst giảm 5 → 1-3. Sau ~10min tất cả rảnh → burst lại 5.
+Poll phase 2-5min → tất cả THẦU poll, không submit → server rate window reset. THẦU hoàn thành ở thời điểm khác nhau → re-submit rải đều → burst giảm 5 → 1-3. Sau ~10min tất cả rảnh → burst lại 5.
 
 ### 4.4 Adaptive Upscale Burst `[CURRENT]`
 
@@ -275,7 +276,7 @@ Poll phase 2-5min → tất cả THỢ poll, không submit → server rate windo
 |-----------|-------|
 | Initial concurrent polls | **4** |
 | Step size | **+4 / -4** |
-| Max | **20** (= 5 workers × 4 videos) |
+| Max | **20** (= 5 THẦU × 4 THỢ/THẦU) |
 | Min (floor) | **4** |
 | Scale-up trigger | 8 consecutive poll successes → +4 |
 | Back-off trigger | Any 403/rate error → -4 (immediate) |
@@ -291,7 +292,7 @@ Start: 4 polls concurrent
               ...
 ```
 
-**Worker model:** Per-account worker runs concurrent jobs (`asyncio.create_task`, max 5 per account). Each job's Phase 2 polls acquire global burst semaphore before polling.
+**Worker model:** Per-account THẦU (coroutine) manages up to 4 THỢ (videos). 5 THẦU per CHỦ = max 20 THỢ `[T]` / max 5 `[C]`. Each THẦU's Phase 2 polls acquire global burst semaphore before polling.
 
 ### 4.5 reCAPTCHA Recovery `[CURRENT]`
 
@@ -457,21 +458,23 @@ THỢ release slot ngay → lấy prompt mới. Upscale chạy nền (submit tu�
 
 ## 8. Scaling: 100 Accounts
 
+> **Full concurrency model**: See [CONCURRENCY_MODEL.md](./CONCURRENCY_MODEL.md) §5 ĐẠI CHỦ.
+
 ### 8.1 Throughput
 
-| Metric | `[CURRENT]` | `[TARGET]` |
-|--------|------------|-----------|
-| Slot held / prompt | ~15min | ~5min |
-| Prompts/hr/worker | ~4 | ~12 |
-| Prompts/hr/account (5w) | ~20 | ~60 |
-| **100 accounts** | **2,000/hr** | **6,000/hr** |
-| Videos/hr | 8,000 | 24,000 |
+| Metric | `[CURRENT]` (slot-based) | `[TARGET]` (video-based) |
+|--------|-------------------------|-------------------------|
+| Worker unit / prompt | 1 slot (1-4 videos hidden) | `output_count` THỢ (explicit) |
+| Max concurrent / account | 5 prompts (5-20 videos) | 20 THỢ = 20 videos |
+| Prompts/hr/THẦU | ~4 | ~12 |
+| Videos/hr/account (5 THẦU) | ~80 (oc=4) | ~240 (oc=4) |
+| **100 accounts** | **8,000 videos/hr** | **24,000 videos/hr** |
 
 ### 8.2 Account Load Balancer `[TARGET]`
 
-Health-based account selection thay thế fixed most-available-slots:
+Health-based account selection thay thế fixed most-available — dùng đơn vị **workers** (video):
 ```python
-score = (available_slots * 10) - (active_slots * 5) - (consecutive_403s * 20)
+score = (available_workers * 10) - (active_workers * 5) - (consecutive_403s * 20)
 ```
 
 ---
@@ -704,7 +707,8 @@ class StatusAggregator:
 | Staggered worker startup | ✅ `[CURRENT]` | §4.2 | — |
 | Pre-upscale token refresh | ✅ `[CURRENT]` | §5.2 | — |
 | Upscale 2s cooldown | ✅ `[CURRENT]` | §7.1 | — |
-| MAX_WORKERS = 5 | ✅ `[CURRENT]` | §1.2 | — |
+| MAX_WORKERS = 5 (slots) | ✅ `[CURRENT]` | §1.2 | — |
+| **Video-based concurrency (20 THỢ/CHỦ)** | 🔲 `[TARGET]` | [CONCURRENCY_MODEL.md](./CONCURRENCY_MODEL.md) | 🔴 Critical |
 | Image upload + cache | ✅ `[CURRENT]` | §6 | — |
 | Continuation frame extraction | ✅ `[CURRENT]` | §6 | — |
 | EventManager (pub/sub infra) | ✅ `[CURRENT]` | §2.2 | — |

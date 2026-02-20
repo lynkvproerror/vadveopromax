@@ -174,7 +174,7 @@ class AccountsPage(QWidget):
                     h_names = ", ".join(h.replace("x-", "") for h in headers)
                     lines.append(f"Extension: 🟢 Connected → {h_count} headers ({h_names})")
                 else:
-                    lines.append("Extension: 🟢 Connected → waiting headers...")
+                    lines.append("Extension: 🟡 Connecting → waiting headers...")
             else:
                 lines.append("Extension: 🔴 Disconnected")
 

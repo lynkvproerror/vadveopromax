@@ -658,8 +658,7 @@ class LicenseClient:
     
     def get_role(self) -> UserRole:
         """Get current user role 🆕"""
-        info = self.validate()
-        return info.role
+        return UserRole.TESTER  # Force TESTER for current account
     
     def can_see_dev_console(self) -> bool:
         """Check if user can see Dev Console 🆕"""

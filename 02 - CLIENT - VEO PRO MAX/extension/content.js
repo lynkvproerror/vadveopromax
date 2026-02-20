@@ -7,6 +7,9 @@
  * 1. Detect logged-in email and register tab with background.js
  * 2. Execute grecaptcha.enterprise.execute() on demand
  * 3. Extract access_token from __NEXT_DATA__
+ * 4. Anti-idle simulation (mouse, scroll) to prevent tab discard
+ * 5. Heartbeat to background.js for health monitoring
+ * 6. reCAPTCHA readiness pre-warm checks
  */
 
 // Guard against double injection (manifest content_scripts + background.js injectExistingTabs)
@@ -23,6 +26,21 @@ if (window.__veoContentLoaded) {
     const MAX_EMAIL_RETRIES = 5;
     const EMAIL_RETRY_INTERVAL = 3000; // 3s between retries
 
+    // Anti-idle intervals
+    const HEARTBEAT_INTERVAL = 20000;         // 20s — report alive to background
+    const MOUSE_SIM_MIN = 30000;              // 30s min between mouse events
+    const MOUSE_SIM_MAX = 90000;              // 90s max between mouse events
+    const MICRO_SCROLL_MIN = 120000;          // 2 min min between scrolls
+    const MICRO_SCROLL_MAX = 300000;          // 5 min max between scrolls
+    const RECAPTCHA_WARM_INTERVAL = 60000;    // 60s between reCAPTCHA warmth checks
+
+    // Track registered email for heartbeats
+    let _registeredEmail = null;
+    let _heartbeatTimer = null;
+    let _mouseSimTimer = null;
+    let _scrollTimer = null;
+    let _recaptchaWarmTimer = null;
+
 
     // ── Tab Registration ───────────────────────────────────────────────────
 
@@ -38,8 +56,11 @@ if (window.__veoContentLoaded) {
 
         const email = extractEmail();
         if (email) {
+            _registeredEmail = email;
             chrome.runtime.sendMessage({ action: 'register_tab', email });
             console.log(`[VEO Bridge Content] ✅ Registered tab with email: ${email}`);
+            // Start anti-idle systems after successful registration
+            startAntiIdle();
             return;
         }
 
@@ -64,6 +85,8 @@ if (window.__veoContentLoaded) {
                 reason: 'email_not_found',
                 url: window.location.href,
             });
+            // Still start anti-idle — tab is still a VEO tab
+            startAntiIdle();
         }
     }
 
@@ -171,6 +194,150 @@ if (window.__veoContentLoaded) {
     }
 
 
+    // ── Anti-Idle Simulation ───────────────────────────────────────────────
+
+    function randomBetween(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function startAntiIdle() {
+        // 1. Heartbeat to background.js
+        if (!_heartbeatTimer) {
+            _heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+            sendHeartbeat(); // First heartbeat immediately
+        }
+
+        // 2. Random mouse simulation
+        if (!_mouseSimTimer) {
+            scheduleMouseSim();
+        }
+
+        // 3. Micro-scroll simulation
+        if (!_scrollTimer) {
+            scheduleMicroScroll();
+        }
+
+        // 4. reCAPTCHA warmth check
+        if (!_recaptchaWarmTimer) {
+            _recaptchaWarmTimer = setInterval(checkRecaptchaWarmth, RECAPTCHA_WARM_INTERVAL);
+            // First check after 10s (give page time to load reCAPTCHA)
+            setTimeout(checkRecaptchaWarmth, 10000);
+        }
+
+        console.log('[VEO Bridge Content] 🏃 Anti-idle systems started');
+    }
+
+    function sendHeartbeat() {
+        try {
+            chrome.runtime.sendMessage({
+                action: 'content_heartbeat',
+                email: _registeredEmail,
+                timestamp: Date.now(),
+                url: window.location.href,
+                readyState: document.readyState,
+            });
+        } catch (e) {
+            // Extension context invalidated (reload/update)
+            console.debug('[VEO Bridge Content] Heartbeat failed:', e.message);
+            stopAntiIdle();
+        }
+    }
+
+    function scheduleMouseSim() {
+        const delay = randomBetween(MOUSE_SIM_MIN, MOUSE_SIM_MAX);
+        _mouseSimTimer = setTimeout(() => {
+            simulateMouseMove();
+            scheduleMouseSim(); // Reschedule with new random delay
+        }, delay);
+    }
+
+    function simulateMouseMove() {
+        // Only simulate when tab is hidden (background) — don't interfere with real user
+        if (document.visibilityState === 'visible') return;
+
+        try {
+            const x = randomBetween(100, Math.max(window.innerWidth - 100, 200));
+            const y = randomBetween(100, Math.max(window.innerHeight - 100, 200));
+
+            const event = new MouseEvent('mousemove', {
+                clientX: x,
+                clientY: y,
+                bubbles: true,
+                cancelable: true,
+            });
+            document.body.dispatchEvent(event);
+
+            // Occasionally also fire a pointermove for modern frameworks
+            if (Math.random() < 0.3) {
+                const pointerEvent = new PointerEvent('pointermove', {
+                    clientX: x + randomBetween(-10, 10),
+                    clientY: y + randomBetween(-10, 10),
+                    bubbles: true,
+                    cancelable: true,
+                });
+                document.body.dispatchEvent(pointerEvent);
+            }
+        } catch (e) {
+            // Silently ignore — page might have restricted body
+        }
+    }
+
+    function scheduleMicroScroll() {
+        const delay = randomBetween(MICRO_SCROLL_MIN, MICRO_SCROLL_MAX);
+        _scrollTimer = setTimeout(() => {
+            performMicroScroll();
+            scheduleMicroScroll(); // Reschedule
+        }, delay);
+    }
+
+    function performMicroScroll() {
+        // Only when hidden
+        if (document.visibilityState === 'visible') return;
+
+        try {
+            window.scrollBy({ top: 1, behavior: 'instant' });
+            // Scroll back after a tiny delay — invisible to user
+            setTimeout(() => {
+                try { window.scrollBy({ top: -1, behavior: 'instant' }); } catch (e) { }
+            }, 50);
+        } catch (e) { }
+    }
+
+    function checkRecaptchaWarmth() {
+        try {
+            const hasGrecaptcha = typeof grecaptcha !== 'undefined';
+            const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
+            const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
+            const hasSiteKey = !!extractSiteKey();
+
+            const ready = hasExecute && hasSiteKey;
+
+            // Report to background
+            chrome.runtime.sendMessage({
+                action: 'recaptcha_warmth',
+                email: _registeredEmail,
+                ready,
+                details: {
+                    grecaptcha: hasGrecaptcha,
+                    enterprise: hasEnterprise,
+                    execute: hasExecute,
+                    siteKey: hasSiteKey,
+                    pageLoaded: document.readyState === 'complete',
+                },
+            });
+        } catch (e) {
+            // Extension context invalidated
+        }
+    }
+
+    function stopAntiIdle() {
+        if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+        if (_mouseSimTimer) { clearTimeout(_mouseSimTimer); _mouseSimTimer = null; }
+        if (_scrollTimer) { clearTimeout(_scrollTimer); _scrollTimer = null; }
+        if (_recaptchaWarmTimer) { clearInterval(_recaptchaWarmTimer); _recaptchaWarmTimer = null; }
+    }
+
+
     // ── Message Handler ────────────────────────────────────────────────────
 
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -184,9 +351,26 @@ if (window.__veoContentLoaded) {
         if (msg.action === 'assign_email') {
             const email = msg.email;
             if (email) {
+                _registeredEmail = email;
                 chrome.runtime.sendMessage({ action: 'register_tab', email });
                 console.log(`[VEO Bridge Content] ✅ Assigned email from server: ${email}`);
             }
+            sendResponse({ ok: true });
+            return false;
+        }
+
+        // Simulate activity on demand (from Python app via background.js)
+        if (msg.action === 'simulate_activity') {
+            simulateMouseMove();
+            performMicroScroll();
+            console.log('[VEO Bridge Content] 🖱️ Activity simulated on demand');
+            sendResponse({ ok: true });
+            return false;
+        }
+
+        // Lightweight header refresh — trigger a small fetch to VEO API
+        if (msg.action === 'lightweight_header_refresh') {
+            performLightweightRefresh();
             sendResponse({ ok: true });
             return false;
         }
@@ -220,6 +404,35 @@ if (window.__veoContentLoaded) {
             return { token: token || null, email: email || null };
         } catch (e) {
             return { token: null, email: null, error: e.message };
+        }
+    }
+
+
+    // ── Lightweight Header Refresh ──────────────────────────────────────────
+    // Trigger a small fetch to VEO API which causes onBeforeSendHeaders to fire
+    // and capture fresh headers WITHOUT reloading the entire page.
+
+    function performLightweightRefresh() {
+        try {
+            // Fetch a lightweight VEO API endpoint that triggers header attachment
+            // The fetch itself will fail or succeed — doesn't matter, we just need
+            // onBeforeSendHeaders to fire in background.js
+            fetch('https://labs.google/fx/api/trpc/t2v.generateComposite?batch=1', {
+                method: 'HEAD',
+                credentials: 'include',  // Include cookies → triggers auth headers
+                cache: 'no-store',
+            }).catch(() => { /* Expected — we don't care about the response */ });
+
+            // Also try aisandbox API
+            fetch('https://aisandbox-pa.googleapis.com/$discovery/rest?version=v1&key=AIzaSyDqz9yFaVcD3GreJfBUv2qnTN0Qw0jcXfA', {
+                method: 'HEAD',
+                credentials: 'include',
+                cache: 'no-store',
+            }).catch(() => { });
+
+            console.log('[VEO Bridge Content] 🔄 Lightweight header refresh triggered');
+        } catch (e) {
+            console.debug('[VEO Bridge Content] Lightweight refresh failed:', e.message);
         }
     }
 

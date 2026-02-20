@@ -1322,8 +1322,8 @@ class ProfilesController:
                         # Step 4: Navigate to VEO if needed
                         current_url = page.url
                         print(f"[DEBUG] Step 4: Current URL = {current_url}")
-                        if "labs.google" not in current_url:
-                            print(f"[DEBUG] Step 4: Navigating to VEO...")
+                        if "/tools/flow" not in current_url:
+                            print(f"[DEBUG] Step 4: Navigating to VEO /tools/flow...")
                             try:
                                 page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
                             except Exception as nav_err:
@@ -1341,7 +1341,7 @@ class ProfilesController:
                             except Exception:
                                 pass
                         else:
-                            print(f"[DEBUG] Step 4: ✅ Already on VEO — skipping navigation")
+                            print(f"[DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation")
                         
                         # Step 5: Trigger header capture via reload
                         print(f"[DEBUG] Step 5: Headers so far = {list(captured_headers.keys())}")
@@ -1354,15 +1354,21 @@ class ProfilesController:
                             except Exception as e:
                                 print(f"[DEBUG] Step 5: Reload error: {e}")
                         
-                        # Step 5b: If still no headers, try navigating to a different VEO page
+                        # Step 5b: If still no headers, try navigating away and back
+                        # (avoid using non-localized URL since Chrome auto-redirects to /vi/ etc.)
                         if not captured_headers.get("x-browser-validation"):
-                            print(f"[DEBUG] Step 5b: Trying alternative navigation...")
+                            print(f"[DEBUG] Step 5b: Trying navigation away+back...")
                             try:
-                                page.goto("https://labs.google/fx/tools/flow", wait_until="load", timeout=15000)
+                                # Navigate away briefly to force fresh request headers
+                                page.goto("https://labs.google/fx/tools/flow", wait_until="load", timeout=10000)
+                                page.wait_for_timeout(1000)
+                                # Reload to trigger API calls for header capture
+                                page.goto("https://labs.google/fx/tools/flow",
+                                          wait_until="load", timeout=15000)
                                 page.wait_for_timeout(3000)
-                                print(f"[DEBUG] Step 5b: Headers after video-fx = {list(captured_headers.keys())}")
+                                print(f"[DEBUG] Step 5b: Headers after nav cycle = {list(captured_headers.keys())}")
                             except Exception as e:
-                                print(f"[DEBUG] Step 5b: Alt nav error: {e}")
+                                print(f"[DEBUG] Step 5b: Nav cycle error: {e}")
                         
                         # Step 6: Compute missing branded headers for CfT
                         # Chrome for Testing doesn't inject x-browser-* headers.
@@ -1418,16 +1424,28 @@ class ProfilesController:
                                 
                                 if isinstance(cmd, tuple) and cmd[0] == "evaluate":
                                     _, expression, eval_arg, result_event, result_holder = cmd
-                                    try:
-                                        if eval_arg is not None:
-                                            result = page.evaluate(expression, eval_arg)
-                                        else:
-                                            result = page.evaluate(expression)
-                                        result_holder["value"] = result
-                                        result_holder["error"] = None
-                                    except Exception as eval_err:
-                                        result_holder["value"] = None
-                                        result_holder["error"] = str(eval_err)
+                                    max_eval_attempts = 2
+                                    for eval_attempt in range(max_eval_attempts):
+                                        try:
+                                            if eval_arg is not None:
+                                                result = page.evaluate(expression, eval_arg)
+                                            else:
+                                                result = page.evaluate(expression)
+                                            result_holder["value"] = result
+                                            result_holder["error"] = None
+                                            break  # success
+                                        except Exception as eval_err:
+                                            err_str = str(eval_err).lower()
+                                            # Navigation destroyed context — retry after wait
+                                            if eval_attempt < max_eval_attempts - 1 and (
+                                                "context was destroyed" in err_str or
+                                                "navigation" in err_str
+                                            ):
+                                                import time as _time
+                                                _time.sleep(2)
+                                                continue
+                                            result_holder["value"] = None
+                                            result_holder["error"] = str(eval_err)
                                     result_event.set()
                                 
                                 elif cmd == "hide":
@@ -2165,46 +2183,50 @@ class ProfilesController:
         
         print(f"[ProfilesController] Step 3: Warming up browser with {len(warmup_urls)} tabs...")
         try:
-            from playwright.sync_api import sync_playwright
+            # Use subprocess.Popen instead of Playwright to avoid greenlet
+            # thread crash. Playwright's sync API requires main thread (greenlet),
+            # but this function is called via run_in_executor (thread pool) from
+            # engine.py Phase 2 recovery. subprocess.Popen is fully thread-safe.
+            _chrome_exe = _get_chrome_executable()
+            if not _chrome_exe:
+                # Fallback: try to find system Chrome
+                _chrome_exe = self._find_browser("auto")
             
+            if not _chrome_exe:
+                print(f"[ProfilesController] ❌ No Chrome executable found for warmup")
+                return False
             
-            with sync_playwright() as p:
-                # Use CfT instead of branded Chrome (supports --load-extension)
-                _chrome_exe = _get_chrome_executable()
-                _launch_kwargs = dict(
-                    user_data_dir=str(profile_path),
-                    headless=False,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--no-first-run",
-                        "--no-default-browser-check",
-                        "--start-maximized",
-                    ],
-                )
-                if _chrome_exe:
-                    _launch_kwargs["executable_path"] = _chrome_exe
-                else:
-                    _launch_kwargs["channel"] = "chrome"  # Fallback to branded
-                context = p.chromium.launch_persistent_context(**_launch_kwargs)
-                
-                # Open warmup tabs
-                for url in warmup_urls:
-                    try:
-                        page = context.new_page()
-                        page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                        print(f"[ProfilesController] ✅ Opened: {url}")
-                    except Exception as e:
-                        print(f"[ProfilesController] ⚠️ Tab {url} error: {e}")
-                
-                # Wait for Variations Service enrollment + x-client-data generation
-                print(f"[ProfilesController] ⏳ Waiting 15s for Variations enrollment...")
-                time.sleep(15)
-                
-                # Close all pages and context
-                try:
-                    context.close()
-                except Exception:
-                    pass
+            chrome_args = [
+                _chrome_exe,
+                f"--user-data-dir={profile_path}",
+                "--disable-blink-features=AutomationControlled",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--start-maximized",
+                "--no-sandbox",
+            ] + warmup_urls  # Chrome opens each URL as a separate tab
+            
+            print(f"[ProfilesController] Launching: {Path(_chrome_exe).name} with {len(warmup_urls)} URLs")
+            proc = subprocess.Popen(
+                chrome_args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            
+            # Wait for Variations Service enrollment + x-client-data generation
+            # Chrome needs ~15s of runtime for Variations Service to download
+            # config from Google servers and generate x-client-data header.
+            print(f"[ProfilesController] ⏳ Waiting 15s for Variations enrollment (PID={proc.pid})...")
+            time.sleep(15)
+            
+            # Graceful shutdown: terminate, then force-kill if needed
+            print(f"[ProfilesController] Closing warmup browser (PID={proc.pid})...")
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
             
             print(f"[ProfilesController] ✅ Phase 2 warmup complete for {email}")
             return True

@@ -31,6 +31,7 @@ from core.import_validator import ImportValidator
 from core.download_manager import DownloadManager
 from core.engine import Engine
 from core.log_exporter import LogExporter
+from core.queue_dto import VideoSlotDTO, TaskDTO, GroupDTO
 
 # Services
 from services.license_client import LicenseClient
@@ -159,9 +160,13 @@ class AppController:
         self._extension_bridge.on_headers_update = self._on_extension_headers_update
         self._extension_bridge.on_extension_connect = self._on_extension_connect
         self._extension_bridge.on_unregistered_connection = self._on_unregistered_extension
+        self._extension_bridge._on_readiness_token = self._on_readiness_token
         
         # Wire extension bridge into RefreshManager for auto header refresh
         self._refresh_manager.set_extension_bridge(self._extension_bridge)
+        
+        # Wire extension bridge into Engine for UpscaleQueue fallback injection
+        self._engine._app_extension_bridge = self._extension_bridge
         
         # Image Enhancer — GPU detection (background) + model management (portable)
         from core.gpu_detector import GPUDetector
@@ -337,6 +342,21 @@ class AppController:
         except Exception as e:
             log.debug(f"[ExtensionBridge] Startup refresh scheduling failed: {e}")
     
+    def _on_readiness_token(self, email: str, token: str):
+        """Callback from ExtensionBridge when readiness check yields a valid token.
+        
+        Caches the trial-execute token on the AccountManager so the next
+        API call can use it instantly (no extra round-trip to extension).
+        """
+        account = self._account_manager.get_account(email)
+        if account:
+            account._token_cache.set(token)
+            account._session.update_recaptcha(token)
+            log.debug(
+                f"[ReadinessToken] Cached trial token for {email} "
+                f"({len(token)} chars)"
+            )
+    
     def _on_unregistered_extension(self):
         """Callback from ExtensionBridge when a connection hasn't registered after 5s.
         
@@ -416,6 +436,7 @@ class AppController:
                     for acc in self._multi_account._accounts:
                         acc.set_profiles_controller(self._profiles_controller)
                         acc._extension_bridge = self._extension_bridge
+                        acc._parent_manager = self._multi_account  # for bridge auto-recovery
                     log.info(f"[AutoLaunch] ProfilesController + ExtensionBridge injected into {len(self._multi_account._accounts)} accounts")
                 
                 # Step 3: Open debug browsers
@@ -589,6 +610,49 @@ class AppController:
         self._push_browser_status()
         self._push_extension_status()
         return True
+
+    def reload_extension_for(self, email: str) -> bool:
+        """Reload the Chrome extension for a specific account.
+        
+        Hot-reloads the extension from disk via chrome.runtime.reload() —
+        no browser restart needed. Waits for reconnection.
+        
+        Thread-safe. Called from UI thread via background thread.
+        
+        Returns:
+            True if extension reloaded and reconnected, False otherwise
+        """
+        bridge = getattr(self, '_extension_bridge', None)
+        if not bridge:
+            log.error("[AppController] No ExtensionBridge — cannot reload extension")
+            return False
+        
+        log.info(f"[AppController] 🧩 Reloading extension for {email}...")
+        print(f"[AppController] 🧩 Reloading extension for {email}...")
+        
+        import asyncio
+        loop = getattr(self, '_loop', None) or asyncio.get_event_loop()
+        
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                bridge.reload_extension(email, timeout=15.0),
+                loop,
+            )
+            result = future.result(timeout=20)
+            
+            if result:
+                log.info(f"[AppController] ✅ Extension reloaded for {email}")
+                print(f"[AppController] ✅ Extension reloaded for {email}")
+            else:
+                log.warning(f"[AppController] ⚠️ Extension reload may have failed for {email}")
+                print(f"[AppController] ⚠️ Extension reload may have failed for {email}")
+            
+            self._push_extension_status()
+            return result
+        except Exception as e:
+            log.error(f"[AppController] ❌ Extension reload error for {email}: {e}")
+            print(f"[AppController] ❌ Extension reload error: {e}")
+            return False
     
     def hot_reload_app(self):
         """Restart the entire Python process.
@@ -1194,6 +1258,10 @@ class AppController:
             elif key == "journal_save_interval_sec":
                 if self._task_journal:
                     self._task_journal._save_interval = int(value)
+            elif key == "workload_priority":
+                if self._engine:
+                    self._engine._workload_priority = str(value)
+                    log.info(f"[Pipeline] Workload priority → {value}")
             else:
                 log.warning(f"[Pipeline] Unknown setting: {key}")
         except Exception as e:
@@ -1405,17 +1473,35 @@ class AppController:
                     )
                     if future:
                         try:
-                            future.result(timeout=3.0)
+                            future.result(timeout=15.0)
                             log.info(f"Synced profile → runtime: {email}")
+                            
+                            # Inject bridge IMMEDIATELY after account is created
+                            acc_mgr = self._multi_account.get_account(email)
+                            if acc_mgr:
+                                acc_mgr._parent_manager = self._multi_account
+                                if hasattr(self, '_extension_bridge') and self._extension_bridge:
+                                    acc_mgr._extension_bridge = self._extension_bridge
+                                if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                                    acc_mgr.set_profiles_controller(self._profiles_controller)
                             
                             # Hot-reload: if engine is running, spawn workers immediately
                             if self._engine and self._engine.is_running:
-                                acc_mgr = self._multi_account.get_account(email)
                                 if acc_mgr:
                                     self._engine.add_account_hot(acc_mgr)
                                     
                         except Exception as e:
-                            log.warning(f"Failed to sync {email}: {e}")
+                            log.warning(f"Failed to sync {email}: {type(e).__name__}: {e}")
+                            import traceback; traceback.print_exc()
+                            # Even on timeout, the account may have been added —
+                            # inject bridge defensively so it's ready when needed
+                            acc_mgr = self._multi_account.get_account(email)
+                            if acc_mgr:
+                                acc_mgr._parent_manager = self._multi_account
+                                if hasattr(self, '_extension_bridge') and self._extension_bridge:
+                                    acc_mgr._extension_bridge = self._extension_bridge
+                                if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                                    acc_mgr.set_profiles_controller(self._profiles_controller)
                             
                 except Exception as e:
                     log.warning(f"Error syncing profile {email}: {e}")
@@ -1438,9 +1524,10 @@ class AppController:
             f"{len(self._multi_account.ready_accounts)} ready"
         )
         
-        # Ensure ExtensionBridge + ProfilesController are injected on ALL accounts
+        # Ensure ExtensionBridge + ProfilesController + parent ref are injected on ALL accounts
         # (covers newly-created accounts from sync AND existing ones)
         for acc in self._multi_account._accounts:
+            acc._parent_manager = self._multi_account  # for bridge auto-recovery
             if hasattr(self, '_extension_bridge') and self._extension_bridge:
                 acc._extension_bridge = self._extension_bridge
             if hasattr(self, '_profiles_controller') and self._profiles_controller:
@@ -1934,13 +2021,29 @@ class AppController:
                 result["accounts"].append(acc_info)
                 continue
             
-            # Check 2: Extension connected (REQUIRED in extension-only architecture)
+            # Check 2: Extension connected + headers ready (REQUIRED)
+            # 3-state: not connected → blocker, connected but no headers → blocker (wait), ready → pass
             ext_connected = (
                 self._extension_bridge and
                 self._extension_bridge.is_connected(account.email)
             )
+            ext_has_headers = False
+            if ext_connected and self._extension_bridge:
+                try:
+                    cached = self._extension_bridge.get_cached_headers(
+                        account.email, max_age_seconds=300
+                    )
+                    ext_has_headers = bool(cached)
+                except Exception:
+                    pass
+            
             if not ext_connected:
                 acc_info["issues"].append("🔴 Extension chưa kết nối — cần mở trình duyệt")
+            elif not ext_has_headers:
+                acc_info["issues"].append(
+                    "🟡 Extension đang kết nối nhưng chưa có headers — "
+                    "vui lòng đợi vài giây hoặc reload trang Veo trong trình duyệt"
+                )
             
             # Check 3: Access token
             has_token = bool(account._session.access_token)
@@ -1964,14 +2067,6 @@ class AppController:
                 else:
                     acc_info["issues"].append("🔴 reCAPTCHA hết hạn — Extension chưa kết nối")
             
-            # Check 5: Browser headers (x-browser-*)
-            has_headers = bool(account._session.browser_validation)
-            if not has_headers:
-                if ext_connected:
-                    acc_info["warnings"].append("🟡 Headers chưa capture — sẽ tự có khi Extension gửi request đầu tiên")
-                else:
-                    acc_info["issues"].append("🔴 Không có headers — cần mở trình duyệt và kết nối Extension")
-            
             # Verdict for this account
             if not acc_info["issues"]:
                 acc_info["ready"] = True
@@ -1982,8 +2077,12 @@ class AppController:
         result["can_start"] = ready_count > 0
         
         # Build summary
+        has_warnings = any(acc.get("warnings") for acc in result["accounts"])
         if ready_count == total_count:
-            result["summary"] = f"✅ Tất cả {total_count} tài khoản sẵn sàng"
+            if has_warnings:
+                result["summary"] = f"⚠️ {total_count} tài khoản sẵn sàng (có cảnh báo — sẽ tự xử lý)"
+            else:
+                result["summary"] = f"✅ Tất cả {total_count} tài khoản sẵn sàng"
         elif ready_count > 0:
             blocked = total_count - ready_count
             result["summary"] = f"⚠️ {ready_count}/{total_count} sẵn sàng, {blocked} bị chặn"
@@ -1995,27 +2094,13 @@ class AppController:
     def start_processing(self):
         """Start processing queue via Engine.
         
-        Runs a pre-flight readiness check first. If no accounts are
-        production-ready, blocks the start and shows an error toast.
+        Pre-flight check is done by the UI (tab_queue._on_toggle_engine)
+        which shows toast feedback. This method only handles engine startup.
         
         Engine uses asyncio.TaskGroup for proper async worker management.
         The Engine.start() coroutine runs in the background async loop.
         """
         if self.state.is_processing:
-            return
-        
-        # Pre-flight readiness check
-        check = self.preflight_check()
-        log.info(f"[Preflight] {check['summary']}")
-        for acc in check["accounts"]:
-            if acc["issues"]:
-                log.warning(f"[Preflight] {acc['email']}: {', '.join(acc['issues'])}")
-            if acc["warnings"]:
-                log.info(f"[Preflight] {acc['email']}: {', '.join(acc['warnings'])}")
-        
-        if not check["can_start"]:
-            self._notify_status(f"Cannot start: {check['summary']}")
-            self.state.is_processing = False
             return
         
         self.state.is_processing = True
@@ -2027,14 +2112,8 @@ class AppController:
         # are now read directly from each AccountManager at runtime.
         # No global max_workers needed.
         
-        # Anti-Detect Spam settings (global — applies to all accounts)
-        self._engine._anti_detect_enabled = getattr(self.settings, 'anti_detect_enabled', True)
-        self._engine._anti_detect_delay_min = getattr(self.settings, 'anti_detect_delay_min', 3.0)
-        self._engine._anti_detect_delay_max = getattr(self.settings, 'anti_detect_delay_max', 8.0)
-        
-        # D1: Continuation Frame settings (global)
-        self._engine._continuation_enabled = getattr(self.settings, 'continuation_enabled', True)
-        self._engine._extract_point_ms = getattr(self.settings, 'extract_point_ms', 750)
+        # Pass settings reference for hot-apply (engine reads live values)
+        self._engine._settings = self.settings
         
         # Wire engine callbacks
         self._engine._on_progress = self._handle_progress
@@ -2065,7 +2144,7 @@ class AppController:
         # Start log exporter (captures warnings/errors for auto-export)
         self._log_exporter.start()
         
-        self._notify_status("Processing started")
+        log.info("[Engine] Processing started")
     
     async def _start_recaptcha_pool(self):
         """Start reCAPTCHA pool inside the async event loop.
@@ -2341,61 +2420,72 @@ class AppController:
         groups = self._dispatcher.get_all_groups()
         result = []
         for gid, group in groups.items():
-            completed = sum(1 for t in group.tasks if t.state == TaskState.COMPLETED)
-            total = len(group.tasks)
+            # Filter out replacement tasks (per-video retries) — they're invisible
+            # to the user; their results slot back into original task's video_outputs
+            visible_tasks = [t for t in group.tasks if not getattr(t, 'replace_target', None)]
+            completed = sum(1 for t in visible_tasks if t.state == TaskState.COMPLETED)
+            total = len(visible_tasks)
             # Detect mode/model from first task
-            first = group.tasks[0] if group.tasks else None
-            result.append({
-                "id": gid,
-                "name": group.name,
-                "status": group.status,
-                "progress": group.progress,
-                "completed": completed,
-                "total": total,
-                "mode": _wf_display(first.workflow_type) if first else "T2V",
-                "model": (first.model if first else ""),
-                "output_folder": (first.output_folder if first else ""),
-                "project_name": (first.project_name if first else ""),
-                "aspect_ratio": (first.aspect_ratio if first else ""),
-                "output_count": (first.output_count if first else 4),
-                "created_at": group.created_at,
-                "tasks": [
-                    {
-                        "id": t.id,
-                        "index": i + 1,
-                        "prompt": t.prompt,
-                        "status": t.state.value,
-                        "progress": t.progress,
-                        "mode": _wf_display(t.workflow_type) if t.workflow_type else "T2V",
-                        "has_continuation": t.parent_task_id is not None,
-                        "parent_id": t.parent_task_id,
-                        "error": t.error,
-                        "output_count": t.output_count,
-                        "output_files": list(t.output_uris) if t.output_uris else [],
-                        "thumbnails": list(t.thumbnail_paths) if hasattr(t, 'thumbnail_paths') else [],
-                        "image_paths": list(t.image_paths) if t.image_paths else [],
-                        "continuation_frame": t.continuation_frame_local_path or "",
-                        "upscale_status": getattr(t, 'upscale_status', ''),
-                        "upscale_error": getattr(t, 'upscale_error', ''),
-                        "image_upload_status": getattr(t, 'image_upload_status', ''),
-                        "download_quality": getattr(t, 'download_quality', '720p'),
-                        "video_outputs": [
-                            {
-                                "index": vo.index,
-                                "quality": vo.quality,
-                                "upscale_status": vo.upscale_status,
-                                "upscale_error": vo.upscale_error,
-                                "best_file": vo.best_file,
-                                "border_color": vo.border_color,
-                                "task_id": t.id,
-                                "target_quality": getattr(t, 'download_quality', '1080p'),
-                            }
+            first = visible_tasks[0] if visible_tasks else None
+            result.append(GroupDTO(
+                id=gid,
+                name=group.name,
+                status=group.status,
+                progress=group.progress,
+                completed=completed,
+                total=total,
+                mode=_wf_display(first.workflow_type) if first else "T2V",
+                model=(first.model if first else ""),
+                output_folder=(first.output_folder if first else ""),
+                project_name=(first.project_name if first else ""),
+                aspect_ratio=(first.aspect_ratio if first else ""),
+                output_count=(first.output_count if first else 4),
+                created_at=group.created_at,
+                tasks=[
+                    TaskDTO(
+                        id=t.id,
+                        index=i + 1,
+                        prompt=t.prompt,
+                        status=t.state.value,
+                        progress=t.progress,
+                        mode=_wf_display(t.workflow_type) if t.workflow_type else "T2V",
+                        has_continuation=t.parent_task_id is not None,
+                        parent_id=t.parent_task_id,
+                        error=t.error,
+                        output_count=t.output_count,
+                        output_files=list(t.output_uris) if t.output_uris else [],
+                        # Build thumbnails from video_outputs (per-video, index-safe)
+                        # instead of task.thumbnail_paths (flat list that shifts after retry)
+                        thumbnails=(
+                            [vo.thumbnail_path for vo in t.video_outputs]
+                            if hasattr(t, 'video_outputs') and t.video_outputs
+                            else list(t.thumbnail_paths) if hasattr(t, 'thumbnail_paths') else []
+                        ),
+                        image_paths=list(getattr(t, 'image_paths', [])) if t.image_paths else [],
+                        continuation_frame=t.continuation_frame_local_path or "",
+                        upscale_status=getattr(t, 'upscale_status', ''),
+                        upscale_error=getattr(t, 'upscale_error', ''),
+                        image_upload_status=getattr(t, 'image_upload_status', ''),
+                        download_quality=getattr(t, 'download_quality', '720p'),
+                        status_text=getattr(t, 'status_text', ''),
+                        video_outputs=[
+                            VideoSlotDTO(
+                                index=vo.index,
+                                quality=vo.quality,
+                                upscale_status=vo.upscale_status,
+                                upscale_error=vo.upscale_error,
+                                best_file=vo.best_file,
+                                border_color=vo.border_color,
+                                thumbnail_path=vo.thumbnail_path,
+                                task_id=t.id,
+                                target_quality=getattr(t, 'download_quality', '1080p'),
+                            )
                             for vo in (t.video_outputs if hasattr(t, 'video_outputs') else [])
                         ],
-                    }
-                    for i, t in enumerate(group.tasks)
+                    )
+                    for i, t in enumerate(visible_tasks)
                 ],
-            })
+            ).to_dict())
         return result
     
     def update_group_settings(self, group_id: str, settings: dict) -> bool:
@@ -2439,6 +2529,14 @@ class AppController:
         """Force retry a task regardless of state (including completed)."""
         return self._dispatcher.force_retry_task(task_id)
     
+    def force_retry_video(self, task_id: str, video_index: int) -> bool:
+        """Force retry a SINGLE video by index, preserving all other videos."""
+        return self._dispatcher.force_retry_video(task_id, video_index)
+    
+    def get_replace_target(self, task_id: str):
+        """Get (original_task_id, video_index) if task_id is a replacement task."""
+        return self._dispatcher.get_replace_target(task_id)
+    
     def _get_account_for_reupscale(self, task_id: str):
         """Get account for re-upscale: MUST use assigned_account.
         
@@ -2470,8 +2568,11 @@ class AppController:
         
         return None, "⚠️ No account available for re-upscale"
     
-    def re_upscale_task(self, task_id: str):
+    def re_upscale_task(self, task_id: str, failed_only: bool = True):
         """Re-upscale a completed task using stored media_ids.
+        
+        Args:
+            failed_only: If True, only re-upscale failed videos. If False, re-upscale all.
         
         Runs async engine method on the background event loop.
         Returns immediately — result is communicated via callbacks.
@@ -2485,7 +2586,7 @@ class AppController:
                 self._notify_status(error)
                 return
             
-            result = await self._engine.re_upscale_task(task_id, account)
+            result = await self._engine.re_upscale_task(task_id, account, failed_only=failed_only)
             # Trigger queue refresh so UI updates status
             for cb in self._on_queue_updated:
                 try:
@@ -2577,10 +2678,6 @@ class AppController:
     def retry_all_failed(self) -> int:
         """Retry all failed tasks."""
         return self._dispatcher.retry_all_failed()
-    
-    def reset_task(self, task_id: str) -> bool:
-        """Reset a task to initial state — delete cache/downloads, re-queue."""
-        return self._dispatcher.reset_task(task_id)
     
     def reset_all_tasks(self) -> int:
         """Reset ALL non-running tasks to initial state."""

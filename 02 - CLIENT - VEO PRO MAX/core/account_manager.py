@@ -313,8 +313,22 @@ class AccountManager:
             Fresh reCAPTCHA token, or None if extension not connected.
         """
         if not self._extension_bridge:
-            log.warning(f"[{self.email}] ❌ Extension bridge NOT SET on AccountManager — cannot get reCAPTCHA")
-            return None
+            # Auto-recover Layer 1: find bridge from sibling accounts via parent manager
+            if hasattr(self, '_parent_manager') and self._parent_manager:
+                for acc in getattr(self._parent_manager, '_accounts', []):
+                    if acc._extension_bridge and acc is not self:
+                        self._extension_bridge = acc._extension_bridge
+                        log.info(f"[{self.email}] ✅ Auto-recovered extension bridge from sibling {acc.email}")
+                        break
+            # Auto-recover Layer 2: get bridge from engine (always set at controller init)
+            if not self._extension_bridge:
+                engine_bridge = getattr(getattr(self, '_engine', None), '_app_extension_bridge', None)
+                if engine_bridge:
+                    self._extension_bridge = engine_bridge
+                    log.info(f"[{self.email}] ✅ Auto-recovered extension bridge from engine")
+            if not self._extension_bridge:
+                log.warning(f"[{self.email}] ⏳ Extension bridge not yet available — reCAPTCHA deferred")
+                return None
         if not self._extension_bridge.is_connected(self.email):
             connected_emails = self._extension_bridge.get_connected_emails()
             conn_count = len(self._extension_bridge._connections)
