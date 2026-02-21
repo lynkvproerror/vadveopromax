@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 """
 VEO Pro Max - Persistent reCAPTCHA Browser Session
 
@@ -184,7 +187,7 @@ class RecaptchaBrowserSession:
         self._is_attached = True
         self._playwright = None  # Not owned by us
         self._context = None     # Not owned by us
-        print(f"[RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)")
+        log.debug(f"[RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)")
     
     async def ensure_ready(self, headless: bool = True, timeout_ms: int = 30000):
         """Open browser, navigate to VEO page, wait for reCAPTCHA Enterprise.
@@ -242,13 +245,13 @@ class RecaptchaBrowserSession:
                 await self._setup_header_interception()
                 
                 self._ready = True
-                print(f"[RecaptchaBrowserSession] ✅ Browser ready for {Path(self._profile_path).name} ({'reconnected' if is_reconnect else 'new'}, port={cdp_port})")
+                log.info(f"[RecaptchaBrowserSession] ✅ Browser ready for {Path(self._profile_path).name} ({'reconnected' if is_reconnect else 'new'}, port={cdp_port})")
                 
                 # Warmup: simulate human activity to build reCAPTCHA trust
                 await self.warmup()
                 
             except Exception as e:
-                print(f"[RecaptchaBrowserSession] ❌ Failed to start browser: {e}")
+                log.error(f"[RecaptchaBrowserSession] ❌ Failed to start browser: {e}")
                 await self._cleanup()
                 raise
     
@@ -266,13 +269,13 @@ class RecaptchaBrowserSession:
             return
         
         try:
-            print("[RecaptchaBrowserSession] 🔥 Warming up browser (simulated activity)...")
+            log.info("[RecaptchaBrowserSession] 🔥 Warming up browser (simulated activity)...")
 
             # Small settle delay for reCAPTCHA to register the activity
             await asyncio.sleep(random.uniform(1.0, 2.0))
-            print("[RecaptchaBrowserSession] ✅ Browser warmup complete")
+            log.info("[RecaptchaBrowserSession] ✅ Browser warmup complete")
         except Exception as e:
-            print(f"[RecaptchaBrowserSession] ⚠️ Warmup failed (non-fatal): {e}")
+            log.error(f"[RecaptchaBrowserSession] ⚠️ Warmup failed (non-fatal): {e}")
     
     
     async def soft_recovery(self):
@@ -296,14 +299,14 @@ class RecaptchaBrowserSession:
         
         async with self._recovery_lock:
             try:
-                print("[RecaptchaBrowserSession] 🔄 Soft recovery: navigating away...")
+                log.info("[RecaptchaBrowserSession] 🔄 Soft recovery: navigating away...")
             
                 # Step 1: Navigate away
                 await self._page.evaluate("window.location.href = 'about:blank'")
                 await asyncio.sleep(1.5)
                 
                 # Step 2: Navigate back to VEO
-                print("[RecaptchaBrowserSession] 🔄 Soft recovery: navigating back to VEO...")
+                log.info("[RecaptchaBrowserSession] 🔄 Soft recovery: navigating back to VEO...")
                 await self._page.evaluate(f"window.location.href = '{self.VEO_URL}'")
                 
                 # Step 3: Wait for page to load
@@ -315,11 +318,11 @@ class RecaptchaBrowserSession:
                 # Step 5: Warmup
                 await self.warmup()
                 
-                print("[RecaptchaBrowserSession] ✅ Soft recovery complete")
+                log.info("[RecaptchaBrowserSession] ✅ Soft recovery complete")
                 return True
                 
             except Exception as e:
-                print(f"[RecaptchaBrowserSession] ❌ Soft recovery failed: {e}")
+                log.error(f"[RecaptchaBrowserSession] ❌ Soft recovery failed: {e}")
                 return False
     
     RECAPTCHA_ENTERPRISE_CHECK = (
@@ -341,7 +344,7 @@ class RecaptchaBrowserSession:
         # Check if already available (page should load it)
         already = await self._page.evaluate(self.RECAPTCHA_ENTERPRISE_CHECK)
         if already:
-            print("[RecaptchaBrowserSession] ✅ reCAPTCHA Enterprise already loaded")
+            log.info("[RecaptchaBrowserSession] ✅ reCAPTCHA Enterprise already loaded")
             return
         
         # Wait a bit — the script might still be initializing
@@ -349,14 +352,14 @@ class RecaptchaBrowserSession:
             await self._page.wait_for_function(
                 self.RECAPTCHA_ENTERPRISE_CHECK, timeout=8000
             )
-            print("[RecaptchaBrowserSession] ✅ reCAPTCHA Enterprise ready after wait")
+            log.info("[RecaptchaBrowserSession] ✅ reCAPTCHA Enterprise ready after wait")
             return
         except Exception:
             pass
         
         # Fallback: inject enterprise.js manually
         site_key = self.RECAPTCHA_SITE_KEY
-        print(f"[RecaptchaBrowserSession] Injecting reCAPTCHA Enterprise script (key={site_key[:12]}...)")
+        log.info(f"[RecaptchaBrowserSession] Injecting reCAPTCHA Enterprise script (key={site_key[:12]}...)")
         
         try:
             await self._page.evaluate(f'''() => {{
@@ -372,9 +375,9 @@ class RecaptchaBrowserSession:
             await self._page.wait_for_function(
                 self.RECAPTCHA_ENTERPRISE_CHECK, timeout=timeout_ms
             )
-            print("[RecaptchaBrowserSession] ✅ reCAPTCHA Enterprise injected and ready")
+            log.info("[RecaptchaBrowserSession] ✅ reCAPTCHA Enterprise injected and ready")
         except Exception:
-            print("[RecaptchaBrowserSession] ⚠️ reCAPTCHA Enterprise not available — will retry on token request")
+            log.warning("[RecaptchaBrowserSession] ⚠️ reCAPTCHA Enterprise not available — will retry on token request")
     
     async def get_recaptcha_token(self) -> Optional[str]:
         """Execute grecaptcha and return fresh token.
@@ -388,7 +391,7 @@ class RecaptchaBrowserSession:
             str: reCAPTCHA token valid for ~120s, or None if failed
         """
         if not self.is_ready:
-            print("[RecaptchaBrowserSession] ⚠️ Browser not ready, call ensure_ready() first")
+            log.warning("[RecaptchaBrowserSession] ⚠️ Browser not ready, call ensure_ready() first")
             return None
         
         try:
@@ -422,26 +425,26 @@ class RecaptchaBrowserSession:
             }''')
             
             if site_key:
-                print(f"[RecaptchaBrowserSession] ✅ Extracted site key from page: {site_key[:16]}...")
+                log.info(f"[RecaptchaBrowserSession] ✅ Extracted site key from page: {site_key[:16]}...")
             else:
                 site_key = self.RECAPTCHA_SITE_KEY
-                print(f"[RecaptchaBrowserSession] ⚠️ Using fallback site key: {site_key[:16]}...")
+                log.warning(f"[RecaptchaBrowserSession] ⚠️ Using fallback site key: {site_key[:16]}...")
             
             # Step 2: Check if reCAPTCHA Enterprise is available
             has_grecaptcha = await self._page.evaluate(self.RECAPTCHA_ENTERPRISE_CHECK)
             
             if not has_grecaptcha:
-                print("[RecaptchaBrowserSession] ⚠️ reCAPTCHA Enterprise not found, re-injecting...")
+                log.warning("[RecaptchaBrowserSession] ⚠️ reCAPTCHA Enterprise not found, re-injecting...")
                 await self._ensure_recaptcha_enterprise()
                 
                 has_grecaptcha = await self._page.evaluate(self.RECAPTCHA_ENTERPRISE_CHECK)
                 if not has_grecaptcha:
-                    print("[RecaptchaBrowserSession] ❌ reCAPTCHA Enterprise still not available")
+                    log.error("[RecaptchaBrowserSession] ❌ reCAPTCHA Enterprise still not available")
                     return None
             
 
             
-            print(f"[RecaptchaBrowserSession] 🔑 Executing reCAPTCHA Enterprise with key={site_key[:16]}... action=VIDEO_GENERATION")
+            log.info(f"[RecaptchaBrowserSession] 🔑 Executing reCAPTCHA Enterprise with key={site_key[:16]}... action=VIDEO_GENERATION")
             token = await self._page.evaluate(f'''
                 async () => {{
                     try {{
@@ -455,16 +458,16 @@ class RecaptchaBrowserSession:
             
             if token:
                 if len(token) < 500:
-                    print(f"[RecaptchaBrowserSession] ⚠️ Token suspiciously short ({len(token)} chars < 500), rejecting")
+                    log.warning(f"[RecaptchaBrowserSession] ⚠️ Token suspiciously short ({len(token)} chars < 500), rejecting")
                     return None
-                print(f"[RecaptchaBrowserSession] ✅ reCAPTCHA token obtained ({len(token)} chars)")
+                log.info(f"[RecaptchaBrowserSession] ✅ reCAPTCHA token obtained ({len(token)} chars)")
             else:
-                print("[RecaptchaBrowserSession] ❌ grecaptcha.enterprise.execute() returned null")
+                log.error("[RecaptchaBrowserSession] ❌ grecaptcha.enterprise.execute() returned null")
             
             return token
             
         except Exception as e:
-            print(f"[RecaptchaBrowserSession] ❌ reCAPTCHA extraction failed: {e}")
+            log.error(f"[RecaptchaBrowserSession] ❌ reCAPTCHA extraction failed: {e}")
             return None
     
     async def extract_access_token(self) -> tuple:
@@ -497,7 +500,7 @@ class RecaptchaBrowserSession:
                 if not next_data:
                     if attempt < max_retries - 1:
                         delay = retry_delays[attempt]
-                        print(f"[RecaptchaBrowserSession] __NEXT_DATA__ empty, waiting {delay}s ({attempt + 1}/{max_retries})...")
+                        log.info(f"[RecaptchaBrowserSession] __NEXT_DATA__ empty, waiting {delay}s ({attempt + 1}/{max_retries})...")
                         await asyncio.sleep(delay)
                         continue
                     return None, None
@@ -521,7 +524,7 @@ class RecaptchaBrowserSession:
                 # No token yet — page may still be loading after navigation
                 if attempt < max_retries - 1:
                     delay = retry_delays[attempt]
-                    print(f"[RecaptchaBrowserSession] Token not in __NEXT_DATA__ yet, waiting {delay}s ({attempt + 1}/{max_retries})...")
+                    log.info(f"[RecaptchaBrowserSession] Token not in __NEXT_DATA__ yet, waiting {delay}s ({attempt + 1}/{max_retries})...")
                     await asyncio.sleep(delay)
                     continue
                 
@@ -532,10 +535,10 @@ class RecaptchaBrowserSession:
                 # Bug 4 fix: Navigation destroyed context — wait and retry
                 if ("context was destroyed" in error_str or "navigation" in error_str) and attempt < max_retries - 1:
                     delay = retry_delays[attempt]
-                    print(f"[RecaptchaBrowserSession] ⚠️ Navigation in progress, waiting {delay}s before retry ({attempt + 1}/{max_retries})...")
+                    log.warning(f"[RecaptchaBrowserSession] ⚠️ Navigation in progress, waiting {delay}s before retry ({attempt + 1}/{max_retries})...")
                     await asyncio.sleep(delay)
                     continue
-                print(f"[RecaptchaBrowserSession] ❌ Access token extraction failed: {e}")
+                log.error(f"[RecaptchaBrowserSession] ❌ Access token extraction failed: {e}")
                 return None, None
         
         return None, None
@@ -548,9 +551,9 @@ class RecaptchaBrowserSession:
         try:
             await self._page.reload(wait_until="networkidle", timeout=15000)
             await asyncio.sleep(1)
-            print(f"[RecaptchaBrowserSession] ✅ Headers refreshed: {list(self._captured_headers.keys())}")
+            log.info(f"[RecaptchaBrowserSession] ✅ Headers refreshed: {list(self._captured_headers.keys())}")
         except Exception as e:
-            print(f"[RecaptchaBrowserSession] ⚠️ Header refresh failed: {e}")
+            log.error(f"[RecaptchaBrowserSession] ⚠️ Header refresh failed: {e}")
     
     async def close(self):
         """Close browser and release resources."""
@@ -560,7 +563,7 @@ class RecaptchaBrowserSession:
                 self._ready = False
                 self._page = None
                 self._is_attached = False
-                print("[RecaptchaBrowserSession] 🔌 Detached from debug browser")
+                log.debug("[RecaptchaBrowserSession] 🔌 Detached from debug browser")
                 return
             await self._cleanup()
     
@@ -584,7 +587,7 @@ class RecaptchaBrowserSession:
                 pass
             self._playwright = None
         
-        print("[RecaptchaBrowserSession] 🔴 Playwright disconnected (Chrome still running)")
+        log.info("[RecaptchaBrowserSession] 🔴 Playwright disconnected (Chrome still running)")
     
     async def _setup_header_interception(self):
         """Set up route interception to capture ALL 5 x-browser-* headers.

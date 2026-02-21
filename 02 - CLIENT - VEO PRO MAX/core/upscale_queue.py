@@ -210,6 +210,20 @@ class UpscaleQueue:
             f"({len(job.media_ids)} videos, {job.target_quality}) → {email}"
         )
     
+    def has_active_jobs(self, email: str) -> bool:
+        """Check if any upscale jobs are actively processing for this account.
+        
+        Used by engine to defer browser restart during upscale polling (Bug #5).
+        """
+        if email not in self._workers:
+            return False
+        worker_task = self._workers[email]
+        if worker_task.done():
+            return False
+        # Worker is running — check if there are queued or in-progress jobs
+        q = self._queues.get(email)
+        return q is not None and not q.empty()
+    
     async def _worker_loop(self, email: str):
         """Background worker: processes upscale jobs for one account.
         
@@ -308,7 +322,7 @@ class UpscaleQueue:
             return
         
         # Get the account
-        account = self._engine._account_manager.get_account(job.account_email)
+        account = self._engine.get_account(job.account_email)
         if not account:
             log.warning(f"[UpscaleQueue] Account {job.account_email} not found, skipping")
             self._total_failed += 1
@@ -321,7 +335,7 @@ class UpscaleQueue:
             bridge = getattr(self._engine, '_app_extension_bridge', None)
             # Source 2: Steal from sibling account that has it
             if not bridge:
-                for acc in self._engine._account_manager._accounts:
+                for acc in self._engine.get_all_accounts():
                     if acc._extension_bridge:
                         bridge = acc._extension_bridge
                         break
@@ -332,27 +346,33 @@ class UpscaleQueue:
                 log.warning(f"[UpscaleQueue] No extension bridge source found — reCAPTCHA will fail")
         
         total = len(job.media_ids)
+        
+        # BUG 1 FIX: Wait for account cooldown BEFORE submitting
+        # Without this, concurrent upscale jobs submit during cooldown → 403 → extend cooldown
+        if self._engine.is_account_on_cooldown(job.account_email):
+            log.info(f"[UpscaleQueue] {job.account_email}: on cooldown, waiting before upscale (task {job.task_id})")
+            await self._engine.wait_for_cooldown(job.account_email)
+        
         log.info(
             f"[UpscaleQueue] Processing task {job.task_id}: "
             f"{total} videos → {job.target_quality} (parallel poll)"
         )
         
         # Proactive token check
-        if account.session.is_token_expired:
-            log.info(f"[UpscaleQueue] Access token expired for {job.account_email}, refreshing...")
-            fresh_token = await account.refresh_access_token()
-            if not fresh_token:
-                log.error(f"[UpscaleQueue] Token refresh failed — skipping upscale")
-                for vo in task.video_outputs:
-                    vo.upscale_status = "failed"
-                    vo.upscale_error = "Access token expired, refresh failed"
-                task.upscale_error = "Access token expired"
-                self._engine._dispatcher.update_progress(
-                    task.id, 90, "⚠️ Upscale skipped (auth expired)"
-                )
-                self._engine._sync_overall_upscale_status(task)
-                self._total_failed += 1
-                return
+        # Gap #2 fix: Use centralized ensure_valid_token() for refresh
+        valid_token = await account.ensure_valid_token()
+        if not valid_token:
+            log.error(f"[UpscaleQueue] Token refresh failed — skipping upscale")
+            for vo in task.video_outputs:
+                vo.upscale_status = "failed"
+                vo.upscale_error = "Access token expired, refresh failed"
+            task.upscale_error = "Access token expired"
+            self._engine._dispatcher.update_progress(
+                task.id, 90, "⚠️ Upscale skipped (auth expired)"
+            )
+            self._engine._sync_overall_upscale_status(task)
+            self._total_failed += 1
+            return
         
         # Store media IDs on task for re-upscale support
         task.upscale_media_ids = list(job.media_ids)
@@ -367,6 +387,7 @@ class UpscaleQueue:
             return
         is_free_upscale = (resolution == "VIDEO_RESOLUTION_1080P")
         from core.api_client import generate_random_seed
+        import hashlib  # Gap #5: idempotency key for upscale
         
         # =====================================================
         # PHASE 1: Sequential Submit (reCAPTCHA per video)
@@ -409,9 +430,15 @@ class UpscaleQueue:
                 # Submit with retry
                 resp = None
                 for attempt in range(max_submit_retries):
+                    # BUG 1 FIX: Check cooldown before each retry attempt
+                    if attempt > 0 and self._engine.is_account_on_cooldown(job.account_email):
+                        await self._engine.wait_for_cooldown(job.account_email)
+                    
                     # No rate lock — upscale doesn't need anti-detect delay.
-                    # reCAPTCHA is serialized by ExtensionBridge, API by semaphore(2).
-                    recaptcha_token = await account.refresh_recaptcha() or ""
+                    # reCAPTCHA is serialized by per-account lock, API by upscale semaphore(3).
+                    # Bug #3 fix: Use recaptcha_lock to serialize with engine workers
+                    async with account.recaptcha_lock:
+                        recaptcha_token = await account.refresh_recaptcha() or ""
                     if not recaptcha_token:
                         recaptcha_token = account.get_recaptcha_token() or ""
                     
@@ -428,7 +455,12 @@ class UpscaleQueue:
                             await asyncio.sleep(delay)
                         continue
                     
-                    sem = self._engine._get_api_semaphore(account.email)
+                    sem = self._engine._get_upscale_api_semaphore(account.email)
+                    # Gap #5: Stable seed per (task, media, attempt) to prevent duplicate jobs
+                    idem_hash = hashlib.sha256(
+                        f"{task.id}:{media_id}:{attempt}".encode()
+                    ).hexdigest()
+                    stable_seed = int(idem_hash[:8], 16) % (2**31)
                     async with sem:
                         resp = await self._engine._api_client.upscale_video(
                             access_token=account.get_access_token() or "",
@@ -436,7 +468,7 @@ class UpscaleQueue:
                             video_media_id=media_id,
                             target_resolution=resolution,
                             aspect_ratio=task.aspect_ratio,
-                            seed=generate_random_seed(),
+                            seed=stable_seed,
                             account_headers=account.get_api_headers(),
                         )
                     account.invalidate_recaptcha()
@@ -468,6 +500,7 @@ class UpscaleQueue:
                         # If pending_ops has successes, recovery would disrupt their polls.
                         if not pending_ops:
                             if attempt == 1:
+                                # M3 Phase 1: Gentle recovery — reload pages
                                 try:
                                     await account.soft_recover_browser()
                                     await asyncio.sleep(8)
@@ -477,14 +510,44 @@ class UpscaleQueue:
                                 except Exception:
                                     pass
                             elif attempt == 2:
+                                # M3 Phase 2: Hard recovery — full browser restart
                                 try:
                                     await account.restart_browser()
-                                    self._engine._account_manager.fix_short_client_data()
+                                    self._engine.fix_client_data()
                                     await asyncio.sleep(10)
                                     await self._engine._wait_for_recaptcha_ready(
                                         account, max_wait=30.0
                                     )
                                 except Exception:
+                                    pass
+                            elif attempt >= 3:
+                                # M3 Phase 3: Profile reset — most aggressive
+                                # Matches engine's recovery state machine Phase 2
+                                try:
+                                    log.warning(
+                                        f"Upscale {video_label}: attempt {attempt+1} — "
+                                        f"escalating to profile reset for {account.email}"
+                                    )
+                                    profiles_ctrl = getattr(
+                                        self._engine, '_profiles_controller', None
+                                    )
+                                    if profiles_ctrl and hasattr(profiles_ctrl, 'reset_profile'):
+                                        await profiles_ctrl.reset_profile(account)
+                                        self._engine.fix_client_data()
+                                        await asyncio.sleep(15)
+                                        await self._engine._wait_for_recaptcha_ready(
+                                            account, max_wait=40.0
+                                        )
+                                    else:
+                                        # Fallback: restart browser again
+                                        await account.restart_browser()
+                                        self._engine.fix_client_data()
+                                        await asyncio.sleep(10)
+                                        await self._engine._wait_for_recaptcha_ready(
+                                            account, max_wait=30.0
+                                        )
+                                except Exception as e:
+                                    log.error(f"Upscale {video_label}: profile reset failed: {e}")
                                     pass
                         else:
                             # Videos already submitted — skip recovery, just mark this one failed
@@ -664,7 +727,7 @@ class UpscaleQueue:
                             self._engine._account_rate_locks[account.email] = asyncio.Lock()
                         async with self._engine._account_rate_locks[account.email]:
                             recaptcha_token = await account.refresh_recaptcha() or ""
-                            sem = self._engine._get_api_semaphore(account.email)
+                            sem = self._engine._get_upscale_api_semaphore(account.email)
                             async with sem:
                                 resp2 = await self._engine._api_client.upscale_video(
                                     access_token=account.get_access_token() or "",

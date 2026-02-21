@@ -2501,8 +2501,14 @@ class TabQueue(QWidget):
         """
         if not self._is_processing:
             # Idle → Start
-            if self.controller and hasattr(self.controller, '_dispatcher'):
-                if self.controller._dispatcher.ready_count == 0:
+            if self.controller and hasattr(self.controller, 'dispatcher'):
+                if self.controller.ready_count == 0:
+                    main_window = self.window()
+                    if main_window and hasattr(main_window, 'show_toast'):
+                        main_window.show_toast(
+                            "⚠️ Không có task nào sẵn sàng. Hãy thêm prompt trước khi bấm Start.",
+                            "warning", duration=4000
+                        )
                     return  # Nothing to process
             
             # Pre-flight readiness check — show detailed feedback
@@ -2903,8 +2909,8 @@ class TabQueue(QWidget):
             self.controller.cancel_task(task_id)
         
         # 2. Fully remove from dispatcher internals so task won't reappear on refresh
-        if self.controller and hasattr(self.controller, '_dispatcher'):
-            disp = self.controller._dispatcher
+        if self.controller and hasattr(self.controller, 'dispatcher'):
+            disp = self.controller.dispatcher
             # Remove from _all_tasks
             disp._all_tasks.pop(task_id, None)
             # Remove from parent TaskGroup.tasks list
@@ -3335,10 +3341,10 @@ class TabQueue(QWidget):
     
     def _on_reset_group(self, group_id: str):
         """Reset all tasks in a group — delete downloads/cache, re-queue."""
-        if not self.controller or not hasattr(self.controller, '_dispatcher'):
+        if not self.controller or not hasattr(self.controller, 'dispatcher'):
             return
         
-        dispatcher = self.controller._dispatcher
+        dispatcher = self.controller.dispatcher
         group = dispatcher._task_groups.get(group_id)
         if not group:
             return
@@ -3387,8 +3393,8 @@ class TabQueue(QWidget):
             return
         
         # Cancel all tasks in this group via dispatcher
-        if self.controller and hasattr(self.controller, '_dispatcher'):
-            dispatcher = self.controller._dispatcher
+        if self.controller and hasattr(self.controller, 'dispatcher'):
+            dispatcher = self.controller.dispatcher
             group = dispatcher._task_groups.get(group_id)
             if group:
                 for task in group.tasks:

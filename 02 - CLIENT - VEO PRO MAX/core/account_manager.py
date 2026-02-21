@@ -31,19 +31,30 @@ class AccountManager:
     
     Responsibilities:
     - Session management (email, access_token, recaptcha)
-    - 4-slot semaphore with acquire_slot() / release_slot()
+    - Worker semaphore with acquire_workers() / release_workers()
+    - Per-account reCAPTCHA lock (serializes all reCAPTCHA requests)
     - Token refresh coordination
     - Project management integration
     """
     
     @property
+    def max_workers(self) -> int:
+        """Get max concurrent workers (THỢ = videos) for this account."""
+        return self._session.max_workers
+    
+    def set_max_workers(self, n: int):
+        """Set max concurrent workers (0-20). 0 effectively disables processing."""
+        self._session.max_workers = max(0, min(n, 20))
+    
+    # --- Deprecated slot accessors (backward compat) ---
+    @property
     def max_slots(self) -> int:
-        """Get max concurrent slots for this account."""
-        return self._session.max_slots
+        """DEPRECATED: Use max_workers instead."""
+        return self._session.max_workers
     
     def set_max_slots(self, n: int):
-        """Set max concurrent slots (0-5). 0 effectively disables processing."""
-        self._session.max_slots = max(0, min(n, 5))
+        """DEPRECATED: Use set_max_workers instead."""
+        self.set_max_workers(n)
     
     @property
     def retry_count(self) -> int:
@@ -83,6 +94,19 @@ class AccountManager:
         
         # Extension bridge ref — set by AppController for real-web token extraction
         self._extension_bridge = None
+        
+        # Per-account reCAPTCHA lock — serializes all reCAPTCHA requests
+        # across worker loop AND upscale queue (Bug #3 fix)
+        self._recaptcha_lock = asyncio.Lock()
+    
+    @property
+    def recaptcha_lock(self) -> asyncio.Lock:
+        """Per-account lock to serialize reCAPTCHA requests.
+        
+        Prevents contention between engine worker loop and upscale queue
+        both trying to refresh reCAPTCHA on the same account simultaneously.
+        """
+        return self._recaptcha_lock
     
     def set_profiles_controller(self, profiles_controller):
         """Set ProfilesController reference for debug browser sharing."""
@@ -175,25 +199,36 @@ class AccountManager:
             log.warning(f"Failed to fetch paygate tier for {self.email}: {e}")
         return self._paygate_tier
     
-    def acquire_slot(self) -> bool:
-        """Attempt to acquire a slot (non-blocking, thread-safe).
+    def acquire_workers(self, n: int = 1) -> bool:
+        """Acquire n workers atomically (thread-safe).
         
-        Delegates to AccountSession.acquire_slot() which is the
-        single source of truth for slot tracking (Issue 4+9 fix).
+        Each worker = 1 THỢ = 1 concurrent video.
+        Delegates to AccountSession.acquire_workers() which is the
+        single source of truth for capacity tracking.
         
+        Args:
+            n: Number of workers to acquire.
         Returns:
-            True if slot acquired, False otherwise.
+            True if all n workers acquired, False otherwise.
         """
         with self._lock:
-            return self._session.acquire_slot()
+            return self._session.acquire_workers(n)
+    
+    def release_workers(self, n: int = 1):
+        """Release n workers (thread-safe)."""
+        with self._lock:
+            self._session.release_workers(n)
+    
+    # --- Deprecated slot methods (backward compat) ---
+    def acquire_slot(self) -> bool:
+        """DEPRECATED: Use acquire_workers(n) instead."""
+        with self._lock:
+            return self._session.acquire_workers(1)
     
     def release_slot(self):
-        """Release a slot (thread-safe).
-        
-        Delegates to AccountSession.release_slot().
-        """
+        """DEPRECATED: Use release_workers(n) instead."""
         with self._lock:
-            self._session.release_slot()
+            self._session.release_workers(1)
     
     def get_access_token(self) -> Optional[str]:
         """Get valid access token.
@@ -298,10 +333,35 @@ class AccountManager:
         reCAPTCHA tokens are single-use: after any API call (success or failure),
         the token is consumed by Google's server. Call this before retry to force
         a fresh token on the next attempt.
+        
+        Idempotent: skips silently if already invalidated (Issue #2 fix).
         """
+        if not self._token_cache.get() and not self._session.recaptcha_token:
+            return  # Already invalidated — skip log to avoid noise
         self._token_cache.invalidate()
         self._session.recaptcha_token = None
         log.debug(f"[{self.email}] reCAPTCHA token invalidated (single-use consumed)")
+    
+    async def ensure_valid_token(self) -> Optional[str]:
+        """Gap #2 fix: Centralized token validation + refresh.
+        
+        Checks if access_token is valid (non-empty, non-expired).
+        If expired, refreshes via extension bridge.
+        
+        Returns:
+            Valid access token, or None if refresh failed.
+        """
+        token = self.get_access_token()
+        if token and not self._session.is_token_expired:
+            return token
+        
+        log.info(f"[{self.email}] Access token invalid/expired, refreshing...")
+        fresh = await self.refresh_access_token()
+        if fresh:
+            return fresh
+        
+        log.error(f"[{self.email}] ensure_valid_token: refresh failed")
+        return None
 
     async def refresh_recaptcha(self) -> Optional[str]:
         """Get fresh reCAPTCHA token via Extension bridge (extension-only).
@@ -787,7 +847,8 @@ class AccountManager:
             "sku": self._session.sku.value,
             "paygate_tier": self._session.paygate_tier.value,
             "credits": self._session.credits,
-            "slots": f"{self.active_slots}/{self.max_slots}",
+            "workers": f"{self._session.active_workers}/{self._session.max_workers}",
+            "slots": f"{self._session.active_workers}/{self._session.max_workers}",  # compat
             "token_expired": self._session.is_token_expired,
             "needs_recaptcha": self._session.needs_recaptcha_refresh,
             "recaptcha_age": f"{self._session.recaptcha_age:.0f}s",

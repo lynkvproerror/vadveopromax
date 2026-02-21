@@ -190,7 +190,7 @@ class TabT2I(QWidget):
         layout.addWidget(header)
         
         # Prompt table (simpler than video tabs - no continuation)
-        self.prompt_table = PromptTable()
+        self.prompt_table = PromptTable(show_continuation=False)
         self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
         self.prompt_table.delete_clicked.connect(self._on_delete_prompt)
         layout.addWidget(self.prompt_table)

@@ -186,6 +186,18 @@ class AppController:
         # Setup callbacks
         self._setup_callbacks()
     
+    # ── Public Accessors (Issue #4: encapsulate Dispatcher access) ──
+    
+    @property
+    def ready_count(self) -> int:
+        """Number of browser slots ready to accept tasks."""
+        return self._dispatcher.ready_count if self._dispatcher else 0
+    
+    @property
+    def dispatcher(self):
+        """Public accessor for dispatcher (read-only operations from UI)."""
+        return self._dispatcher
+    
     def _setup_callbacks(self):
         """Setup internal callbacks between components."""
         # Dispatcher callbacks
@@ -215,13 +227,10 @@ class AppController:
                 future = asyncio.run_coroutine_threadsafe(self._extension_bridge.start(), self._loop)
                 future.result(timeout=5.0)  # Wait and catch any startup errors
                 log.info("[AppController] Extension bridge started on ws://127.0.0.1:8765")
-                print("[AppController] ✅ Extension bridge started on ws://127.0.0.1:8765")
             except Exception as e:
-                log.error(f"[AppController] ❌ Extension bridge failed to start: {e}")
-                print(f"[AppController] ❌ Extension bridge failed: {e}")
+                log.error(f"[AppController] Extension bridge failed to start: {e}")
         else:
-            log.error("[AppController] ❌ Async loop not ready — bridge not started")
-            print("[AppController] ❌ Async loop not ready — bridge not started")
+            log.error("[AppController] Async loop not ready — bridge not started")
         
         # Start session monitoring
         self._session_monitor.start_monitoring()
@@ -242,7 +251,6 @@ class AppController:
             recovered = self._dispatcher.import_state(snapshot)
             if recovered > 0:
                 log.info(f"[AppController] Recovered {recovered} tasks from journal")
-                print(f"[AppController] \u2705 Recovered {recovered} tasks from crash journal")
         
         self._notify_status("Controller started")
     
@@ -348,7 +356,9 @@ class AppController:
         Caches the trial-execute token on the AccountManager so the next
         API call can use it instantly (no extra round-trip to extension).
         """
-        account = self._account_manager.get_account(email)
+        if not hasattr(self, '_engine') or not self._engine:
+            return
+        account = self._engine.get_account(email)
         if account:
             account._token_cache.set(token)
             account._session.update_recaptcha(token)
@@ -583,8 +593,7 @@ class AppController:
             log.error("[AppController] No ProfilesController — cannot restart browser")
             return False
         
-        log.info(f"[AppController] 🔁 Restarting browser for {email}...")
-        print(f"[AppController] 🔁 Restarting browser for {email}...")
+        log.info(f"[AppController] Restarting browser for {email}...")
         
         # Step 1: Kill existing browser
         try:
@@ -627,8 +636,7 @@ class AppController:
             log.error("[AppController] No ExtensionBridge — cannot reload extension")
             return False
         
-        log.info(f"[AppController] 🧩 Reloading extension for {email}...")
-        print(f"[AppController] 🧩 Reloading extension for {email}...")
+        log.info(f"[AppController] Reloading extension for {email}...")
         
         import asyncio
         loop = getattr(self, '_loop', None) or asyncio.get_event_loop()
@@ -641,17 +649,14 @@ class AppController:
             result = future.result(timeout=20)
             
             if result:
-                log.info(f"[AppController] ✅ Extension reloaded for {email}")
-                print(f"[AppController] ✅ Extension reloaded for {email}")
+                log.info(f"[AppController] Extension reloaded for {email}")
             else:
-                log.warning(f"[AppController] ⚠️ Extension reload may have failed for {email}")
-                print(f"[AppController] ⚠️ Extension reload may have failed for {email}")
+                log.warning(f"[AppController] Extension reload may have failed for {email}")
             
             self._push_extension_status()
             return result
         except Exception as e:
-            log.error(f"[AppController] ❌ Extension reload error for {email}: {e}")
-            print(f"[AppController] ❌ Extension reload error: {e}")
+            log.error(f"[AppController] Extension reload error for {email}: {e}")
             return False
     
     def hot_reload_app(self):
@@ -663,8 +668,7 @@ class AppController:
         """
         import subprocess as _sp
         
-        log.info("[AppController] 🔄 Hot reload: stopping services...")
-        print("[AppController] 🔄 Hot reload: stopping services...")
+        log.info("[AppController] Hot reload: stopping services...")
         
         # Step 1: Stop engine gracefully
         try:
@@ -802,11 +806,12 @@ class AppController:
     def set_account_max_slots(self, email: str, value: int):
         """Set max concurrent workers for an account.
         
-        Called from Settings UI when user changes the slots spinner.
+        Called from Settings UI when user changes the workers spinner.
+        Method name kept as set_account_max_slots for backward compat.
         """
         acc = self._multi_account.get_account(email)
         if acc:
-            acc.set_max_slots(value)
+            acc.set_max_workers(value)
         
         log.info(f"[AppController] Account {email} max_slots → {value}")
     
@@ -1534,15 +1539,16 @@ class AppController:
                 acc.set_profiles_controller(self._profiles_controller)
     
     def set_account_max_slots(self, email: str, max_slots: int):
-        """Set max_slots on runtime AccountManager for a given email.
+        """Set max_workers on runtime AccountManager for a given email.
         
-        Called by UI when user changes Slots SpinBox.
+        Called by UI when user changes Workers SpinBox.
+        Method name kept as set_account_max_slots for backward compat.
         """
         acc = self._multi_account.get_account(email)
         if acc:
-            acc.set_max_slots(max_slots)
+            acc.set_max_workers(max_slots)
             logging.getLogger(__name__).info(
-                f"Runtime max_slots for {email} → {max_slots}"
+                f"Runtime max_workers for {email} → {max_slots}"
             )
     
     # Safe concurrency limit: max concurrent API calls per account
@@ -1963,7 +1969,7 @@ class AppController:
             True if activation successful
         """
         if not hasattr(self, '_license_client') or not self._license_client:
-            print(f"[WARN] License client not initialized, key: {key[:8]}...")
+            log.warning(f"[AppController] License client not initialized, key: {key[:8]}...")
             return False
         
         result = self._license_client.activate(key)
@@ -2780,13 +2786,13 @@ class AppController:
                     # Deferred re-notify: DevConsole may not exist yet at restore time
                     from PySide6.QtCore import QTimer
                     QTimer.singleShot(2000, self._notify_queue_updated)
-                    print(f"[Session] Queue restored: {count} tasks")
+                    log.info(f"[Session] Queue restored: {count} tasks")
         else:
-            print("[Session] Queue restore SKIPPED (restore_queue_on_startup=False)")
+            log.info("[Session] Queue restore SKIPPED (restore_queue_on_startup=False)")
         
         if not restore_tabs:
             data.pop("tabs", None)
-            print("[Session] Tabs restore SKIPPED (restore_tabs_on_startup=False)")
+            log.info("[Session] Tabs restore SKIPPED (restore_tabs_on_startup=False)")
         
         return data
     
@@ -2803,7 +2809,7 @@ class AppController:
         from core.session_manager import SessionManager
         sm = SessionManager()
         sm.delete_session()
-        print(f"[Controller] Queue cleared: {count} tasks, session file deleted")
+        log.info(f"[Controller] Queue cleared: {count} tasks, session file deleted")
         return count
     
     def get_cache_stats(self) -> dict:

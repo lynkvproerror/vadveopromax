@@ -192,7 +192,7 @@ def ensure_critical_deps():
     If PySide6 is missing, install it silently (no splash available yet).
     """
     if not _is_package_installed("PySide6"):
-        print("[DependencyChecker] PySide6 not found — installing...")
+        log.warning("[DependencyChecker] PySide6 not found — installing...")
         _install_pip_package("PySide6")
 
 

@@ -144,8 +144,8 @@ class AccountsPage(QWidget):
             # Plan & Credits
             sku = acc.get("sku", "?")
             credits_val = acc.get("credits", 0)
-            slots = acc.get("slots_display", "?")
-            lines.append(f"Plan: {sku}  |  Credits: {credits_val:,}  |  Slots: {slots}")
+            workers = acc.get("workers", acc.get("slots_display", "?"))
+            lines.append(f"Plan: {sku}  |  Credits: {credits_val:,}  |  Workers: {workers}")
 
             # Session
             lines.append(f"Session: {acc.get('session_status', '?')}")

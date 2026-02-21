@@ -213,8 +213,11 @@ class SessionMonitor:
             "is_token_expired": session.is_token_expired,
             "needs_recaptcha_refresh": session.needs_recaptcha_refresh,
             "is_ready": session.is_ready,
-            "active_slots": session.active_slots,
-            "available_slots": session.available_slots,
+            "active_workers": session.active_workers,
+            "available_workers": session.available_workers,
+            # Backward compat
+            "active_slots": session.active_workers,
+            "available_slots": session.available_workers,
         }
     
     def clear_errors(self):

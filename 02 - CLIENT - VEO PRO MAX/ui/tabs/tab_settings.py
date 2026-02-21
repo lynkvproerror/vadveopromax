@@ -284,7 +284,7 @@ class TabSettings(QWidget):
         self.profiles_table.setColumnWidth(3, 80)   # Plan
         self.profiles_table.setColumnWidth(4, 80)   # Credits
         self.profiles_table.setColumnWidth(5, 110)  # Status
-        self.profiles_table.setColumnWidth(6, 60)   # Workers - SpinBox 0-4
+        self.profiles_table.setColumnWidth(6, 60)   # Workers - SpinBox 0-20
         self.profiles_table.setColumnWidth(7, 50)   # Ext - emoji status
         self.profiles_table.setColumnWidth(8, 50)   # Retry - number
         self.profiles_table.setColumnWidth(9, 290)  # Actions - 6 buttons
@@ -429,9 +429,9 @@ class TabSettings(QWidget):
             
             # Workers SpinBox (col 6) — per-account concurrent worker limit
             slots_spin = QSpinBox()
-            slots_spin.setRange(0, 5)
-            slots_spin.setValue(acc.get('max_slots', 4))
-            slots_spin.setToolTip("Max concurrent workers for this account (0 = disable processing)")
+            slots_spin.setRange(0, 20)
+            slots_spin.setValue(acc.get('max_workers', acc.get('max_slots', 20)))
+            slots_spin.setToolTip("Max concurrent workers for this account (0 = disable, 1 worker = 1 video)")
             slots_spin.setFixedWidth(50)
             slots_spin.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 2px; text-align: center;")
             slots_spin.valueChanged.connect(
@@ -2850,21 +2850,21 @@ class TabSettings(QWidget):
         print(f"[Settings] Account {email} {state_str}")
     
     def _on_slots_changed(self, email: str, value: int):
-        """Handle Slots SpinBox change — per-account concurrent worker limit.
+        """Handle Workers SpinBox change — per-account concurrent worker limit.
         
         Args:
             email: Account email
-            value: New max_slots value (0-4)
+            value: New max_workers value (0-20)
         """
         # Persist to ChromeProfile
         if self.profiles_controller:
-            self.profiles_controller.update_profile(email, max_slots=value)
+            self.profiles_controller.update_profile(email, max_workers=value)
         
-        # Propagate to runtime AccountManager._session.max_slots
+        # Propagate to runtime AccountManager._session.max_workers
         if self.controller and hasattr(self.controller, 'set_account_max_slots'):
             self.controller.set_account_max_slots(email, value)
         
-        print(f"[Settings] Account {email} max_slots → {value}")
+        print(f"[Settings] Account {email} max_workers → {value}")
     
     def _on_delete_profile(self, email: str):
         """Delete the specified profile after confirmation.

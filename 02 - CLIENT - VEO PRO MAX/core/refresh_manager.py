@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 """
 VEO Pro Max - Session Refresh Manager
 
@@ -193,7 +196,7 @@ class CookieRefreshManager:
         
         # Log failure for manual action
         if not success:
-            print(f"[RefreshManager] ⚠️ Refresh failed for {email} — manual re-login required via Browser button")
+            log.error(f"[RefreshManager] ⚠️ Refresh failed for {email} — manual re-login required via Browser button")
     
     def cancel_refresh(self, email: str):
         """Cancel a pending refresh request."""

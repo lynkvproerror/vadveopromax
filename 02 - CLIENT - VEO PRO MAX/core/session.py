@@ -82,8 +82,8 @@ class AccountSession:
     
     # === Internal State ===
     state: AccountState = AccountState.DISCONNECTED
-    active_slots: int = 0
-    max_slots: int = 5
+    active_workers: int = 0     # Number of THỢ (videos) currently processing
+    max_workers: int = 20       # Max concurrent THỢ (1 THỢ = 1 video)
     last_activity: Optional[datetime] = None
     
     # === Per-Account Worker Settings ===
@@ -128,9 +128,35 @@ class AccountSession:
         return (datetime.now() - self.recaptcha_fetched_at).total_seconds()
     
     @property
+    def available_workers(self) -> int:
+        """Get number of available workers (THỢ = videos)."""
+        return max(0, self.max_workers - self.active_workers)
+    
+    # --- Deprecated slot properties (backward compat) ---
+    @property
     def available_slots(self) -> int:
-        """Get number of available slots."""
-        return max(0, self.max_slots - self.active_slots)
+        """DEPRECATED: Use available_workers instead."""
+        return self.available_workers
+    
+    @property
+    def active_slots(self) -> int:
+        """DEPRECATED: Use active_workers instead."""
+        return self.active_workers
+    
+    @active_slots.setter
+    def active_slots(self, value: int):
+        """DEPRECATED setter: routes to active_workers."""
+        self.active_workers = value
+    
+    @property
+    def max_slots(self) -> int:
+        """DEPRECATED: Use max_workers instead."""
+        return self.max_workers
+    
+    @max_slots.setter
+    def max_slots(self, value: int):
+        """DEPRECATED setter: routes to max_workers."""
+        self.max_workers = value
     
     @property
     def is_connected(self) -> bool:
@@ -143,23 +169,35 @@ class AccountSession:
         return (
             not self.is_token_expired
             and not self.needs_recaptcha_refresh
-            and self.available_slots > 0
+            and self.available_workers > 0
             # Note: browser_validation is desirable but NOT required for is_ready.
             # Missing headers will cause 403, handled by retry logic.
         )
     
-    def acquire_slot(self) -> bool:
-        """Attempt to acquire a slot. Returns True if successful."""
-        if self.active_slots >= self.max_slots:
+    def acquire_workers(self, n: int = 1) -> bool:
+        """Acquire n workers atomically. Returns False if insufficient capacity.
+        
+        Args:
+            n: Number of workers (THỢ/videos) to acquire.
+        """
+        if self.active_workers + n > self.max_workers:
             return False
-        self.active_slots += 1
+        self.active_workers += n
         self.last_activity = datetime.now()
         return True
     
+    def release_workers(self, n: int = 1):
+        """Release n workers."""
+        self.active_workers = max(0, self.active_workers - n)
+    
+    # --- Deprecated slot methods (backward compat wrappers) ---
+    def acquire_slot(self) -> bool:
+        """DEPRECATED: Use acquire_workers(n) instead."""
+        return self.acquire_workers(1)
+    
     def release_slot(self):
-        """Release a slot."""
-        if self.active_slots > 0:
-            self.active_slots -= 1
+        """DEPRECATED: Use release_workers(n) instead."""
+        self.release_workers(1)
     
     def update_recaptcha(self, token: str):
         """Update reCAPTCHA token."""
@@ -267,7 +305,7 @@ class AccountSession:
             # Account state
             "state": self.state.value,
             # Per-account worker settings
-            "max_slots": self.max_slots,
+            "max_workers": self.max_workers,
             "retry_count": self.retry_count,
             "request_timeout": self.request_timeout,
             # Browser profile
@@ -302,8 +340,16 @@ class AccountSession:
                 session.state = AccountState(state_val)
             except ValueError:
                 session.state = AccountState.DISCONNECTED
-        # Restore per-account worker settings
-        session.max_slots = data.get("max_slots", 5)
+        # Restore per-account worker settings (with migration)
+        if "max_workers" in data:
+            session.max_workers = data["max_workers"]
+        elif "max_slots" in data:
+            # Migration: old profiles had max_slots=5 → convert to max_workers=20
+            session.max_workers = data["max_slots"] * 4
+        else:
+            session.max_workers = 20
+        # Bug #10 fix: Always reset active_workers on load (crash recovery)
+        session.active_workers = 0
         session.retry_count = data.get("retry_count", 3)
         session.request_timeout = data.get("request_timeout", 120)
         return session

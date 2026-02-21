@@ -26,10 +26,10 @@ class MultiAccountManager:
     """ĐẠI CHỦ - Manages multiple VEO account managers (CHỦ).
     
     Responsibilities:
-    - Track total capacity (N accounts × 4 slots each)
-    - Load balancing: prefer account with most available slots
+    - Track total capacity (N accounts × max_workers each)
+    - Load balancing: prefer account with most available workers
     - Account health monitoring
-    - Slot allocation coordination
+    - Worker allocation coordination
     
     IMPORTANT: ĐẠI CHỦ manages AccountManagers (CHỦ), NOT raw AccountSessions.
     All session access goes through AccountManager layer.
@@ -41,18 +41,18 @@ class MultiAccountManager:
     
     @property
     def total_capacity(self) -> int:
-        """Total capacity = N accounts × 4 slots."""
-        return sum(acc.max_slots for acc in self._accounts)
+        """Total capacity = N accounts × max_workers."""
+        return sum(acc.max_workers for acc in self._accounts)
     
     @property
     def total_available(self) -> int:
-        """Sum of available slots from all accounts."""
-        return sum(acc.available_slots for acc in self._accounts)
+        """Sum of available workers from all accounts."""
+        return sum(acc.available_workers for acc in self._accounts)
     
     @property
     def total_active(self) -> int:
-        """Sum of active slots from all accounts."""
-        return sum(acc.active_slots for acc in self._accounts)
+        """Sum of active workers from all accounts."""
+        return sum(acc.active_workers for acc in self._accounts)
     
     @property
     def account_count(self) -> int:
@@ -88,7 +88,7 @@ class MultiAccountManager:
         async with self._lock:
             for i, acc in enumerate(self._accounts):
                 if acc.email == email:
-                    if acc.active_slots > 0:
+                    if acc.active_workers > 0:
                         return False
                     await acc.close_browser()
                     self._accounts.pop(i)
@@ -106,15 +106,15 @@ class MultiAccountManager:
         """Compute health score for load balancing.
         
         Score formula:
-          + available_slots × 10   (more free slots = better)
-          - active_slots × 5       (busy accounts penalized)
+          + available_workers × 10   (more free workers = better)
+          - active_workers × 5       (busy accounts penalized)
           - consecutive_403s × 20  (error-prone accounts avoided)
           + ext_connected × 15     (extension ready = bonus)
         
         Higher score = preferred account.
         """
-        available = account.available_slots
-        active = account.active_slots
+        available = account.available_workers
+        active = account.active_workers
         
         # Get 403 count from adaptive burst controller (if set on engine)
         consecutive_403 = 0
@@ -158,9 +158,13 @@ class MultiAccountManager:
             
             result["accounts"][acc.email] = {
                 "score": self._compute_health_score(acc),
-                "available_slots": acc.available_slots,
-                "active_slots": acc.active_slots,
-                "max_slots": acc.max_slots,
+                "available_workers": acc.available_workers,
+                "active_workers": acc.active_workers,
+                "max_workers": acc.max_workers,
+                # Backward compat
+                "available_slots": acc.available_workers,
+                "active_slots": acc.active_workers,
+                "max_slots": acc.max_workers,
                 "ext_connected": ext_connected,
                 "enabled": acc.is_enabled,
             }
@@ -198,26 +202,29 @@ class MultiAccountManager:
             score = self._compute_health_score(best)
             log.debug(
                 f"[LoadBalancer] Selected {best.email} "
-                f"(score={score}, slots={best.available_slots}/{best.max_slots})"
+                f"(score={score}, workers={best.available_workers}/{best.max_workers})"
             )
             return best
     
     async def acquire_slot(self) -> Optional[AccountManager]:
-        """Acquire a slot from the best available account.
+        """Acquire a worker from the best available account.
         
-        Returns the account manager if successful, None if no slots available.
+        Returns the account manager if successful, None if no workers available.
+        Deprecated: use acquire_workers() pattern in engine instead.
         """
         account = await self.get_available_account()
-        if account and account.acquire_slot():
+        if account and account.acquire_workers(1):
             return account
         return None
     
     async def release_slot(self, email: str):
-        """Release a slot from the specified account."""
+        """Release a worker from the specified account.
+        Deprecated: use account.release_workers(n) directly.
+        """
         async with self._lock:
             account = self.get_account(email)
             if account:
-                account.release_slot()
+                account.release_workers(1)
     
     def get_accounts_needing_refresh(self) -> List[AccountManager]:
         """Get accounts that need token or reCAPTCHA refresh."""

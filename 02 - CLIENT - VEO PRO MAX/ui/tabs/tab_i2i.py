@@ -209,6 +209,7 @@ class TabI2I(QWidget):
         self.prompt_table = PromptTable(
             image_mode=ImageMode.I2I,
             accent_color=Theme.PURPLE,
+            show_continuation=False,
         )
         self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
         self.prompt_table.delete_clicked.connect(self._on_delete_prompt)

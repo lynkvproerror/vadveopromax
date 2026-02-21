@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 """
 VEO Pro Max - Session Manager
 
@@ -59,10 +62,10 @@ class SessionManager:
                 self._session_file.unlink()
             tmp.rename(self._session_file)
             
-            print(f"[Session] Saved to {self._session_file}")
+            log.info(f"[Session] Saved to {self._session_file}")
             return True
         except Exception as e:
-            print(f"[Session] Save failed: {e}")
+            log.error(f"[Session] Save failed: {e}")
             return False
     
     def load_session(self) -> dict:
@@ -72,7 +75,7 @@ class SessionManager:
             Session data dict, or empty dict if not found/corrupt
         """
         if not self._session_file.exists():
-            print("[Session] No session file found")
+            log.info("[Session] No session file found")
             return {}
         
         try:
@@ -80,14 +83,14 @@ class SessionManager:
                 data = json.load(f)
             
             if data.get("version") != SESSION_VERSION:
-                print(f"[Session] Version mismatch: {data.get('version')} != {SESSION_VERSION}")
+                log.info(f"[Session] Version mismatch: {data.get('version')} != {SESSION_VERSION}")
                 return {}
             
             saved_at = data.get("saved_at", "unknown")
-            print(f"[Session] Loaded from {saved_at}")
+            log.info(f"[Session] Loaded from {saved_at}")
             return data
         except Exception as e:
-            print(f"[Session] Load failed: {e}")
+            log.error(f"[Session] Load failed: {e}")
             return {}
     
     def delete_session(self) -> bool:
@@ -343,7 +346,7 @@ class SessionManager:
                             deleted_count += 1
                     shutil.rmtree(item)
         except OSError as e:
-            print(f"[Session] Clear cache failed: {e}")
+            log.error(f"[Session] Clear cache failed: {e}")
         
         return {
             "deleted_count": deleted_count,

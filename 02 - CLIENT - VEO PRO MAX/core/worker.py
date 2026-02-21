@@ -107,17 +107,16 @@ class Worker:
         try:
             # === Stage 1: Token Validation (5%) ===
             self._report_progress(task.id, 5, "🔑 Validating tokens")
-            access_token = account.get_access_token()
             
-            # Auto-refresh expired access token via extension bridge
+            # Gap #3 FIX: Use centralized ensure_valid_token() —
+            # same method used by engine upscale path and upscale_queue.
+            # Handles: check expiry → auto-refresh → return token or None.
+            access_token = await account.ensure_valid_token()
             if not access_token:
-                self._report_progress(task.id, 6, "🔄 Refreshing access token")
-                access_token = await account.refresh_access_token()
-                if not access_token:
-                    return WorkerResult(
-                        success=False,
-                        error="Access token expired and refresh failed"
-                    )
+                return WorkerResult(
+                    success=False,
+                    error="Access token expired and refresh failed"
+                )
             
             recaptcha_token = account.get_recaptcha_token()
             
@@ -128,14 +127,33 @@ class Worker:
             )
             
             # === Stage 2: reCAPTCHA Refresh (10%) ===
+            # Bug #11 fix: Use per-account lock to serialize with upscale queue
             if not recaptcha_token or account.session.needs_recaptcha_refresh:
                 self._report_progress(task.id, 8, "🔄 Refreshing reCAPTCHA")
-                recaptcha_token = await account.refresh_recaptcha()
+                async with account.recaptcha_lock:
+                    recaptcha_token = await account.refresh_recaptcha()
                 if not recaptcha_token:
                     return WorkerResult(
                         success=False,
                         error="reCAPTCHA token expired and refresh failed"
                     )
+            
+            # Gap #1 fix: Validate reCAPTCHA quality (same as upscale_queue)
+            # Garbage tokens (<500 chars) from extension glitches cause 403
+            if recaptcha_token and len(recaptcha_token) < 500:
+                log.warning(
+                    f"[Worker] reCAPTCHA token too short ({len(recaptcha_token)} chars), "
+                    f"invalidating and retrying once"
+                )
+                account.invalidate_recaptcha()
+                async with account.recaptcha_lock:
+                    recaptcha_token = await account.refresh_recaptcha()
+                if not recaptcha_token or len(recaptcha_token) < 500:
+                    return WorkerResult(
+                        success=False,
+                        error=f"reCAPTCHA token garbage ({len(recaptcha_token or '')} chars)"
+                    )
+            
             self._report_progress(task.id, 10, "✅ reCAPTCHA ready")
             
             # === Stage 3: Submitting to API (15%) ===
@@ -149,6 +167,10 @@ class Worker:
             ).hexdigest()[:32]
             
             # Route to appropriate API method
+            log.info(
+                f"[Worker] Dispatching {task.workflow_type} task={task.id} "
+                f"output_count={task.output_count} account={getattr(task, 'assigned_account', 'N/A')}"
+            )
             result = await self._execute_workflow(
                 task,
                 access_token or "",
@@ -159,13 +181,29 @@ class Worker:
                 extra_headers={"x-goog-request-params": idem_key},
             )
             
+            # M2 FIX: Centralized reCAPTCHA invalidation — single-use tokens
+            # must be consumed after EVERY API call (success or failure).
+            # This replaces scattered invalidate calls in engine.py worker loop.
+            account.invalidate_recaptcha()
+            
             # === Stage 4: API Response Received (20%) ===
             self._report_progress(task.id, 20, "✅ Request accepted")
+            
+            if result.success:
+                log.info(
+                    f"[Worker] Task {task.id} accepted: "
+                    f"ops={len(result.operation_names)} outputs={len(result.output_uris)}"
+                )
+            else:
+                log.warning(
+                    f"[Worker] Task {task.id} failed: {result.error}"
+                )
             
             return result
             
         except Exception as e:
             self.state = WorkerState.ERROR
+            log.error(f"[Worker] Task {task.id} exception: {e}", exc_info=True)
             return WorkerResult(success=False, error=str(e))
         finally:
             self.state = WorkerState.IDLE

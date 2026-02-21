@@ -12,12 +12,27 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Set root logger to INFO EARLY so all modules' log.info() calls are captured.
-# Without this, Python defaults to WARNING and extension install logs are dropped.
+# Set root logger to DEBUG so ALL log levels are captured by DevConsole.
+# Previously INFO → log.debug() calls were invisible until DevConsole opened.
 # NOTE: Do NOT use logging.basicConfig() here! It adds a StreamHandler(sys.stderr)
 # which crashes after _StreamToLogger replaces sys.stderr later. The QtLogHandler
 # (installed by DevConsole) handles all output display.
-logging.getLogger().setLevel(logging.INFO)
+#
+# Terminal StreamHandler: Shows INFO+ in terminal for visibility.
+# DevConsole QtLogHandler: Shows DEBUG+ (attached later when DevConsole opens).
+logging.getLogger().setLevel(logging.DEBUG)
+
+# Add a simple StreamHandler for terminal output at INFO level
+# This ensures critical info is visible in terminal even before DevConsole opens.
+# _StreamToLogger will replace sys.stdout later, but this handler writes
+# directly to the original stdout before that happens.
+_terminal_handler = logging.StreamHandler(sys.stdout)
+_terminal_handler.setLevel(logging.INFO)
+_terminal_handler.setFormatter(logging.Formatter(
+    "[%(levelname)-5s] %(asctime)s - %(name)s - %(message)s",
+    datefmt="%H:%M:%S",
+))
+logging.getLogger().addHandler(_terminal_handler)
 
 
 def main():

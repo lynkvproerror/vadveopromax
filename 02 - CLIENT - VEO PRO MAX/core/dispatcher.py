@@ -180,7 +180,7 @@ class Task:
         if not self.video_outputs:
             # DEBUG: No video_outputs yet — using backing field fallback
             if self._upscale_status:
-                print(f"[UpscaleStatus] Task {self.id}: fallback to _upscale_status='{self._upscale_status}' (no video_outputs)")
+                log.debug(f"[UpscaleStatus] Task {self.id}: fallback to _upscale_status='{self._upscale_status}' (no video_outputs)")
             return self._upscale_status
         statuses = [vo.upscale_status for vo in self.video_outputs]
         if all(s == "success" for s in statuses):
@@ -204,7 +204,7 @@ class Task:
         """Overall upscale error from first failed video."""
         if not self.video_outputs:
             if self._upscale_error:
-                print(f"[UpscaleError] Task {self.id}: fallback to _upscale_error='{self._upscale_error}' (no video_outputs)")
+                log.debug(f"[UpscaleError] Task {self.id}: fallback to _upscale_error='{self._upscale_error}' (no video_outputs)")
             return self._upscale_error
         failed = [vo for vo in self.video_outputs if vo.upscale_status == "failed"]
         if failed:
@@ -432,15 +432,15 @@ class Dispatcher:
             orig_task_id, orig_video_idx = replace_target
             orig_task = self._all_tasks.get(orig_task_id)
             if not orig_task:
-                print(f"[ResultSlot] ⚠️ WARN: Original task '{orig_task_id}' NOT FOUND "
-                      f"for replacement {task.id} — result-slotting skipped")
+                log.warning(f"[ResultSlot] Original task '{orig_task_id}' NOT FOUND "
+                            f"for replacement {task.id} — result-slotting skipped")
             elif orig_video_idx >= len(orig_task.video_outputs):
-                print(f"[ResultSlot] ⚠️ WARN: Original task '{orig_task_id}' has "
-                      f"{len(orig_task.video_outputs)} video_outputs, "
-                      f"but replacement targets index {orig_video_idx} — OOB, skipped")
+                log.warning(f"[ResultSlot] Original task '{orig_task_id}' has "
+                            f"{len(orig_task.video_outputs)} video_outputs, "
+                            f"but replacement targets index {orig_video_idx} — OOB, skipped")
             elif not task.video_outputs:
-                print(f"[ResultSlot] ⚠️ WARN: Replacement {task.id} completed but "
-                      f"has EMPTY video_outputs — slotting skipped")
+                log.warning(f"[ResultSlot] Replacement {task.id} completed but "
+                            f"has EMPTY video_outputs — slotting skipped")
             else:
                 # Copy replacement's first video_output into original slot
                 src_vo = task.video_outputs[0]
@@ -462,9 +462,9 @@ class Dispatcher:
                 if src_vo.thumbnail_path and src_vo.thumbnail_path not in orig_task.thumbnail_paths:
                     orig_task.thumbnail_paths.append(src_vo.thumbnail_path)
                 
-                print(f"[ResultSlot] ✅ Replacement {task.id} video[0] → "
-                      f"original {orig_task_id} video[{orig_video_idx}] "
-                      f"(quality={dst_vo.quality}, file={dst_vo.best_file})")
+                log.info(f"[ResultSlot] ✅ Replacement {task.id} video[0] → "
+                         f"original {orig_task_id} video[{orig_video_idx}] "
+                         f"(quality={dst_vo.quality}, file={dst_vo.best_file})")
                 
                 # Clean replacement mapping
                 self._replace_target_map.pop(task_id, None)
@@ -554,7 +554,7 @@ class Dispatcher:
         if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
             self._running_count = max(0, self._running_count - 1)
         
-        print(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
+        log.info(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
         emit_event(EventType.QUEUE_UPDATED, {
             "action": "cancel", "task_id": task_id,
         }, source="dispatcher")
@@ -968,7 +968,7 @@ class Dispatcher:
             if t.parent_task_id == task_id
         ]
         has_children = bool(children_ids)
-        print(f"[ForceRetry] Task {task_id}: found {len(children_ids)} children: {children_ids}")
+        log.info(f"[ForceRetry] Task {task_id}: found {len(children_ids)} children: {children_ids}")
         
         # ── DELETE ALL OUTPUT FILES ──
         # Always delete video files — even if children exist.
@@ -977,18 +977,18 @@ class Dispatcher:
             try:
                 if os.path.isfile(path):
                     os.remove(path)
-                    print(f"[ForceRetry] Deleted output: {path}")
+                    log.debug(f"[ForceRetry] Deleted output: {path}")
             except Exception as e:
-                print(f"[ForceRetry] Could not delete {path}: {e}")
+                log.warning(f"[ForceRetry] Could not delete {path}: {e}")
         
         # Delete cached thumbnails
         for path in list(task.thumbnail_paths):
             try:
                 if os.path.isfile(path):
                     os.remove(path)
-                    print(f"[ForceRetry] Deleted thumbnail: {path}")
+                    log.debug(f"[ForceRetry] Deleted thumbnail: {path}")
             except Exception as e:
-                print(f"[ForceRetry] Could not delete {path}: {e}")
+                log.warning(f"[ForceRetry] Could not delete {path}: {e}")
         
         # Delete per-video files from video_outputs (720p, upscaled, thumbnails)
         deleted = set(task.output_uris) | set(task.thumbnail_paths)
@@ -998,9 +998,9 @@ class Dispatcher:
                     try:
                         if os.path.isfile(vpath):
                             os.remove(vpath)
-                            print(f"[ForceRetry] Deleted video_output file: {vpath}")
+                            log.debug(f"[ForceRetry] Deleted video_output file: {vpath}")
                     except Exception as e:
-                        print(f"[ForceRetry] Could not delete {vpath}: {e}")
+                        log.warning(f"[ForceRetry] Could not delete {vpath}: {e}")
                     deleted.add(vpath)
         
         # Delete continuation frame file from temp dir
@@ -1008,9 +1008,9 @@ class Dispatcher:
             try:
                 if os.path.isfile(task.continuation_frame_local_path):
                     os.remove(task.continuation_frame_local_path)
-                    print(f"[ForceRetry] Deleted continuation frame: {task.continuation_frame_local_path}")
+                    log.debug(f"[ForceRetry] Deleted continuation frame: {task.continuation_frame_local_path}")
             except Exception as e:
-                print(f"[ForceRetry] Could not delete frame: {e}")
+                log.warning(f"[ForceRetry] Could not delete frame: {e}")
         
         # ── FULL DATA RESET (every field back to initial state) ──
         task.output_uris.clear()
@@ -1047,8 +1047,8 @@ class Dispatcher:
         # prompt_index intentionally preserved for correct file naming (NNN_*)
         # image_paths intentionally preserved (local source files, not generated data)
         # parent_task_id intentionally preserved (structural relationship)
-        print(f"[ForceRetry] Task {task_id}: state={task.state.value}, "
-              f"prompt_index={task.prompt_index} preserved, all generated data purged")
+        log.info(f"[ForceRetry] Task {task_id}: state={task.state.value}, "
+                 f"prompt_index={task.prompt_index} preserved, all generated data purged")
         
         # ── Account handling ──
         if task.parent_task_id:
@@ -1056,8 +1056,8 @@ class Dispatcher:
             parent = self._all_tasks.get(task.parent_task_id)
             if parent and parent.assigned_account:
                 task.required_account = parent.assigned_account
-                print(f"[ForceRetry] Child {task_id}: preserving account affinity "
-                      f"→ {parent.assigned_account}")
+                log.info(f"[ForceRetry] Child {task_id}: preserving account affinity "
+                         f"→ {parent.assigned_account}")
             else:
                 task.assigned_account = None
                 task.required_account = None
@@ -1090,7 +1090,7 @@ class Dispatcher:
                     try:
                         if os.path.isfile(path):
                             os.remove(path)
-                            print(f"[ForceRetry] Deleted descendant output: {path}")
+                            log.debug(f"[ForceRetry] Deleted descendant output: {path}")
                     except Exception:
                         pass
                 for path in list(child.thumbnail_paths):
@@ -1150,11 +1150,11 @@ class Dispatcher:
                     if desc_id not in self._parent_to_children[pid]:
                         self._parent_to_children[pid].append(desc_id)
                 
-                print(f"[ForceRetry] Descendant {desc_id} fully purged + reset to WAITING"
-                      f" (parent={child.parent_task_id})")
+                log.info(f"[ForceRetry] Descendant {desc_id} fully purged + reset to WAITING"
+                         f" (parent={child.parent_task_id})")
             
-            print(f"[ForceRetry] Purged & re-registered chain links for "
-                  f"{len(all_descendants)} descendants of {task_id}")
+            log.info(f"[ForceRetry] Purged & re-registered chain links for "
+                     f"{len(all_descendants)} descendants of {task_id}")
         
         # Re-queue or register dependency
         if task.state == TaskState.READY:
@@ -1162,8 +1162,8 @@ class Dispatcher:
             self._enqueue_task(task, priority=0)
             if self._on_task_ready:
                 self._on_task_ready(task)
-            print(f"[ForceRetry] Task {task_id} fully purged and re-queued"
-                  f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
+            log.info(f"[ForceRetry] Task {task_id} fully purged and re-queued"
+                     f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
         else:
             # WAITING child: register in parent→child map (will be activated
             # when parent completes via _resolve_dependencies)
@@ -1174,8 +1174,8 @@ class Dispatcher:
                 if task_id not in self._parent_to_children[pid]:
                     self._parent_to_children[pid].append(task_id)
             self._waiting_tasks[task_id] = task
-            print(f"[ForceRetry] Task {task_id} fully purged → WAITING for parent {pid}"
-                  f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
+            log.info(f"[ForceRetry] Task {task_id} fully purged → WAITING for parent {pid}"
+                     f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
         return True
     
     def force_retry_video(self, task_id: str, video_index: int) -> bool:
@@ -1197,12 +1197,12 @@ class Dispatcher:
         import os
         task = self._all_tasks.get(task_id)
         if not task:
-            print(f"[ForceRetryVideo] Task {task_id} not found")
+            log.warning(f"[ForceRetryVideo] Task {task_id} not found")
             return False
         
         if video_index < 0 or video_index >= len(task.video_outputs):
-            print(f"[ForceRetryVideo] Invalid video_index {video_index} "
-                  f"(task has {len(task.video_outputs)} videos)")
+            log.warning(f"[ForceRetryVideo] Invalid video_index {video_index} "
+                        f"(task has {len(task.video_outputs)} videos)")
             return False
         
         vo = task.video_outputs[video_index]
@@ -1226,15 +1226,15 @@ class Dispatcher:
                     # Remove from maps
                     self._replace_target_map.pop(old_replacement_id, None)
                     self._all_tasks.pop(old_replacement_id, None)
-                    print(f"[ForceRetryVideo] Cancelled old retry task {old_replacement_id}")
+                    log.info(f"[ForceRetryVideo] Cancelled old retry task {old_replacement_id}")
                 elif old_task and old_task.state == TaskState.RUNNING:
-                    print(f"[ForceRetryVideo] Video {video_index} retry is actively RUNNING, skipping")
+                    log.warning(f"[ForceRetryVideo] Video {video_index} retry is actively RUNNING, skipping")
                     return False
             
-            print(f"[ForceRetryVideo] Re-retrying video {video_index} (replacing old retry)")
+            log.info(f"[ForceRetryVideo] Re-retrying video {video_index} (replacing old retry)")
         
-        print(f"[ForceRetryVideo] Task {task_id} video {video_index}: "
-              f"quality={vo.quality}, upscale_status={vo.upscale_status}")
+        log.info(f"[ForceRetryVideo] Task {task_id} video {video_index}: "
+                 f"quality={vo.quality}, upscale_status={vo.upscale_status}")
         
         # ── 1. Delete only this video's files ──
         for vpath in (vo.file_720p, vo.file_upscaled, vo.thumbnail_path):
@@ -1242,9 +1242,9 @@ class Dispatcher:
                 try:
                     if os.path.isfile(vpath):
                         os.remove(vpath)
-                        print(f"[ForceRetryVideo] Deleted: {vpath}")
+                        log.debug(f"[ForceRetryVideo] Deleted: {vpath}")
                 except Exception as e:
-                    print(f"[ForceRetryVideo] Could not delete {vpath}: {e}")
+                    log.warning(f"[ForceRetryVideo] Could not delete {vpath}: {e}")
         
         # Also remove from task.output_uris / thumbnail_paths if present
         for path_list in (task.output_uris, task.thumbnail_paths):
@@ -1263,7 +1263,7 @@ class Dispatcher:
         vo.scene_id = ""
         vo.media_id = ""
         
-        print(f"[ForceRetryVideo] Reset video_outputs[{video_index}] for task {task_id}")
+        log.info(f"[ForceRetryVideo] Reset video_outputs[{video_index}] for task {task_id}")
         
         # ── 3. Create replacement 1-video task ──
         from datetime import datetime
@@ -1303,12 +1303,12 @@ class Dispatcher:
             if any(t.id == task_id for t in group.tasks):
                 group.tasks.append(replacement)
                 group_found = True
-                print(f"[ForceRetryVideo] Added replacement to group '{group.name}' "
-                      f"(now {len(group.tasks)} tasks)")
+                log.info(f"[ForceRetryVideo] Added replacement to group '{group.name}' "
+                         f"(now {len(group.tasks)} tasks)")
                 break
         if not group_found:
-            print(f"[ForceRetryVideo] ⚠️ WARN: No group found for task {task_id} — "
-                  f"replacement {replacement_id} won't be serialized in session!")
+            log.warning(f"[ForceRetryVideo] No group found for task {task_id} — "
+                        f"replacement {replacement_id} won't be serialized in session!")
         
         # ── 5. Register replacement mapping for progress propagation ──
         self._replace_target_map[replacement_id] = (task_id, video_index)
@@ -1321,8 +1321,8 @@ class Dispatcher:
         if self._on_task_ready:
             self._on_task_ready(replacement)
         
-        print(f"[ForceRetryVideo] Created replacement task {replacement_id} "
-              f"(1 video, prompt_index={retry_prompt_index}) → will replace video_outputs[{video_index}]")
+        log.info(f"[ForceRetryVideo] Created replacement task {replacement_id} "
+                 f"(1 video, prompt_index={retry_prompt_index}) → will replace video_outputs[{video_index}]")
         
         return True
     
@@ -1373,7 +1373,7 @@ class Dispatcher:
             except Exception:
                 break
         self._running_count = 0  # Reset to 0 since everything is cleared
-        print(f"[Dispatcher] Cleared all: {count} tasks removed")
+        log.info(f"[Dispatcher] Cleared all: {count} tasks removed")
         return count
     
     @staticmethod
@@ -1511,10 +1511,10 @@ class Dispatcher:
                 if rt:
                     if isinstance(rt, (list, tuple)) and len(rt) == 2:
                         task.replace_target = tuple(rt)
-                        print(f"[SessionRestore] Task {task.id}: restored replace_target → "
-                              f"({rt[0]}, video[{rt[1]}])")
+                        log.info(f"[SessionRestore] Task {task.id}: restored replace_target → "
+                                 f"({rt[0]}, video[{rt[1]}])")
                     else:
-                        print(f"[SessionRestore] ⚠️ Task {task.id}: invalid replace_target format: {rt!r}")
+                        log.warning(f"[SessionRestore] Task {task.id}: invalid replace_target format: {rt!r}")
                         task.replace_target = None
                 # Restore timestamps
                 for ts_field in ("created_at", "completed_at"):
@@ -1609,7 +1609,7 @@ class Dispatcher:
         
         if count > 0:
             extra = f" ({skipped} already loaded)" if skipped else ""
-            print(f"[Dispatcher] Restored {count} tasks from {len(groups_data)} groups{extra}")
+            log.info(f"[Dispatcher] Restored {count} tasks from {len(groups_data)} groups{extra}")
         elif skipped > 0:
             log.debug(f"[Dispatcher] All {skipped} tasks already loaded — skipped duplicate restore")
         return count

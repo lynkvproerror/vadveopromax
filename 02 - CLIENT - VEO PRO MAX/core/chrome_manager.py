@@ -99,7 +99,6 @@ def _do_cft_download(progress_callback=None) -> Optional[str]:
     
     def _progress(msg):
         log.info(f"[ChromeManager] {msg}")
-        print(f"[ChromeManager] {msg}")
         if progress_callback:
             try:
                 progress_callback(msg)
@@ -368,8 +367,7 @@ def _is_extension_loaded(port: int) -> bool:
             target_type = target.get("type", "")
             if url.startswith("chrome-extension://") and target_type in ("service_worker", "background_page"):
                 ext_id = url.split("/")[2] if len(url.split("/")) > 2 else "unknown"
-                log.info(f"[ChromeManager] ✅ Extension already loaded: {ext_id} (type={target_type})")
-                print(f"[ChromeManager] ✅ Extension already loaded: {ext_id}")
+                log.info(f"[ChromeManager] Extension already loaded: {ext_id} (type={target_type})")
                 return True
         
         return False
@@ -541,14 +539,13 @@ def launch_chrome(
     # Chromium and Chrome for Testing. If not supported, Chrome silently ignores it.
     if _has_extension:
         args.insert(-1, f"--load-extension={_extension_dir}")
-        print(f"[ChromeManager] Added --load-extension flag: {_extension_dir}")
+        log.info(f"[ChromeManager] Added --load-extension flag: {_extension_dir}")
 
     if hidden:
         args.append("--window-position=-32000,-32000")
 
     args.append(start_url)
 
-    print(f"[ChromeManager] Launching Chrome: port={port}, profile={Path(profile_path).name}")
     log.info(f"[ChromeManager] Launching Chrome: port={port}, profile={Path(profile_path).name}")
     log.info(f"[ChromeManager] Chrome args: {' '.join(args[:8])}...")
 
@@ -563,7 +560,6 @@ def launch_chrome(
     )
 
     pid = proc.pid
-    print(f"[ChromeManager] Chrome launched: PID={pid}, port={port}")
     log.info(f"[ChromeManager] Chrome launched: PID={pid}, port={port}")
 
     # Disable Windows Efficiency Mode for Chrome process
@@ -575,27 +571,25 @@ def launch_chrome(
     # Wait for CDP to become responsive
     cdp_ready = False
     deadline = time.time() + CHROME_STARTUP_TIMEOUT
-    print(f"[ChromeManager] Waiting for CDP on port {port} (timeout={CHROME_STARTUP_TIMEOUT}s)...")
+    log.warning(f"[ChromeManager] Waiting for CDP on port {port} (timeout={CHROME_STARTUP_TIMEOUT}s)...")
     while time.time() < deadline:
         if _is_cdp_alive(port):
-            print(f"[ChromeManager] CDP ready on port {port}")
             log.info(f"[ChromeManager] CDP ready on port {port}")
             cdp_ready = True
             break
         time.sleep(0.5)
 
     if not cdp_ready:
-        print(f"[ChromeManager] CDP NOT responding after {CHROME_STARTUP_TIMEOUT}s on port {port}")
+        log.warning(f"[ChromeManager] CDP NOT responding after {CHROME_STARTUP_TIMEOUT}s on port {port}")
         log.warning(f"[ChromeManager] CDP not responding after {CHROME_STARTUP_TIMEOUT}s")
 
     # Extension loads via --load-extension flag at launch time.
     # Chrome branded builds (145+) don't support CDP Extensions.loadUnpacked,
     # so we rely solely on the --load-extension flag.
     if _has_extension:
-        print(f"[ChromeManager] ✅ Extension loaded via --load-extension flag")
         log.info(f"[ChromeManager] Extension loaded via --load-extension flag")
     elif not _has_extension:
-        print(f"[ChromeManager] No extension directory found — skipping install")
+        log.warning(f"[ChromeManager] No extension directory found — skipping install")
 
     return {"pid": pid, "port": port, "email": email, "chrome_exe": chrome_exe}
 
@@ -764,16 +758,21 @@ def launch_or_reconnect(
             if _has_extension:
                 port = existing.get("port")
                 if port and _is_extension_loaded(port):
-                    print(f"[ChromeManager] Reconnected — extension already loaded on port {port}")
+                    log.info(f"[ChromeManager] Reconnected — extension already loaded on port {port}")
                 else:
                     # Extension not detected yet — likely still initializing or Chrome
                     # was restarted externally. --load-extension flag needs a relaunch.
-                    print(f"[ChromeManager] Reconnected — extension not detected on port {port} (may still be initializing)")
+                    log.info(f"[ChromeManager] Reconnected — extension not detected on port {port} (may still be initializing)")
+            # Enforce tab limit on reconnect (prevents tab accumulation)
+            enforce_tab_limit(existing.get("port", 0))
             return existing
 
         # Launch new (will install extension after CDP ready)
-        print(f"[ChromeManager] No existing Chrome found — launching new instance")
-        return launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden)
+        log.info(f"[ChromeManager] No existing Chrome found — launching new instance")
+        result = launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden)
+        # Enforce tab limit on new launch (close any extra tabs from start_url)
+        enforce_tab_limit(result.get("port", 0))
+        return result
 
 
 # ── Tab management ───────────────────────────────────────────────────────
@@ -799,6 +798,141 @@ def has_tab_with_url(port: int, url_fragment: str) -> bool:
     """Check if any tab contains the given URL fragment."""
     tabs = get_cdp_tabs(port)
     return any(url_fragment in tab.get("url", "") for tab in tabs)
+
+
+# ── Tab Limiter ──────────────────────────────────────────────────────────
+# Enforce max 3 tabs per Chrome instance: Gmail, YouTube, Google Flow.
+# Prevents tab accumulation from multiple CDP reconnects and new_page() calls.
+
+# URL fragments that identify the 3 allowed tabs
+ALLOWED_TAB_URLS = [
+    "mail.google.com",       # Gmail
+    "youtube.com",           # YouTube
+    "labs.google",           # Google Flow (labs.google/fx/tools/flow)
+]
+
+MAX_TABS = 3
+
+
+def _close_cdp_tab(port: int, tab_id: str) -> bool:
+    """Close a single tab via CDP HTTP API.
+
+    Uses the /json/close/{targetId} endpoint that works without WebSocket.
+
+    Args:
+        port: CDP port
+        tab_id: Target ID of the tab to close
+
+    Returns:
+        True if tab closed successfully
+    """
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/json/close/{tab_id}", method="GET"
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            return resp.status == 200
+    except Exception as e:
+        log.debug(f"[ChromeManager] Could not close tab {tab_id}: {e}")
+        return False
+
+
+def _is_tab_allowed(tab: Dict, allowed_urls: List[str] = ALLOWED_TAB_URLS) -> bool:
+    """Check if a tab's URL matches one of the allowed URL fragments."""
+    url = tab.get("url", "")
+    return any(fragment in url for fragment in allowed_urls)
+
+
+def close_excess_tabs(
+    port: int,
+    max_tabs: int = MAX_TABS,
+    allowed_urls: List[str] = ALLOWED_TAB_URLS,
+) -> int:
+    """Close excess tabs to enforce the tab limit.
+
+    Strategy:
+    1. Keep tabs whose URL matches an allowed fragment (up to max_tabs).
+    2. Close all about:blank and unrecognized tabs first.
+    3. If still over limit, close the oldest non-essential tabs.
+
+    Args:
+        port: CDP port of the Chrome instance
+        max_tabs: Maximum number of tabs to keep (default 3)
+        allowed_urls: URL fragments for tabs that should be kept
+
+    Returns:
+        Number of tabs closed
+    """
+    tabs = get_cdp_tabs(port)
+    if len(tabs) <= max_tabs:
+        return 0  # Already within limit
+
+    log.info(f"[ChromeManager] Tab cleanup: {len(tabs)} tabs found (max={max_tabs})")
+
+    # Categorize tabs
+    allowed_tabs = []      # Tabs matching allowed URLs
+    blank_tabs = []        # about:blank tabs
+    other_tabs = []        # Unrecognized tabs
+
+    for tab in tabs:
+        url = tab.get("url", "")
+        if url in ("about:blank", "chrome://newtab/", ""):
+            blank_tabs.append(tab)
+        elif _is_tab_allowed(tab, allowed_urls):
+            allowed_tabs.append(tab)
+        else:
+            other_tabs.append(tab)
+
+    # Build close list: prioritize closing blank > other > excess allowed
+    to_close = []
+
+    # 1. Close all blank tabs (never needed)
+    to_close.extend(blank_tabs)
+
+    # 2. Close unrecognized tabs
+    to_close.extend(other_tabs)
+
+    # 3. If allowed tabs exceed limit, keep only the first max_tabs
+    if len(allowed_tabs) > max_tabs:
+        # Keep first max_tabs (ordered as Chrome returns them = oldest first)
+        to_close.extend(allowed_tabs[max_tabs:])
+        allowed_tabs = allowed_tabs[:max_tabs]
+
+    # Don't close more than necessary — we need at least 1 tab alive
+    remaining = len(tabs) - len(to_close)
+    if remaining < 1:
+        # Keep at least one tab (the first allowed or first overall)
+        if to_close:
+            to_close.pop(0)
+
+    # Execute closures
+    closed = 0
+    for tab in to_close:
+        tab_id = tab.get("id", "")
+        tab_url = tab.get("url", "?")[:60]
+        if tab_id and _close_cdp_tab(port, tab_id):
+            closed += 1
+            log.debug(f"[ChromeManager] Closed tab: {tab_url}")
+
+    if closed > 0:
+        remaining_tabs = get_cdp_tabs(port)
+        log.info(
+            f"[ChromeManager] Tab cleanup complete: closed {closed}, "
+            f"remaining {len(remaining_tabs)} tab(s)"
+        )
+
+    return closed
+
+
+def enforce_tab_limit(port: int) -> int:
+    """Convenience wrapper: enforce max 3 tabs on a Chrome instance.
+
+    Called automatically after launch_or_reconnect() to prevent tab accumulation.
+
+    Returns:
+        Number of tabs closed (0 if already within limit)
+    """
+    return close_excess_tabs(port, max_tabs=MAX_TABS, allowed_urls=ALLOWED_TAB_URLS)
 
 
 # ── Kill Chrome ──────────────────────────────────────────────────────────

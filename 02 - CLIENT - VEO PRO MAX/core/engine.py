@@ -40,10 +40,10 @@ class Engine:
     
     Pipeline flow:
     1. Dispatcher.get_next_task()  →  get ready task from queue
-    2. MultiAccountManager.acquire_slot()  →  get available account
+    2. AccountManager.acquire_workers(n)  →  reserve worker capacity
     3. ProjectManager.get_or_create_project()  →  ensure project exists
     4. Worker.execute(task, account)  →  run API calls
-    5. AccountManager.release_slot()  →  return slot to pool
+    5. AccountManager.release_workers(n)  →  return workers to pool
     6. Dispatcher.complete_task() / fail_task()  →  update state
     """
     
@@ -141,13 +141,17 @@ class Engine:
         # Account-level cooldown: shared between engine workers + upscale queue
         # When ANY 403 hits, the account enters cooldown. Both prompt submission
         # and upscale submit check this before calling API.
+        # Issue #3: asyncio.Event for efficient multi-waiter support —
+        # all waiters wake simultaneously when cooldown expires.
         self._account_cooldowns: Dict[str, datetime] = {}       # email → cooldown_until
         self._account_cooldown_backoff: Dict[str, int] = {}     # email → consecutive 403 count
+        self._cooldown_events: Dict[str, asyncio.Event] = {}    # email → Event (set=clear)
+        self._cooldown_timers: Dict[str, asyncio.TimerHandle] = {}  # email → scheduled clear
         
         # Workload priority: controls resource allocation between prompt and upscale
         # 'balanced' = both run concurrently
         # 'prompts_first' = upscale queue pauses while prompts are actively processing
-        # 'upscale_first' = engine workers pause new prompt pickup while upscale has pending jobs
+        # 'upscale_first' = worker does inline upscale before freeing slot
         self._workload_priority = 'balanced'
     
     @property
@@ -159,32 +163,79 @@ class Engine:
         return not self._pause_event.is_set()
     
     def _get_api_semaphore(self, email: str) -> asyncio.Semaphore:
-        """Get or create per-account API semaphore.
+        """Get or create per-account API semaphore (for main pipeline).
         
-        Limits max concurrent API calls (submit, poll, upload, upscale)
+        Limits max concurrent API calls (submit, poll, upload)
         to 2 per account, preventing burst traffic that triggers 403.
         """
         if email not in self._account_api_semaphores:
             self._account_api_semaphores[email] = asyncio.Semaphore(2)
         return self._account_api_semaphores[email]
     
-    # ── Account Cooldown: shared 403 backoff ──
+    def _get_upscale_api_semaphore(self, email: str) -> asyncio.Semaphore:
+        """Get or create per-account API semaphore for upscale operations.
+        
+        Bug #14 fix: Separate from main semaphore so upscale polls don't
+        compete with main pipeline polls for the same 2 permits.
+        Limit: 3 concurrent upscale API calls per account.
+        """
+        if not hasattr(self, '_account_upscale_semaphores'):
+            self._account_upscale_semaphores = {}
+        if email not in self._account_upscale_semaphores:
+            self._account_upscale_semaphores[email] = asyncio.Semaphore(3)
+        return self._account_upscale_semaphores[email]
+    
+    # ── Account Cooldown: shared 403 backoff (Issue #3: Event-based) ──
+    
+    def _get_cooldown_event(self, email: str) -> asyncio.Event:
+        """Get or create per-account cooldown Event."""
+        if email not in self._cooldown_events:
+            evt = asyncio.Event()
+            evt.set()  # Default: no cooldown → event set (waiters pass through)
+            self._cooldown_events[email] = evt
+        return self._cooldown_events[email]
     
     def set_account_cooldown(self, email: str, reason: str = "403"):
         """Set cooldown for an account after 403 error.
         
         Exponential backoff: 30s → 60s → 120s → 180s max.
         Called by both engine workers and upscale queue.
+        Event-based: all waiters re-block when cooldown is extended.
         """
         count = self._account_cooldown_backoff.get(email, 0) + 1
         self._account_cooldown_backoff[email] = count
         
         delay = min(30 * (2 ** (count - 1)), 180)  # 30, 60, 120, 180 cap
         self._account_cooldowns[email] = datetime.now() + timedelta(seconds=delay)
+        
+        # Block all waiters (clear event)
+        evt = self._get_cooldown_event(email)
+        evt.clear()
+        
+        # Cancel any previous timer, schedule auto-clear
+        old_timer = self._cooldown_timers.pop(email, None)
+        if old_timer:
+            old_timer.cancel()
+        
+        try:
+            loop = asyncio.get_event_loop()
+            timer = loop.call_later(delay, self._auto_clear_cooldown, email)
+            self._cooldown_timers[email] = timer
+        except RuntimeError:
+            pass  # No event loop — fallback to poll-based in wait_for_cooldown
+        
         log.warning(
             f"[Cooldown] {email}: {reason} → cooldown {delay}s "
             f"(consecutive #{count})"
         )
+    
+    def _auto_clear_cooldown(self, email: str):
+        """Auto-clear cooldown and wake all waiters when timer expires."""
+        self._account_cooldowns.pop(email, None)
+        self._cooldown_timers.pop(email, None)
+        evt = self._cooldown_events.get(email)
+        if evt:
+            evt.set()  # Wake all waiters simultaneously
     
     def is_account_on_cooldown(self, email: str) -> bool:
         """Check if account is on cooldown. Returns False if expired."""
@@ -192,29 +243,60 @@ class Engine:
         if not until:
             return False
         if datetime.now() >= until:
-            del self._account_cooldowns[email]
+            # Expired — clean up
+            self._auto_clear_cooldown(email)
             return False
-        remaining = (until - datetime.now()).total_seconds()
-        log.debug(f"[Cooldown] {email}: {remaining:.0f}s remaining")
         return True
     
     async def wait_for_cooldown(self, email: str):
-        """Wait until account cooldown expires. No-op if not on cooldown."""
-        until = self._account_cooldowns.get(email)
-        if not until:
+        """Wait until account cooldown expires. No-op if not on cooldown.
+        
+        Issue #3: Uses asyncio.Event — multiple waiters share one timer.
+        If cooldown is extended mid-wait, waiters stay blocked until
+        the NEW expiry (no early wake-up race).
+        """
+        if not self.is_account_on_cooldown(email):
             return
-        remaining = (until - datetime.now()).total_seconds()
-        if remaining > 0:
-            log.info(f"[Cooldown] {email}: waiting {remaining:.0f}s...")
-            await asyncio.sleep(remaining)
-        # Clean up
-        self._account_cooldowns.pop(email, None)
+        
+        remaining = 0
+        until = self._account_cooldowns.get(email)
+        if until:
+            remaining = max(0, (until - datetime.now()).total_seconds())
+        log.info(f"[Cooldown] {email}: waiting {remaining:.0f}s...")
+        
+        evt = self._get_cooldown_event(email)
+        try:
+            # Wait with timeout as safety net (event should fire via timer)
+            await asyncio.wait_for(evt.wait(), timeout=remaining + 5)
+        except asyncio.TimeoutError:
+            # Safety: clear cooldown if timer somehow didn't fire
+            self._auto_clear_cooldown(email)
     
     def clear_account_cooldown(self, email: str):
         """Clear cooldown on successful API call (reset backoff counter)."""
-        if email in self._account_cooldowns:
-            del self._account_cooldowns[email]
+        self._account_cooldowns.pop(email, None)
         self._account_cooldown_backoff.pop(email, None)
+        # Cancel timer and wake waiters
+        old_timer = self._cooldown_timers.pop(email, None)
+        if old_timer:
+            old_timer.cancel()
+        evt = self._cooldown_events.get(email)
+        if evt:
+            evt.set()
+    
+    # ── Public Facades (Issue #1: encapsulate AccountManager access) ──
+    
+    def get_account(self, email: str):
+        """Public facade — get account by email."""
+        return self._account_manager.get_account(email)
+    
+    def get_all_accounts(self):
+        """Public facade — iterate all accounts (returns copy)."""
+        return list(self._account_manager._accounts)
+    
+    def fix_client_data(self):
+        """Public facade — fix short x-client-data headers after browser restart."""
+        self._account_manager.fix_short_client_data()
     
     # ── Workload Priority ──
     
@@ -231,17 +313,6 @@ class Engine:
             if task.state.value in ('running', 'waiting_poll'):
                 return True
         return False
-    
-    def should_worker_wait(self) -> bool:
-        """Check if engine workers should pause (upscale_first mode).
-        
-        Returns True if workload_priority='upscale_first' and upscale
-        queue has pending or active jobs.
-        """
-        if self._workload_priority != 'upscale_first':
-            return False
-        stats = self._upscale_queue.get_stats()
-        return stats.get('pending_jobs', 0) > 0 or stats.get('active_workers', 0) > 0
     
     async def pause(self):
         """Pause: workers sleep at next loop iteration without exiting.
@@ -340,19 +411,19 @@ class Engine:
             async with asyncio.TaskGroup() as tg:
                 self._task_group = tg  # Store reference for hot-reload
                 
-                # Dynamic Worker Scaling: Always create MAX workers per account.
-                # acquire_slot() checks max_slots EVERY call, so changing
-                # max_slots mid-run takes effect immediately:
-                #   - Increase: idle workers start acquiring slots → process tasks
-                #   - Decrease: excess workers fail acquire_slot() → idle safely
-                MAX_WORKERS_PER_ACCOUNT = 5
+                # C1 fix: Dynamic Worker Scaling — spawn coroutines matching max_workers.
+                # acquire_workers() checks capacity EVERY call, so changing
+                # max_workers mid-run takes effect immediately:
+                #   - Increase: idle coroutines start acquiring workers → process tasks
+                #   - Decrease: excess coroutines fail acquire_workers() → idle safely
                 
                 for account in self._account_manager._accounts:
                     if not account.is_enabled:
                         log.info(f"Account {account.email}: skipped (disabled)")
                         continue
                     
-                    self._spawn_workers_for_account(tg, account, MAX_WORKERS_PER_ACCOUNT)
+                    num_coroutines = account.max_workers  # C1: dynamic, not hardcoded 5
+                    self._spawn_workers_for_account(tg, account, num_coroutines)
                 
                 # Hot-reload watcher: listens for new accounts added at runtime
                 tg.create_task(self._account_watcher(tg))
@@ -408,7 +479,7 @@ class Engine:
         Runs inside the TaskGroup — uses tg.create_task() to add
         new worker coroutines dynamically without engine restart.
         """
-        MAX_WORKERS_PER_ACCOUNT = 5
+        # C1 fix: dynamic coroutine count per account
         
         while not self._stop_event.is_set():
             try:
@@ -433,7 +504,8 @@ class Engine:
                     log.warning(f"Hot-reload: browser start failed for {account.email}: {e}")
                 
                 # Spawn workers
-                self._spawn_workers_for_account(tg, account, MAX_WORKERS_PER_ACCOUNT)
+                num_coroutines = account.max_workers  # C1: dynamic
+                self._spawn_workers_for_account(tg, account, num_coroutines)
                 log.info(f"🔥 Hot-reload: {account.email} workers spawned — processing starts immediately")
                 
                 # Wake up idle workers to check for tasks
@@ -532,7 +604,7 @@ class Engine:
         
         Each worker is dedicated to ONE account but pulls tasks from 
         the GLOBAL task queue (THẦU). This ensures:
-        - Per-account slot limit is respected (max_slots)
+        - Per-account worker limit is respected (max_workers)
         - Cross-project work distribution (any worker can take any task)
         - No task duplication (atomic get_next_task)
         - Per-account retry and timeout settings
@@ -563,24 +635,35 @@ class Engine:
                         startup_delay = worker_idx * 1.5  # 0s, 1.5s, 3s, 4.5s, 6s
                         await asyncio.sleep(startup_delay)
                 
-                # Step 1: Acquire slot from THIS account
-                if not account.acquire_slot():
+                # Step 1: Two-phase admission — acquire 1 worker first
+                worker_count = 0
+                if not account.acquire_workers(1):
                     await asyncio.sleep(0.5)
+                    continue
+                worker_count = 1
+                
+                # H4 fix: Check account cooldown BEFORE wasting reCAPTCHA tokens
+                if self.is_account_on_cooldown(account.email):
+                    account.release_workers(worker_count)
+                    worker_count = 0
+                    await self.wait_for_cooldown(account.email)
                     continue
                 
                 # Bug 2 fix: Pause if profile reset in progress for this account
                 if self._account_resetting.get(account.email, False):
-                    account.release_slot()
+                    account.release_workers(worker_count)
+                    worker_count = 0
                     log.debug(f"Worker {worker.worker_id}: account {account.email} resetting, waiting...")
                     while self._account_resetting.get(account.email, False) and not self._stop_event.is_set():
                         await asyncio.sleep(2)
-                    continue  # Re-acquire slot after reset
+                    continue  # Re-acquire after reset
                 
                 try:
                     # Step 2: Get next task from GLOBAL queue (THẦU)
                     task = self._dispatcher.get_next_task()
                     if not task:
-                        account.release_slot()
+                        account.release_workers(worker_count)
+                        worker_count = 0
                         # Bug 14: Wait for task notification instead of busy-polling
                         self._task_available.clear()
                         try:
@@ -592,6 +675,29 @@ class Engine:
                             pass
                         continue
                     
+                    # Phase 2 admission: acquire extra workers for output_count > 1
+                    output_count = getattr(task, 'output_count', 1) or 1
+                    if output_count > 1:
+                        extra = output_count - 1
+                        if account.acquire_workers(extra):
+                            worker_count += extra
+                        else:
+                            # Not enough capacity — requeue task, release held worker
+                            log.info(
+                                f"Worker {worker.worker_id}: insufficient capacity for "
+                                f"output_count={output_count} on {account.email} "
+                                f"(need {output_count}, have {account.session.available_workers + 1})"
+                            )
+                            self._dispatcher.requeue_task(task)
+                            account.release_workers(worker_count)
+                            worker_count = 0
+                            await asyncio.sleep(1.0)
+                            continue
+                    
+                    # H3 fix: Store worker_count on task for proper cleanup
+                    # Set ASAP after Phase 2 admission so watchdog can recover correctly
+                    task._worker_count = worker_count
+                    
                     log.info(
                         f"[Pipeline] Worker {worker.worker_id} picked task {task.id} "
                         f"[{task.state.value}/{task.stage.value}] "
@@ -601,9 +707,13 @@ class Engine:
                     
                     # D2: Account affinity check — continuation tasks must run on same account
                     if task.required_account and task.required_account != account.email:
-                        # Re-queue for correct account, release our slot
-                        self._dispatcher.submit_task(task)
-                        account.release_slot()
+                        # Re-queue for correct account, release our workers
+                        # BUG FIX: Use requeue_task (decrements _running_count)
+                        # instead of submit_task (which leaked +1)
+                        task.state = TaskState.READY
+                        self._dispatcher.requeue_task(task)
+                        account.release_workers(worker_count)
+                        worker_count = 0
                         await asyncio.sleep(0.1)
                         continue
                     
@@ -611,7 +721,8 @@ class Engine:
                     # get_next_task and now (e.g., user deleted from queue)
                     if task.state == TaskState.CANCELLED:
                         log.info(f"Worker {worker.worker_id}: task {task.id} was cancelled, skipping")
-                        account.release_slot()
+                        account.release_workers(worker_count)
+                        worker_count = 0
                         continue
                     
                     # Step 3: Lazy browser start if not yet initialized
@@ -672,8 +783,8 @@ class Engine:
                         )
                         task.state = TaskState.WAITING_POLL
                         await self._poll_operation(task, account)
-                        account.release_slot()
-                        return  # Task completed or failed inside _poll_operation
+                        # Workers released by finally block
+                        continue
                     
                     # Bug 13: Per-account rate limiter — serialize requests per account
                     # Ensures 4 workers on same account don't submit simultaneously
@@ -714,7 +825,7 @@ class Engine:
                             f"{task.workflow_type} has no images "
                             f"(upload failed or image_paths empty)"
                         )
-                        account.release_slot()
+                        # Workers released by finally block
                         continue
                     
                     # Step 6.6: Re-upload continuation frame for child tasks
@@ -734,7 +845,7 @@ class Engine:
                                 self._dispatcher.fail_task(
                                     task.id, "Continuation frame re-upload failed"
                                 )
-                                account.release_slot()
+                                # Workers released by finally block
                                 continue
                     
                     # Adaptive retry: more retries for transient errors.
@@ -760,19 +871,17 @@ class Engine:
                         
                         # Lock: covers anti-detect delay + single API call only
                         async with self._account_rate_locks[account.email]:
-                            # Step 6: Anti-Detect Spam — random delay (SERIALIZED per account)
+                            # Step 6: Anti-Detect Spam — adaptive delay (SERIALIZED per account)
                             if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else getattr(self, '_anti_detect_enabled', True):
-                                # Risk 1 fix: Increased from 1-5s to 3-8s (avg 5.5s)
-                                # With 4 workers: worst-case 4 submit in ~22s instead of ~10s
-                                delay_min = getattr(self._settings, 'anti_detect_delay_min', 3.0) if self._settings else getattr(self, '_anti_detect_delay_min', 3.0)
-                                delay_max = getattr(self._settings, 'anti_detect_delay_max', 8.0) if self._settings else getattr(self, '_anti_detect_delay_max', 8.0)
-                                delay = random.uniform(delay_min, delay_max)
+                                # M1 fix: Use AdaptiveBurstController for intelligent pacing
+                                # Tightens delay after 10 successes, backs off on 403s
                                 log.info(
-                                    f"[Pipeline] Task {task.id}: anti-detect {delay:.1f}s → submit "
+                                    f"[Pipeline] Task {task.id}: adaptive delay "
+                                    f"({self._burst_controller.get_delay(account.email):.1f}s base) → submit "
                                     f"attempt {attempt+1}/{max_retries+1} [{task.stage.value}] "
                                     f"progress={task.progress}%"
                                 )
-                                await asyncio.sleep(delay)
+                                await self._burst_controller.wait(account.email)
                         
                             try:
                                 result = await asyncio.wait_for(
@@ -785,13 +894,16 @@ class Engine:
                                     error=f"Request timed out after {timeout}s"
                                 )
                             
-                            # reCAPTCHA tokens are single-use: consumed by Google
-                            # on EVERY request (success OR failure).
-                            # Invalidate immediately so next call gets a fresh token.
+                            # M2: Defense-in-depth — Worker.execute() handles primary
+                            # invalidation, but this covers TimeoutError (L833) where
+                            # Worker.execute may not have finished its cleanup.
+                            # invalidate_recaptcha() is idempotent — safe to double-call.
                             account.invalidate_recaptcha()
                         # Rate lock released here — other workers can now submit
                         
                         if result.success:
+                            # M1 fix: Record success for adaptive delay tightening
+                            self._burst_controller.record_success(account.email)
                             break  # Success — exit retry loop
                         
                         # Layer 1: Network error → INSTANT pause, re-queue task
@@ -801,7 +913,7 @@ class Engine:
                             if self._on_connectivity_changed:
                                 self._on_connectivity_changed(False, 9999)
                             self._dispatcher.requeue_task(task)
-                            account.release_slot()
+                            # Workers released by finally block
                             return  # Exit worker loop — task preserved in queue
                         
                         # Auth errors → special handling, no retry
@@ -837,10 +949,14 @@ class Engine:
                             recaptcha_fail = "recaptcha" in error_lower
                             acct_email = account.email
                             
-                            # Pre-retry: invalidate reCAPTCHA (single-use tokens)
-                            account.invalidate_recaptcha()
+                            # Pre-retry: reCAPTCHA already invalidated at L791
+                            # Bug #2 fix: removed duplicate invalidation here
                             
                             if recaptcha_fail or "403" in (result.error or ""):
+                                # M1 fix: Record error for adaptive delay backoff
+                                status = 403 if "403" in (result.error or "") else 500
+                                self._burst_controller.record_error(account.email, status)
+                                
                                 current_epoch = self._browser_recovery_epoch.get(acct_email, 0)
                                 last_counted_epoch = self._account_403_last_epoch.get(acct_email, -1)
                                 
@@ -901,9 +1017,17 @@ class Engine:
                                     elif phase == 2:
                                         # ── Phase 2: Hard restart — LAST RESORT ──
                                         log.error(f"🔴 [{acct_email}] Phase 2 fail #{count} → HARD browser restart")
-                                        await self._do_browser_recovery(
-                                            account, worker.worker_id, "hard"
-                                        )
+                                        # Bug #5 fix: check upscale queue before hard restart
+                                        if self._upscale_queue and self._upscale_queue.has_active_jobs(acct_email):
+                                            log.warning(
+                                                f"🔴 [{acct_email}] Deferring hard restart — "
+                                                f"upscale queue has active polls. Waiting 15s..."
+                                            )
+                                            await asyncio.sleep(15)
+                                        else:
+                                            await self._do_browser_recovery(
+                                                account, worker.worker_id, "hard"
+                                            )
                                         await asyncio.sleep(10)
                                         await self._wait_for_recaptcha_ready(account, max_wait=30.0)
                                         
@@ -958,8 +1082,8 @@ class Engine:
                             )
                             await asyncio.sleep(backoff)
                     
-                    # Slot stays held until task fully completes (poll + download).
-                    # This ensures max_slots limits actual concurrent tasks.
+                    # Worker stays held until task fully completes (poll + download).
+                    # This ensures max_workers limits actual concurrent tasks.
                     
                     # Step 8: Process final result
                     log.info(f"[Engine] Task {task.id}: result.success={result.success if result else 'NO_RESULT'}, "
@@ -1003,7 +1127,7 @@ class Engine:
                                 f"(first={result.operation_name[:12]}...)"
                             )
                             await self._poll_operation(task, account)
-                            account.release_slot()
+                            # Workers released by finally block
                         else:
                             # Sync operation (T2I) - already complete
                             if result.output_uris:
@@ -1022,12 +1146,11 @@ class Engine:
                                 output_uris=result.output_uris,
                             )
                             self._download_count += len(result.output_uris or [])
-                            account.release_slot()
+                            # Workers released by finally block
                             if self._on_task_completed:
                                 self._on_task_completed(task)
                     elif result:
                         error_msg = result.error or "Unknown error"
-                        account.release_slot()
                         
                         if self._is_auth_error(error_msg):
                             # Auth error → fail task, manual re-login required
@@ -1056,7 +1179,9 @@ class Engine:
                                     f"🔄 [ChainRetry] Root {task.id} failed but has chain → "
                                     f"auto-retry #{task.chain_retry_count}/3 in {delay:.0f}s"
                                 )
-                                account.release_slot()
+                                # Release workers before sleep
+                                account.release_workers(worker_count)
+                                worker_count = 0
                                 # Set task to FAILED first — retry_chain() requires FAILED state
                                 task.state = TaskState.FAILED
                                 task.error = final_error
@@ -1084,15 +1209,16 @@ class Engine:
                         self._error_count += 1
                         if self._on_task_failed:
                             self._on_task_failed(task, "Worker returned no result")
-                        account.release_slot()
+                        # Workers released by finally block
                 
                 except Exception as inner_e:
-                    # Release slot if still held due to error before the release point
-                    try:
-                        account.release_slot()
-                    except Exception:
-                        pass
                     raise inner_e
+                finally:
+                    # ★ Bug #4 fix: Centralized cleanup — guarantees workers released
+                    # regardless of which code path was taken (success, error, exception)
+                    if worker_count > 0:
+                        account.release_workers(worker_count)
+                        worker_count = 0
                 
             except asyncio.CancelledError:
                 break
@@ -1390,6 +1516,8 @@ class Engine:
                     media_ids = ordered_media_ids
                     
                     # ★ Phase 6: Create VideoOutputInfo per video
+                    # H1 fix: Always create entries for ALL ops (including failed)
+                    # to preserve index alignment: video_outputs[i] ↔ operation_names[i]
                     task.video_outputs = []
                     for i, op_name in enumerate(task.operation_names):
                         if op_name in completed_results:
@@ -1401,7 +1529,16 @@ class Engine:
                                 media_id=detail["mediaId"],
                                 quality="pending",
                             )
-                            task.video_outputs.append(vo)
+                        else:
+                            # H1: Failed op gets a placeholder entry — preserves index
+                            vo = VideoOutputInfo(
+                                index=i,
+                                operation_name=op_name,
+                                scene_id=task.scene_ids[i] if i < len(task.scene_ids) else "",
+                                media_id="",  # No mediaId for failed ops
+                                quality="failed",
+                            )
+                        task.video_outputs.append(vo)
                     
                     task.stage = TaskStage.GENERATED  # ★ Checkpoint: poll complete
                     
@@ -1433,76 +1570,112 @@ class Engine:
                     
                     # === Stage: Auto-upscale if needed (88-92%) ===
                     upscale_paths = [None] * len(media_ids)  # None placeholders
+                    skip_upscale = False  # Bug #8 fix: use flag instead of clearing media_ids
                     if task.download_quality != "720p" and media_ids:
-                        # Proactive token check: access_token may have expired
-                        # during the 2-5min poll phase. Refresh BEFORE upscale.
-                        if account.session.is_token_expired:
-                            log.info(f"[Upscale] Access token expired for {account.email}, refreshing...")
-                            fresh_token = await account.refresh_access_token()
-                            if not fresh_token:
-                                log.error(f"[Upscale] Token refresh failed for {account.email} — keeping 720p")
-                                # Mark all videos as upscale-skipped
-                                for vo in task.video_outputs:
-                                    vo.upscale_status = "failed"
-                                    vo.upscale_error = "Access token expired, refresh failed"
-                                task.upscale_error = "Access token expired"
-                                self._dispatcher.update_progress(task.id, 90, "⚠️ Upscale skipped (auth expired)")
-                                # Skip upscale, continue to completion with 720p
-                                upscale_paths = [None] * len(media_ids)
-                                media_ids = []  # Empty to skip upscale block below
+                        # Gap #2: Centralized token validation before upscale enqueue
+                        valid_token = await account.ensure_valid_token()
+                        if not valid_token:
+                            log.error(f"[Upscale] Token refresh failed for {account.email} — keeping 720p")
+                            # Mark all videos as upscale-skipped
+                            for vo in task.video_outputs:
+                                vo.upscale_status = "failed"
+                                vo.upscale_error = "Access token expired, refresh failed"
+                            task.upscale_error = "Access token expired"
+                            self._dispatcher.update_progress(task.id, 90, "⚠️ Upscale skipped (auth expired)")
+                            # Skip upscale, continue to completion with 720p
+                            upscale_paths = [None] * len(media_ids)
+                            skip_upscale = True  # Bug #8: preserve media_ids for re-upscale
                         
-                        # Phase 3A: Enqueue for background upscale (release worker slot)
-                        if media_ids:  # Still has media_ids (not emptied by token failure)
-                            from core.upscale_queue import UpscaleJob
-                            self._upscale_queue.enqueue(UpscaleJob(
-                                task_id=task.id,
-                                account_email=account.email,
-                                media_ids=list(media_ids),
-                                output_uris=list(output_uris),
-                                target_quality=task.download_quality,
-                                aspect_ratio=task.aspect_ratio,
-                            ))
-                            task.upscale_media_ids = list(media_ids)
-                            task.stage = TaskStage.UPSCALING  # ★ Stay in upscaling
-                            self._dispatcher.update_progress(
-                                task.id, 88, f"⬆️ Upscaling {task.download_quality} (queued)"
-                            )
-                            
-                            # Handle continuation frame before worker exits
-                            # EARLY ACTIVATION: Children start immediately after 720p,
-                            # not after upscale completes (~3-5min savings per chain link)
-                            if (
-                                (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
-                                and self._dispatcher.has_children(task.id)
-                                and output_uris
-                            ):
-                                frame_result = await self._extract_continuation_frame(
-                                    task, account, output_uris[0]
+                        # Phase 3A: Upscale — mode determines inline vs background
+                        if not skip_upscale:  # Bug #8: check flag instead of testing media_ids
+                            if self._workload_priority == 'upscale_first':
+                                # Issue #5: INLINE upscale — worker holds slot
+                                # Video is upscaled immediately, no queue delay
+                                log.info(
+                                    f"[Engine] Task {task.id}: upscale_first mode → "
+                                    f"inline upscale ({task.download_quality})"
                                 )
-                                if frame_result:
-                                    # Note: Don't set continuation_frame on parent task —
-                                    # only children should have it (for Queue UI display).
-                                    # Parent is T2V and should NOT show "Frame" thumbnail.
-                                    
-                                    # Layer 2: Smart cooldown — wait for grecaptcha readiness
-                                    # instead of fixed sleep(3-5s).
-                                    await self._wait_for_recaptcha_ready(account, max_wait=30.0)
-                                    
-                                    # ★ Activate children NOW — don't wait for upscale
-                                    # _resolve_dependencies pops _parent_to_children,
-                                    # so UpscaleQueue's complete_task() won't double-activate
-                                    self._dispatcher.activate_children_early(
-                                        task.id,
-                                        frame_result[0],   # continuation_frame_uri
-                                        frame_result[1],   # continuation_frame_local_path
+                                task.stage = TaskStage.UPSCALING
+                                self._dispatcher.update_progress(
+                                    task.id, 88, f"⬆️ Upscaling {task.download_quality} (inline)"
+                                )
+                                upscale_results = await self._auto_upscale(
+                                    task, account, output_uris, media_ids
+                                )
+                                # Populate upscale_paths for merge at L1642+
+                                for i, uri in enumerate(upscale_results):
+                                    if uri and i < len(upscale_paths):
+                                        upscale_paths[i] = uri
+                                
+                                # Handle continuation frame (same as background path)
+                                if (
+                                    (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
+                                    and self._dispatcher.has_children(task.id)
+                                    and output_uris
+                                ):
+                                    frame_result = await self._extract_continuation_frame(
+                                        task, account, output_uris[0]
                                     )
-                            
-                            # Worker exits — UpscaleQueue will call complete_task()
-                            log.info(
-                                f"[Engine] Task {task.id}: worker releasing slot → "
-                                f"upscale continues in background"
-                            )
-                            return
+                                    if frame_result:
+                                        await self._wait_for_recaptcha_ready(account, max_wait=30.0)
+                                        self._dispatcher.activate_children_early(
+                                            task.id,
+                                            frame_result[0],
+                                            frame_result[1],
+                                        )
+                                # Fall through to merge at L1642+ (don't return)
+                            else:
+                                # BACKGROUND upscale (balanced / prompts_first)
+                                from core.upscale_queue import UpscaleJob
+                                self._upscale_queue.enqueue(UpscaleJob(
+                                    task_id=task.id,
+                                    account_email=account.email,
+                                    media_ids=list(media_ids),
+                                    output_uris=list(output_uris),
+                                    target_quality=task.download_quality,
+                                    aspect_ratio=task.aspect_ratio,
+                                ))
+                                task.upscale_media_ids = list(media_ids)
+                                task.stage = TaskStage.UPSCALING  # ★ Stay in upscaling
+                                self._dispatcher.update_progress(
+                                    task.id, 88, f"⬆️ Upscaling {task.download_quality} (queued)"
+                                )
+                                
+                                # Handle continuation frame before worker exits
+                                # EARLY ACTIVATION: Children start immediately after 720p,
+                                # not after upscale completes (~3-5min savings per chain link)
+                                if (
+                                    (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
+                                    and self._dispatcher.has_children(task.id)
+                                    and output_uris
+                                ):
+                                    frame_result = await self._extract_continuation_frame(
+                                        task, account, output_uris[0]
+                                    )
+                                    if frame_result:
+                                        # Note: Don't set continuation_frame on parent task —
+                                        # only children should have it (for Queue UI display).
+                                        # Parent is T2V and should NOT show "Frame" thumbnail.
+                                        
+                                        # Layer 2: Smart cooldown — wait for grecaptcha readiness
+                                        # instead of fixed sleep(3-5s).
+                                        await self._wait_for_recaptcha_ready(account, max_wait=30.0)
+                                        
+                                        # ★ Activate children NOW — don't wait for upscale
+                                        # _resolve_dependencies pops _parent_to_children,
+                                        # so UpscaleQueue's complete_task() won't double-activate
+                                        self._dispatcher.activate_children_early(
+                                            task.id,
+                                            frame_result[0],   # continuation_frame_uri
+                                            frame_result[1],   # continuation_frame_local_path
+                                        )
+                                
+                                # Worker exits — UpscaleQueue will call complete_task()
+                                log.info(
+                                    f"[Engine] Task {task.id}: worker releasing slot → "
+                                    f"upscale continues in background"
+                                )
+                                return
                     
                     # Per-video quality merge: prefer upscale, fallback 720p
                     # NOTE: local_720p has same length as output_uris, with "" for failed downloads
@@ -2144,6 +2317,10 @@ class Engine:
             output_folder=original_task.output_folder,
             project_name=original_task.project_name,
             prompt_index=original_task.prompt_index,  # Same index → naming collision handled by dedup
+            # H2 fix: Copy continuation fields for F2V/I2V workflows
+            continuation_frame_uri=original_task.continuation_frame_uri,
+            continuation_frame_local_path=original_task.continuation_frame_local_path,
+            extract_point_ms=original_task.extract_point_ms,
         )
         # Pin to same account — reuse project_id, same image_uris (account-bound)
         retry_task.required_account = original_task.assigned_account
@@ -2463,11 +2640,13 @@ class Engine:
             return False
         
         # Fallback: rebuild upscale_media_ids from video_outputs if missing
+        # MUST keep positional alignment: index in upscale_media_ids == index in video_outputs
         if not task.upscale_media_ids and task.video_outputs:
-            rebuilt = [vo.media_id for vo in task.video_outputs if vo.media_id]
-            if rebuilt:
+            rebuilt = [vo.media_id or "" for vo in task.video_outputs]  # "" placeholder for failed
+            if any(rebuilt):
                 task.upscale_media_ids = rebuilt
-                log.info(f"Re-upscale {task_id}: rebuilt media_ids from video_outputs ({len(rebuilt)} IDs)")
+                valid_count = sum(1 for m in rebuilt if m)
+                log.info(f"Re-upscale {task_id}: rebuilt media_ids from video_outputs ({valid_count}/{len(rebuilt)} valid)")
         
         if not task.upscale_media_ids:
             log.warning(f"Re-upscale {task_id}: no media_ids (video_outputs also empty)")
@@ -2531,18 +2710,24 @@ class Engine:
             return False
         
         # Fallback: rebuild upscale_media_ids from video_outputs if missing
+        # MUST keep positional alignment: index in upscale_media_ids == index in video_outputs
         if not task.upscale_media_ids and task.video_outputs:
-            rebuilt = [vo.media_id for vo in task.video_outputs if vo.media_id]
-            if rebuilt:
+            rebuilt = [vo.media_id or "" for vo in task.video_outputs]  # "" placeholder for failed
+            if any(rebuilt):
                 task.upscale_media_ids = rebuilt
-                log.info(f"Re-upscale single {task_id}[{video_index}]: rebuilt media_ids from video_outputs ({len(rebuilt)} IDs)")
+                valid_count = sum(1 for m in rebuilt if m)
+                log.info(f"Re-upscale single {task_id}[{video_index}]: rebuilt media_ids from video_outputs ({valid_count}/{len(rebuilt)} valid)")
         
         if not task.upscale_media_ids:
             log.warning(f"Re-upscale single {task_id}[{video_index}]: no media_ids (video_outputs also empty)")
             return False
         
         if video_index >= len(task.upscale_media_ids):
-            log.warning(f"Re-upscale single {task_id}[{video_index}]: index out of range")
+            log.warning(f"Re-upscale single {task_id}[{video_index}]: index out of range ({len(task.upscale_media_ids)} media_ids)")
+            return False
+        
+        if not task.upscale_media_ids[video_index]:
+            log.warning(f"Re-upscale single {task_id}[{video_index}]: no media_id for this video (operation may have failed)")
             return False
         
         self._dispatcher.update_progress(
@@ -2657,12 +2842,29 @@ class Engine:
         2. Re-poll via check_status() to obtain fresh fifeUrls
         3. Download 720p using existing _download_outputs()
         
+        Bug #7 fix: If provided account is unavailable, falls back to any
+        available account (operation_names are not account-scoped for polling).
+        
         Use case: 720p files were deleted, corrupted, or download partially failed.
         """
         task = self._dispatcher.get_task(task_id)
         if not task:
             log.warning(f"Re-download {task_id}: task not found")
             return False
+        
+        # Bug #7: Fallback account if provided one is unavailable
+        if not account or not account.is_enabled:
+            log.warning(f"Re-download {task_id}: assigned account unavailable, trying fallback")
+            fallback = await self._account_manager.get_available_account()
+            if fallback:
+                log.info(f"Re-download {task_id}: using fallback account {fallback.email}")
+                account = fallback
+            else:
+                log.error(f"Re-download {task_id}: no available accounts for fallback")
+                self._dispatcher.update_progress(
+                    task_id, 100, "⚠️ Re-download failed: no available accounts"
+                )
+                return False
         
         # Collect operation_names — prefer task-level, fallback to video_outputs
         op_names = list(task.operation_names) if task.operation_names else []

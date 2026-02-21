@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 """
 VEO Pro Max - Profiles Controller
 
@@ -95,7 +98,7 @@ def _find_chrome_pid_by_profile(profile_dir_name: str) -> int:
             if line.startswith('ProcessId='):
                 return int(line.split('=')[1])
     except Exception as e:
-        print(f"[Win32] PID lookup error: {e}")
+        log.error(f"[Win32] PID lookup error: {e}")
     return 0
 
 def _win32_hide_hwnds(hwnds: list):
@@ -143,7 +146,7 @@ class ChromeProfile:
     subscription_fetched: bool = False  # True if subscription was successfully fetched
     token_expires_at: Optional[str] = None  # ISO datetime when token expires (for status display)
     is_enabled: bool = True  # Account participates in rotation when generating
-    max_slots: int = 5  # Per-account concurrent worker limit (0-5)
+    max_workers: int = 20  # Per-account concurrent worker limit (0-20, 1 worker = 1 video)
     
     def __post_init__(self):
         if not self.created_at:
@@ -220,10 +223,20 @@ class ChromeProfile:
         if "is_enabled" not in data:
             data["is_enabled"] = True  # Default enabled for legacy profiles
         
+        # Migrate max_slots → max_workers (field renamed in recent update)
+        if "max_slots" in data and "max_workers" not in data:
+            data["max_workers"] = data.pop("max_slots")
+        elif "max_slots" in data:
+            data.pop("max_slots")  # Remove duplicate if both exist
+        
         # Remove legacy worker_profiles key if present
         data.pop("worker_profiles", None)
         
-        return cls(**data)
+        # Filter out any unknown keys to prevent TypeError on cls(**data)
+        known_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in known_fields}
+        
+        return cls(**filtered)
 
 
 class ProfilesController:
@@ -288,7 +301,8 @@ class ProfilesController:
                 "is_enabled": p.is_enabled,
                 "profile_path": p.profile_path,
                 "login_method": p.login_method,
-                "max_slots": p.max_slots,
+                "max_workers": p.max_workers,
+                "max_slots": p.max_workers,  # backward compat for old UI readers
             }
             results.append(d)
         return results
@@ -315,7 +329,7 @@ class ProfilesController:
         """
         # Check for duplicate
         if self.get_profile(email):
-            print(f"[ProfilesController] Profile already exists: {email}")
+            log.info(f"[ProfilesController] Profile already exists: {email}")
             return False
         
         profile = ChromeProfile(
@@ -330,7 +344,7 @@ class ProfilesController:
         if notify:
             self._notify("profiles_changed")
         
-        print(f"[ProfilesController] Added profile: {email}")
+        log.info(f"[ProfilesController] Added profile: {email}")
         return True
     
     def remove_profile(self, email: str) -> bool:
@@ -352,10 +366,10 @@ class ProfilesController:
                 # Step 1: Kill Chrome browser BEFORE deleting folder
                 try:
                     self.kill_debug_browser(email)
-                    print(f"[ProfilesController] 🔒 Chrome killed for {email}")
+                    log.info(f"[ProfilesController] 🔒 Chrome killed for {email}")
                     time.sleep(2)  # Wait for process to fully die
                 except Exception as e:
-                    print(f"[ProfilesController] ⚠️ kill_debug_browser: {e}")
+                    log.warning(f"[ProfilesController] ⚠️ kill_debug_browser: {e}")
                 
                 # Also kill via PID file (in case debug browser wasn't tracked)
                 if p.browser_profile_path:
@@ -374,15 +388,15 @@ class ProfilesController:
                         for attempt in range(3):
                             try:
                                 shutil.rmtree(profile_dir)
-                                print(f"[ProfilesController] 🗑️ Deleted browser folder: {profile_dir.name}")
+                                log.info(f"[ProfilesController] 🗑️ Deleted browser folder: {profile_dir.name}")
                                 deleted = True
                                 break
                             except Exception as e:
-                                print(f"[ProfilesController] ⚠️ rmtree attempt {attempt+1}/3: {e}")
+                                log.warning(f"[ProfilesController] ⚠️ rmtree attempt {attempt+1}/3: {e}")
                                 time.sleep(2)
                         
                         if not deleted:
-                            print(f"[ProfilesController] ❌ Could not delete {profile_dir.name} — may need manual cleanup")
+                            log.error(f"[ProfilesController] ❌ Could not delete {profile_dir.name} — may need manual cleanup")
                 
                 # Cleanup stored credentials
                 try:
@@ -401,9 +415,9 @@ class ProfilesController:
                             del tokens_data[email]
                             with open(tokens_path, 'w', encoding='utf-8') as f:
                                 json.dump(tokens_data, f, indent=2, ensure_ascii=False)
-                            print(f"[ProfilesController] 🗑️ Removed {email} from tokens.json")
+                            log.info(f"[ProfilesController] 🗑️ Removed {email} from tokens.json")
                 except Exception as e:
-                    print(f"[ProfilesController] ⚠️ tokens.json cleanup: {e}")
+                    log.warning(f"[ProfilesController] ⚠️ tokens.json cleanup: {e}")
                 
                 # Cleanup project cache
                 try:
@@ -416,10 +430,10 @@ class ProfilesController:
                 
                 self._profiles.pop(i)
                 self.save_profiles()
-                print(f"[ProfilesController] Removed profile: {email}")
+                log.info(f"[ProfilesController] Removed profile: {email}")
                 return True
         
-        print(f"[ProfilesController] Profile not found: {email}")
+        log.warning(f"[ProfilesController] Profile not found: {email}")
         return False
     
 
@@ -462,10 +476,10 @@ class ProfilesController:
         
         profile = self.get_profile(email)
         if not profile:
-            print(f"[ProfilesController] Profile not found: {email}")
+            log.warning(f"[ProfilesController] Profile not found: {email}")
             return False
         
-        print(f"[ProfilesController] Refreshing session for {email}")
+        log.info(f"[ProfilesController] Refreshing session for {email}")
         
         try:
             # Get or create token manager
@@ -479,16 +493,16 @@ class ProfilesController:
                 profile.last_used = datetime.now().isoformat()
                 self.save_profiles()
                 self._notify("profiles_changed")
-                print(f"[ProfilesController] ✅ Session refreshed for {email}")
+                log.info(f"[ProfilesController] ✅ Session refreshed for {email}")
                 return True
             else:
                 profile.is_ready = False
                 self.save_profiles()
-                print(f"[ProfilesController] ❌ Failed to refresh session for {email}")
+                log.error(f"[ProfilesController] ❌ Failed to refresh session for {email}")
                 return False
                 
         except Exception as e:
-            print(f"[ProfilesController] Refresh error: {e}")
+            log.error(f"[ProfilesController] Refresh error: {e}")
             profile.is_ready = False
             self.save_profiles()
             return False
@@ -504,7 +518,7 @@ class ProfilesController:
         """
         profile = self.get_profile(email)
         if not profile:
-            print(f"[ProfilesController] Profile not found: {email}")
+            log.warning(f"[ProfilesController] Profile not found: {email}")
             return {"success": False, "reason": "profile_not_found", "can_auto_login": False}
         
         # Check if auto-login is possible
@@ -516,7 +530,7 @@ class ProfilesController:
         except Exception:
             pass
         
-        print(f"[ProfilesController] Fetching subscription for {email}")
+        log.info(f"[ProfilesController] Fetching subscription for {email}")
         
         if profile.browser_profile_path:
             # Browser login → Fetch real-time
@@ -525,7 +539,7 @@ class ProfilesController:
             return result
         else:
             # No browser profile path → needs login first
-            print(f"[ProfilesController] ❌ No browser profile — needs login")
+            log.error(f"[ProfilesController] ❌ No browser profile — needs login")
             return {"success": False, "reason": "not_logged_in", "can_auto_login": can_auto_login}
     
     def _fetch_subscription_via_browser(self, profile: "ChromeProfile") -> dict:
@@ -540,18 +554,18 @@ class ProfilesController:
                 entry = self._debug_browsers[profile.email]
                 if entry.get("context") is not None:
                     # Debug browser fully ready — reuse it
-                    print(f"[ProfilesController] Debug browser open for {profile.email} — reusing for subscription fetch")
+                    log.debug(f"[ProfilesController] Debug browser open for {profile.email} — reusing for subscription fetch")
                     return self._fetch_subscription_via_debug_browser(profile)
                 else:
                     # Debug browser is still launching — wait for it
                     import time
-                    print(f"[ProfilesController] Debug browser launching for {profile.email} — waiting...")
+                    log.debug(f"[ProfilesController] Debug browser launching for {profile.email} — waiting...")
                     for _ in range(30):  # Wait up to 15s
                         time.sleep(0.5)
                         if entry.get("context") is not None:
-                            print(f"[ProfilesController] Debug browser ready — reusing for subscription fetch")
+                            log.debug(f"[ProfilesController] Debug browser ready — reusing for subscription fetch")
                             return self._fetch_subscription_via_debug_browser(profile)
-                    print(f"[ProfilesController] Debug browser launch timeout — skipping subscription fetch")
+                    log.warning(f"[ProfilesController] Debug browser launch timeout — skipping subscription fetch")
                     return {"success": False, "reason": "browser_launching"}
             
             # Check if we're inside an asyncio loop
@@ -559,8 +573,8 @@ class ProfilesController:
             try:
                 loop = asyncio.get_running_loop()
                 if loop:
-                    print(f"[ProfilesController] ⚠️ Inside asyncio loop - skipping sync subscription fetch")
-                    print(f"[ProfilesController] Subscription will be fetched on next refresh")
+                    log.warning(f"[ProfilesController] ⚠️ Inside asyncio loop - skipping sync subscription fetch")
+                    log.info(f"[ProfilesController] Subscription will be fetched on next refresh")
                     return {"success": True, "reason": "deferred"}
             except RuntimeError:
                 pass  # No running loop, safe to use sync API
@@ -570,8 +584,8 @@ class ProfilesController:
             import os
             
             if not profile.browser_profile_path or not os.path.exists(profile.browser_profile_path):
-                print(f"[ProfilesController] ❌ Browser profile path not found: {profile.browser_profile_path}")
-                print(f"[ProfilesController] 🔑 Account needs re-login")
+                log.error(f"[ProfilesController] ❌ Browser profile path not found: {profile.browser_profile_path}")
+                log.info(f"[ProfilesController] 🔑 Account needs re-login")
                 profile.is_ready = False
                 self.save_profiles()
                 return {"success": False, "reason": "profile_missing"}
@@ -579,7 +593,7 @@ class ProfilesController:
             API_KEY = "AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY"
             CREDITS_URL = f"https://aisandbox-pa.googleapis.com/v1/credits?key={API_KEY}"
             
-            print(f"[ProfilesController] Launching browser with saved profile...")
+            log.info(f"[ProfilesController] Launching browser with saved profile...")
             
             
             with sync_playwright() as p:
@@ -605,7 +619,7 @@ class ProfilesController:
                 
                 try:
                     # Step 1: Navigate to labs.google/fx/tools/flow (needs full page for __NEXT_DATA__)
-                    print(f"[ProfilesController] Navigating to labs.google/fx/tools/flow...")
+                    log.info(f"[ProfilesController] Navigating to labs.google/fx/tools/flow...")
                     page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(5000)
                     
@@ -613,7 +627,7 @@ class ProfilesController:
                     try:
                         create_btn = page.locator("button:has-text('Create with Flow')")
                         if create_btn.count() > 0 and create_btn.first.is_visible():
-                            print("[ProfilesController] Clicking 'Create with Flow' button...")
+                            log.info("[ProfilesController] Clicking 'Create with Flow' button...")
                             create_btn.first.click()
                             page.wait_for_timeout(3000)
                     except Exception:
@@ -624,7 +638,7 @@ class ProfilesController:
                     session_result = {}
                     
                     for attempt in range(3):
-                        print(f"[ProfilesController] Extracting __NEXT_DATA__ (attempt {attempt+1}/3)...")
+                        log.info(f"[ProfilesController] Extracting __NEXT_DATA__ (attempt {attempt+1}/3)...")
                         try:
                             session_result = page.evaluate("""
                                 () => {
@@ -652,35 +666,35 @@ class ProfilesController:
                                 }
                             """)
                         except Exception as eval_err:
-                            print(f"[ProfilesController] ⚠️ Evaluate failed: {eval_err}")
+                            log.error(f"[ProfilesController] ⚠️ Evaluate failed: {eval_err}")
                             session_result = {"error": str(eval_err)}
                             page.wait_for_timeout(3000)
                             continue
                         
-                        print(f"[ProfilesController] __NEXT_DATA__ result: {session_result}")
+                        log.info(f"[ProfilesController] __NEXT_DATA__ result: {session_result}")
                         
                         if session_result and "error" not in session_result:
                             access_token = session_result.get("access_token") or session_result.get("accessToken")
                             if access_token:
-                                print(f"[ProfilesController] ✅ Got access token on attempt {attempt+1}")
+                                log.info(f"[ProfilesController] ✅ Got access token on attempt {attempt+1}")
                                 break
                         
                         if attempt < 2:
-                            print(f"[ProfilesController] ⚠️ No token yet, waiting 3s before retry...")
+                            log.warning(f"[ProfilesController] ⚠️ No token yet, waiting 3s before retry...")
                             page.wait_for_timeout(3000)
                     
                     # Check for error or empty session (not logged in)
                     if not access_token:
-                        print(f"[ProfilesController] ⚠️ __NEXT_DATA__ extraction failed after 3 attempts: {session_result}")
+                        log.error(f"[ProfilesController] ⚠️ __NEXT_DATA__ extraction failed after 3 attempts: {session_result}")
                         profile.is_ready = False
                         profile.subscription_fetched = False
                         self.save_profiles()
                         return {"success": False, "reason": "session_expired"}
                     
-                    print(f"[ProfilesController] ✅ Got access token: {access_token[:20]}...")
+                    log.info(f"[ProfilesController] ✅ Got access token: {access_token[:20]}...")
                     
                     # Step 3: Call credits API with Bearer token
-                    print(f"[ProfilesController] Fetching credits API with Bearer token...")
+                    log.info(f"[ProfilesController] Fetching credits API with Bearer token...")
                     credits_result = page.evaluate(f"""
                         async () => {{
                             try {{
@@ -700,7 +714,7 @@ class ProfilesController:
                         }}
                     """)
                     
-                    print(f"[ProfilesController] Credits result: {credits_result}")
+                    log.info(f"[ProfilesController] Credits result: {credits_result}")
                     
                     if credits_result and "error" not in credits_result:
                         profile.sku = credits_result.get("sku", "WS_ULTRA")
@@ -711,11 +725,11 @@ class ProfilesController:
                         profile.last_used = datetime.now().isoformat()
                         self.save_profiles()
                         
-                        print(f"[ProfilesController] ✅ Success: {profile.tier_display}, Credits: {profile.credits}")
+                        log.info(f"[ProfilesController] ✅ Success: {profile.tier_display}, Credits: {profile.credits}")
                         return {"success": True, "reason": "ok"}
                     else:
                         # Still have session, just no credits info
-                        print(f"[ProfilesController] ⚠️ Credits API failed: {credits_result}")
+                        log.error(f"[ProfilesController] ⚠️ Credits API failed: {credits_result}")
                         profile.is_ready = True
                         profile.subscription_fetched = False
                         profile.last_used = datetime.now().isoformat()
@@ -727,7 +741,7 @@ class ProfilesController:
                     
         except Exception as e:
             import traceback
-            print(f"[ProfilesController] Subscription fetch error: {e}")
+            log.error(f"[ProfilesController] Subscription fetch error: {e}")
             traceback.print_exc()
             return {"success": False, "reason": "exception"}
     
@@ -740,7 +754,7 @@ class ProfilesController:
         """
         from datetime import datetime
         email = profile.email
-        print(f"[ProfilesController] Fetching subscription via debug browser for {email}...")
+        log.debug(f"[ProfilesController] Fetching subscription via debug browser for {email}...")
         
         # Step 1: Extract __NEXT_DATA__ for access token
         session_result = self.execute_js_on_debug_browser(email, """
@@ -764,15 +778,15 @@ class ProfilesController:
         """, timeout=10)
         
         if not session_result or "error" in session_result:
-            print(f"[ProfilesController] __NEXT_DATA__ extraction failed: {session_result}")
+            log.error(f"[ProfilesController] __NEXT_DATA__ extraction failed: {session_result}")
             return {"success": False, "reason": "no_session"}
         
         access_token = session_result.get("access_token", "")
         if not access_token:
-            print(f"[ProfilesController] No access token in __NEXT_DATA__")
+            log.info(f"[ProfilesController] No access token in __NEXT_DATA__")
             return {"success": False, "reason": "no_token"}
         
-        print(f"[ProfilesController] Got access token: {access_token[:20]}...")
+        log.info(f"[ProfilesController] Got access token: {access_token[:20]}...")
         
         # Step 2: Fetch credits API using the debug browser's fetch()
         credits_js = """
@@ -792,7 +806,7 @@ class ProfilesController:
         """
         credits_result = self.execute_js_on_debug_browser(email, credits_js, timeout=15)
         
-        print(f"[ProfilesController] Credits result: {credits_result}")
+        log.info(f"[ProfilesController] Credits result: {credits_result}")
         
         if credits_result and "error" not in credits_result:
             profile.sku = credits_result.get("sku", "WS_ULTRA")
@@ -802,10 +816,10 @@ class ProfilesController:
             profile.subscription_fetched = True
             profile.last_used = datetime.now().isoformat()
             self.save_profiles()
-            print(f"[ProfilesController] \u2705 Success via debug browser: {profile.tier_display}, Credits: {profile.credits}")
+            log.debug(f"[ProfilesController] \u2705 Success via debug browser: {profile.tier_display}, Credits: {profile.credits}")
             return {"success": True, "reason": "ok"}
         else:
-            print(f"[ProfilesController] Credits API failed via debug browser: {credits_result}")
+            log.error(f"[ProfilesController] Credits API failed via debug browser: {credits_result}")
             profile.is_ready = True
             profile.subscription_fetched = False
             profile.last_used = datetime.now().isoformat()
@@ -844,7 +858,7 @@ class ProfilesController:
         if updated:
             profile.subscription_fetched = True
             self.save_profiles()
-            print(f"[ProfilesController] ✅ Subscription updated from API: {profile.tier_display}, Credits: {profile.credits}")
+            log.info(f"[ProfilesController] ✅ Subscription updated from API: {profile.tier_display}, Credits: {profile.credits}")
             self._notify("subscription_updated", email)
         
         return updated
@@ -883,7 +897,7 @@ class ProfilesController:
         """
         import uuid
         
-        print("[ProfilesController] Starting Browser Login flow...")
+        log.info("[ProfilesController] Starting Browser Login flow...")
         
         # Check if we have an existing profile with browser_profile_path
         # If so, reuse it to maintain session
@@ -896,14 +910,14 @@ class ProfilesController:
             existing_path = Path(existing_profiles[0].browser_profile_path)
             if existing_path.exists():
                 profile_path = existing_path
-                print(f"[ProfilesController] Reusing existing browser profile: {profile_path}")
+                log.info(f"[ProfilesController] Reusing existing browser profile: {profile_path}")
         
         if not profile_path:
             # Generate unique profile folder (first time login)
             profile_folder = f"browser_session_{uuid.uuid4().hex[:8]}"
             profile_path = self.storage_path.parent / "browser_profiles" / profile_folder
             profile_path.mkdir(parents=True, exist_ok=True)
-            print(f"[ProfilesController] NEW browser profile path: {profile_path}")
+            log.info(f"[ProfilesController] NEW browser profile path: {profile_path}")
         
         try:
             from playwright.sync_api import sync_playwright
@@ -934,7 +948,7 @@ class ProfilesController:
                 try:
                     # Navigate to labs.google/fx homepage
                     # The /api/auth/signin/google endpoint has aisandbox scope issues
-                    print("[ProfilesController] Opening labs.google/fx...")
+                    log.info("[ProfilesController] Opening labs.google/fx...")
                     page.goto(
                         "https://labs.google/fx",
                         wait_until="networkidle",
@@ -946,10 +960,10 @@ class ProfilesController:
                     
                     # Check if already logged in
                     current_url = page.url
-                    print(f"[ProfilesController] Current URL: {current_url}")
+                    log.info(f"[ProfilesController] Current URL: {current_url}")
                     
                     # Try to find Sign In button (user needs to click)
-                    print("[ProfilesController] Looking for 'Sign In' button...")
+                    log.info("[ProfilesController] Looking for 'Sign In' button...")
                     
                     clicked = False
                     
@@ -969,7 +983,7 @@ class ProfilesController:
                             if btn.count() > 0 and btn.is_visible():
                                 btn.click(force=True)
                                 clicked = True
-                                print(f"[ProfilesController] ✅ Clicked: {selector}")
+                                log.info(f"[ProfilesController] ✅ Clicked: {selector}")
                                 break
                         except Exception:
                             continue
@@ -986,24 +1000,24 @@ class ProfilesController:
                                 if (signInBtn) signInBtn.click();
                             """)
                             clicked = True
-                            print("[ProfilesController] ✅ Clicked via JavaScript")
+                            log.info("[ProfilesController] ✅ Clicked via JavaScript")
                         except Exception as e:
-                            print(f"[ProfilesController] JS click failed: {e}")
+                            log.error(f"[ProfilesController] JS click failed: {e}")
                     
                     if not clicked:
-                        print("[ProfilesController] ℹ️ No Sign In button found - user may already be logged in or needs to click manually")
+                        log.info("[ProfilesController] ℹ️ No Sign In button found - user may already be logged in or needs to click manually")
                     
                     if clicked:
                         # Wait for OAuth redirect
                         page.wait_for_timeout(3000)
-                        print(f"[ProfilesController] Current URL: {page.url[:60]}...")
+                        log.info(f"[ProfilesController] Current URL: {page.url[:60]}...")
                         
                         if "accounts.google.com" in page.url:
-                            print("[ProfilesController] ✅ Redirected to Google OAuth!")
+                            log.info("[ProfilesController] ✅ Redirected to Google OAuth!")
                     
                     # Wait for user to login
-                    print(f"[ProfilesController] ⏳ Waiting for login (max {timeout_seconds}s)...")
-                    print("[ProfilesController] Please login with your Google account in the browser window")
+                    log.warning(f"[ProfilesController] ⏳ Waiting for login (max {timeout_seconds}s)...")
+                    log.info("[ProfilesController] Please login with your Google account in the browser window")
                     
                     email = None
                     for i in range(timeout_seconds // 5):
@@ -1043,7 +1057,7 @@ class ProfilesController:
                                 
                                 if email_result:
                                     email = email_result
-                                    print(f"[ProfilesController] ✅ Detected login: {email}")
+                                    log.info(f"[ProfilesController] ✅ Detected login: {email}")
                                     break
                                 
                                 # Method 2: Try calling session API
@@ -1064,31 +1078,31 @@ class ProfilesController:
                                 
                                 if session_result:
                                     email = session_result
-                                    print(f"[ProfilesController] ✅ Session detected: {email}")
+                                    log.info(f"[ProfilesController] ✅ Session detected: {email}")
                                     break
                                     
                         except Exception as e:
-                            print(f"[ProfilesController] Detection check: {e}")
+                            log.info(f"[ProfilesController] Detection check: {e}")
                         
-                        print(f"[ProfilesController] Waiting... ({(i+1)*5}/{timeout_seconds}s)")
+                        log.warning(f"[ProfilesController] Waiting... ({(i+1)*5}/{timeout_seconds}s)")
                     
                     if not email:
-                        print("[ProfilesController] ❌ Login timeout or cancelled")
+                        log.error("[ProfilesController] ❌ Login timeout or cancelled")
                         context.close()
                         return None
                     
                     # Wait for storage to sync before closing
-                    print("[ProfilesController] Syncing browser storage...")
+                    log.info("[ProfilesController] Syncing browser storage...")
                     page.wait_for_timeout(2000)
                     
                     # Close browser - profile is saved
-                    print(f"[ProfilesController] Closing browser. Profile path: {profile_path}")
+                    log.info(f"[ProfilesController] Closing browser. Profile path: {profile_path}")
                     context.close()
                     
                     # Check if profile already exists
                     existing = self.get_profile(email)
                     if existing:
-                        print(f"[ProfilesController] Updating existing profile: {email}")
+                        log.info(f"[ProfilesController] Updating existing profile: {email}")
                         existing.login_method = "browser"
                         existing.browser_profile_path = str(profile_path)
                         existing.is_ready = True
@@ -1117,24 +1131,24 @@ class ProfilesController:
                             self.save_profiles()
                             
                             # Fetch subscription real-time
-                            print("[ProfilesController] Fetching subscription...")
+                            log.info("[ProfilesController] Fetching subscription...")
                             self._fetch_subscription_via_browser(profile)
                         
-                        print(f"[ProfilesController] ✅ Browser profile added: {email}")
+                        log.info(f"[ProfilesController] ✅ Browser profile added: {email}")
                         return email
                     else:
-                        print(f"[ProfilesController] Failed to add profile: {email}")
+                        log.error(f"[ProfilesController] Failed to add profile: {email}")
                         return None
                         
                 except Exception as e:
-                    print(f"[ProfilesController] Browser login error: {e}")
+                    log.error(f"[ProfilesController] Browser login error: {e}")
                     import traceback
                     traceback.print_exc()
                     context.close()
                     return None
                     
         except Exception as e:
-            print(f"[ProfilesController] Browser login flow error: {e}")
+            log.error(f"[ProfilesController] Browser login flow error: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -1163,20 +1177,20 @@ class ProfilesController:
         
         # Prevent duplicate launches
         if email in self._debug_browsers:
-            print(f"[ProfilesController] Browser already open for {email}")
+            log.info(f"[ProfilesController] Browser already open for {email}")
             return True
         
         profile = self.get_profile(email)
         if not profile or not profile.browser_profile_path:
-            print(f"[ProfilesController] No browser profile found for {email}")
+            log.info(f"[ProfilesController] No browser profile found for {email}")
             return False
         
         profile_path = Path(profile.browser_profile_path)
         if not profile_path.exists():
-            print(f"[ProfilesController] Browser profile path missing: {profile_path}")
+            log.info(f"[ProfilesController] Browser profile path missing: {profile_path}")
             return False
         
-        print(f"[ProfilesController] 🌐 Opening debug browser for {email}...")
+        log.debug(f"[ProfilesController] 🌐 Opening debug browser for {email}...")
         
         try:
             from playwright.sync_api import sync_playwright
@@ -1216,12 +1230,12 @@ class ProfilesController:
                     cdp_port = chrome_info["port"]
                     is_reconnect = "tabs" in chrome_info  # reconnect returns tabs
                     
-                    print(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port} ({'reconnected' if is_reconnect else 'new'})")
+                    log.info(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port} ({'reconnected' if is_reconnect else 'new'})")
                     
                     # Hide browser windows
                     browser_hwnds = _find_hwnds_by_pid(chrome_pid)
                     _win32_hide_hwnds(browser_hwnds)
-                    print(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — hidden for {email}")
+                    log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — hidden for {email}")
                     
                     if on_state_change:
                         try:
@@ -1231,7 +1245,7 @@ class ProfilesController:
                     
                     with sync_playwright() as pw:
                         # Step 1: Connect to Chrome via CDP (with retry for cold-boot)
-                        print(f"[DEBUG] Step 1: Connecting to CDP on port {cdp_port}...")
+                        log.debug(f"[DEBUG] Step 1: Connecting to CDP on port {cdp_port}...")
                         browser = None
                         cdp_retries = 3
                         for cdp_attempt in range(cdp_retries):
@@ -1242,34 +1256,64 @@ class ProfilesController:
                                 break
                             except Exception as cdp_err:
                                 if cdp_attempt < cdp_retries - 1:
-                                    print(f"[DEBUG] Step 1: CDP connect attempt {cdp_attempt + 1}/{cdp_retries} failed, retrying in 5s...")
+                                    log.error(f"[DEBUG] Step 1: CDP connect attempt {cdp_attempt + 1}/{cdp_retries} failed, retrying in 5s...")
                                     import time as _time
                                     _time.sleep(5)
                                 else:
                                     raise cdp_err
-                        print(f"[DEBUG] Step 1: ✅ Connected. Contexts: {len(browser.contexts)}")
+                        log.debug(f"[DEBUG] Step 1: ✅ Connected. Contexts: {len(browser.contexts)}")
                         context = browser.contexts[0] if browser.contexts else browser.new_context()
                         
                         # Step 2: Reuse existing pages
                         existing_pages = context.pages
-                        print(f"[DEBUG] Step 2: Found {len(existing_pages)} existing page(s)")
+                        log.debug(f"[DEBUG] Step 2: Found {len(existing_pages)} existing page(s)")
                         if existing_pages:
                             page = existing_pages[0]
-                            print(f"[DEBUG] Step 2: ✅ Reusing tab: {page.url}")
+                            log.debug(f"[DEBUG] Step 2: ✅ Reusing tab: {page.url}")
                         else:
                             page = context.new_page()
-                            print(f"[DEBUG] Step 2: ✅ Created new tab")
+                            log.debug(f"[DEBUG] Step 2: ✅ Created new tab")
+                        
+                        # Step 2b: Close excess tabs (enforce max 3)
+                        ALLOWED_FRAGMENTS = ["mail.google.com", "youtube.com", "labs.google"]
+                        if len(existing_pages) > 3:
+                            log.info(f"[ProfilesController] Tab cleanup: {len(existing_pages)} tabs → closing excess")
+                            # Categorize pages
+                            allowed = []
+                            blank = []
+                            other = []
+                            for p in existing_pages:
+                                url = p.url or ""
+                                if url in ("about:blank", "chrome://newtab/", ""):
+                                    blank.append(p)
+                                elif any(frag in url for frag in ALLOWED_FRAGMENTS):
+                                    allowed.append(p)
+                                else:
+                                    other.append(p)
+                            # Close blank + other + excess allowed (keep first 3 allowed)
+                            to_close = blank + other + allowed[3:]
+                            closed = 0
+                            for p in to_close:
+                                if p == page:
+                                    continue  # Don't close the page we're using
+                                try:
+                                    p.close()
+                                    closed += 1
+                                except Exception:
+                                    pass
+                            if closed:
+                                log.info(f"[ProfilesController] Tab cleanup: closed {closed} excess tab(s)")
                         
                         # Step 3: Set up header capture via CDP protocol
                         # (page.route() doesn't work reliably with connect_over_cdp)
                         captured_headers = {}
-                        print(f"[DEBUG] Step 3: Setting up CDP header capture...")
+                        log.debug(f"[DEBUG] Step 3: Setting up CDP header capture...")
                         
                         try:
                             cdp_session = context.new_cdp_session(page)
-                            print(f"[DEBUG] Step 3: ✅ CDP session created")
+                            log.debug(f"[DEBUG] Step 3: ✅ CDP session created")
                         except Exception as e:
-                            print(f"[DEBUG] Step 3: ❌ CDP session failed: {e}")
+                            log.error(f"[DEBUG] Step 3: ❌ CDP session failed: {e}")
                             cdp_session = None
                         
                         if cdp_session:
@@ -1293,7 +1337,7 @@ class ProfilesController:
                                             captured_headers[key] = val
                                             found.append(key)
                                     if found:
-                                        print(f"[DEBUG] CDP captured headers from {url[:60]}: {found}")
+                                        log.debug(f"[DEBUG] CDP captured headers from {url[:60]}: {found}")
                             
                             def on_request_extra_info(event):
                                 headers = event.get("headers", {})
@@ -1305,59 +1349,59 @@ class ProfilesController:
                                             captured_headers[key] = h_val
                                             found.append(key)
                                 if found:
-                                    print(f"[DEBUG] CDP ExtraInfo captured: {found}")
+                                    log.debug(f"[DEBUG] CDP ExtraInfo captured: {found}")
                             
                             cdp_session.on("Network.requestWillBeSent", on_request_will_be_sent)
                             cdp_session.on("Network.requestWillBeSentExtraInfo", on_request_extra_info)
                             cdp_session.send("Network.enable")
-                            print(f"[DEBUG] Step 3: ✅ Network.enable active — listening for headers")
+                            log.debug(f"[DEBUG] Step 3: ✅ Network.enable active — listening for headers")
                             
                             # Also get window ID
                             try:
                                 win_info = cdp_session.send("Browser.getWindowForTarget")
                                 window_id = win_info.get("windowId")
                             except Exception as e:
-                                print(f"[DEBUG] Window ID warning: {e}")
+                                log.warning(f"[DEBUG] Window ID warning: {e}")
                         
                         # Step 4: Navigate to VEO if needed
                         current_url = page.url
-                        print(f"[DEBUG] Step 4: Current URL = {current_url}")
+                        log.debug(f"[DEBUG] Step 4: Current URL = {current_url}")
                         if "/tools/flow" not in current_url:
-                            print(f"[DEBUG] Step 4: Navigating to VEO /tools/flow...")
+                            log.debug(f"[DEBUG] Step 4: Navigating to VEO /tools/flow...")
                             try:
                                 page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
                             except Exception as nav_err:
                                 # ERR_ABORTED = Chrome redirected (e.g., to login) — not fatal
-                                print(f"[DEBUG] Step 4: Navigation interrupted ({type(nav_err).__name__}), checking final URL...")
+                                log.debug(f"[DEBUG] Step 4: Navigation interrupted ({type(nav_err).__name__}), checking final URL...")
                             page.wait_for_timeout(3000)
-                            print(f"[DEBUG] Step 4: Final URL = {page.url}")
+                            log.debug(f"[DEBUG] Step 4: Final URL = {page.url}")
                             
                             try:
                                 create_btn = page.locator("button:has-text('Create with Flow')")
                                 if create_btn.count() > 0 and create_btn.first.is_visible():
                                     create_btn.first.click()
                                     page.wait_for_timeout(3000)
-                                    print(f"[DEBUG] Step 4: Clicked 'Create with Flow'")
+                                    log.debug(f"[DEBUG] Step 4: Clicked 'Create with Flow'")
                             except Exception:
                                 pass
                         else:
-                            print(f"[DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation")
+                            log.warning(f"[DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation")
                         
                         # Step 5: Trigger header capture via reload
-                        print(f"[DEBUG] Step 5: Headers so far = {list(captured_headers.keys())}")
+                        log.debug(f"[DEBUG] Step 5: Headers so far = {list(captured_headers.keys())}")
                         if not captured_headers.get("x-browser-validation"):
-                            print(f"[DEBUG] Step 5: Reloading to trigger API calls...")
+                            log.debug(f"[DEBUG] Step 5: Reloading to trigger API calls...")
                             try:
                                 page.reload(wait_until="load", timeout=15000)
                                 page.wait_for_timeout(3000)
-                                print(f"[DEBUG] Step 5: Reload done. Headers = {list(captured_headers.keys())}")
+                                log.debug(f"[DEBUG] Step 5: Reload done. Headers = {list(captured_headers.keys())}")
                             except Exception as e:
-                                print(f"[DEBUG] Step 5: Reload error: {e}")
+                                log.error(f"[DEBUG] Step 5: Reload error: {e}")
                         
                         # Step 5b: If still no headers, try navigating away and back
                         # (avoid using non-localized URL since Chrome auto-redirects to /vi/ etc.)
                         if not captured_headers.get("x-browser-validation"):
-                            print(f"[DEBUG] Step 5b: Trying navigation away+back...")
+                            log.debug(f"[DEBUG] Step 5b: Trying navigation away+back...")
                             try:
                                 # Navigate away briefly to force fresh request headers
                                 page.goto("https://labs.google/fx/tools/flow", wait_until="load", timeout=10000)
@@ -1366,9 +1410,9 @@ class ProfilesController:
                                 page.goto("https://labs.google/fx/tools/flow",
                                           wait_until="load", timeout=15000)
                                 page.wait_for_timeout(3000)
-                                print(f"[DEBUG] Step 5b: Headers after nav cycle = {list(captured_headers.keys())}")
+                                log.debug(f"[DEBUG] Step 5b: Headers after nav cycle = {list(captured_headers.keys())}")
                             except Exception as e:
-                                print(f"[DEBUG] Step 5b: Nav cycle error: {e}")
+                                log.error(f"[DEBUG] Step 5b: Nav cycle error: {e}")
                         
                         # Step 6: Compute missing branded headers for CfT
                         # Chrome for Testing doesn't inject x-browser-* headers.
@@ -1386,9 +1430,9 @@ class ProfilesController:
                                 sha1_hash = hashlib.sha1(validation_data.encode("utf-8")).digest()
                                 validation_b64 = b64.b64encode(sha1_hash).decode("ascii")
                                 captured_headers["x-browser-validation"] = validation_b64
-                                print(f"[ProfilesController] 🔑 Computed x-browser-validation from UA: {validation_b64[:20]}...")
+                                log.info(f"[ProfilesController] 🔑 Computed x-browser-validation from UA: {validation_b64[:20]}...")
                             except Exception as e:
-                                print(f"[ProfilesController] ⚠️ Could not compute x-browser-validation: {e}")
+                                log.warning(f"[ProfilesController] ⚠️ Could not compute x-browser-validation: {e}")
                         
                         # Inject static branded headers if missing (CfT doesn't send these)
                         if "x-browser-channel" not in captured_headers:
@@ -1400,11 +1444,11 @@ class ProfilesController:
                         
                         # Final result
                         if captured_headers:
-                            print(f"[ProfilesController] ✅ Browser headers captured for {email}: {list(captured_headers.keys())}")
+                            log.info(f"[ProfilesController] ✅ Browser headers captured for {email}: {list(captured_headers.keys())}")
                         else:
-                            print(f"[ProfilesController] ⚠️ No x-browser-* headers captured for {email} — API calls may fail with 403")
+                            log.warning(f"[ProfilesController] ⚠️ No x-browser-* headers captured for {email} — API calls may fail with 403")
                         
-                        print(f"[ProfilesController] ✅ Debug browser ready for {email} (persistent, port={cdp_port})")
+                        log.debug(f"[ProfilesController] ✅ Debug browser ready for {email} (persistent, port={cdp_port})")
                         
                         # Store refs for RecaptchaBrowserSession reuse
                         entry = self._debug_browsers.get(email)
@@ -1455,7 +1499,7 @@ class ProfilesController:
                                     entry = self._debug_browsers.get(email)
                                     if entry:
                                         entry["state"] = "hidden"
-                                    print(f"[ProfilesController] 🔇 Browser hidden for {email}")
+                                    log.info(f"[ProfilesController] 🔇 Browser hidden for {email}")
                                     if on_state_change:
                                         try:
                                             on_state_change(email, "hidden")
@@ -1468,7 +1512,7 @@ class ProfilesController:
                                     entry = self._debug_browsers.get(email)
                                     if entry:
                                         entry["state"] = "visible"
-                                    print(f"[ProfilesController] 👁️ Browser shown for {email}")
+                                    log.info(f"[ProfilesController] 👁️ Browser shown for {email}")
                                     if on_state_change:
                                         try:
                                             on_state_change(email, "visible")
@@ -1477,7 +1521,7 @@ class ProfilesController:
                                 
                                 elif cmd == "refresh_token":
                                     # Reload page to refresh session, extract fresh access_token
-                                    print(f"[ProfilesController] 🔄 Refreshing token for {email}...")
+                                    log.info(f"[ProfilesController] 🔄 Refreshing token for {email}...")
                                     try:
                                         try:
                                             page.reload(wait_until="load", timeout=15000)
@@ -1507,11 +1551,11 @@ class ProfilesController:
                                                 profile.access_token = token
                                                 from datetime import datetime, timedelta
                                                 profile.token_expires = datetime.now() + timedelta(hours=1)
-                                            print(f"[ProfilesController] ✅ Token refreshed for {email} ({len(token)} chars)")
+                                            log.info(f"[ProfilesController] ✅ Token refreshed for {email} ({len(token)} chars)")
                                         else:
-                                            print(f"[ProfilesController] ⚠️ Token refresh failed — no token in page data")
+                                            log.error(f"[ProfilesController] ⚠️ Token refresh failed — no token in page data")
                                     except Exception as e:
-                                        print(f"[ProfilesController] ❌ Token refresh error: {e}")
+                                        log.error(f"[ProfilesController] ❌ Token refresh error: {e}")
                                 
                                 elif cmd == "close":
                                     # Disconnect only — Chrome keeps running
@@ -1543,12 +1587,12 @@ class ProfilesController:
                     # If kill was requested, terminate Chrome
                     if kill_on_exit:
                         kill_chrome(str(profile_path))
-                        print(f"[ProfilesController] 🔒 Chrome KILLED for {email}")
+                        log.info(f"[ProfilesController] 🔒 Chrome KILLED for {email}")
                     else:
-                        print(f"[ProfilesController] 🔗 Playwright disconnected — Chrome still running for {email}")
+                        log.info(f"[ProfilesController] 🔗 Playwright disconnected — Chrome still running for {email}")
                         
                 except Exception as e:
-                    print(f"[ProfilesController] Debug browser error: {e}")
+                    log.error(f"[ProfilesController] Debug browser error: {e}")
                     import traceback
                     traceback.print_exc()
                     # Kill orphaned Chrome if CDP connect failed
@@ -1556,13 +1600,13 @@ class ProfilesController:
                     try:
                         if chrome_pid:
                             kill_chrome(str(profile_path))
-                            print(f"[ProfilesController] 🔒 Killed orphaned Chrome PID={chrome_pid} (CDP connect failed)")
+                            log.error(f"[ProfilesController] 🔒 Killed orphaned Chrome PID={chrome_pid} (CDP connect failed)")
                     except Exception:
                         pass
                 finally:
                     self._debug_browsers.pop(email, None)
                     state = "closed" if kill_on_exit else "disconnected"
-                    print(f"[ProfilesController] Debug browser {state} for {email}")
+                    log.debug(f"[ProfilesController] Debug browser {state} for {email}")
                     if on_state_change:
                         try:
                             on_state_change(email, "closed")
@@ -1575,7 +1619,7 @@ class ProfilesController:
             
         except Exception as e:
             self._debug_browsers.pop(email, None)
-            print(f"[ProfilesController] Debug browser error: {e}")
+            log.error(f"[ProfilesController] Debug browser error: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -1618,7 +1662,7 @@ class ProfilesController:
         if not entry:
             return False
         entry["cmd_queue"].put("close")
-        print(f"[ProfilesController] 🔗 Signaled disconnect for {email} (Chrome stays alive)")
+        log.info(f"[ProfilesController] 🔗 Signaled disconnect for {email} (Chrome stays alive)")
         return True
     
     def kill_debug_browser(self, email: str) -> bool:
@@ -1638,7 +1682,7 @@ class ProfilesController:
                 return kill_chrome(profile.browser_profile_path)
             return False
         entry["cmd_queue"].put("kill")
-        print(f"[ProfilesController] 🔒 Signaled kill for {email}")
+        log.info(f"[ProfilesController] 🔒 Signaled kill for {email}")
         return True
     
     def is_debug_browser_open(self, email: str) -> bool:
@@ -1724,11 +1768,11 @@ class ProfilesController:
         # Wait for the browser thread to process it
         if result_event.wait(timeout=timeout):
             if result_holder["error"]:
-                print(f"[ProfilesController] JS eval error for {email}: {result_holder['error']}")
+                log.error(f"[ProfilesController] JS eval error for {email}: {result_holder['error']}")
                 return None
             return result_holder["value"]
         else:
-            print(f"[ProfilesController] JS eval timeout for {email} ({timeout}s)")
+            log.warning(f"[ProfilesController] JS eval timeout for {email} ({timeout}s)")
             return None
     
     def auto_login_with_credentials(
@@ -1759,7 +1803,7 @@ class ProfilesController:
         Returns:
             Email of created/updated profile, or None if failed
         """
-        print(f"[ProfilesController] Starting Auto-Login for {email} (headless={headless})...")
+        log.info(f"[ProfilesController] Starting Auto-Login for {email} (headless={headless})...")
         
         # Get or create browser profile path (each email gets its OWN profile)
         profile_path = None
@@ -1768,14 +1812,14 @@ class ProfilesController:
             existing_path = Path(existing.browser_profile_path)
             if existing_path.exists():
                 profile_path = existing_path
-                print(f"[ProfilesController] Reusing OWN browser profile: {profile_path}")
+                log.info(f"[ProfilesController] Reusing OWN browser profile: {profile_path}")
         
         if not profile_path:
             import uuid
             profile_folder = f"browser_session_{uuid.uuid4().hex[:8]}"
             profile_path = self.storage_path.parent / "browser_profiles" / profile_folder
             profile_path.mkdir(parents=True, exist_ok=True)
-            print(f"[ProfilesController] NEW browser profile: {profile_path}")
+            log.info(f"[ProfilesController] NEW browser profile: {profile_path}")
         
         try:
             from playwright.sync_api import sync_playwright
@@ -1784,7 +1828,7 @@ class ProfilesController:
             # (debug browser, ChromeManager, or any stale instance)
             # This prevents CDP port conflicts and profile lock errors.
             import time
-            print(f"[ProfilesController] Killing any Chrome using profile: {profile_path.name}")
+            log.info(f"[ProfilesController] Killing any Chrome using profile: {profile_path.name}")
             try:
                 # Force-close debug browser entry if exists
                 if hasattr(self, '_debug_browsers') and email in self._debug_browsers:
@@ -1812,9 +1856,9 @@ class ProfilesController:
                     f'ForEach-Object {{ $_.Terminate() }}'
                 )
                 subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10)
-                print(f"[ProfilesController] ✅ Chrome processes killed for {profile_path.name}")
+                log.info(f"[ProfilesController] ✅ Chrome processes killed for {profile_path.name}")
             except Exception as e:
-                print(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
+                log.warning(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
             
             time.sleep(3)  # Wait for Chrome to fully exit and release profile lock
             
@@ -1842,45 +1886,45 @@ class ProfilesController:
                 
                 try:
                     # Step 1: Navigate to Google login
-                    print("[ProfilesController] Navigating to accounts.google.com...")
+                    log.info("[ProfilesController] Navigating to accounts.google.com...")
                     page.goto("https://accounts.google.com", wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(3000)
                     
                     # Check if already logged in (browser has session cookies)
                     current_url = page.url
                     if "accounts.google.com" not in current_url or "myaccount.google.com" in current_url:
-                        print(f"[ProfilesController] ✅ Already logged in! URL: {current_url[:50]}...")
+                        log.info(f"[ProfilesController] ✅ Already logged in! URL: {current_url[:50]}...")
                         # Skip login, go directly to labs.google
                     else:
                         # Step 2: Fill email
-                        print("[ProfilesController] Filling email...")
+                        log.info("[ProfilesController] Filling email...")
                         email_input = page.locator("#identifierId")
                         if email_input.count() > 0 and email_input.is_visible():
                             email_input.fill(email)
                             page.wait_for_timeout(500)
                             page.keyboard.press("Enter")
-                            print("[ProfilesController] ✅ Email entered")
+                            log.info("[ProfilesController] ✅ Email entered")
                         else:
                             # Maybe already past email step or different page
-                            print("[ProfilesController] ⚠️ Email input not found — may already be logged in")
+                            log.warning("[ProfilesController] ⚠️ Email input not found — may already be logged in")
                             # Check if we're on a chooser or different Google page
                             if "myaccount.google" in current_url or "SignOutOptions" in current_url:
-                                print("[ProfilesController] ✅ Already logged in, skipping...")
+                                log.warning("[ProfilesController] ✅ Already logged in, skipping...")
                             else:
-                                print(f"[ProfilesController] Current URL: {current_url[:80]}")
+                                log.info(f"[ProfilesController] Current URL: {current_url[:80]}")
                                 # Try alternative selector as last resort
                                 alt_input = page.locator("input[type='email']")
                                 if alt_input.count() > 0:
                                     alt_input.first.fill(email)
                                     page.keyboard.press("Enter")
                                 else:
-                                    print("[ProfilesController] ⚠️ No email field found at all")
+                                    log.warning("[ProfilesController] ⚠️ No email field found at all")
                     
                     # Wait for password page
                     page.wait_for_timeout(3000)
                     
                     # Step 3: Fill password
-                    print("[ProfilesController] Filling password...")
+                    log.info("[ProfilesController] Filling password...")
                     password_input = page.locator("input[name='Passwd']")
                     
                     # Wait for password input to be visible
@@ -1893,43 +1937,43 @@ class ProfilesController:
                         password_input.fill(password)
                         page.wait_for_timeout(500)
                         page.keyboard.press("Enter")
-                        print("[ProfilesController] ✅ Password entered")
+                        log.info("[ProfilesController] ✅ Password entered")
                     else:
-                        print("[ProfilesController] ⚠️ Password input not found - may need manual input")
+                        log.warning("[ProfilesController] ⚠️ Password input not found - may need manual input")
                         # Wait for user to handle manually
                         page.wait_for_timeout(10000)
                     
                     # Step 4: Wait for login completion (redirect away from accounts.google.com)
-                    print(f"[ProfilesController] Waiting for login completion (max {timeout_seconds}s)...")
+                    log.warning(f"[ProfilesController] Waiting for login completion (max {timeout_seconds}s)...")
                     login_success = False
                     
                     for i in range(timeout_seconds // 5):
                         page.wait_for_timeout(5000)
                         current_url = page.url
-                        print(f"[ProfilesController] Current URL: {current_url[:50]}...")
+                        log.info(f"[ProfilesController] Current URL: {current_url[:50]}...")
                         
                         # Check if redirected to labs.google or myaccount
                         if "accounts.google.com" not in current_url:
                             login_success = True
-                            print("[ProfilesController] ✅ Login redirect detected!")
+                            log.info("[ProfilesController] ✅ Login redirect detected!")
                             break
                         
                         # Check for error messages
                         error_visible = page.locator("[class*='error'], [class*='Error']").count() > 0
                         if error_visible:
-                            print("[ProfilesController] ⚠️ Error detected on page")
+                            log.error("[ProfilesController] ⚠️ Error detected on page")
                             
-                        print(f"[ProfilesController] Waiting... ({(i+1)*5}/{timeout_seconds}s)")
+                        log.warning(f"[ProfilesController] Waiting... ({(i+1)*5}/{timeout_seconds}s)")
                     
                     if not login_success:
-                        print("[ProfilesController] ❌ Login timeout - check for CAPTCHA/2FA")
+                        log.error("[ProfilesController] ❌ Login timeout - check for CAPTCHA/2FA")
                         context.close()
                         return None
                     
                     # Step 5: Navigate to labs.google and extract session from __NEXT_DATA__
                     # Per docs (ACCOUNT_SESSION_MANAGEMENT.md Section 7.2):
                     # Server-side renders session data into __NEXT_DATA__ when Google cookies are present
-                    print("[ProfilesController] Navigating to labs.google/fx/tools/flow...")
+                    log.info("[ProfilesController] Navigating to labs.google/fx/tools/flow...")
                     page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(5000)
                     
@@ -1937,7 +1981,7 @@ class ProfilesController:
                     try:
                         create_btn = page.locator("button:has-text('Create with Flow')")
                         if create_btn.count() > 0 and create_btn.first.is_visible():
-                            print("[ProfilesController] Clicking 'Create with Flow' button...")
+                            log.info("[ProfilesController] Clicking 'Create with Flow' button...")
                             create_btn.first.click()
                             page.wait_for_timeout(3000)
                     except Exception:
@@ -1950,7 +1994,7 @@ class ProfilesController:
                     session_email = email
                     
                     for attempt in range(3):
-                        print(f"[ProfilesController] Extracting __NEXT_DATA__ (attempt {attempt+1}/3)...")
+                        log.info(f"[ProfilesController] Extracting __NEXT_DATA__ (attempt {attempt+1}/3)...")
                         try:
                             session_result = page.evaluate("""
                                 () => {
@@ -1978,32 +2022,32 @@ class ProfilesController:
                                 }
                             """)
                         except Exception as eval_err:
-                            print(f"[ProfilesController] ⚠️ Evaluate failed: {eval_err}")
+                            log.error(f"[ProfilesController] ⚠️ Evaluate failed: {eval_err}")
                             session_result = {"error": str(eval_err)}
                             page.wait_for_timeout(3000)
                             continue
                         
-                        print(f"[ProfilesController] __NEXT_DATA__ result: {session_result}")
+                        log.info(f"[ProfilesController] __NEXT_DATA__ result: {session_result}")
                         
                         access_token = session_result.get("access_token") or session_result.get("accessToken")
                         user_info = session_result.get("user", {})
                         session_email = user_info.get("email", email)
                         
                         if access_token:
-                            print(f"[ProfilesController] ✅ Got access token on attempt {attempt+1}")
+                            log.info(f"[ProfilesController] ✅ Got access token on attempt {attempt+1}")
                             break
                         
                         if attempt < 2:
-                            print(f"[ProfilesController] ⚠️ No token yet, waiting 3s...")
+                            log.warning(f"[ProfilesController] ⚠️ No token yet, waiting 3s...")
                             page.wait_for_timeout(3000)
                     
                     if not access_token:
-                        print("[ProfilesController] ⚠️ No access token from __NEXT_DATA__ - profile saved without token")
+                        log.warning("[ProfilesController] ⚠️ No access token from __NEXT_DATA__ - profile saved without token")
                     
                     # Step 7: Fetch credits/subscription on the SAME page (no second browser needed)
                     credits_data = {}
                     if access_token:
-                        print(f"[ProfilesController] Fetching credits API with token...")
+                        log.info(f"[ProfilesController] Fetching credits API with token...")
                         try:
                             credits_data = page.evaluate(f"""
                                 async () => {{
@@ -2024,25 +2068,25 @@ class ProfilesController:
                                 }}
                             """)
                         except Exception as e:
-                            print(f"[ProfilesController] Credits API error: {e}")
+                            log.error(f"[ProfilesController] Credits API error: {e}")
                             credits_data = {"error": str(e)}
                         
-                        print(f"[ProfilesController] Credits result: {credits_data}")
+                        log.info(f"[ProfilesController] Credits result: {credits_data}")
                     
                     # Sync storage before close
-                    print("[ProfilesController] Syncing browser storage...")
+                    log.info("[ProfilesController] Syncing browser storage...")
                     page.wait_for_timeout(2000)
                     
                     # Close browser (unless keep_browser_open for debugging)
                     if keep_browser_open:
-                        print("[ProfilesController] 🔓 Browser kept open for debugging. Close manually when done.")
+                        log.debug("[ProfilesController] 🔓 Browser kept open for debugging. Close manually when done.")
                     else:
                         context.close()
                     
                     # Step 8: Save/update profile with ALL data (token + credits)
                     existing = self.get_profile(session_email)
                     if existing:
-                        print(f"[ProfilesController] Updating existing profile: {session_email}")
+                        log.info(f"[ProfilesController] Updating existing profile: {session_email}")
                         existing.login_method = "browser"
                         existing.browser_profile_path = str(profile_path)
                         existing.is_ready = True
@@ -2052,7 +2096,7 @@ class ProfilesController:
                             existing.credits = credits_data.get("credits", 0)
                             existing.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
                             existing.subscription_fetched = True
-                            print(f"[ProfilesController] ✅ {existing.tier_display}, Credits: {existing.credits}")
+                            log.info(f"[ProfilesController] ✅ {existing.tier_display}, Credits: {existing.credits}")
                         self.save_profiles()
                         return session_email
                     
@@ -2075,24 +2119,24 @@ class ProfilesController:
                                 profile.credits = credits_data.get("credits", 0)
                                 profile.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
                                 profile.subscription_fetched = True
-                                print(f"[ProfilesController] ✅ {profile.tier_display}, Credits: {profile.credits}")
+                                log.info(f"[ProfilesController] ✅ {profile.tier_display}, Credits: {profile.credits}")
                             self.save_profiles()
                         
-                        print(f"[ProfilesController] ✅ Auto-login successful: {session_email}")
+                        log.info(f"[ProfilesController] ✅ Auto-login successful: {session_email}")
                         return session_email
                     else:
-                        print(f"[ProfilesController] Failed to add profile: {session_email}")
+                        log.error(f"[ProfilesController] Failed to add profile: {session_email}")
                         return None
                         
                 except Exception as e:
-                    print(f"[ProfilesController] Auto-login error: {e}")
+                    log.error(f"[ProfilesController] Auto-login error: {e}")
                     import traceback
                     traceback.print_exc()
                     context.close()
                     return None
                     
         except Exception as e:
-            print(f"[ProfilesController] Auto-login flow error: {e}")
+            log.error(f"[ProfilesController] Auto-login flow error: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -2116,17 +2160,17 @@ class ProfilesController:
         import time
         import subprocess
         
-        print(f"[ProfilesController] 🟠 Phase 2: Copy Variations + warmup for {email}")
+        log.info(f"[ProfilesController] 🟠 Phase 2: Copy Variations + warmup for {email}")
         
         profile = self.get_profile(email)
         if not profile or not profile.browser_profile_path:
-            print(f"[ProfilesController] ❌ Profile not found: {email}")
+            log.error(f"[ProfilesController] ❌ Profile not found: {email}")
             return False
         
         profile_path = Path(profile.browser_profile_path)
         
         # Step 1: Kill any Chrome using this profile
-        print(f"[ProfilesController] Step 1: Killing Chrome for {profile_path.name}...")
+        log.info(f"[ProfilesController] Step 1: Killing Chrome for {profile_path.name}...")
         try:
             self.kill_debug_browser(email)
         except Exception:
@@ -2158,18 +2202,18 @@ class ProfilesController:
             )
             subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10)
         except Exception as e:
-            print(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
+            log.warning(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
         
         time.sleep(3)  # Wait for Chrome to fully exit
         
         # Step 2: Copy Variations from donor
-        print(f"[ProfilesController] Step 2: Copying Variations from donor...")
+        log.info(f"[ProfilesController] Step 2: Copying Variations from donor...")
         donor_path = self._find_donor_profile(exclude_email=email)
         
         if not donor_path:
-            print(f"[ProfilesController] ⚠️ No donor profile found — warmup only")
+            log.warning(f"[ProfilesController] ⚠️ No donor profile found — warmup only")
         else:
-            print(f"[ProfilesController] Donor: {donor_path.name}")
+            log.info(f"[ProfilesController] Donor: {donor_path.name}")
             self._copy_variations_files(donor_path, profile_path)
         
         time.sleep(3)  # Let Variations files settle
@@ -2181,7 +2225,7 @@ class ProfilesController:
             "https://labs.google/fx/tools/flow",
         ]
         
-        print(f"[ProfilesController] Step 3: Warming up browser with {len(warmup_urls)} tabs...")
+        log.info(f"[ProfilesController] Step 3: Warming up browser with {len(warmup_urls)} tabs...")
         try:
             # Use subprocess.Popen instead of Playwright to avoid greenlet
             # thread crash. Playwright's sync API requires main thread (greenlet),
@@ -2193,7 +2237,7 @@ class ProfilesController:
                 _chrome_exe = self._find_browser("auto")
             
             if not _chrome_exe:
-                print(f"[ProfilesController] ❌ No Chrome executable found for warmup")
+                log.error(f"[ProfilesController] ❌ No Chrome executable found for warmup")
                 return False
             
             chrome_args = [
@@ -2206,7 +2250,7 @@ class ProfilesController:
                 "--no-sandbox",
             ] + warmup_urls  # Chrome opens each URL as a separate tab
             
-            print(f"[ProfilesController] Launching: {Path(_chrome_exe).name} with {len(warmup_urls)} URLs")
+            log.info(f"[ProfilesController] Launching: {Path(_chrome_exe).name} with {len(warmup_urls)} URLs")
             proc = subprocess.Popen(
                 chrome_args,
                 stdout=subprocess.DEVNULL,
@@ -2216,11 +2260,11 @@ class ProfilesController:
             # Wait for Variations Service enrollment + x-client-data generation
             # Chrome needs ~15s of runtime for Variations Service to download
             # config from Google servers and generate x-client-data header.
-            print(f"[ProfilesController] ⏳ Waiting 15s for Variations enrollment (PID={proc.pid})...")
+            log.info(f"[ProfilesController] ⏳ Waiting 15s for Variations enrollment (PID={proc.pid})...")
             time.sleep(15)
             
             # Graceful shutdown: terminate, then force-kill if needed
-            print(f"[ProfilesController] Closing warmup browser (PID={proc.pid})...")
+            log.info(f"[ProfilesController] Closing warmup browser (PID={proc.pid})...")
             proc.terminate()
             try:
                 proc.wait(timeout=10)
@@ -2228,11 +2272,11 @@ class ProfilesController:
                 proc.kill()
                 proc.wait(timeout=5)
             
-            print(f"[ProfilesController] ✅ Phase 2 warmup complete for {email}")
+            log.info(f"[ProfilesController] ✅ Phase 2 warmup complete for {email}")
             return True
             
         except Exception as e:
-            print(f"[ProfilesController] ❌ Warmup browser error: {e}")
+            log.error(f"[ProfilesController] ❌ Warmup browser error: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -2292,12 +2336,12 @@ class ProfilesController:
             if src.exists():
                 try:
                     shutil.copy2(str(src), str(dst))
-                    print(f"[ProfilesController] ✅ Copied {filename}: {source_path.name} → {target_path.name}")
+                    log.info(f"[ProfilesController] ✅ Copied {filename}: {source_path.name} → {target_path.name}")
                     copied += 1
                 except Exception as e:
-                    print(f"[ProfilesController] ❌ Failed to copy {filename}: {e}")
+                    log.error(f"[ProfilesController] ❌ Failed to copy {filename}: {e}")
             else:
-                print(f"[ProfilesController] ⚠️ {filename} not found in {source_path.name}")
+                log.warning(f"[ProfilesController] ⚠️ {filename} not found in {source_path.name}")
         
         return copied == 2
     
@@ -2411,7 +2455,7 @@ class ProfilesController:
                     temp_file.unlink(missing_ok=True)
                     
                 except Exception as e:
-                    print(f"[ProfilesController] Cookie read error: {e}")
+                    log.error(f"[ProfilesController] Cookie read error: {e}")
         
         # Alternative: Try to read from Local State or Preferences
         prefs_paths = [
@@ -2440,7 +2484,7 @@ class ProfilesController:
                         return email
                         
                 except Exception as e:
-                    print(f"[ProfilesController] Prefs read error: {e}")
+                    log.error(f"[ProfilesController] Prefs read error: {e}")
         
         return None
     
@@ -2466,7 +2510,7 @@ class ProfilesController:
             updates["credits"] = credits
         
         self.update_profile(email, **updates)
-        print(f"[ProfilesController] Session verified for: {email}")
+        log.info(f"[ProfilesController] Session verified for: {email}")
         
         return True
     
@@ -2491,14 +2535,14 @@ class ProfilesController:
         """
         profile = self.get_profile(email)
         if not profile:
-            print(f"[ProfilesController] Profile not found: {email}")
+            log.warning(f"[ProfilesController] Profile not found: {email}")
             return False
         
         if not profile.profile_path:
-            print(f"[ProfilesController] No profile path for: {email}")
+            log.info(f"[ProfilesController] No profile path for: {email}")
             return False
         
-        print(f"[ProfilesController] Extracting tokens for: {email}")
+        log.info(f"[ProfilesController] Extracting tokens for: {email}")
         
         try:
             from core.token_extractor import extract_tokens_sync
@@ -2511,16 +2555,16 @@ class ProfilesController:
                     email,
                     is_ready=True,
                 )
-                print(f"[ProfilesController] Tokens extracted for: {email}")
-                print(f"[ProfilesController] Token complete: {tokens.is_complete}")
+                log.info(f"[ProfilesController] Tokens extracted for: {email}")
+                log.info(f"[ProfilesController] Token complete: {tokens.is_complete}")
                 return True
             else:
-                print(f"[ProfilesController] Token extraction failed for: {email}")
+                log.error(f"[ProfilesController] Token extraction failed for: {email}")
                 self.update_profile(email, is_ready=False)
                 return False
                 
         except Exception as e:
-            print(f"[ProfilesController] Error extracting tokens: {e}")
+            log.error(f"[ProfilesController] Error extracting tokens: {e}")
             return False
     
     # =========================================================================
@@ -2543,7 +2587,7 @@ class ProfilesController:
                 else:
                     results["failed"] += 1
             except Exception as e:
-                print(f"[ProfilesController] Batch refresh error for {profile.email}: {e}")
+                log.error(f"[ProfilesController] Batch refresh error for {profile.email}: {e}")
                 results["failed"] += 1
         
         return results
@@ -2571,11 +2615,11 @@ class ProfilesController:
             with open(export_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             
-            print(f"[ProfilesController] Exported {len(self._profiles)} profiles to {export_path}")
+            log.info(f"[ProfilesController] Exported {len(self._profiles)} profiles to {export_path}")
             return True
             
         except Exception as e:
-            print(f"[ProfilesController] Export failed: {e}")
+            log.error(f"[ProfilesController] Export failed: {e}")
             return False
     
     def import_profiles(self, import_path: Path, merge: bool = True) -> int:
@@ -2611,11 +2655,11 @@ class ProfilesController:
             self.save_profiles()
             self._notify("profiles_changed")
             
-            print(f"[ProfilesController] Imported {imported} profiles from {import_path}")
+            log.info(f"[ProfilesController] Imported {imported} profiles from {import_path}")
             return imported
             
         except Exception as e:
-            print(f"[ProfilesController] Import failed: {e}")
+            log.error(f"[ProfilesController] Import failed: {e}")
             return 0
     
     # =========================================================================
@@ -2625,7 +2669,7 @@ class ProfilesController:
     def load_profiles(self) -> List[ChromeProfile]:
         """Load profiles from JSON file."""
         if not self.storage_path.exists():
-            print(f"[ProfilesController] No profiles file, starting fresh")
+            log.info(f"[ProfilesController] No profiles file, starting fresh")
             self._profiles = []
             return self._profiles
         
@@ -2637,10 +2681,10 @@ class ProfilesController:
                 ChromeProfile.from_dict(p) 
                 for p in data.get("profiles", [])
             ]
-            print(f"[ProfilesController] Loaded {len(self._profiles)} profiles")
+            log.info(f"[ProfilesController] Loaded {len(self._profiles)} profiles")
             
         except Exception as e:
-            print(f"[ProfilesController] Error loading profiles: {e}")
+            log.error(f"[ProfilesController] Error loading profiles: {e}")
             self._profiles = []
         
         return self._profiles
@@ -2656,10 +2700,10 @@ class ProfilesController:
             with open(self.storage_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             
-            print(f"[ProfilesController] Saved {len(self._profiles)} profiles")
+            log.info(f"[ProfilesController] Saved {len(self._profiles)} profiles")
             
         except Exception as e:
-            print(f"[ProfilesController] Error saving profiles: {e}")
+            log.error(f"[ProfilesController] Error saving profiles: {e}")
     
     # =========================================================================
     # Helpers
@@ -2672,7 +2716,7 @@ class ProfilesController:
             try:
                 callback(*args)
             except Exception as e:
-                print(f"[ProfilesController] Callback error: {e}")
+                log.error(f"[ProfilesController] Callback error: {e}")
     
     def get_status_summary(self) -> dict:
         """Get summary for display."""

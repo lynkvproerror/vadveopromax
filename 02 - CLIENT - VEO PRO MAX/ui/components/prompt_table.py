@@ -141,6 +141,7 @@ class PromptTable(QWidget):
         on_delete: Optional[Callable[[int], None]] = None,
         image_mode: ImageMode = ImageMode.NONE,
         accent_color: str = "",
+        show_continuation: bool = True,
     ):
         super().__init__(parent)
         
@@ -149,6 +150,7 @@ class PromptTable(QWidget):
         self._rows: List[PromptRow] = []
         self._refreshing = False  # Guard against re-entrance
         self._image_mode = image_mode
+        self._show_continuation = show_continuation
         self._accent_color = accent_color or Theme.BLUE
         self._image_config = self._IMAGE_CONFIGS[image_mode]
         self._image_col_count = 1 if image_mode != ImageMode.NONE else 0  # Single 'Images' column
@@ -172,8 +174,8 @@ class PromptTable(QWidget):
             self._refresh_table()
     
     def _has_continuation(self) -> bool:
-        """Whether this mode supports continuation (video modes only)."""
-        return self._image_mode in (ImageMode.NONE, ImageMode.I2V, ImageMode.R2V)
+        """Whether this table shows the Continue column."""
+        return self._show_continuation
     
     def _build_columns(self):
         """Build column headers based on image_mode."""

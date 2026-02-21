@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 """
 VEO Pro Max - Credentials Manager
 
@@ -79,7 +82,7 @@ class CredentialsManager:
             True if saved successfully
         """
         if not self._fernet:
-            print("[CredentialsManager] ❌ cryptography package not installed")
+            log.error("[CredentialsManager] ❌ cryptography package not installed")
             return False
         
         try:
@@ -100,11 +103,11 @@ class CredentialsManager:
             
             # Save to file
             self.storage_path.write_bytes(encrypted)
-            print(f"[CredentialsManager] ✅ Credentials saved for {email}")
+            log.info(f"[CredentialsManager] ✅ Credentials saved for {email}")
             return True
             
         except Exception as e:
-            print(f"[CredentialsManager] ❌ Failed to save: {e}")
+            log.error(f"[CredentialsManager] ❌ Failed to save: {e}")
             return False
     
     def _load_all_raw(self) -> Optional[Dict[str, Any]]:
@@ -152,7 +155,7 @@ class CredentialsManager:
         
         # Return first entry, reconstruct email from key
         for email, creds in all_accounts.items():
-            print(f"[CredentialsManager] ✅ Loaded credentials for {email}")
+            log.info(f"[CredentialsManager] ✅ Loaded credentials for {email}")
             return {"email": email, "password": creds.get("password", "")}
         return None
     
@@ -171,7 +174,7 @@ class CredentialsManager:
         
         creds = all_accounts.get(email)
         if creds:
-            print(f"[CredentialsManager] ✅ Loaded credentials for {email}")
+            log.info(f"[CredentialsManager] ✅ Loaded credentials for {email}")
             return {"email": email, "password": creds.get("password", "")}
         return None
     
@@ -200,7 +203,7 @@ class CredentialsManager:
                 return False
             
             del all_accounts[email]
-            print(f"[CredentialsManager] 🗑️ Deleted credentials for {email}")
+            log.info(f"[CredentialsManager] 🗑️ Deleted credentials for {email}")
             
             if not all_accounts:
                 # No more accounts — delete the file entirely
@@ -216,7 +219,7 @@ class CredentialsManager:
             return True
             
         except Exception as e:
-            print(f"[CredentialsManager] ❌ Failed to delete for {email}: {e}")
+            log.error(f"[CredentialsManager] ❌ Failed to delete for {email}: {e}")
             return False
     
     def delete_credentials(self) -> bool:
@@ -228,10 +231,10 @@ class CredentialsManager:
         try:
             if self.storage_path.exists():
                 self.storage_path.unlink()
-                print("[CredentialsManager] ✅ All credentials deleted")
+                log.info("[CredentialsManager] ✅ All credentials deleted")
             return True
         except Exception as e:
-            print(f"[CredentialsManager] ❌ Failed to delete: {e}")
+            log.error(f"[CredentialsManager] ❌ Failed to delete: {e}")
             return False
     
     def get_stored_email(self) -> Optional[str]:

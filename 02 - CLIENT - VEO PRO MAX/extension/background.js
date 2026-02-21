@@ -14,6 +14,7 @@
 // ── State ──────────────────────────────────────────────────────────────
 const WEBSOCKET_PORTS = [8765, 8766, 8767]; // Primary + fallback ports
 const RECONNECT_INTERVAL = 3000; // 3 seconds
+const MAX_TABS = 3; // Maximum number of browser tabs allowed (Gmail, YouTube, VEO Flow)
 
 let ws = null;
 let wsConnected = false;
@@ -412,17 +413,28 @@ async function handleAppMessage(msg) {
         console.log(`[VEO Bridge] Assigned email ${email} to existing VEO tab ${tabId} (${targetTab.url})`);
         wsSend({ action: 'register', email, tabId });
       } else {
-        // No VEO tab exists at all — create one, pinned and inactive
-        console.log(`[VEO Bridge] No VEO tab found, creating one for ${email}...`);
-        const newTab = await chrome.tabs.create({
-          url: VEO_URL,
-          active: false,
-          pinned: true,
-        });
-        tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
-        console.log(`[VEO Bridge] Created VEO tab ${newTab.id} for ${email}`);
-        wsSend({ action: 'register', email, tabId: newTab.id });
-        startZombieTimer(newTab.id);  // Track zombie potential
+        // No VEO tab exists — check tab limit before creating
+        const allTabs = await chrome.tabs.query({ currentWindow: true });
+        if (allTabs.length >= MAX_TABS) {
+          console.warn(`[VEO Bridge] ⚠️ Tab limit reached (${allTabs.length}/${MAX_TABS}) — NOT creating tab for ${email}`);
+          wsSend({
+            action: 'register',
+            email,
+            tabId: null,
+            error: `Tab limit reached (${MAX_TABS})`,
+          });
+        } else {
+          console.log(`[VEO Bridge] Creating VEO tab for ${email} (${allTabs.length}/${MAX_TABS} tabs)...`);
+          const newTab = await chrome.tabs.create({
+            url: VEO_URL,
+            active: false,
+            pinned: true,
+          });
+          tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+          console.log(`[VEO Bridge] Created VEO tab ${newTab.id} for ${email}`);
+          wsSend({ action: 'register', email, tabId: newTab.id });
+          startZombieTimer(newTab.id);
+        }
       }
       break;
     }
@@ -1112,8 +1124,14 @@ async function ensureVeoTab() {
       return;
     }
 
-    // No VEO tab found — create one, pinned and inactive (background)
-    console.log('[VEO Bridge] 🆕 No VEO tab found, opening one...');
+    // No VEO tab found — check tab limit before creating
+    const allTabs = await chrome.tabs.query({ currentWindow: true });
+    if (allTabs.length >= MAX_TABS) {
+      console.warn(`[VEO Bridge] ⚠️ Tab limit reached (${allTabs.length}/${MAX_TABS}) — NOT creating VEO tab`);
+      return;
+    }
+
+    console.log(`[VEO Bridge] 🆕 No VEO tab found, opening one (${allTabs.length}/${MAX_TABS} tabs)...`);
     const tab = await chrome.tabs.create({
       url: VEO_URL,
       active: false, // don't steal focus from current tab
@@ -1148,13 +1166,86 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('[VEO Bridge] Extension installed/updated');
   chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.33 });
   connectWebSocket();
-  // Inject into already-open VEO tabs, then ensure one exists
-  injectExistingTabs().then(() => ensureVeoTab());
+  // Inject into already-open VEO tabs, clean up excess, then ensure one exists
+  injectExistingTabs().then(() => {
+    closeExcessTabs();
+    ensureVeoTab();
+  });
 });
 
 // ── Startup ─────────────────────────────────────────────────────────────
 
 connectWebSocket();
 // Also inject on service worker startup (not just install)
-injectExistingTabs().then(() => ensureVeoTab());
+injectExistingTabs().then(() => {
+  closeExcessTabs(); // Clean up any accumulated tabs first
+  ensureVeoTab();
+});
 console.log('[VEO Bridge] Background service worker started');
+
+
+// ── Tab Cleanup ─────────────────────────────────────────────────────────
+// Close excess tabs beyond MAX_TABS limit.
+// Prioritizes closing: about:blank > unrecognized > excess VEO tabs.
+
+const ALLOWED_URL_FRAGMENTS = [
+  'mail.google.com',       // Gmail
+  'youtube.com',           // YouTube
+  'labs.google',           // Google Flow
+];
+
+async function closeExcessTabs() {
+  try {
+    const allTabs = await chrome.tabs.query({ currentWindow: true });
+    if (allTabs.length <= MAX_TABS) return 0;
+
+    console.log(`[VEO Bridge] Tab cleanup: ${allTabs.length} tabs found (max=${MAX_TABS})`);
+
+    // Categorize tabs
+    const allowed = [];
+    const blank = [];
+    const other = [];
+
+    for (const tab of allTabs) {
+      const url = tab.url || '';
+      if (url === 'about:blank' || url === 'chrome://newtab/' || url === '') {
+        blank.push(tab);
+      } else if (ALLOWED_URL_FRAGMENTS.some(frag => url.includes(frag))) {
+        allowed.push(tab);
+      } else {
+        other.push(tab);
+      }
+    }
+
+    // Build close list: blank > other > excess allowed
+    const toClose = [...blank, ...other, ...allowed.slice(MAX_TABS)];
+
+    // Keep at least 1 tab alive
+    while (toClose.length > 0 && allTabs.length - toClose.length < 1) {
+      toClose.shift();
+    }
+
+    let closed = 0;
+    for (const tab of toClose) {
+      try {
+        await chrome.tabs.remove(tab.id);
+        // Also clean up tabState
+        if (tabState[tab.id]) {
+          delete tabState[tab.id];
+        }
+        closed++;
+        console.log(`[VEO Bridge] Closed excess tab ${tab.id}: ${(tab.url || '?').substring(0, 60)}`);
+      } catch (e) {
+        console.debug(`[VEO Bridge] Could not close tab ${tab.id}: ${e.message}`);
+      }
+    }
+
+    if (closed > 0) {
+      console.log(`[VEO Bridge] Tab cleanup complete: closed ${closed} tab(s)`);
+    }
+    return closed;
+  } catch (e) {
+    console.error('[VEO Bridge] closeExcessTabs failed:', e);
+    return 0;
+  }
+}

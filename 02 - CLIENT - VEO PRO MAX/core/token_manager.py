@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 """
 Token Manager for VEO Pro Max.
 
@@ -60,14 +63,14 @@ class TokenManager:
         self._running = True
         self._thread = threading.Thread(target=self._refresh_loop, daemon=True)
         self._thread.start()
-        print("[TokenManager] Started auto-refresh loop")
+        log.info("[TokenManager] Started auto-refresh loop")
     
     def stop(self):
         """Stop the auto-refresh thread."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=2)
-        print("[TokenManager] Stopped")
+        log.info("[TokenManager] Stopped")
     
     def _refresh_loop(self):
         """Background loop to check token expiry."""
@@ -75,7 +78,7 @@ class TokenManager:
             try:
                 self._check_and_flag_expiring()
             except Exception as e:
-                print(f"[TokenManager] Error in refresh loop: {e}")
+                log.error(f"[TokenManager] Error in refresh loop: {e}")
             
             # Sleep for check interval
             for _ in range(self.CHECK_INTERVAL_SECONDS):
@@ -97,15 +100,15 @@ class TokenManager:
             
             # Check if token needs refresh (10 min buffer)
             if expires_at - now < self.REFRESH_BUFFER_SECONDS:
-                print(f"[TokenManager] Token expired/expiring for {email}, refreshing...")
+                log.info(f"[TokenManager] Token expired/expiring for {email}, refreshing...")
                 
                 # Notify callback — browser session will handle refresh
                 if "token_refreshed" in self._callbacks:
                     try:
                         self._callbacks["token_refreshed"](email)
-                        print(f"[TokenManager] ✅ Token refreshed for {email}")
+                        log.info(f"[TokenManager] ✅ Token refreshed for {email}")
                     except Exception as e:
-                        print(f"[TokenManager] ❌ Failed to refresh token for {email}: {e}")
+                        log.error(f"[TokenManager] ❌ Failed to refresh token for {email}: {e}")
     
     def _load_tokens(self) -> Dict:
         """Load tokens from file."""
@@ -116,7 +119,7 @@ class TokenManager:
             with open(self.tokens_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"[TokenManager] Error loading tokens: {e}")
+            log.error(f"[TokenManager] Error loading tokens: {e}")
             return {}
     
     def _save_tokens(self, tokens: Dict):
@@ -125,7 +128,7 @@ class TokenManager:
             with open(self.tokens_path, 'w', encoding='utf-8') as f:
                 json.dump(tokens, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"[TokenManager] Error saving tokens: {e}")
+            log.error(f"[TokenManager] Error saving tokens: {e}")
     
     def save_token(self, email: str, access_token: str, expires_in: int = 3599):
         """Save/update token for an email (from browser session).
@@ -159,7 +162,7 @@ class TokenManager:
         token_data = tokens.get(email)
         
         if not token_data:
-            print(f"[TokenManager] No tokens found for {email}")
+            log.info(f"[TokenManager] No tokens found for {email}")
             return None
         
         access_token = token_data.get("access_token", "")
@@ -172,7 +175,7 @@ class TokenManager:
             return access_token
         
         # Token expired — needs browser re-login
-        print(f"[TokenManager] Token expired/expiring for {email}, needs browser refresh")
+        log.info(f"[TokenManager] Token expired/expiring for {email}, needs browser refresh")
         return None
     
     def remove_tokens(self, email: str):
@@ -182,7 +185,7 @@ class TokenManager:
         if email in tokens:
             del tokens[email]
             self._save_tokens(tokens)
-            print(f"[TokenManager] Removed tokens for {email}")
+            log.info(f"[TokenManager] Removed tokens for {email}")
     
     def get_all_emails(self) -> list:
         """Get list of all emails with stored tokens."""

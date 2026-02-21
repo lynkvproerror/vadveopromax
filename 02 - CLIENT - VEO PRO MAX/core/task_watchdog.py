@@ -26,7 +26,7 @@ class TaskWatchdog:
     
     Scans all tasks every SCAN_INTERVAL seconds. If a task has been
     in RUNNING or WAITING_POLL longer than its timeout, it is force
-    re-queued and the orphaned slot released.
+    re-queued and the orphaned workers released.
     """
     
     # Timeout thresholds (seconds)
@@ -140,15 +140,17 @@ class TaskWatchdog:
         # Re-queue in dispatcher
         self._dispatcher.requeue_task(task)
         
-        # Try to release the orphaned slot
+        # Try to release the orphaned workers
         if assigned_account:
             try:
-                account = self._engine._account_manager.get_account(assigned_account)
+                account = self._engine.get_account(assigned_account)
                 if account:
-                    account.release_slot()
-                    log.info(f"[Watchdog] Released orphaned slot for {assigned_account}")
+                    # Release workers proportional to task output_count
+                    worker_count = getattr(task, '_worker_count', None) or getattr(task, 'output_count', 1) or 1
+                    account.release_workers(worker_count)
+                    log.info(f"[Watchdog] Released {worker_count} orphaned worker(s) for {assigned_account}")
             except Exception as e:
-                log.debug(f"[Watchdog] Could not release slot for {assigned_account}: {e}")
+                log.debug(f"[Watchdog] Could not release workers for {assigned_account}: {e}")
         
         # Emit event for subscribers (Journal, StatusAggregator)
         emit_event(EventType.ENGINE_ERROR, {

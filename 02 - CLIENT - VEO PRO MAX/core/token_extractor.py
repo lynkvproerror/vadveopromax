@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 """
 VEO Pro Max - Token Extractor
 
@@ -187,13 +190,13 @@ class TokenExtractor:
             # 1. Extract access token from __NEXT_DATA__
             access_token, email = await self._extract_access_token(page)
             if not access_token:
-                print("Failed to extract access token")
+                log.error("Failed to extract access token")
                 return None
             
             # 2. Extract reCAPTCHA token
             recaptcha_token = await self._extract_recaptcha_token(page)
             if not recaptcha_token:
-                print("Warning: Failed to extract reCAPTCHA token")
+                log.error("Warning: Failed to extract reCAPTCHA token")
             
             # 3. Get captured x-browser headers
             browser_validation = self._captured_headers.get("x-browser-validation", "")
@@ -207,7 +210,7 @@ class TokenExtractor:
                 client_data = self._captured_headers.get("x-client-data", "")
             
             if not browser_validation:
-                print("Warning: Failed to capture x-browser-validation header")
+                log.error("Warning: Failed to capture x-browser-validation header")
             
             return ExtractedTokens(
                 email=email or "unknown@gmail.com",
@@ -219,7 +222,7 @@ class TokenExtractor:
             )
             
         except Exception as e:
-            print(f"Token extraction failed: {e}")
+            log.error(f"Token extraction failed: {e}")
             return None
         finally:
             if self._browser:
@@ -287,7 +290,7 @@ class TokenExtractor:
             return access_token, email
             
         except Exception as e:
-            print(f"Access token extraction failed: {e}")
+            log.error(f"Access token extraction failed: {e}")
             return None, None
     
     async def _extract_recaptcha_token(self, page) -> Optional[str]:
@@ -300,7 +303,7 @@ class TokenExtractor:
                     timeout=10000
                 )
             except Exception:
-                print("grecaptcha not available on page")
+                log.info("grecaptcha not available on page")
                 return None
             
             # Find site key and execute
@@ -346,7 +349,7 @@ class TokenExtractor:
             return token
             
         except Exception as e:
-            print(f"reCAPTCHA extraction failed: {e}")
+            log.error(f"reCAPTCHA extraction failed: {e}")
             return None
     
     async def _trigger_api_call(self, page):
@@ -399,8 +402,8 @@ async def extract_tokens(profile_path: str, headless: bool = True) -> Optional[E
     Example:
         tokens = await extract_tokens("C:/Users/xxx/Chrome/User Data/Default")
         if tokens:
-            print(f"Access Token: {tokens.access_token[:20]}...")
-            print(f"Complete: {tokens.is_complete}")
+            log.info(f"Access Token: {tokens.access_token[:20]}...")
+            log.info(f"Complete: {tokens.is_complete}")
     """
     extractor = TokenExtractor()
     await extractor.initialize()
@@ -466,5 +469,5 @@ def extract_headers_from_har(har_path: str) -> Dict[str, str]:
         return result
         
     except Exception as e:
-        print(f"HAR extraction failed: {e}")
+        log.error(f"HAR extraction failed: {e}")
         return {}
