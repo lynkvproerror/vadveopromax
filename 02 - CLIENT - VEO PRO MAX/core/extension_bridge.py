@@ -86,6 +86,7 @@ class ExtensionBridge:
         self._server = None  # websockets server
         self._connections: list[ExtensionConnection] = []
         self._pending_requests: Dict[str, asyncio.Future] = {}  # requestId → Future
+        self._pending_request_conns: Dict[str, ExtensionConnection] = {}  # GAP #9: requestId → connection owner
         self._recaptcha_locks: Dict[str, asyncio.Lock] = {}  # email → Lock (serialize per-account)
         self._heartbeat_task: Optional[asyncio.Task] = None  # Fix 5: heartbeat loop
         self._preserved_headers: Dict[str, Dict[str, str]] = {}  # Survive disconnects
@@ -101,12 +102,25 @@ class ExtensionBridge:
         self._short_token_counts: Dict[str, int] = {}  # email → consecutive short token count
         self._SHORT_TOKEN_RELOAD_THRESHOLD = 3
 
+        # Rate-limit stale header debug logs (prevent log spam)
+        self._stale_log_times: Dict[str, float] = {}  # email → last log timestamp
+        _STALE_LOG_INTERVAL = 60  # Log stale headers at most once per 60s per email
+
+        # Frozen tab escalation tracking
+        self._frozen_tab_counts: Dict[str, int] = {}  # email → consecutive frozen events
+        self._frozen_tab_first_at: Dict[str, float] = {}  # email → timestamp of first frozen event in window
+        self._FROZEN_ESCALATION_THRESHOLD = 3  # After N consecutive frozen events → escalate
+        self._FROZEN_WINDOW = 300  # 5 min window for counting frozen events
+        self._refresh_cooldown_times: Dict[str, float] = {}  # email → last refresh trigger timestamp (centralized)
+
         # Callbacks (set by AccountManager/AppController)
         self.on_headers_update: Optional[Callable] = None    # (email, headers, access_token)
         self.on_extension_connect: Optional[Callable] = None  # (email)
         self.on_extension_disconnect: Optional[Callable] = None  # (email)
         self.on_unregistered_connection: Optional[Callable] = None  # () — called when a new connection hasn't registered after delay
-        self._on_readiness_token: Optional[Callable] = None  # (email, token) — cache trial-execute token
+        self.on_readiness_token: Optional[Callable] = None  # (email, token) — cache trial-execute token
+        self.on_account_logged_out: Optional[Callable] = None  # (email, reason) — account logout detected
+        self.on_tab_dead: Optional[Callable] = None  # (email, reason) — tab declared dead after retries
 
     @property
     def port(self) -> int:
@@ -152,7 +166,40 @@ class ExtensionBridge:
         finally:
             # Cleanup — safe even if other waiters exist (they already got the event)
             self._connection_events.pop(email, None)
-    
+
+    async def _trigger_refresh(self, email: str, reason: str, level: str = "lightweight"):
+        """Centralized refresh trigger — single entry point for all callers.
+        
+        Consolidates scattered refresh triggers (Concurrency Analysis §15.3):
+        - tab_frozen handler
+        - heartbeat loop (missing content heartbeat)
+        - refresh_manager (stale headers)
+        
+        Args:
+            email: Account email
+            reason: Human-readable reason for logging
+            level: "lightweight" or "full"
+        """
+        # Global cooldown: 30s between ANY refresh attempt per email
+        now = time.time()
+        last = self._refresh_cooldown_times.get(email, 0)
+        if now - last < 30:
+            return  # Cooldown active — skip
+        self._refresh_cooldown_times[email] = now
+        # ★ Reset content heartbeat — prevent heartbeat_loop from detecting
+        # stale pre-reload timestamp and triggering ANOTHER recovery
+        self._content_heartbeats[email] = now
+
+        log.info(f"[ExtensionBridge] 🔄 Refresh [{level}] for {email} — {reason}")
+
+        try:
+            if level == "full":
+                await self.refresh_headers(email, timeout=10)
+            else:
+                await self.refresh_headers_lightweight(email, timeout=10)
+        except Exception as e:
+            log.debug(f"[ExtensionBridge] Refresh failed for {email}: {e}")
+
     @staticmethod
     def _is_ws_open(ws) -> bool:
         """Check if a WebSocket connection is open (websockets v16+ compatible).
@@ -223,13 +270,14 @@ class ExtensionBridge:
         log.debug(f"[ExtensionBridge] No unregistered connection available for {email}")
         return False
 
-    def get_cached_headers(self, email: str, max_age_seconds: int = 300) -> Optional[Dict[str, str]]:
+    def get_cached_headers(self, email: str, max_age_seconds: int = 180) -> Optional[Dict[str, str]]:
         """Get latest cached headers for an email (from auto-push).
         
         Args:
             email: Account email to look up.
             max_age_seconds: Max age in seconds before headers are considered stale.
-                             Default 300 (5 minutes). Set 0 to skip freshness check.
+                             Default 180 (3 minutes) — GAP #4: synced with Extension's
+                             3-minute HEADER_REFRESH_ALARM cycle. Set 0 to skip freshness check.
         
         Returns:
             Headers dict if fresh, None if stale or not found.
@@ -240,10 +288,15 @@ class ExtensionBridge:
                 if max_age_seconds > 0 and email in conn.headers_updated_at:
                     age = (datetime.now() - conn.headers_updated_at[email]).total_seconds()
                     if age > max_age_seconds:
-                        log.debug(
-                            f"[ExtensionBridge] Cached headers for {email} are stale "
-                            f"({age:.0f}s > {max_age_seconds}s)"
-                        )
+                        # Rate-limit stale debug log: once per 60s per email
+                        now_ts = time.time()
+                        last_log = self._stale_log_times.get(email, 0)
+                        if now_ts - last_log >= 60:
+                            log.debug(
+                                f"[ExtensionBridge] Cached headers for {email} are stale "
+                                f"({age:.0f}s > {max_age_seconds}s)"
+                            )
+                            self._stale_log_times[email] = now_ts
                         return None
                 return conn.headers[email]
         # Fallback: preserved headers from last disconnected session
@@ -364,7 +417,9 @@ class ExtensionBridge:
         async with self._recaptcha_locks[email]:
             request_id = str(uuid.uuid4())
             future = asyncio.get_running_loop().create_future()
+            conn = self._find_connection(email)
             self._pending_requests[request_id] = future
+            self._pending_request_conns[request_id] = conn  # GAP #9: tag with connection
 
             try:
                 await self._ws_send(conn, {
@@ -388,15 +443,15 @@ class ExtensionBridge:
                             f"{len(token)} chars (min {self.MIN_TOKEN_LENGTH}) — "
                             f"consecutive #{count}"
                         )
-                        # Auto-reload tab after threshold consecutive short tokens
+                        # GAP #3: Let Extension handle tab reload (it has direct
+                        # chrome.tabs.reload access). App only tracks count and
+                        # resets counter — avoids double reload (11s wasted).
                         if count >= self._SHORT_TOKEN_RELOAD_THRESHOLD:
                             log.warning(
-                                f"[ExtensionBridge] 🔄 Triggering tab reload for {email} — "
-                                f"{count} consecutive short tokens (reCAPTCHA widget broken)"
+                                f"[ExtensionBridge] 🔄 Short token threshold reached for {email} — "
+                                f"Extension will auto-reload tab (App skips duplicate reload)"
                             )
                             self._short_token_counts[email] = 0
-                            # Reload via refresh_headers (reloads VEO tab)
-                            asyncio.create_task(self._reload_tab_for_recaptcha(email))
                         return None
                     # Valid token — reset counter
                     self._short_token_counts[email] = 0
@@ -412,14 +467,14 @@ class ExtensionBridge:
                             f"[ExtensionBridge] ❌ reCAPTCHA token too short for {email}: "
                             f"{error} — consecutive #{count}"
                         )
-                        # Auto-reload tab after threshold consecutive short tokens
+                        # GAP #3: Let Extension handle tab reload (direct chrome.tabs.reload).
+                        # App-side only tracks count — no duplicate reload.
                         if count >= self._SHORT_TOKEN_RELOAD_THRESHOLD:
                             log.warning(
-                                f"[ExtensionBridge] 🔄 Triggering tab reload for {email} — "
-                                f"{count} consecutive short tokens (reCAPTCHA widget broken)"
+                                f"[ExtensionBridge] 🔄 Short token threshold reached for {email} — "
+                                f"Extension will auto-reload tab (App skips duplicate reload)"
                             )
                             self._short_token_counts[email] = 0
-                            asyncio.create_task(self._reload_tab_for_recaptcha(email))
                     else:
                         log.warning(f"[ExtensionBridge] reCAPTCHA failed for {email}: {error}")
                     return None
@@ -428,6 +483,239 @@ class ExtensionBridge:
                 return None
             finally:
                 self._pending_requests.pop(request_id, None)
+                self._pending_request_conns.pop(request_id, None)  # GAP #9
+
+    async def submit_prompt(
+        self,
+        email: str,
+        endpoint: str,
+        body: dict,
+        needs_recaptcha: bool = True,
+        timeout: float = 35.0,
+    ) -> Optional[dict]:
+        """Submit prompt via Extension — reCAPTCHA + API call from page context.
+
+        Extension generates reCAPTCHA token and sends fetch() from the real
+        labs.google page. Token is used immediately (<100ms), all browser
+        headers (x-client-data, x-browser-*) are auto-added by Chrome.
+
+        Args:
+            email: Account email to submit for
+            endpoint: Endpoint key (T2V, I2V_SINGLE, I2V_DUAL, R2V, T2I,
+                      STATUS, UPSCALE_VIDEO, UPLOAD)
+            body: Pre-built request body dict (WITHOUT recaptchaContext —
+                  Extension adds fresh token). Must include clientContext
+                  (sessionId, tool, projectId, paygateTier) and requests[].
+            needs_recaptcha: Whether to generate reCAPTCHA token (default True)
+            timeout: Max seconds to wait for response (default 35s —
+                     reCAPTCHA 3-5s + API 2-10s + buffer)
+
+        Returns:
+            dict with keys: success, status, statusText, data, tokenLength, error
+            or None if failed/timeout
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] No connection for {email} — cannot submit prompt")
+            return None
+
+        # Pre-warm: simulate activity if tab has been idle >60s
+        last_hb = self._content_heartbeats.get(email, 0)
+        if last_hb and (time.time() - last_hb) > 60:
+            log.debug(f"[ExtensionBridge] Tab idle >60s for {email} — simulating activity before submit")
+            try:
+                await self.simulate_activity(email, timeout=3.0)
+                await asyncio.sleep(0.5)
+            except Exception:
+                pass
+
+        # Serialize submissions per account (same lock as reCAPTCHA)
+        if email not in self._recaptcha_locks:
+            self._recaptcha_locks[email] = asyncio.Lock()
+
+        async with self._recaptcha_locks[email]:
+            request_id = str(uuid.uuid4())
+            future = asyncio.get_running_loop().create_future()
+            conn = self._find_connection(email)
+            if not conn:
+                log.warning(f"[ExtensionBridge] Connection lost for {email} during submit_prompt")
+                return None
+            self._pending_requests[request_id] = future
+            self._pending_request_conns[request_id] = conn
+
+            try:
+                await self._ws_send(conn, {
+                    'action': 'submit_prompt',
+                    'requestId': request_id,
+                    'email': email,
+                    'endpoint': endpoint,
+                    'payload': {'body': body},
+                    'needsRecaptcha': needs_recaptcha,
+                })
+
+                result = await asyncio.wait_for(future, timeout=timeout)
+
+                success = result.get('success', False)
+                status = result.get('status', 0)
+                error = result.get('error', '')
+                token_len = result.get('tokenLength', 0)
+
+                if success:
+                    log.info(
+                        f"[ExtensionBridge] ✅ submit_prompt {endpoint} for {email}: "
+                        f"HTTP {status} (token {token_len} chars)"
+                    )
+                    # Reset short token counter on success
+                    self._short_token_counts[email] = 0
+                    return result
+                else:
+                    # Check if it's a reCAPTCHA issue
+                    if error and ('too short' in error.lower() or 'recaptcha' in error.lower()):
+                        self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
+                        count = self._short_token_counts[email]
+                        log.warning(
+                            f"[ExtensionBridge] ❌ submit_prompt reCAPTCHA failed for {email}: "
+                            f"{error} — consecutive #{count}"
+                        )
+                    else:
+                        log.warning(
+                            f"[ExtensionBridge] ❌ submit_prompt {endpoint} for {email}: "
+                            f"HTTP {status} — {error}"
+                        )
+                    return result
+
+            except asyncio.TimeoutError:
+                log.error(
+                    f"[ExtensionBridge] submit_prompt timed out for {email} "
+                    f"({timeout}s) — endpoint={endpoint}"
+                )
+                return None
+            finally:
+                self._pending_requests.pop(request_id, None)
+                self._pending_request_conns.pop(request_id, None)
+
+    async def submit_upscale(
+        self,
+        email: str,
+        body: dict,
+        timeout: float = 35.0,
+    ) -> Optional[dict]:
+        """Submit upscale request via Extension page context.
+        
+        Reuses the submit_prompt handler in background.js with
+        endpoint='UPSCALE_VIDEO'. Extension injects fresh reCAPTCHA token.
+        
+        Args:
+            email: Account email
+            body: Pre-built body from api_client.build_upscale_body()
+            timeout: Max wait time
+            
+        Returns:
+            dict with {success, status, data, error} or None on timeout
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] submit_upscale: no connection for {email}")
+            return None
+        
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+        self._pending_request_conns[request_id] = conn
+        
+        try:
+            await self._ws_send(conn, {
+                'action': 'submit_prompt',
+                'requestId': request_id,
+                'email': email,
+                'endpoint': 'UPSCALE_VIDEO',
+                'payload': {'body': body},
+                'needsRecaptcha': True,
+            })
+            
+            result = await asyncio.wait_for(future, timeout=timeout)
+            
+            success = result.get('success', False)
+            status = result.get('status', 0)
+            error = result.get('error', '')
+            
+            if success:
+                log.info(
+                    f"[ExtensionBridge] ✅ submit_upscale for {email}: HTTP {status}"
+                )
+            else:
+                log.warning(
+                    f"[ExtensionBridge] ❌ submit_upscale for {email}: "
+                    f"HTTP {status} — {error}"
+                )
+            return result
+            
+        except asyncio.TimeoutError:
+            log.error(
+                f"[ExtensionBridge] submit_upscale timed out for {email} ({timeout}s)"
+            )
+            return None
+        finally:
+            self._pending_requests.pop(request_id, None)
+            self._pending_request_conns.pop(request_id, None)
+
+    async def submit_status_check(
+        self,
+        email: str,
+        body: dict,
+        timeout: float = 20.0,
+    ) -> Optional[dict]:
+        """Submit status poll request via Extension page context.
+        
+        Reuses the submit_prompt handler in background.js with
+        endpoint='STATUS'. No reCAPTCHA needed for polling.
+        
+        Args:
+            email: Account email
+            body: Pre-built body from api_client.build_status_body()
+            timeout: Max wait time
+            
+        Returns:
+            dict with {success, status, data, error} or None on timeout
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] submit_status_check: no connection for {email}")
+            return None
+        
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+        self._pending_request_conns[request_id] = conn
+        
+        try:
+            await self._ws_send(conn, {
+                'action': 'submit_prompt',
+                'requestId': request_id,
+                'email': email,
+                'endpoint': 'STATUS',
+                'payload': {'body': body},
+                'needsRecaptcha': False,
+            })
+            
+            result = await asyncio.wait_for(future, timeout=timeout)
+            
+            success = result.get('success', False)
+            if not success:
+                log.debug(
+                    f"[ExtensionBridge] submit_status_check for {email}: "
+                    f"HTTP {result.get('status', 0)} — {result.get('error', '')}"
+                )
+            return result
+            
+        except asyncio.TimeoutError:
+            log.debug(
+                f"[ExtensionBridge] submit_status_check timed out for {email} ({timeout}s)"
+            )
+            return None
+        finally:
+            self._pending_requests.pop(request_id, None)
+            self._pending_request_conns.pop(request_id, None)
 
     async def _reload_tab_for_recaptcha(self, email: str):
         """Reload VEO tab to re-initialize broken reCAPTCHA widget.
@@ -575,9 +863,9 @@ class ExtensionBridge:
                 )
                 # Pass token to callback for caching in reCAPTCHA pool
                 if token and len(token) > self.MIN_TOKEN_LENGTH:
-                    if hasattr(self, '_on_readiness_token') and self._on_readiness_token:
+                    if self.on_readiness_token:
                         try:
-                            self._on_readiness_token(email, token)
+                            self.on_readiness_token(email, token)
                             log.debug(
                                 f"[ExtensionBridge] Cached readiness-check token "
                                 f"for {email} ({len(token)} chars)"
@@ -740,6 +1028,47 @@ class ExtensionBridge:
                 return True
         except asyncio.TimeoutError:
             log.debug(f"[ExtensionBridge] Lightweight refresh timed out for {email}")
+            return False
+        finally:
+            self._pending_requests.pop(request_id, None)
+
+    async def probe_browser_headers(self, email: str, timeout: float = 10.0) -> bool:
+        """Probe for x-browser-validation by triggering a cross-origin fetch.
+
+        Injects a script into the VEO page that makes a fetch to
+        aisandbox-pa.googleapis.com. Chrome adds x-browser-validation
+        to cross-origin requests, which the webRequest listener captures.
+
+        Returns True if x-browser-validation was captured.
+        """
+        if not self._connections:
+            return False
+
+        conn = self._find_connection(email) if email else self._connections[0]
+        if not conn:
+            return False
+
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+
+        try:
+            await self._ws_send(conn, {
+                'action': 'probe_browser_headers',
+                'requestId': request_id,
+                'email': email,
+            })
+
+            result = await asyncio.wait_for(future, timeout=timeout)
+            has_validation = result.get('hasValidation', False)
+            global_val = result.get('globalValidation')
+            if has_validation:
+                log.info(f"[ExtensionBridge] ✅ x-browser-validation captured for {email}")
+            else:
+                log.warning(f"[ExtensionBridge] ⚠️ x-browser-validation NOT captured after probe (globalValidation={global_val})")
+            return has_validation
+        except asyncio.TimeoutError:
+            log.debug(f"[ExtensionBridge] Browser header probe timed out for {email}")
             return False
         finally:
             self._pending_requests.pop(request_id, None)
@@ -917,8 +1246,21 @@ class ExtensionBridge:
                     future.set_result(msg)
 
         elif action == 'tab_closed':
+            # GAP #8: Cleanup stale state when tab is closed
             email = msg.get('email', '')
-            log.info(f"[ExtensionBridge] Tab closed for {email}")
+            log.info(f"[ExtensionBridge] Tab closed for {email} — cleaning up cached state")
+            if email:
+                # Clear cached data for this email on the connection
+                conn.headers.pop(email, None)
+                conn.headers_updated_at.pop(email, None)
+                conn.access_tokens.pop(email, None)
+                # Clear global state for this email
+                self._content_heartbeats.pop(email, None)
+                self._recaptcha_readiness.pop(email, None)
+                self._short_token_counts.pop(email, None)
+                self._frozen_tab_counts.pop(email, None)
+                self._frozen_tab_first_at.pop(email, None)
+                log.info(f"[ExtensionBridge] 🧹 Cleaned up all cached state for {email}")
 
         elif action == 'pong':
             pass  # Keepalive response
@@ -944,13 +1286,66 @@ class ExtensionBridge:
             # Background detected frozen tab (missed heartbeats)
             email = msg.get('email', '')
             elapsed = msg.get('elapsedMs', 0)
-            log.warning(
-                f"[ExtensionBridge] 🥶 Tab frozen for {email} "
-                f"(no heartbeat for {elapsed // 1000}s) — auto-reloading"
-            )
+
+            # Escalation tracking: count consecutive frozen events within window
+            now_ts = time.time()
+            first_at = self._frozen_tab_first_at.get(email, 0)
+            if now_ts - first_at > self._FROZEN_WINDOW:
+                # Reset window
+                self._frozen_tab_counts[email] = 0
+                self._frozen_tab_first_at[email] = now_ts
+
+            self._frozen_tab_counts[email] = self._frozen_tab_counts.get(email, 0) + 1
+            count = self._frozen_tab_counts[email]
+
+            if count >= self._FROZEN_ESCALATION_THRESHOLD:
+                # Escalated: multiple frozen events → tab is truly dead
+                log.warning(
+                    f"[ExtensionBridge] 💀 Tab DEAD for {email} "
+                    f"({count} frozen events in {self._FROZEN_WINDOW}s) — browser restart needed"
+                )
+                # Only notify once per window
+                if count == self._FROZEN_ESCALATION_THRESHOLD:
+                    try:
+                        if self.on_tab_dead:
+                            self.on_tab_dead(email, f"Tab frozen {count}x in {self._FROZEN_WINDOW}s")
+                    except Exception:
+                        pass
+            else:
+                # ★ Suppress false frozen events caused by an in-progress reload.
+                # After refresh_headers() reloads the tab, the old heartbeat timestamp
+                # is stale → extension detects "frozen" → fires ANOTHER recovery.
+                # If _trigger_refresh cooldown is still active, this frozen event
+                # is a false positive from the reload, not a new freeze.
+                last_refresh = self._refresh_cooldown_times.get(email, 0)
+                if time.time() - last_refresh < 30:
+                    log.debug(
+                        f"[ExtensionBridge] 🥶 Tab frozen for {email} suppressed — "
+                        f"refresh already in-progress ({time.time() - last_refresh:.0f}s ago)"
+                    )
+                else:
+                    log.warning(
+                        f"[ExtensionBridge] 🥶 Tab frozen for {email} "
+                        f"(no heartbeat for {elapsed // 1000}s) — "
+                        f"recovery attempt {count}/{self._FROZEN_ESCALATION_THRESHOLD}"
+                    )
+                    # Active recovery via centralized trigger
+                    asyncio.ensure_future(self._trigger_refresh(
+                        email,
+                        f"frozen tab recovery {count}/{self._FROZEN_ESCALATION_THRESHOLD}",
+                        level="lightweight" if count == 1 else "full"
+                    ))
 
         elif action == 'recaptcha_ready':
             # Layer 1: Response to check_recaptcha_ready request
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
+        elif action == 'submit_prompt_result':
+            # Response to submit_prompt — full API response from page context
             request_id = msg.get('requestId')
             if request_id and request_id in self._pending_requests:
                 future = self._pending_requests[request_id]
@@ -973,6 +1368,14 @@ class ExtensionBridge:
                 if not future.done():
                     future.set_result(msg)
 
+        elif action == 'probe_browser_headers_result':
+            # Response to probe_browser_headers request
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
         elif action == 'activity_simulated':
             # Response to simulate_activity request
             request_id = msg.get('requestId')
@@ -985,16 +1388,11 @@ class ExtensionBridge:
             email = msg.get('email', '')
             reason = msg.get('reason', 'unknown')
             log.warning(f"[ExtensionBridge] 🔴 Account LOGGED OUT: {email} (reason: {reason})")
-            # Emit event for engine/UI to handle
             try:
-                from core.event_bus import emit_event, EventType
-                emit_event(EventType.ACCOUNT_STATUS_CHANGED, {
-                    "email": email,
-                    "status": "logged_out",
-                    "reason": reason,
-                }, source="extension_bridge")
+                if self.on_account_logged_out:
+                    self.on_account_logged_out(email, reason)
             except Exception:
-                pass  # EventType might not have ACCOUNT_STATUS_CHANGED
+                pass
 
         elif action == 'tab_discarded':
             email = msg.get('email', '')
@@ -1023,6 +1421,23 @@ class ExtensionBridge:
             tab_id = msg.get('tabId')
             log.warning(f"[ExtensionBridge] ⚠️ Zombie tab detected: tab {tab_id} — no email after 30s")
 
+        elif action == 'tab_dead':
+            # Extension gave up reloading this tab (3 attempts failed in 5min)
+            email = msg.get('email', '')
+            attempts = msg.get('reloadAttempts', 0)
+            log.error(
+                f"[ExtensionBridge] 💀 Tab DEAD for {email} — "
+                f"{attempts} reload attempts failed. Browser restart recommended."
+            )
+            # Reset frozen counters so escalation doesn't double-fire
+            self._frozen_tab_counts.pop(email, None)
+            self._frozen_tab_first_at.pop(email, None)
+            try:
+                if self.on_tab_dead:
+                    self.on_tab_dead(email, f"Extension declared tab dead after {attempts} reload attempts")
+            except Exception:
+                pass
+
     async def _disconnect(self, conn: Optional[ExtensionConnection], peer):
         """Clean up a disconnected Extension."""
         if conn and conn in self._connections:
@@ -1042,11 +1457,19 @@ class ExtensionBridge:
                     except Exception:
                         pass
             
-            # Fix 2: Resolve all pending futures with error so callers don't hang
-            for req_id, future in list(self._pending_requests.items()):
-                if not future.done():
-                    future.set_result({'error': 'Extension disconnected', 'token': None})
-            self._pending_requests.clear()
+            # Fix 2 + GAP #9: Only resolve futures belonging to THIS connection
+            # (previously cleared ALL futures, causing cross-connection errors)
+            cleared = 0
+            for req_id, owner_conn in list(self._pending_request_conns.items()):
+                if owner_conn is conn:
+                    future = self._pending_requests.get(req_id)
+                    if future and not future.done():
+                        future.set_result({'error': 'Extension disconnected', 'token': None})
+                    self._pending_requests.pop(req_id, None)
+                    self._pending_request_conns.pop(req_id, None)
+                    cleared += 1
+            if cleared:
+                log.debug(f"[ExtensionBridge] Cleared {cleared} pending request(s) for disconnected connection")
 
             try:
                 # Temporarily suppress websockets logger during close to prevent
@@ -1138,6 +1561,17 @@ class ExtensionBridge:
                         )
                         dead.append(conn)
                         continue
+                    
+                    # Python-side content heartbeat check:
+                    # If connected but no heartbeat for 120s+, try recovery
+                    for email in conn.registered_emails:
+                        last_hb = self._content_heartbeats.get(email, 0)
+                        if last_hb and (time.time() - last_hb) > 120:
+                            asyncio.ensure_future(self._trigger_refresh(
+                                email,
+                                f"content heartbeat missing {time.time() - last_hb:.0f}s",
+                                level="lightweight"
+                            ))
                     
                     try:
                         await conn.ws.send(json.dumps({'action': 'ping'}))

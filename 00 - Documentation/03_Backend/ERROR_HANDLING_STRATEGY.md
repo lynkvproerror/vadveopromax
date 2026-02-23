@@ -316,3 +316,5 @@ class ErrorHandler:
 - [MULTITHREADING_ARCHITECTURE.md](./MULTITHREADING_ARCHITECTURE.md) - Worker retry logic
 - [TAB_06_QUEUE_MANAGER.md](../01_UI_UX/TAB_06_QUEUE_MANAGER.md) - Error display UI
 - [API_ENDPOINTS.md](../../Research/reference/API_ENDPOINTS.md) - API error responses
+- [API_403_RISK_ANALYSIS.md](./API_403_RISK_ANALYSIS.md) - 16 root causes of 403 + Runtime 5-Layer Defense
+- [ENGINE_PIPELINE_ARCHITECTURE.md](../02_Architecture/ENGINE_PIPELINE_ARCHITECTURE.md) - Circuit Breaker (§9.5) + 5-Layer Anti-Spam (§4.8)

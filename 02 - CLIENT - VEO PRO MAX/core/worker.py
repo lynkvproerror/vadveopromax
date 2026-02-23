@@ -160,12 +160,6 @@ class Worker:
             account_headers = account.get_api_headers()
             self._report_progress(task.id, 15, "📤 Submitting request")
             
-            # Phase 2B: Idempotency key — prevent duplicate submissions on timeout retry
-            import hashlib
-            idem_key = hashlib.sha256(
-                f"{task.id}:{task.retry_attempts}".encode()
-            ).hexdigest()[:32]
-            
             # Route to appropriate API method
             log.info(
                 f"[Worker] Dispatching {task.workflow_type} task={task.id} "
@@ -178,7 +172,7 @@ class Worker:
                 account.project_id,
                 account_headers=account_headers,
                 paygate_tier=paygate_tier,
-                extra_headers={"x-goog-request-params": idem_key},
+                # HAR verified: website does NOT send x-goog-request-params
             )
             
             # M2 FIX: Centralized reCAPTCHA invalidation — single-use tokens

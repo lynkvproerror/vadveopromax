@@ -108,7 +108,7 @@ async def process_i2v_single(ui_config: dict) -> list[str]:
             "videoModelKey": "veo_3_1_i2v_s_fast_ultra_relaxed",
             "textInput": {"prompt": ui_config["prompt"]},
             "startImage": {"mediaId": media_id},  # ← Uploaded image
-            "seed": random.randint(0, 32767),
+            "seed": random.randint(5000, 24999),
             "metadata": {"sceneId": str(uuid.uuid4())}
         }]
     }
@@ -147,7 +147,7 @@ async def process_i2v_dual(ui_config: dict) -> list[str]:
             "textInput": {"prompt": ui_config["prompt"]},
             "startImage": {"mediaId": start_id},
             "endImage": {"mediaId": end_id},
-            "seed": random.randint(0, 32767),
+            "seed": random.randint(5000, 24999),
             "metadata": {"sceneId": str(uuid.uuid4())}
         }]
     }
@@ -190,7 +190,7 @@ async def process_ingredients(ui_config: dict) -> list[str]:
             "videoModelKey": f"veo_3_1_r2v_fast_{ui_config['aspect_ratio'].replace(':', '_')}_ultra",
             "textInput": {"prompt": ui_config["prompt"]},
             "referenceImages": ingredient_ids,  # ← Array of uploaded images
-            "seed": random.randint(0, 32767),
+            "seed": random.randint(5000, 24999),
             "metadata": {"sceneId": str(uuid.uuid4())}
         }]
     }
@@ -431,7 +431,7 @@ def build_batch_requests(prompt: str, model_key: str, aspect: str, count: int = 
     
     return [{
         "aspectRatio": map_aspect_ratio(aspect),
-        "seed": random.randint(0, 32767),
+        "seed": random.randint(5000, 24999),
         "textInput": {"prompt": prompt},
         "videoModelKey": model_key,
         "metadata": {"sceneId": str(uuid.uuid4())}
@@ -639,7 +639,7 @@ def build_image_request(
 
 | Field | Min | Max | Default | Validation |
 |-------|-----|-----|---------|------------|
-| `seed` | 0 | 32767 (video) / 999999 (image) | Random | Integer only |
+| `seed` | 5000 | 24999 (video) / 999999 (image) | Random | Integer only |
 | `outputs` | 1 | 4 | 4 | Integer only |
 | `prompt` | 1 char | ~2000 chars | Required | Non-empty string |
 

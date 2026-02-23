@@ -265,8 +265,8 @@ class MainWindow(QMainWindow):
             if self.controller:
                 if hasattr(self.controller, 'stop_perf_timer'):
                     self.controller.stop_perf_timer()
-                if hasattr(self.controller, '_dev_console'):
-                    self.controller._dev_console = None
+                if hasattr(self.controller, 'dev_console'):
+                    self.controller.dev_console = None
             self.show_toast("DevConsole hidden", "info")
         else:
             # Add dev console tab (use actual migrated TabDevConsole)
@@ -277,14 +277,10 @@ class MainWindow(QMainWindow):
             self.tab_instances['devconsole'] = dev_widget
             
             # Wire to controller so it can push JSON/queue data
-            if self.controller and hasattr(self.controller, '_dev_console'):
-                self.controller._dev_console = dev_widget
-                # Immediately push current browser status + session data + queue state
-                self.controller._push_browser_status()
-                self.controller._push_session_data()
-                self.controller._push_pool_status()
-                self.controller._push_extension_status()
-                self.controller._notify_queue_updated()
+            if self.controller and hasattr(self.controller, 'dev_console'):
+                self.controller.dev_console = dev_widget
+                # Immediately push current status to DevConsole
+                self.controller.push_status_updates()
                 self.controller.start_perf_timer()
             
             self._dev_console_visible = True
@@ -466,8 +462,8 @@ class MainWindow(QMainWindow):
         self._check_connectivity_async()
         
         # Worker pool status → DevConsole
-        if hasattr(self.controller, '_push_pool_status'):
-            self.controller._push_pool_status()
+        if hasattr(self.controller, 'push_status_updates'):
+            self.controller.push_pool_status()  # Only pool status on timer, not full push
     
     def _update_memory(self):
         """Update memory usage in status bar."""

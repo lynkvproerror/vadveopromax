@@ -71,7 +71,7 @@ class TaskWatchdog:
     
     async def _scan_loop(self):
         """Main background loop."""
-        from core.dispatcher import TaskState
+        from core.dispatcher import TaskState, TaskStage
         
         try:
             while self._running:
@@ -86,6 +86,12 @@ class TaskWatchdog:
                 
                 stuck_count = 0
                 for task in self._dispatcher.get_all_tasks():
+                    # Skip tasks managed by UpscaleQueue (background upscale)
+                    # These tasks have state=WAITING_POLL but are NOT stuck —
+                    # they're actively being processed by UpscaleQueue
+                    if getattr(task, 'stage', None) in (TaskStage.UPSCALING, TaskStage.UPSCALED):
+                        continue
+                    
                     if task.state == TaskState.RUNNING:
                         if self._is_stuck(task, now, self.RUNNING_TIMEOUT):
                             self._recover(task, "RUNNING timeout", self.RUNNING_TIMEOUT)

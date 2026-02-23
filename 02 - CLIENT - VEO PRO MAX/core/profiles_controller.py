@@ -20,9 +20,9 @@ from core.session import AccountSession, SubscriptionType, PaygateTier
 
 
 def _get_chrome_executable() -> Optional[str]:
-    """Get Chrome for Testing (CfT) executable path for Playwright.
+    """Get Chrome executable path for Playwright.
     
-    CfT supports --load-extension (branded Chrome removed it in v137+).
+    Priority: branded Chrome (full headers + reCAPTCHA trust) > CfT > None.
     Falls back to None (Playwright will use its own bundled Chromium).
     """
     try:
@@ -254,10 +254,10 @@ class ProfilesController:
         
         Args:
             storage_path: Path to JSON storage file. 
-                         Defaults to config/profiles.json
+                         Defaults to ~/.veoauto/profiles.json
         """
         if storage_path is None:
-            storage_path = Path(__file__).parent.parent / "config" / "profiles.json"
+            storage_path = Path.home() / ".veoauto" / "profiles.json"
         
         self.storage_path = Path(storage_path)
         self._profiles: List[ChromeProfile] = []
@@ -265,6 +265,14 @@ class ProfilesController:
         
         # Ensure directory exists
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Auto-migrate: copy from old source-tree location if new file doesn't exist
+        if not self.storage_path.exists():
+            old_path = Path(__file__).parent.parent / "config" / "profiles.json"
+            if old_path.exists():
+                import shutil
+                shutil.copy2(old_path, self.storage_path)
+                log.info(f"[ProfilesController] Migrated profiles from {old_path} → {self.storage_path}")
         
         # Load existing profiles
         self.load_profiles()
@@ -598,7 +606,7 @@ class ProfilesController:
             
             with sync_playwright() as p:
                 # Headless mode for subscription refresh - no need to show browser
-                # Use CfT instead of branded Chrome (supports --load-extension)
+                # Use branded Chrome (preferred) or CfT fallback
                 _chrome_exe = _get_chrome_executable()
                 _launch_kwargs = dict(
                     user_data_dir=profile.browser_profile_path,
@@ -925,7 +933,7 @@ class ProfilesController:
             
             with sync_playwright() as p:
                 # Launch VISIBLE browser for user to login
-                # Use CfT instead of branded Chrome (supports --load-extension)
+                # Use branded Chrome (preferred) or CfT fallback
                 _chrome_exe = _get_chrome_executable()
                 _launch_kwargs = dict(
                     user_data_dir=str(profile_path),
@@ -1232,14 +1240,21 @@ class ProfilesController:
                     
                     log.info(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port} ({'reconnected' if is_reconnect else 'new'})")
                     
-                    # Hide browser windows
+                    # Hide browser windows (if auto-hide enabled)
                     browser_hwnds = _find_hwnds_by_pid(chrome_pid)
-                    _win32_hide_hwnds(browser_hwnds)
-                    log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — hidden for {email}")
+                    from config.settings import get_settings as _get_settings
+                    _s = _get_settings()
+                    if _s.auto_hide_enabled and _s.auto_hide_on_launch:
+                        _win32_hide_hwnds(browser_hwnds)
+                        log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — hidden for {email}")
+                        _initial_state = "hidden"
+                    else:
+                        log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — visible for {email} (auto-hide disabled)")
+                        _initial_state = "visible"
                     
                     if on_state_change:
                         try:
-                            on_state_change(email, "hidden")
+                            on_state_change(email, _initial_state)
                         except Exception:
                             pass
                     
@@ -1864,7 +1879,7 @@ class ProfilesController:
             
             
             with sync_playwright() as p:
-                # Use CfT instead of branded Chrome (supports --load-extension)
+                # Use branded Chrome (preferred) or CfT fallback
                 _chrome_exe = _get_chrome_executable()
                 _launch_kwargs = dict(
                     user_data_dir=str(profile_path),
@@ -2729,3 +2744,23 @@ class ProfilesController:
             "total_credits": total_credits,
             "capacity": len(self._profiles) * 4,  # 4 slots per account
         }
+
+
+# ─────────────────────────────────────────────────────────────
+# Global singleton — mirrors get_settings() pattern
+# ─────────────────────────────────────────────────────────────
+
+_profiles_controller: Optional[ProfilesController] = None
+
+
+def get_profiles_controller() -> ProfilesController:
+    """Get or create the global ProfilesController singleton.
+    
+    Used by UI components (tab_settings) that need profiles access
+    without requiring the full AppController dependency.
+    """
+    global _profiles_controller
+    if _profiles_controller is None:
+        _profiles_controller = ProfilesController()
+    return _profiles_controller
+

@@ -27,7 +27,7 @@ interface VideoGenerationRequest {
 | Thuộc tính | Giá trị | Ghi chú |
 |------------|---------|---------|
 | **Data Type** | `integer` (số nguyên) | Không phải string hay float |
-| **Range** | `0 - 32767` | 16-bit signed integer (2^15 - 1) |
+| **Range** | `5000 - 24999` | HAR verified (observed: 23713, 14781, 23516, 16504) |
 | **Required** | ✅ Yes | Mỗi request phải có seed |
 | **Unique** | ❌ No | Có thể trùng lặp, nhưng không nên |
 | **Generated** | Client-side | JavaScript tạo trước khi gửi |
@@ -105,7 +105,7 @@ Seed được gửi trực tiếp từ client trong request payload. Bạn có t
 ```javascript
 // Simple Random
 function generateRandomSeed() {
-  return Math.floor(Math.random() * 32768);
+  return Math.floor(Math.random() * 20000) + 5000; // 5000-24999
 }
 
 // Crypto Random (Better quality)
@@ -130,8 +130,8 @@ const payload = {
 // UI Component
 <input 
   type="number" 
-  min="0" 
-  max="32767"
+  min="5000" 
+  max="24999"
   placeholder="Random seed (leave empty for auto)"
   value={userSeed}
   onChange={(e) => setUserSeed(e.target.value)}
@@ -224,16 +224,16 @@ class SeedManager {
 ```javascript
 // ✅ VALID SEEDS
 const validSeeds = [
-  0,        // Minimum
-  1,
+  5000,     // Minimum (HAR verified)
   15000,
-  32767     // Maximum (2^15 - 1)
+  23713,    // Observed in HAR
+  24999     // Maximum (HAR verified)
 ];
 
 // ❌ INVALID SEEDS
 const invalidSeeds = [
-  -1,       // Negative
-  32768,    // Too large
+  4999,     // Below minimum
+  25000,    // Above maximum
   1.5,      // Float
   "123",    // String
   null,     // Null
@@ -251,8 +251,8 @@ function validateSeed(seed) {
   if (!Number.isInteger(seed)) {
     throw new Error('Seed must be an integer');
   }
-  if (seed < 0 || seed > 32767) {
-    throw new Error('Seed must be between 0 and 32767');
+  if (seed < 5000 || seed > 24999) {
+    throw new Error('Seed must be between 5000 and 24999');
   }
   return true;
 }
@@ -273,7 +273,7 @@ function validateSeed(seed) {
 ```
 [ Generate Video ]
 ☐ Advanced: Use custom seed
-    Seed: [____] (0-32767)
+    Seed: [____] (5000-24999)
 ```
 
 **Option C: Variation Selector**
@@ -298,7 +298,7 @@ try {
   const response = await generateVideo(userSeed, prompt);
 } catch (error) {
   if (error.message.includes('Seed')) {
-    alert('Invalid seed. Please use a number between 0 and 32767.');
+    alert('Invalid seed. Please use a number between 5000 and 24999.');
   } else {
     // Handle API errors
   }
@@ -442,7 +442,7 @@ After sync, verify:
 
 ### Câu Hỏi 1: Seeds có thể tổng hợp được không?
 
-✅ **CÓ**. Seed là một số nguyên đơn giản (0-32767):
+✅ **CÓ**. Seed là một số nguyên đơn giản (5000-24999):
 - Data type: `integer`
 - Variable name: `seed`
 - Client có thể tạo random hoặc cho user control

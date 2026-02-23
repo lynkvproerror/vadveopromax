@@ -44,7 +44,7 @@ payload = {
     },
     "requests": [{
         "aspectRatio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "seed": random.randint(0, 32767),
+        "seed": random.randint(5000, 24999),
         "textInput": {"prompt": "A serene lake at sunset"},
         "videoModelKey": "veo_3_1_t2v_fast_landscape_ultra",
         "metadata": {"sceneId": str(uuid.uuid4())}

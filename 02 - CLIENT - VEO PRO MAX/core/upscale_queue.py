@@ -119,6 +119,58 @@ class AdaptiveBurstController:
         }
 
 
+class AdaptiveJobController:
+    """Per-account adaptive concurrency for upscale jobs.
+    
+    AIMD algorithm: Start at INITIAL, increase by 1 after
+    SCALE_UP_AFTER consecutive successes per account,
+    halve on failure. Floor=MIN, Ceiling=MAX.
+    
+    This adapts to reCAPTCHA token availability per account:
+    - Stable tokens → more concurrent upscale jobs
+    - 403 / failures → back off to reduce contention
+    """
+    
+    INITIAL = 4
+    MIN = 2
+    MAX = 8
+    SCALE_UP_AFTER = 3  # consecutive successes before +1
+    
+    def __init__(self):
+        self._limits: Dict[str, int] = {}      # email → current limit
+        self._streaks: Dict[str, int] = {}     # email → consecutive successes
+    
+    def get_limit(self, email: str) -> int:
+        """Get current concurrent job limit for account."""
+        return self._limits.get(email, self.INITIAL)
+    
+    def record_success(self, email: str):
+        """Record successful job. Scale up after sustained streak."""
+        self._streaks[email] = self._streaks.get(email, 0) + 1
+        if self._streaks[email] >= self.SCALE_UP_AFTER:
+            old = self.get_limit(email)
+            new = min(old + 1, self.MAX)
+            self._limits[email] = new
+            self._streaks[email] = 0
+            if new != old:
+                log.info(f"[JobCtrl] {email}: ↑ limit {old}→{new} (streak={self.SCALE_UP_AFTER})")
+    
+    def record_failure(self, email: str):
+        """Record failed job. Halve limit immediately."""
+        old = self.get_limit(email)
+        new = max(old // 2, self.MIN)
+        self._limits[email] = new
+        self._streaks[email] = 0
+        if new != old:
+            log.info(f"[JobCtrl] {email}: ↓ limit {old}→{new} (failure)")
+    
+    def get_stats(self) -> dict:
+        return {
+            "limits": dict(self._limits),
+            "streaks": dict(self._streaks),
+        }
+
+
 @dataclass
 class UpscaleJob:
     """A pending upscale job, created when worker finishes 720p download."""
@@ -143,22 +195,94 @@ class UpscaleQueue:
     - Shares engine's rate locks + API semaphores for safety
     - On completion: updates task.video_outputs, downloads upscaled files,
       syncs overall status, and fires TASK_COMPLETED event
+    
+    Dependency Injection (Cluster #1 fix):
+    - All engine dependencies injected via constructor (full DI)
+    - No engine reference stored — fully decoupled
     """
     
-    def __init__(self, engine: 'Engine'):
+    def __init__(
+        self,
+        dispatcher: 'Dispatcher',
+        api_client: 'VEOApiClient',
+        poll_fn: Callable,               # engine._poll_upscale
+        download_fn: Callable,           # engine._download_outputs
+        wait_recaptcha_fn: Callable,     # engine._wait_for_recaptcha_ready
+        sync_status_fn: Callable,        # engine._sync_overall_upscale_status
+        semaphore_fn: Callable,          # engine._get_upscale_api_semaphore
+        rate_locks: Dict,                # engine._account_rate_locks
+        # --- Account & cooldown (replaces engine public API) ---
+        get_account_fn: Callable,        # engine.get_account
+        get_all_accounts_fn: Callable,   # engine.get_all_accounts
+        is_on_cooldown_fn: Callable,     # engine.is_account_on_cooldown
+        wait_cooldown_fn: Callable,      # engine.wait_for_cooldown
+        set_cooldown_fn: Callable,       # engine.set_account_cooldown
+        clear_cooldown_fn: Callable,     # engine.clear_account_cooldown
+        fix_client_data_fn: Callable,    # engine.fix_client_data
+        should_wait_fn: Callable,        # engine.should_upscale_wait
+        wait_for_circuit_fn: Callable,   # engine._wait_for_circuit (Fix C)
+        burst_controller=None,           # engine._burst_controller (anti-detect delay)
+        on_completed: Optional[Callable] = None,   # engine._on_task_completed
+        profiles_controller=None,        # engine._profiles_controller
+        extension_bridge=None,           # engine._extension_bridge
+    ):
         """
+        Fully decoupled UpscaleQueue — no engine reference.
+        
         Args:
-            engine: The Engine instance — we delegate to its existing methods
-                    (_auto_upscale, _download_outputs, _sync_overall_upscale_status)
-                    to avoid duplicating 200+ lines of battle-tested upscale logic.
+            dispatcher: Task queue manager (progress, complete, get_task)
+            api_client: VEO API client (upscale_video)
+            poll_fn: async fn(task, account, label, op_name, scene_id) → result
+            download_fn: async fn(task, uris, **kw) → paths
+            wait_recaptcha_fn: async fn(account, max_wait) → None
+            sync_status_fn: fn(task) → None
+            semaphore_fn: fn(email) → asyncio.Semaphore
+            rate_locks: Dict[str, asyncio.Lock] — per-account rate locks
+            get_account_fn: fn(email) → Account or None
+            get_all_accounts_fn: fn() → list[Account]
+            is_on_cooldown_fn: fn(email) → bool
+            wait_cooldown_fn: async fn(email) → None
+            set_cooldown_fn: fn(email, reason) → None
+            clear_cooldown_fn: fn(email) → None
+            fix_client_data_fn: fn() → None
+            should_wait_fn: fn() → bool
+            wait_for_circuit_fn: async fn(email) → None — wait for CB CLOSED
+            on_completed: optional callback fn(task) for UI refresh
+            profiles_controller: optional profiles controller for reset
+            extension_bridge: optional extension bridge for reCAPTCHA
         """
-        self._engine = engine
+        # Injected dependencies (full DI — no engine reference)
+        self._dispatcher = dispatcher
+        self._api_client = api_client
+        self._poll_fn = poll_fn
+        self._download_fn = download_fn
+        self._wait_recaptcha_fn = wait_recaptcha_fn
+        self._sync_status_fn = sync_status_fn
+        self._semaphore_fn = semaphore_fn
+        self._rate_locks = rate_locks
+        self._get_account = get_account_fn
+        self._get_all_accounts = get_all_accounts_fn
+        self._is_on_cooldown = is_on_cooldown_fn
+        self._wait_cooldown = wait_cooldown_fn
+        self._set_cooldown = set_cooldown_fn
+        self._clear_cooldown = clear_cooldown_fn
+        self._fix_client_data = fix_client_data_fn
+        self._should_wait = should_wait_fn
+        self._wait_for_circuit = wait_for_circuit_fn  # Fix C: CB gate
+        self._burst_controller = burst_controller     # Anti-detect delay
+        self._on_completed = on_completed
+        self._profiles_controller = profiles_controller
+        self._extension_bridge = extension_bridge
+        
         self._queues: Dict[str, asyncio.Queue] = {}      # email → Queue[UpscaleJob]
         self._workers: Dict[str, asyncio.Task] = {}       # email → background task
         self._running = False
         
         # Adaptive burst controller (global across all accounts)
         self._burst = AdaptiveBurstController()
+        
+        # Per-account adaptive job concurrency (AIMD)
+        self._job_controller = AdaptiveJobController()
         
         # Stats
         self._total_enqueued = 0
@@ -233,7 +357,6 @@ class UpscaleQueue:
         """
         q = self._queues[email]
         active_jobs: List[asyncio.Task] = []
-        MAX_CONCURRENT_JOBS = 5  # max concurrent tasks per account worker
         
         while self._running:
             try:
@@ -241,13 +364,15 @@ class UpscaleQueue:
                 active_jobs = [t for t in active_jobs if not t.done()]
                 
                 # Workload priority: pause if prompts_first mode active
-                if self._engine.should_upscale_wait():
+                if self._should_wait():
                     log.info(f"[UpscaleQueue] {email}: pausing — prompts_first priority")
                     await asyncio.sleep(5)
                     continue
                 
-                # If at capacity, wait for one to finish
-                if len(active_jobs) >= MAX_CONCURRENT_JOBS:
+                # Fix G6: Force sequential — only 1 job at a time per account
+                # All upscale submits must go through anti-detect delay
+                max_jobs = 1
+                if len(active_jobs) >= max_jobs:
                     if active_jobs:
                         done, _ = await asyncio.wait(
                             active_jobs, return_when=asyncio.FIRST_COMPLETED
@@ -260,8 +385,8 @@ class UpscaleQueue:
                     continue
                 
                 # Account cooldown: wait if on cooldown before picking up jobs
-                if self._engine.is_account_on_cooldown(email):
-                    await self._engine.wait_for_cooldown(email)
+                if self._is_on_cooldown(email):
+                    await self._wait_cooldown(email)
                 
                 # Wait for next job (with timeout to allow graceful shutdown)
                 try:
@@ -315,32 +440,30 @@ class UpscaleQueue:
         
         Time savings: ~12min (sequential) → ~5min (parallel poll)
         """
-        task = self._engine._dispatcher.get_task(job.task_id)
+        task = self._dispatcher.get_task(job.task_id)
         if not task:
             log.warning(f"[UpscaleQueue] Task {job.task_id} not found, skipping")
             self._total_failed += 1
             return
         
         # Get the account
-        account = self._engine.get_account(job.account_email)
+        account = self._get_account(job.account_email)
         if not account:
             log.warning(f"[UpscaleQueue] Account {job.account_email} not found, skipping")
             self._total_failed += 1
             return
         
         # Auto-inject extension bridge if missing (can happen after browser restart)
-        if not account._extension_bridge:
-            bridge = None
-            # Source 1: Direct reference on engine
-            bridge = getattr(self._engine, '_app_extension_bridge', None)
-            # Source 2: Steal from sibling account that has it
+        if not account.extension_bridge:
+            bridge = self._extension_bridge
+            # Fallback: steal from sibling account that has it
             if not bridge:
-                for acc in self._engine.get_all_accounts():
-                    if acc._extension_bridge:
-                        bridge = acc._extension_bridge
+                for acc in self._get_all_accounts():
+                    if acc.extension_bridge:
+                        bridge = acc.extension_bridge
                         break
             if bridge:
-                account._extension_bridge = bridge
+                account.extension_bridge = bridge
                 log.info(f"[UpscaleQueue] Injected extension bridge into {job.account_email}")
             else:
                 log.warning(f"[UpscaleQueue] No extension bridge source found — reCAPTCHA will fail")
@@ -349,14 +472,22 @@ class UpscaleQueue:
         
         # BUG 1 FIX: Wait for account cooldown BEFORE submitting
         # Without this, concurrent upscale jobs submit during cooldown → 403 → extend cooldown
-        if self._engine.is_account_on_cooldown(job.account_email):
+        if self._is_on_cooldown(job.account_email):
             log.info(f"[UpscaleQueue] {job.account_email}: on cooldown, waiting before upscale (task {job.task_id})")
-            await self._engine.wait_for_cooldown(job.account_email)
+            await self._wait_cooldown(job.account_email)
         
         log.info(
             f"[UpscaleQueue] Processing task {job.task_id}: "
             f"{total} videos → {job.target_quality} (parallel poll)"
         )
+        
+        # Fix C: CircuitBreaker gate — wait for circuit CLOSED before submitting.
+        # Without this, upscale submits during a 403 storm would compound the problem:
+        # each upscale needs reCAPTCHA → if CB is OPEN, those tokens are wasted.
+        try:
+            await self._wait_for_circuit(job.account_email)
+        except Exception as e:
+            log.warning(f"[UpscaleQueue] Circuit wait error for {job.account_email}: {e}")
         
         # Proactive token check
         # Gap #2 fix: Use centralized ensure_valid_token() for refresh
@@ -367,10 +498,10 @@ class UpscaleQueue:
                 vo.upscale_status = "failed"
                 vo.upscale_error = "Access token expired, refresh failed"
             task.upscale_error = "Access token expired"
-            self._engine._dispatcher.update_progress(
+            self._dispatcher.update_progress(
                 task.id, 90, "⚠️ Upscale skipped (auth expired)"
             )
-            self._engine._sync_overall_upscale_status(task)
+            self._sync_status_fn(task)
             self._total_failed += 1
             return
         
@@ -400,11 +531,11 @@ class UpscaleQueue:
                 if not job.retry_indices or job.media_ids[target_indices.index(vi)]:
                     task.video_outputs[vi].upscale_status = "submitting"
         submit_label = f"{len(target_indices)}" if job.retry_indices else f"{total}"
-        self._engine._dispatcher.update_progress(
+        self._dispatcher.update_progress(
             task.id, 88, f"⬆️ Submitting {submit_label} upscales...")
-        if self._engine._on_task_completed:
+        if self._on_completed:
             try:
-                self._engine._on_task_completed(task)  # Trigger UI refresh
+                self._on_completed(task)  # Trigger UI refresh
             except Exception:
                 pass
         
@@ -423,19 +554,34 @@ class UpscaleQueue:
                 continue
             
             try:
-                # Cooldown between sequential submits
-                if local_idx > 0:
-                    await asyncio.sleep(2.0)
-                
                 # Submit with retry
                 resp = None
                 for attempt in range(max_submit_retries):
                     # BUG 1 FIX: Check cooldown before each retry attempt
-                    if attempt > 0 and self._engine.is_account_on_cooldown(job.account_email):
-                        await self._engine.wait_for_cooldown(job.account_email)
+                    if attempt > 0 and self._is_on_cooldown(job.account_email):
+                        await self._wait_cooldown(job.account_email)
                     
-                    # No rate lock — upscale doesn't need anti-detect delay.
-                    # reCAPTCHA is serialized by per-account lock, API by upscale semaphore(3).
+                    # Fix G6: Acquire per-account rate lock + anti-detect delay
+                    # Same mechanism as engine — serialize API calls with adaptive delay
+                    email = job.account_email
+                    if email not in self._rate_locks:
+                        self._rate_locks[email] = asyncio.Lock()
+                    
+                    async with self._rate_locks[email]:
+                        # Re-check cooldown inside lock (another worker may have set it)
+                        if self._is_on_cooldown(email):
+                            log.info(f"Upscale {video_label}: cooldown detected inside rate lock")
+                            await self._wait_cooldown(email)
+                        
+                        # Anti-detect delay (adaptive burst controller)
+                        if self._burst_controller:
+                            bc_delay = self._burst_controller.get_delay(email)
+                            log.info(
+                                f"Upscale {video_label}: anti-detect delay "
+                                f"({bc_delay:.1f}s) → attempt {attempt+1}/{max_submit_retries}"
+                            )
+                            await self._burst_controller.wait(email)
+                    
                     # Bug #3 fix: Use recaptcha_lock to serialize with engine workers
                     async with account.recaptcha_lock:
                         recaptcha_token = await account.refresh_recaptcha() or ""
@@ -455,27 +601,54 @@ class UpscaleQueue:
                             await asyncio.sleep(delay)
                         continue
                     
-                    sem = self._engine._get_upscale_api_semaphore(account.email)
                     # Gap #5: Stable seed per (task, media, attempt) to prevent duplicate jobs
                     idem_hash = hashlib.sha256(
                         f"{task.id}:{media_id}:{attempt}".encode()
                     ).hexdigest()
                     stable_seed = int(idem_hash[:8], 16) % (2**31)
-                    async with sem:
-                        resp = await self._engine._api_client.upscale_video(
-                            access_token=account.get_access_token() or "",
-                            recaptcha_token=recaptcha_token,
+                    
+                    # ★ PRIMARY PATH: Extension-based upscale
+                    ext_bridge = getattr(account, 'extension_bridge', None)
+                    use_ext = (ext_bridge and ext_bridge.is_connected(account.email))
+                    
+                    if use_ext:
+                        upscale_body = self._api_client.build_upscale_body(
                             video_media_id=media_id,
                             target_resolution=resolution,
                             aspect_ratio=task.aspect_ratio,
                             seed=stable_seed,
-                            account_headers=account.get_api_headers(),
                         )
+                        ext_r = await ext_bridge.submit_upscale(
+                            email=account.email, body=upscale_body,
+                        )
+                        from core.api_client import APIResponse
+                        if ext_r and ext_r.get('success'):
+                            resp = APIResponse(success=True, data=ext_r.get('data', {}))
+                        elif ext_r:
+                            resp = APIResponse(
+                                success=False,
+                                error=ext_r.get('error', '') or f"HTTP {ext_r.get('status', 0)}",
+                            )
+                        else:
+                            resp = APIResponse(success=False, error="Extension timeout")
+                    else:
+                        # ★ FALLBACK: Traditional aiohttp path
+                        sem = self._semaphore_fn(account.email)
+                        async with sem:
+                            resp = await self._api_client.upscale_video(
+                                access_token=account.get_access_token() or "",
+                                recaptcha_token=recaptcha_token,
+                                video_media_id=media_id,
+                                target_resolution=resolution,
+                                aspect_ratio=task.aspect_ratio,
+                                seed=stable_seed,
+                                account_headers=account.get_api_headers(),
+                            )
                     account.invalidate_recaptcha()
                     await asyncio.sleep(1.0)
                     
                     if resp.success:
-                        self._engine.clear_account_cooldown(job.account_email)
+                        self._clear_cooldown(job.account_email)
                         break
                     
                     log.warning(
@@ -490,11 +663,11 @@ class UpscaleQueue:
                     if "recaptcha" in error_lower or is_403:
                         # Set account cooldown on 403
                         if is_403:
-                            self._engine.set_account_cooldown(
+                            self._set_cooldown(
                                 job.account_email, f"upscale submit 403"
                             )
                             # Wait for cooldown before next attempt
-                            await self._engine.wait_for_cooldown(job.account_email)
+                            await self._wait_cooldown(job.account_email)
                         
                         # GUARD: Only do browser recovery if NO videos submitted OK yet.
                         # If pending_ops has successes, recovery would disrupt their polls.
@@ -504,7 +677,7 @@ class UpscaleQueue:
                                 try:
                                     await account.soft_recover_browser()
                                     await asyncio.sleep(8)
-                                    await self._engine._wait_for_recaptcha_ready(
+                                    await self._wait_recaptcha_fn(
                                         account, max_wait=20.0
                                     )
                                 except Exception:
@@ -513,9 +686,9 @@ class UpscaleQueue:
                                 # M3 Phase 2: Hard recovery — full browser restart
                                 try:
                                     await account.restart_browser()
-                                    self._engine.fix_client_data()
+                                    self._fix_client_data()
                                     await asyncio.sleep(10)
-                                    await self._engine._wait_for_recaptcha_ready(
+                                    await self._wait_recaptcha_fn(
                                         account, max_wait=30.0
                                     )
                                 except Exception:
@@ -528,22 +701,20 @@ class UpscaleQueue:
                                         f"Upscale {video_label}: attempt {attempt+1} — "
                                         f"escalating to profile reset for {account.email}"
                                     )
-                                    profiles_ctrl = getattr(
-                                        self._engine, '_profiles_controller', None
-                                    )
+                                    profiles_ctrl = self._profiles_controller
                                     if profiles_ctrl and hasattr(profiles_ctrl, 'reset_profile'):
                                         await profiles_ctrl.reset_profile(account)
-                                        self._engine.fix_client_data()
+                                        self._fix_client_data()
                                         await asyncio.sleep(15)
-                                        await self._engine._wait_for_recaptcha_ready(
+                                        await self._wait_recaptcha_fn(
                                             account, max_wait=40.0
                                         )
                                     else:
                                         # Fallback: restart browser again
                                         await account.restart_browser()
-                                        self._engine.fix_client_data()
+                                        self._fix_client_data()
                                         await asyncio.sleep(10)
-                                        await self._engine._wait_for_recaptcha_ready(
+                                        await self._wait_recaptcha_fn(
                                             account, max_wait=30.0
                                         )
                                 except Exception as e:
@@ -591,7 +762,7 @@ class UpscaleQueue:
                 pending_ops.append((orig_idx, op_name, scene_id, media_id))
                 # Update progress per-video submit
                 submitted = len(pending_ops)
-                self._engine._dispatcher.update_progress(
+                self._dispatcher.update_progress(
                     task.id, 88, f"⬆️ Submitted {submitted}/{len(target_indices)} upscales"
                 )
                 
@@ -624,12 +795,12 @@ class UpscaleQueue:
                 for i in failed_indices:
                     task.video_outputs[i].upscale_status = "pending"
                     task.video_outputs[i].upscale_error = ""
-                self._engine._dispatcher.update_progress(
+                self._dispatcher.update_progress(
                     task.id, 87, f"🔁 Upscale retry {job.retry_count}/{job.max_retries} in {retry_delay}s..."
                 )
-                if self._engine._on_task_completed:
+                if self._on_completed:
                     try:
-                        self._engine._on_task_completed(task)
+                        self._on_completed(task)
                     except Exception:
                         pass
                 await asyncio.sleep(retry_delay)
@@ -637,17 +808,17 @@ class UpscaleQueue:
                 return
             
             log.warning(f"[UpscaleQueue] All retries exhausted for task {job.task_id}")
-            self._engine._sync_overall_upscale_status(task)
+            self._sync_status_fn(task)
             self._total_failed += 1
             from core.dispatcher import TaskStage
             task.stage = TaskStage.COMPLETED
-            self._engine._dispatcher.update_progress(task.id, 100, "⚠️ Upscale failed — 720p saved")
-            self._engine._dispatcher.complete_task(
+            self._dispatcher.update_progress(task.id, 100, "⚠️ Upscale failed — 720p saved")
+            self._dispatcher.complete_task(
                 task.id, output_uris=task.output_uris or [],
             )
-            if self._engine._on_task_completed:
+            if self._on_completed:
                 try:
-                    self._engine._on_task_completed(task)
+                    self._on_completed(task)
                 except Exception as e:
                     log.error(f"[UpscaleQueue] UI callback error: {e}")
             return
@@ -686,7 +857,7 @@ class UpscaleQueue:
         # =====================================================
         # PHASE 2: Parallel Poll (all videos simultaneously)
         # =====================================================
-        self._engine._dispatcher.update_progress(
+        self._dispatcher.update_progress(
             task.id, 90, f"🔄 Polling {len(pending_ops)} upscales in parallel..."
         )
         log.info(
@@ -704,7 +875,7 @@ class UpscaleQueue:
             # Acquire burst-controlled poll slot
             await self._burst.acquire()
             try:
-                result = await self._engine._poll_upscale(
+                result = await self._poll_fn(
                     task, account, video_label, op_name, scene_id
                 )
                 
@@ -723,21 +894,50 @@ class UpscaleQueue:
                 if is_free_upscale:
                     log.info(f"Upscale {video_label}: 1080p poll failed, re-submitting (free)")
                     try:
-                        if account.email not in self._engine._account_rate_locks:
-                            self._engine._account_rate_locks[account.email] = asyncio.Lock()
-                        async with self._engine._account_rate_locks[account.email]:
-                            recaptcha_token = await account.refresh_recaptcha() or ""
-                            sem = self._engine._get_upscale_api_semaphore(account.email)
-                            async with sem:
-                                resp2 = await self._engine._api_client.upscale_video(
-                                    access_token=account.get_access_token() or "",
-                                    recaptcha_token=recaptcha_token,
+                        if account.email not in self._rate_locks:
+                            self._rate_locks[account.email] = asyncio.Lock()
+                        async with self._rate_locks[account.email]:
+                            # Fix G7: Anti-detect delay before upscale re-submit
+                            if self._burst_controller:
+                                await self._burst_controller.wait(account.email)
+                            # ★ PRIMARY PATH: Extension-based re-submit
+                            ext_bridge = getattr(account, 'extension_bridge', None)
+                            use_ext = (ext_bridge and ext_bridge.is_connected(account.email))
+                            
+                            if use_ext:
+                                upscale_body = self._api_client.build_upscale_body(
                                     video_media_id=media_id,
                                     target_resolution=resolution,
                                     aspect_ratio=task.aspect_ratio,
                                     seed=generate_random_seed(),
-                                    account_headers=account.get_api_headers(),
                                 )
+                                ext_r = await ext_bridge.submit_upscale(
+                                    email=account.email, body=upscale_body,
+                                )
+                                from core.api_client import APIResponse
+                                if ext_r and ext_r.get('success'):
+                                    resp2 = APIResponse(success=True, data=ext_r.get('data', {}))
+                                elif ext_r:
+                                    resp2 = APIResponse(
+                                        success=False,
+                                        error=ext_r.get('error', '') or f"HTTP {ext_r.get('status', 0)}",
+                                    )
+                                else:
+                                    resp2 = APIResponse(success=False, error="Extension timeout")
+                            else:
+                                # ★ FALLBACK: Traditional aiohttp path
+                                recaptcha_token = await account.refresh_recaptcha() or ""
+                                sem = self._semaphore_fn(account.email)
+                                async with sem:
+                                    resp2 = await self._api_client.upscale_video(
+                                        access_token=account.get_access_token() or "",
+                                        recaptcha_token=recaptcha_token,
+                                        video_media_id=media_id,
+                                        target_resolution=resolution,
+                                        aspect_ratio=task.aspect_ratio,
+                                        seed=generate_random_seed(),
+                                        account_headers=account.get_api_headers(),
+                                    )
                             account.invalidate_recaptcha()
                             await asyncio.sleep(1.0)
                         
@@ -747,7 +947,7 @@ class UpscaleQueue:
                                 op2 = ops2[0].get("operation", {}).get("name", "")
                                 sid2 = ops2[0].get("sceneId", "")
                                 if op2:
-                                    result2 = await self._engine._poll_upscale(
+                                    result2 = await self._poll_fn(
                                         task, account, video_label, op2, sid2
                                     )
                                     if result2:
@@ -790,11 +990,11 @@ class UpscaleQueue:
         uris_to_download = [(i, u) for i, u in enumerate(upscaled_uris) if u]
         
         if uris_to_download:
-            self._engine._dispatcher.update_progress(
+            self._dispatcher.update_progress(
                 task.id, 95, f"⬇️ Downloading {len(uris_to_download)} upscaled videos"
             )
             dl_uris = [u for _, u in uris_to_download]
-            dl_paths = await self._engine._download_outputs(
+            dl_paths = await self._download_fn(
                 task, dl_uris,
                 quality_subfolder=job.target_quality,
                 generate_thumbnails=False,
@@ -821,7 +1021,7 @@ class UpscaleQueue:
             task.output_uris = final_paths
         
         # Sync overall upscale status
-        self._engine._sync_overall_upscale_status(task)
+        self._sync_status_fn(task)
         
         # === Complete the task (deferred from engine worker) ===
         from core.dispatcher import TaskStage
@@ -829,29 +1029,31 @@ class UpscaleQueue:
         task.stage = TaskStage.COMPLETED
         
         if any_success:
-            self._engine._dispatcher.update_progress(
+            self._dispatcher.update_progress(
                 task.id, 100, f"✅ Upscaled to {job.target_quality}"
             )
             self._total_completed += 1
+            self._job_controller.record_success(job.account_email)
         else:
-            self._engine._dispatcher.update_progress(
+            self._dispatcher.update_progress(
                 task.id, 100, f"⚠️ Upscale failed — 720p saved"
             )
             self._total_failed += 1
+            self._job_controller.record_failure(job.account_email)
         
         # Call complete_task() — transitions task state to COMPLETED
         # NOTE: Continuation children were already activated early by engine
         # (via activate_children_early after 720p download), so we don't pass
         # continuation_frame args here — _parent_to_children already popped.
-        self._engine._dispatcher.complete_task(
+        self._dispatcher.complete_task(
             task.id,
             output_uris=task.output_uris or [],
         )
         
         # Notify UI of update
-        if self._engine._on_task_completed:
+        if self._on_completed:
             try:
-                self._engine._on_task_completed(task)
+                self._on_completed(task)
             except Exception as e:
                 log.error(f"[UpscaleQueue] UI callback error: {e}")
         

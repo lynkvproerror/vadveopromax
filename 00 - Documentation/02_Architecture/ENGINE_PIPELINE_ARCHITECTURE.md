@@ -1,6 +1,6 @@
 # 🏭 Engine Pipeline Architecture — Mô Hình Nhà Xưởng
 
-> **Version**: 8.0 • **Updated**: 2026-02-21  
+> **Version**: 9.0 • **Updated**: 2026-02-22  
 > **Scope**: Orchestration Engine — component roles, data flow, pipeline, rate limiting, token, data integrity, fault tolerance.  
 > **Convention**: `[CURRENT]` = đã implement. `[TARGET]` = đề xuất, chưa implement.  
 > **See also**: [CONCURRENCY_MODEL.md](./CONCURRENCY_MODEL.md) — ĐẠI CHỦ/CHỦ/THẦU/THỢ hierarchy, video-based units, account isolation.
@@ -333,6 +333,57 @@ Start: 4 polls concurrent
 
 **Report format:** JSON with `session` (timing), `summary` (stats + task counts), `errors` (categorized, max 20 per category).
 
+### 4.8 5-Layer Anti-Spam Defense `[CURRENT]`
+
+Hệ thống phòng thủ 5 lớp chống 403 retry flood, áp dụng **per-account** (tất cả THỢ cùng CHỦ chịu chung):
+
+```mermaid
+flowchart TD
+    subgraph "LỚP 1: Rate Lock 🔒"
+        L1["asyncio.Lock per account<br/>Chỉ 1 THỢ gửi request tại 1 thời điểm<br/>File: engine.py L1150"]
+    end
+    
+    subgraph "LỚP 2: Adaptive Delay ⏱️"
+        L2["AdaptiveBurstController<br/>Thành công → giảm delay (2s)<br/>403 → tăng delay (8s)<br/>File: engine.py L1161"]
+    end
+    
+    subgraph "LỚP 3: API Semaphore 🚦"
+        L3["Semaphore(2) per account<br/>Max 2 API calls đồng thời<br/>File: engine.py L85"]
+    end
+    
+    subgraph "LỚP 4: Cooldown ❄️"
+        L4["Exponential backoff 30→60→120→180s<br/>Event-based multi-waiter<br/>1 THỢ bị 403 → TẤT CẢ THỢ cùng account đợi<br/>File: engine.py L233"]
+    end
+    
+    subgraph "LỚP 5: Circuit Breaker ⚡"
+        L5["3 trạng thái: CLOSED/OPEN/HALF-OPEN<br/>5+ 403 liên tiếp HOẶC extension mất → OPEN<br/>Background monitor 10s kiểm tra extension<br/>File: engine.py L322"]
+    end
+    
+    L1 --> L2 --> L3 --> L4 --> L5
+```
+
+**Lưu ý quan trọng:** Tất cả 5 lớp dùng `account.email` làm key → áp dụng cho **toàn bộ nhóm THỢ cùng CHỦ**, không phải từng THỢ riêng lẻ. Khi 1 THỢ gặp 403, tất cả THỢ cùng account cùng bị ảnh hưởng.
+
+**Luồng trong retry loop:**
+```
+for attempt in range(max_retries + 1):
+    if attempt > 0:
+        await wait_for_cooldown()     # Lớp 4: đợi cooldown hết
+        await _wait_for_circuit()     # Lớp 5: đợi extension về
+    
+    async with rate_lock:             # Lớp 1: xếp hàng 1 lượt
+        await burst_controller.wait() # Lớp 2: adaptive delay
+        result = await worker.execute()  # Lớp 3: semaphore bên trong
+    
+    if result.success:
+        record_circuit_success()      # Reset Lớp 5
+        clear_account_cooldown()      # Reset Lớp 4
+    elif "403":
+        burst_controller.record_error()  # Lớp 2 tăng delay
+        record_circuit_403()             # Lớp 5 đếm
+        set_account_cooldown()           # Lớp 4 bật
+```
+
 ---
 
 ## 5. Token & reCAPTCHA Management
@@ -532,6 +583,36 @@ Download attempt (max 3):
   5. 3× fail → mark "failed", continue others
 ```
 
+### 9.5 Circuit Breaker (Cầu Dao) `[CURRENT]`
+
+Per-account circuit breaker ngăn retry flood khi extension mất kết nối:
+
+```mermaid
+stateDiagram-v2
+    [*] --> CLOSED: Engine starts
+    CLOSED --> OPEN: Extension disconnect<br/>OR 5+ consecutive 403
+    OPEN --> HALF_OPEN: Monitor detects extension reconnect
+    HALF_OPEN --> CLOSED: Probe request succeeds
+    HALF_OPEN --> OPEN: Probe request fails (403)
+```
+
+| Trạng thái | Điều kiện | THỢ |
+|---|---|---|
+| 🟢 CLOSED | Extension connected, có reCAPTCHA | Chạy bình thường |
+| 🟡 HALF-OPEN | Extension vừa reconnect, chưa test | 1 THỢ thử (probe), còn lại đợi |
+| 🔴 OPEN | Extension mất HOẶC 5+ 403 liên tiếp | **TẤT CẢ THỢ sleep** |
+
+**Thành phần:**
+
+| Component | Location | Mô tả |
+|---|---|---|
+| State vars | `engine.py` `__init__` | `_circuit_state`, `_circuit_events`, `_circuit_consecutive_403` |
+| Trip/Close | `engine.py` L340-400 | `_trip_circuit_breaker()`, `_close_circuit_breaker()`, `_half_open_circuit_breaker()` |
+| Retry gate | `engine.py` L1137-1145 | `_wait_for_circuit()` trước mỗi retry attempt |
+| 403 recording | `engine.py` L1243 | `record_circuit_403()` đếm consecutive failures |
+| Success reset | `engine.py` L1388 | `record_circuit_success()` close breaker + reset counter |
+| Background monitor | `engine.py` TaskGroup | `_circuit_breaker_monitor()` kiểm tra extension mỗi 10s |
+
 ---
 
 ## 10. 🔍 Gap Analysis — Thiếu Sót Hiện Tại
@@ -696,6 +777,9 @@ class StatusAggregator:
 | Task groups/state | `dispatcher.py` | `Dispatcher` class L186-920 |
 | Queue UI bridge | `queue_controller.py` | `QueueController` L36-276 |
 | App lifecycle | `app_controller.py` | `AppController` L68-2256 |
+| Circuit breaker | `engine.py` | `_trip/_close/_half_open_circuit_breaker()` L340-485 |
+| Circuit monitor | `engine.py` | `_circuit_breaker_monitor()` in TaskGroup |
+| 5-layer retry gate | `engine.py` | L1137-1145 (`wait_cooldown` + `wait_circuit`) |
 
 ---
 
@@ -725,4 +809,6 @@ class StatusAggregator:
 | **reCAPTCHA Token Pool** | ✅ `[CURRENT]` | §5.1 | — |
 | **reCAPTCHA 5-Layer Defense** | ✅ `[CURRENT]` | §4.7 | — |
 | **reCAPTCHA Readiness Probe** | ✅ `[CURRENT]` | §4.7 | — |
+| **5-Layer Anti-Spam Defense** | ✅ `[CURRENT]` | §4.8 | — |
+| **Circuit Breaker (Cầu Dao)** | ✅ `[CURRENT]` | §9.5 | — |
 | **Account Load Balancer** | 🔲 `[TARGET]` | §8.2, §11.1 | 🟢 Perf |

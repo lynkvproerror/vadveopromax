@@ -34,7 +34,7 @@ class VEOApiClient:
     def _build_standard_headers(self) -> dict:
         """Build complete headers including auth and browser fingerprint"""
         headers = {
-            "Content-Type": "application/json",
+            "Content-Type": "text/plain;charset=UTF-8",
             "Authorization": f"Bearer {self.auth_manager.get_bearer_token()}"
         }
         # Add x-browser-* headers
@@ -106,12 +106,12 @@ def generate_video_t2v(
     model: str = "veo_3_1_t2v_fast_landscape_ultra",
     aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
     count: int = 4,
-    seed: int = None  # 0-32767, auto-generate if None
+    seed: int = None  # 5000-24999, auto-generate if None
 ) -> list:
     """
     Text-to-Video generation.
     
-    Reference: SEED_MANAGEMENT.md - seed is REQUIRED (0-32767)
+    Reference: SEED_MANAGEMENT.md - seed is REQUIRED (5000-24999)
     Reference: BROWSER_HEADERS.md - x-browser-* headers are MANDATORY
     
     Payload Example:

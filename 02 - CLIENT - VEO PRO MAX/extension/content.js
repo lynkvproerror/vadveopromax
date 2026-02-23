@@ -375,6 +375,217 @@ if (window.__veoContentLoaded) {
             return false;
         }
 
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // submit_prompt — Content script relay for page-context API calls
+        //
+        // Why relay via content script instead of chrome.scripting.executeScript?
+        // MV3 service workers can terminate after 30s, killing pending
+        // executeScript promises. Content scripts live as long as the page,
+        // making them reliable for long-running async operations.
+        //
+        // Flow: background.js → content.js → <script> (MAIN world)
+        //       → window.postMessage → content.js → background.js
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        if (msg.action === 'submit_prompt') {
+            const requestId = msg.requestId;
+            const endpointUrl = msg.endpointUrl;
+            const payload = msg.payload || {};
+            const needsRecaptcha = msg.needsRecaptcha !== false;
+
+            console.log(
+                `[VEO Bridge Content] 🚀 submit_prompt relay: ` +
+                `endpoint=${msg.endpoint} needsRecaptcha=${needsRecaptcha}`
+            );
+
+            // One-time listener for result from MAIN world script
+            const resultHandler = (event) => {
+                if (event.source !== window) return;
+                if (!event.data || event.data.type !== '__VEO_SUBMIT_RESULT__') return;
+                if (event.data.requestId !== requestId) return;
+
+                window.removeEventListener('message', resultHandler);
+                console.log(
+                    `[VEO Bridge Content] ${event.data.result?.success ? '✅' : '❌'} ` +
+                    `submit_prompt result: status=${event.data.result?.status || 'N/A'}`
+                );
+
+                // Send result back to background.js
+                chrome.runtime.sendMessage({
+                    action: 'submit_prompt_relay_result',
+                    requestId: requestId,
+                    ...event.data.result,
+                });
+            };
+            window.addEventListener('message', resultHandler);
+
+            // Safety timeout: clean up listener after 45s if no result
+            const timeout = setTimeout(() => {
+                window.removeEventListener('message', resultHandler);
+                console.error(`[VEO Bridge Content] ❌ submit_prompt timed out (45s)`);
+                chrome.runtime.sendMessage({
+                    action: 'submit_prompt_relay_result',
+                    requestId: requestId,
+                    success: false,
+                    error: 'Content script relay timeout (45s)',
+                });
+            }, 45000);
+
+            // Override cleanup on result
+            const origHandler = resultHandler;
+            const wrappedHandler = (event) => {
+                if (event.source !== window) return;
+                if (!event.data || event.data.type !== '__VEO_SUBMIT_RESULT__') return;
+                if (event.data.requestId !== requestId) return;
+                clearTimeout(timeout);
+                origHandler(event);
+            };
+            window.removeEventListener('message', resultHandler);
+            window.addEventListener('message', wrappedHandler);
+
+            // Inject <script> tag into MAIN world
+            const script = document.createElement('script');
+            script.textContent = `
+(async function() {
+    const requestId = ${JSON.stringify(requestId)};
+    const endpointUrl = ${JSON.stringify(endpointUrl)};
+    const payload = ${JSON.stringify(payload)};
+    const needsRecaptcha = ${JSON.stringify(needsRecaptcha)};
+
+    try {
+        // ── Step 1: reCAPTCHA token ──────────────────────────────
+        let recaptchaToken = null;
+        if (needsRecaptcha) {
+            let siteKey = null;
+            // Extract from script tags
+            for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+                const m = s.src.match(/render=([^&]+)/);
+                if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
+            }
+            // Fallback: from grecaptcha config
+            if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
+                for (const id in ___grecaptcha_cfg.clients) {
+                    const client = ___grecaptcha_cfg.clients[id];
+                    for (const key in client) {
+                        const obj = client[key];
+                        if (obj && typeof obj === 'object') {
+                            for (const k2 in obj) {
+                                const v = obj[k2];
+                                if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
+                            }
+                        }
+                        if (siteKey) break;
+                    }
+                    if (siteKey) break;
+                }
+            }
+            if (!siteKey) {
+                window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
+                    success: false, error: 'Could not extract reCAPTCHA site key'
+                }}, '*');
+                return;
+            }
+
+            try {
+                const recaptchaPromise = grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
+                const recaptchaTimeout = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
+                );
+                recaptchaToken = await Promise.race([recaptchaPromise, recaptchaTimeout]);
+                if (!recaptchaToken || recaptchaToken.length < 500) {
+                    window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
+                        success: false,
+                        error: 'reCAPTCHA token too short (' + (recaptchaToken ? recaptchaToken.length : 0) + ' chars)',
+                        tokenLength: recaptchaToken ? recaptchaToken.length : 0
+                    }}, '*');
+                    return;
+                }
+            } catch (err) {
+                window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
+                    success: false, error: 'reCAPTCHA execute failed: ' + err.message
+                }}, '*');
+                return;
+            }
+        }
+
+        // ── Step 2: Build body ───────────────────────────────────
+        const body = payload.body || {};
+        if (needsRecaptcha && recaptchaToken) {
+            if (!body.clientContext) body.clientContext = {};
+            body.clientContext.recaptchaContext = {
+                token: recaptchaToken,
+                applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+            };
+        }
+
+        // ── Step 3: Access token ─────────────────────────────────
+        let accessToken = null;
+        const nextDataEl = document.getElementById('__NEXT_DATA__');
+        if (nextDataEl) {
+            try {
+                const data = JSON.parse(nextDataEl.textContent);
+                const props = data?.props?.pageProps || {};
+                const session = props.session || {};
+                accessToken = session.access_token || session.accessToken;
+                if (!accessToken) {
+                    const user = props.user || {};
+                    accessToken = user.accessToken;
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        // ── Step 4: Fetch from page context ──────────────────────
+        const headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
+        if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
+
+        const controller = new AbortController();
+        const fetchTimeout = setTimeout(() => controller.abort(), 20000);
+        try {
+            const resp = await fetch(endpointUrl, {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+            clearTimeout(fetchTimeout);
+            const responseText = await resp.text();
+            let responseData = null;
+            try { responseData = JSON.parse(responseText); }
+            catch (e) { responseData = { raw: responseText.substring(0, 1000) }; }
+
+            window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
+                success: resp.ok,
+                status: resp.status,
+                statusText: resp.statusText,
+                data: responseData,
+                tokenLength: recaptchaToken ? recaptchaToken.length : 0,
+            }}, '*');
+        } catch (fetchErr) {
+            clearTimeout(fetchTimeout);
+            const errMsg = fetchErr.name === 'AbortError'
+                ? 'fetch timeout (20s) — API did not respond'
+                : 'fetch failed: ' + fetchErr.message;
+            window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
+                success: false,
+                error: errMsg,
+                tokenLength: recaptchaToken ? recaptchaToken.length : 0,
+            }}, '*');
+        }
+
+    } catch (err) {
+        window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
+            success: false, error: 'Page script error: ' + err.message
+        }}, '*');
+    }
+})();
+`;
+            document.documentElement.appendChild(script);
+            script.remove(); // Clean up — script has already executed
+
+            sendResponse({ ok: true }); // Ack to background.js
+            return false; // sync response
+        }
+
         return false;
     });
 

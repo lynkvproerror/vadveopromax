@@ -2,7 +2,7 @@
 
 **Location**: `03_Backend/API_403_RISK_ANALYSIS.md`  
 **Status**: ACTIVE  
-**Last Updated**: 2026-02-07
+**Last Updated**: 2026-02-22
 
 ---
 
@@ -357,7 +357,7 @@ flowchart TD
 def _build_headers(self, access_token, recaptcha_token):
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
+        "Content-Type": "text/plain;charset=UTF-8",
         "x-goog-recaptcha-token": recaptcha_token,
         # ADD: Origin/Referer để tránh CORS reject
         "Origin": "https://labs.google.com",
@@ -396,13 +396,13 @@ flowchart TD
 ```mermaid
 flowchart TD
     A["POST request"] --> B{"Content-Type?"}
-    B -->|"application/json"| C["✅ Pass"]
+    B -->|"text/plain;charset=UTF-8"| C["✅ Pass"]
     B -->|"Missing/Wrong"| D["❌ 403 hoặc 415"]
     
     D --> E["Mitigation: Luôn set Content-Type"]
 ```
 
-**Xử lý:** Code hiện tại đã set `"Content-Type": "application/json"`. Rủi ro thấp.
+**Xử lý:** Code hiện tại đã set `"Content-Type": "text/plain;charset=UTF-8"` (cập nhật từ HAR/cURL analysis). Rủi ro thấp.
 
 ---
 
@@ -644,9 +644,33 @@ class APIErrorHandler:
 
 ---
 
+## Runtime Defense: 5-Layer Anti-Spam + Circuit Breaker `[CURRENT]`
+
+Ngoài việc ngăn 403 từ gốc (16 rủi ro trên), hệ thống có **5 lớp bảo vệ runtime** chống retry flood khi 403 xảy ra:
+
+| Lớp | Name | Mechanism | Scope |
+|---|---|---|---|
+| 1 | **Rate Lock** | `asyncio.Lock` — 1 THỢ gửi tại 1 thời điểm | Per-account |
+| 2 | **Adaptive Delay** | `AdaptiveBurstController` — 2-8s giữa mỗi request | Per-account |
+| 3 | **API Semaphore** | `Semaphore(2)` — max 2 concurrent API calls | Per-account |
+| 4 | **Cooldown** | Exponential backoff 30→180s, Event-based multi-waiter | Per-account |
+| 5 | **Circuit Breaker** | 3-state (CLOSED/OPEN/HALF-OPEN), background monitor 10s | Per-account |
+
+**Circuit Breaker cầu dao:**
+- 🟢 CLOSED: Bình thường
+- 🔴 OPEN: Extension mất HOẶC 5+ 403 liên tiếp → tất cả THỢ ngủ
+- 🟡 HALF-OPEN: Extension về → 1 THỢ probe → thành công → CLOSED
+
+Tất cả 5 lớp dùng `account.email` làm key → áp dụng cho **nhóm THỢ cùng CHỦ**, không phải từng THỢ riêng lẻ.
+
+> Chi tiết: Xem [ENGINE_PIPELINE_ARCHITECTURE.md](../02_Architecture/ENGINE_PIPELINE_ARCHITECTURE.md) §4.8 và §9.5.
+
+---
+
 ## Cross-References
 
 - [RECAPTCHA_BROWSER_MANAGEMENT.md](RECAPTCHA_BROWSER_MANAGEMENT.md) — reCAPTCHA flow & browser architecture
 - [TOKEN_SECURITY.md](TOKEN_SECURITY.md) — Token lifecycle & security
 - [ACCOUNT_SESSION_MANAGEMENT.md](ACCOUNT_SESSION_MANAGEMENT.md) — Multi-account management
+- [ENGINE_PIPELINE_ARCHITECTURE.md](../02_Architecture/ENGINE_PIPELINE_ARCHITECTURE.md) — 5-Layer Defense & Circuit Breaker (§4.8, §9.5)
 - [API_ENDPOINTS.md](../../Research/reference/API_ENDPOINTS.md) — Endpoint auth requirements

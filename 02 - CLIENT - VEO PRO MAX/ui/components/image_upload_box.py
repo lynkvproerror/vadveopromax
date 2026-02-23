@@ -197,8 +197,8 @@ class ImageUploadBox(QWidget):
             from ui.components.enhance_dialog import EnhanceDialog
             enhancer = None
             app = self.window()
-            if hasattr(app, 'controller') and hasattr(app.controller, '_image_enhancer'):
-                enhancer = app.controller._image_enhancer
+            if hasattr(app, 'controller') and hasattr(app.controller, 'image_enhancer'):
+                enhancer = app.controller.image_enhancer
             
             dialog = EnhanceDialog(
                 image_path=self._image_path,

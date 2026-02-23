@@ -52,11 +52,13 @@ class RecaptchaPool:
         self._fetchers: Dict[str, Callable[[str], Awaitable[Optional[str]]]] = {}
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        self._should_skip_fn: Optional[Callable[[str], bool]] = None  # email → skip refill?
         
         # Stats
         self._hits = 0      # Served from pool
         self._misses = 0    # Fell back to direct fetch
         self._prefetched = 0
+        self._skipped_refills = 0  # Skipped due to cooldown/circuit
     
     def register_account(
         self,
@@ -74,10 +76,44 @@ class RecaptchaPool:
             self._pools[email] = deque(maxlen=self.POOL_SIZE)
         self._fetchers[email] = fetch_fn
     
+    def set_skip_check(self, fn: Callable[[str], bool]):
+        """Set a function to check if refill should be skipped.
+        
+        Args:
+            fn: Function that takes email and returns True if refill
+                should be skipped (e.g., account on cooldown or circuit OPEN).
+        """
+        self._should_skip_fn = fn
+    
     def unregister_account(self, email: str):
         """Remove account from pool."""
         self._pools.pop(email, None)
         self._fetchers.pop(email, None)
+    
+    def inject_token(self, email: str, token: str):
+        """Fix E: Inject an externally-obtained token into the pool.
+        
+        Used by readiness check callback to cache trial-execute tokens
+        so workers don't need an extra round-trip to the extension.
+        
+        Args:
+            email: Account email.
+            token: reCAPTCHA token string (must be >500 chars to be useful).
+        """
+        if not token or len(token) < 500:
+            return  # Reject garbage tokens
+        pool = self._pools.get(email)
+        if pool is None:
+            return  # Account not registered
+        # Don't exceed pool size — drop oldest if full
+        if len(pool) >= self.POOL_SIZE:
+            pool.popleft()
+        pool.append(CachedToken(value=token))
+        self._prefetched += 1
+        log.debug(
+            f"[RecaptchaPool] Injected readiness token for {email} "
+            f"(pool={len(pool)}/{self.POOL_SIZE})"
+        )
     
     def start(self):
         """Start background refill loop."""
@@ -186,6 +222,11 @@ class RecaptchaPool:
                 for email in list(self._fetchers.keys()):
                     if not self._running:
                         break
+                    
+                    # Skip refill if account is on cooldown or circuit OPEN
+                    if self._should_skip_fn and self._should_skip_fn(email):
+                        self._skipped_refills += 1
+                        continue
                     
                     pool = self._pools.get(email, deque(maxlen=self.POOL_SIZE))
                     

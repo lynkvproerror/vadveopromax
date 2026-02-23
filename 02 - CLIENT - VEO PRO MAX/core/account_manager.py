@@ -95,6 +95,20 @@ class AccountManager:
         # Extension bridge ref — set by AppController for real-web token extraction
         self._extension_bridge = None
         
+        # GAP #5: Restart-in-progress flag — prevents race between
+        # extension reconnect and app-initiated browser restart
+        self._restart_in_progress = False
+    
+    @property
+    def extension_bridge(self):
+        """Get extension bridge reference (public API for external access)."""
+        return self._extension_bridge
+    
+    @extension_bridge.setter
+    def extension_bridge(self, value):
+        """Set extension bridge reference."""
+        self._extension_bridge = value
+        
         # Per-account reCAPTCHA lock — serializes all reCAPTCHA requests
         # across worker loop AND upscale queue (Bug #3 fix)
         self._recaptcha_lock = asyncio.Lock()
@@ -376,13 +390,13 @@ class AccountManager:
             # Auto-recover Layer 1: find bridge from sibling accounts via parent manager
             if hasattr(self, '_parent_manager') and self._parent_manager:
                 for acc in getattr(self._parent_manager, '_accounts', []):
-                    if acc._extension_bridge and acc is not self:
-                        self._extension_bridge = acc._extension_bridge
+                    if acc.extension_bridge and acc is not self:
+                        self._extension_bridge = acc.extension_bridge
                         log.info(f"[{self.email}] ✅ Auto-recovered extension bridge from sibling {acc.email}")
                         break
             # Auto-recover Layer 2: get bridge from engine (always set at controller init)
             if not self._extension_bridge:
-                engine_bridge = getattr(getattr(self, '_engine', None), '_app_extension_bridge', None)
+                engine_bridge = getattr(getattr(self, '_engine', None), '_extension_bridge', None)
                 if engine_bridge:
                     self._extension_bridge = engine_bridge
                     log.info(f"[{self.email}] ✅ Auto-recovered extension bridge from engine")
@@ -498,86 +512,106 @@ class AccountManager:
         """Kill Chrome process completely and relaunch for fresh session.
         
         Uses profiles_controller to kill/relaunch the debug browser.
+        GAP #2: Poll process exit instead of hardcoded sleep(3).
+        GAP #5: Set _restart_in_progress flag to prevent reconnect race.
         
         Returns:
             True if restart successful, False otherwise
         """
         email = self.email
+        
+        # GAP #5: Guard against concurrent restarts
+        if self._restart_in_progress:
+            log.warning(f"[{email}] ⚠️ Restart already in progress — skipping")
+            return False
+        
+        self._restart_in_progress = True
         log.info(f"[{email}] 🔄 Full browser restart: killing Chrome process...")
         
-        # Step 1: Close session wrapper
-        if self._browser_session:
-            try:
-                await self._browser_session.close()
-            except Exception:
-                pass
-            self._browser_session = None
-        
-        # Step 2+3: Kill and relaunch Chrome via profiles_controller
-        if self._profiles_controller:
-            try:
-                self._profiles_controller.kill_debug_browser(email)
-                log.info(f"[{email}] Chrome kill signal sent")
-            except Exception as e:
-                log.error(f"[{email}] kill_debug_browser error: {e}")
-            
-            await asyncio.sleep(3)
-            
-            try:
-                self._profiles_controller.open_browser_for_debug(email)
-                log.info(f"[{email}] Chrome relaunch signal sent, waiting for Extension...")
-                # Event-driven wait instead of hardcoded sleep(10)
-                if self._extension_bridge:
-                    connected = await self._extension_bridge.wait_for_extension(email, timeout=30)
-                    if connected:
-                        log.info(f"[{email}] ✅ Extension reconnected after restart")
-                    else:
-                        log.warning(f"[{email}] ⚠️ Extension not reconnected within 30s")
-                else:
-                    await asyncio.sleep(10)  # Fallback if no bridge
-            except Exception as e:
-                log.error(f"[{email}] open_browser_for_debug error: {e}")
-                return False
-        
-        # Step 4: Invalidate cached tokens AND browser headers (force fresh extraction)
-        saved_client_data = self._session.client_data or ""
-        self._session.access_token = None
-        self._session.token_expires = None
-        self._session.recaptcha_token = None
-        self._session.client_data = ""          # Must clear to accept new value
-        self._session.browser_validation = ""   # Also browser-specific
-        self._session.browser_copyright = ""
-        self._session.browser_year = ""
-        self._token_cache = TokenCache()
-        
-        # Step 5: Re-attach via ensure_browser (extracts fresh token + headers)
         try:
-            await self.ensure_browser(headless=True)
+            # Step 1: Close session wrapper
+            if self._browser_session:
+                try:
+                    await self._browser_session.close()
+                except Exception:
+                    pass
+                self._browser_session = None
             
-            # Step 6: Fix x-client-data if new browser value is too short
-            # Chrome Variations Service may not have loaded yet → short value.
-            # Restore cached pre-restart value if it was good and new is short.
-            current_cd = self._session.client_data or ""
-            MIN_GOOD = 20  # Full x-client-data is typically 50+ chars
-            if len(current_cd) < MIN_GOOD and len(saved_client_data) >= MIN_GOOD:
-                log.info(
-                    f"[{email}] Restoring cached x-client-data "
-                    f"({len(saved_client_data)} chars, new was {len(current_cd)} chars)"
-                )
-                self._session.client_data = saved_client_data
-            elif len(current_cd) < MIN_GOOD:
-                log.warning(
-                    f"[{email}] ⚠️ x-client-data short ({len(current_cd)} chars) — "
-                    f"Engine will borrow from pool after restart"
-                )
-            else:
-                log.info(f"[{email}] x-client-data OK ({len(current_cd)} chars)")
+            # Step 2+3: Kill and relaunch Chrome via profiles_controller
+            if self._profiles_controller:
+                try:
+                    self._profiles_controller.kill_debug_browser(email)
+                    log.info(f"[{email}] Chrome kill signal sent")
+                except Exception as e:
+                    log.error(f"[{email}] kill_debug_browser error: {e}")
+                
+                # GAP #2: Poll process exit instead of hardcoded sleep(3)
+                for i in range(10):
+                    if not self._profiles_controller.is_debug_browser_open(email):
+                        log.info(f"[{email}] Chrome process exited after {i+1}s")
+                        break
+                    await asyncio.sleep(1)
+                else:
+                    log.warning(f"[{email}] ⚠️ Chrome still running after 10s — proceeding anyway")
+                
+                try:
+                    self._profiles_controller.open_browser_for_debug(email)
+                    log.info(f"[{email}] Chrome relaunch signal sent, waiting for Extension...")
+                    # Event-driven wait instead of hardcoded sleep(10)
+                    if self._extension_bridge:
+                        connected = await self._extension_bridge.wait_for_extension(email, timeout=30)
+                        if connected:
+                            log.info(f"[{email}] ✅ Extension reconnected after restart")
+                        else:
+                            log.warning(f"[{email}] ⚠️ Extension not reconnected within 30s")
+                    else:
+                        await asyncio.sleep(10)  # Fallback if no bridge
+                except Exception as e:
+                    log.error(f"[{email}] open_browser_for_debug error: {e}")
+                    return False
             
-            log.info(f"[{email}] ✅ Browser restart complete — fresh PID, tokens, reCAPTCHA")
-            return True
-        except Exception as e:
-            log.error(f"[{email}] ❌ ensure_browser after restart failed: {e}")
+            # Step 4: Invalidate cached tokens AND browser headers (force fresh extraction)
+            saved_client_data = self._session.client_data or ""
+            self._session.access_token = None
+            self._session.token_expires = None
+            self._session.recaptcha_token = None
+            self._session.client_data = ""          # Must clear to accept new value
+            self._session.browser_validation = ""   # Also browser-specific
+            self._session.browser_copyright = ""
+            self._session.browser_year = ""
+            self._token_cache = TokenCache()
+            
+            # Step 5: Re-attach via ensure_browser (extracts fresh token + headers)
+            try:
+                await self.ensure_browser(headless=True)
+                
+                # Step 6: Fix x-client-data if new browser value is too short
+                # Chrome Variations Service may not have loaded yet → short value.
+                # Restore cached pre-restart value if it was good and new is short.
+                current_cd = self._session.client_data or ""
+                MIN_GOOD = 20  # Full x-client-data is typically 50+ chars
+                if len(current_cd) < MIN_GOOD and len(saved_client_data) >= MIN_GOOD:
+                    log.info(
+                        f"[{email}] Restoring cached x-client-data "
+                        f"({len(saved_client_data)} chars, new was {len(current_cd)} chars)"
+                    )
+                    self._session.client_data = saved_client_data
+                elif len(current_cd) < MIN_GOOD:
+                    log.warning(
+                        f"[{email}] ⚠️ x-client-data short ({len(current_cd)} chars) — "
+                        f"Engine will borrow from pool after restart"
+                    )
+                else:
+                    log.info(f"[{email}] x-client-data OK ({len(current_cd)} chars)")
+                
+                log.info(f"[{email}] ✅ Browser restart complete — fresh PID, tokens, reCAPTCHA")
+                return True
+            except Exception as e:
+                log.error(f"[{email}] ❌ ensure_browser after restart failed: {e}")
             return False
+        finally:
+            # GAP #5: Always clear restart flag
+            self._restart_in_progress = False
 
     async def close_browser(self):
         """Close persistent browser session."""
@@ -692,14 +726,15 @@ class AccountManager:
     def _is_extension_loaded_check(self) -> bool:
         """Check if Extension is loaded in Chrome via CDP /json endpoint."""
         try:
-            from core.chrome_manager import _is_extension_loaded, _load_pid_file
+            from core.extension_manager import is_extension_loaded
+            from core.chrome_manager import _load_pid_file
             profile_path = self._session.profile_path
             if not profile_path:
                 return False
             pid_info = _load_pid_file(profile_path)
             if not pid_info:
                 return False
-            return _is_extension_loaded(pid_info["port"])
+            return is_extension_loaded(pid_info["port"])
         except Exception:
             return False
     

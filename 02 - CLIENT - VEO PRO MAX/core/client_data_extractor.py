@@ -255,7 +255,6 @@ def _extract_via_temp_chrome() -> Optional[str]:
             "--no-default-browser-check",
             "--disable-infobars",
             "--disable-blink-features=AutomationControlled",
-            "--window-position=-32000,-32000",
             "--disable-gpu",
             "about:blank",
         ]
@@ -272,7 +271,10 @@ def _extract_via_temp_chrome() -> Optional[str]:
         log.info(f"[ClientDataExtractor] Temp Chrome launched: PID={proc.pid}, port={port}")
         
         # Fully hide Chrome window (including taskbar) via Win32 API
-        _hide_process_windows(proc.pid)
+        from config.settings import get_settings as _get_settings
+        _s = _get_settings()
+        if _s.auto_hide_enabled and _s.auto_hide_on_data_extract:
+            _hide_process_windows(proc.pid)
         
         # Wait for CDP to be ready
         deadline = time.time() + 15

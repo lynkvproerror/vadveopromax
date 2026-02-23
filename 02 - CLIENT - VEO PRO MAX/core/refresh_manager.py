@@ -231,24 +231,16 @@ class CookieRefreshManager:
             # reCAPTCHA is on-demand via extension — no proactive refresh needed
         
         # Auto-refresh stale extension headers (Fix #6)
+        # Delegates to ExtensionBridge._trigger_refresh() — centralized cooldown
         if self._extension_bridge:
             for email in self._sessions:
                 headers = self._extension_bridge.get_cached_headers(email, max_age_seconds=240)
                 if headers is None and self._extension_bridge.is_connected(email):
-                    # Headers stale (>12 min) — trigger refresh
                     try:
                         import asyncio
-                        try:
-                            loop = asyncio.get_running_loop()
-                            # Already in async context — schedule as task
-                            asyncio.ensure_future(
-                                self._extension_bridge.refresh_headers(email, timeout=10)
-                            )
-                        except RuntimeError:
-                            # No running loop — create one (sync context)
-                            asyncio.run(
-                                self._extension_bridge.refresh_headers(email, timeout=10)
-                            )
+                        asyncio.ensure_future(self._extension_bridge._trigger_refresh(
+                            email, "stale headers >240s (refresh_manager)", level="full"
+                        ))
                     except Exception:
                         pass  # Best-effort
         

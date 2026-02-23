@@ -127,8 +127,8 @@ class MultiAccountManager:
         
         # Extension connected bonus
         ext_connected = 0
-        if hasattr(account, '_extension_bridge') and account._extension_bridge:
-            ext_connected = 1 if account._extension_bridge.is_connected(account.email) else 0
+        if account.extension_bridge:
+            ext_connected = 1 if account.extension_bridge.is_connected(account.email) else 0
         
         score = (available * 10) - (active * 5) - (consecutive_403 * 20) + (ext_connected * 15)
         return score
@@ -153,8 +153,8 @@ class MultiAccountManager:
         result = {"accounts": {}}
         for acc in self._accounts:
             ext_connected = False
-            if hasattr(acc, '_extension_bridge') and acc._extension_bridge:
-                ext_connected = acc._extension_bridge.is_connected(acc.email)
+            if acc.extension_bridge:
+                ext_connected = acc.extension_bridge.is_connected(acc.email)
             
             result["accounts"][acc.email] = {
                 "score": self._compute_health_score(acc),

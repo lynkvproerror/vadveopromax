@@ -121,3 +121,10 @@ chrome-for-testing/
 # Session data
 sessions/
 **/sessions/
+
+# Backup copy folder (contains large model files)
+02 - CLIENT - VEO PRO MAX - Copy/
+**/assets/models/*.pth
+
+03 - Client Camoufox - VEO PRO MAX/
+

@@ -104,6 +104,7 @@ class AppController:
             dispatcher=self._dispatcher,
             api_client=self._api_client,
         )
+        self._engine._app_controller = self  # Fix A: direct reference (replaces _account_manager._app_controller chain)
         
         # Task persistence (crash recovery) + stuck task detection
         from core.task_journal import TaskJournal
@@ -151,8 +152,9 @@ class AppController:
         self._loop_thread: Optional[threading.Thread] = None
         self._engine_future = None  # Track engine.start() Future for clean shutdown
         
-        # ProfilesController reference (set by UI via set_profiles_controller)
-        self._profiles_controller = None
+        # ProfilesController — shared singleton (also used by tab_settings)
+        from core.profiles_controller import get_profiles_controller
+        self._profiles_controller = get_profiles_controller()
         
         # Extension bridge — WebSocket server for Chrome Extension tokens
         from core.extension_bridge import ExtensionBridge
@@ -160,13 +162,15 @@ class AppController:
         self._extension_bridge.on_headers_update = self._on_extension_headers_update
         self._extension_bridge.on_extension_connect = self._on_extension_connect
         self._extension_bridge.on_unregistered_connection = self._on_unregistered_extension
-        self._extension_bridge._on_readiness_token = self._on_readiness_token
+        self._extension_bridge.on_readiness_token = self._on_readiness_token
+        self._extension_bridge.on_account_logged_out = self._on_account_logged_out
+        self._extension_bridge.on_tab_dead = self._on_tab_dead
         
         # Wire extension bridge into RefreshManager for auto header refresh
         self._refresh_manager.set_extension_bridge(self._extension_bridge)
         
         # Wire extension bridge into Engine for UpscaleQueue fallback injection
-        self._engine._app_extension_bridge = self._extension_bridge
+        self._engine._extension_bridge = self._extension_bridge
         
         # Image Enhancer — GPU detection (background) + model management (portable)
         from core.gpu_detector import GPUDetector
@@ -253,6 +257,10 @@ class AppController:
                 log.info(f"[AppController] Recovered {recovered} tasks from journal")
         
         self._notify_status("Controller started")
+        
+        # Auto-launch Chrome browsers for all ready profiles (runs in background)
+        # Must be called AFTER async loop + extension bridge are ready
+        self._auto_launch_browsers()
     
     def set_splash_callback(self, cb):
         """Set splash progress callback: cb(percent: int, status: str)."""
@@ -281,6 +289,18 @@ class AppController:
             self.stop_processing()
         
         self.state.is_running = False
+        
+        # Persist settings & profiles to disk before shutdown
+        try:
+            from config.settings import save_settings
+            save_settings()
+        except Exception:
+            pass
+        try:
+            if self._profiles_controller:
+                self._profiles_controller.save_profiles()
+        except Exception:
+            pass
         
         # Stop monitoring
         self._session_monitor.stop_monitoring()
@@ -355,6 +375,7 @@ class AppController:
         
         Caches the trial-execute token on the AccountManager so the next
         API call can use it instantly (no extra round-trip to extension).
+        Fix E: Also inject into RecaptchaPool so any worker can benefit.
         """
         if not hasattr(self, '_engine') or not self._engine:
             return
@@ -362,9 +383,13 @@ class AppController:
         if account:
             account._token_cache.set(token)
             account._session.update_recaptcha(token)
+            # Fix E: Inject into RecaptchaPool for cross-worker availability
+            pool = getattr(self._engine, '_recaptcha_pool', None)
+            if pool:
+                pool.inject_token(email, token)
             log.debug(
                 f"[ReadinessToken] Cached trial token for {email} "
-                f"({len(token)} chars)"
+                f"({len(token)} chars) → AM + Pool"
             )
     
     def _on_unregistered_extension(self):
@@ -396,12 +421,72 @@ class AppController:
         except Exception as e:
             log.error(f"[AutoAssign] Failed: {e}")
     
+    def _on_account_logged_out(self, email: str, reason: str):
+        """Callback from ExtensionBridge when logout is detected on a VEO tab.
+        
+        GAP #7 fix: Also pause account workers via long cooldown (300s)
+        to prevent futile 401/403 retry loops on logged-out account.
+        """
+        log.warning(f"[AppController] 🔴 Account logged out: {email} (reason: {reason})")
+        try:
+            # Mark profile as not-ready in persistent data
+            if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                self._profiles_controller.update_profile(email, is_ready=False)
+                log.info(f"[AppController] Profile {email} marked is_ready=False after logout")
+            
+            # GAP #7: Pause workers — set long cooldown so workers stop attempting
+            if hasattr(self, '_engine') and self._engine:
+                from datetime import datetime, timedelta
+                self._engine._account_cooldowns[email] = datetime.now() + timedelta(seconds=300)
+                evt = self._engine._get_cooldown_event(email)
+                evt.clear()  # Block all workers for this account
+                log.warning(f"[AppController] ⏸️ Workers paused for {email} (300s cooldown after logout)")
+            
+            self._push_browser_status()
+            self._push_extension_status()
+            self._push_session_data()
+        except Exception as e:
+            log.debug(f"[AppController] Status push failed after logout: {e}")
+    
+    def _on_tab_dead(self, email: str, reason: str):
+        """Callback from ExtensionBridge when a VEO tab is declared dead.
+        
+        GAP #1 fix: Auto-trigger browser restart instead of just logging.
+        Runs in background thread to avoid blocking the event loop.
+        """
+        log.warning(f"[AppController] 💀 Tab dead: {email} (reason: {reason}) — auto-restarting browser")
+        try:
+            self._push_browser_status()
+            self._push_extension_status()
+            
+            # GAP #1: Auto-restart browser in background thread
+            import threading
+            def _restart():
+                try:
+                    result = self.restart_browser_for(email)
+                    if result:
+                        log.info(f"[AppController] ✅ Browser auto-restarted for {email} after tab death")
+                    else:
+                        log.error(f"[AppController] ❌ Browser auto-restart failed for {email}")
+                except Exception as e:
+                    log.error(f"[AppController] Auto-restart error for {email}: {e}")
+            threading.Thread(target=_restart, name=f"tab-dead-restart-{email}", daemon=True).start()
+        except Exception as e:
+            log.debug(f"[AppController] Status push failed after tab death: {e}")
+    
     async def _refresh_extension_data(self, email: str):
         """Request fresh headers + access token from extension immediately."""
         try:
             # 1. Refresh headers (triggers VEO tab reload → fresh x-browser-*)
             await self._extension_bridge.refresh_headers(email, timeout=10)
             log.info(f"[ExtensionBridge] ✅ Startup headers refreshed for {email}")
+            
+            # 2. Probe for x-browser-validation (cross-origin fetch triggers Chrome to add it)
+            has_validation = await self._extension_bridge.probe_browser_headers(email, timeout=10)
+            if has_validation:
+                log.info(f"[ExtensionBridge] ✅ x-browser-validation captured for {email}")
+            else:
+                log.warning(f"[ExtensionBridge] ⚠️ x-browser-validation NOT captured — API requests may get 403")
         except Exception as e:
             log.debug(f"[ExtensionBridge] Startup header refresh failed: {e}")
         
@@ -445,7 +530,7 @@ class AppController:
                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                     for acc in self._multi_account._accounts:
                         acc.set_profiles_controller(self._profiles_controller)
-                        acc._extension_bridge = self._extension_bridge
+                        acc.extension_bridge = self._extension_bridge
                         acc._parent_manager = self._multi_account  # for bridge auto-recovery
                     log.info(f"[AutoLaunch] ProfilesController + ExtensionBridge injected into {len(self._multi_account._accounts)} accounts")
                 
@@ -467,8 +552,13 @@ class AppController:
                         if success:
                             # Brief yield — browser thread starts in background
                             await asyncio.sleep(1)
-                            self._profiles_controller.hide_debug_browser(email)
-                            log.info(f"[AutoLaunch] ✅ {email} browser hidden")
+                            from config.settings import get_settings as _get_settings
+                            _s = _get_settings()
+                            if _s.auto_hide_enabled and _s.auto_hide_on_engine_start:
+                                self._profiles_controller.hide_debug_browser(email)
+                                log.info(f"[AutoLaunch] ✅ {email} browser hidden")
+                            else:
+                                log.info(f"[AutoLaunch] ✅ {email} browser visible (auto-hide disabled)")
                         else:
                             log.warning(f"[AutoLaunch] ⚠️ Failed to open browser for {email}")
                     
@@ -496,6 +586,14 @@ class AppController:
                     connected = self._extension_bridge.get_connected_emails()
                     log.info(f"[AutoLaunch] Extension status: {len(connected)} emails registered: {connected}")
                 
+                # Step 6: Ensure extensions are installed/up-to-date across all profiles
+                try:
+                    results = self.ensure_all_extensions()
+                    if results:
+                        log.info(f"[AutoLaunch] Extension check complete: {results}")
+                except Exception as e:
+                    log.warning(f"[AutoLaunch] Extension batch check failed: {e}")
+                
                 self._push_browser_status()
                 log.info("[AutoLaunch] ✅ Background browser launch complete")
                     
@@ -505,6 +603,47 @@ class AppController:
         # Run in background async loop
         if self._loop:
             asyncio.run_coroutine_threadsafe(_launch(), self._loop)
+    # ── Public API for UI (Fix B: encapsulate private access) ──────
+    
+    @property
+    def extension_bridge(self):
+        """Public read-only accessor for extension bridge."""
+        return self._extension_bridge
+    
+    @property
+    def dev_console(self):
+        """Public accessor for DevConsole widget."""
+        return self._dev_console
+    
+    @dev_console.setter
+    def dev_console(self, widget):
+        """Set DevConsole widget (called by UI on toggle)."""
+        self._dev_console = widget
+    
+    def push_status_updates(self):
+        """Push all status updates to DevConsole — single public entry point."""
+        self._push_browser_status()
+        self._push_session_data()
+        self._push_pool_status()
+        self._push_extension_status()
+        self._notify_queue_updated()
+    
+    def push_browser_status(self):
+        """Public: Push browser status to DevConsole (used by UI components)."""
+        self._push_browser_status()
+    
+    def push_session_data(self):
+        """Public: Push session data to DevConsole (used by UI components)."""
+        self._push_session_data()
+    
+    def push_pool_status(self):
+        """Public: Push pool status to DevConsole (used by UI components)."""
+        self._push_pool_status()
+    
+    @property
+    def image_enhancer(self):
+        """Public: Get ImageEnhancer instance (used by image widgets)."""
+        return self._image_enhancer
     
     def _push_browser_status(self):
         """Push current browser status to DevConsole (thread-safe).
@@ -623,40 +762,193 @@ class AppController:
     def reload_extension_for(self, email: str) -> bool:
         """Reload the Chrome extension for a specific account.
         
-        Hot-reloads the extension from disk via chrome.runtime.reload() —
-        no browser restart needed. Waits for reconnection.
+        Chrome-type-aware strategy:
+        1. Try hot-reload via WebSocket (chrome.runtime.reload()) — fastest, both types
+        2a. Branded Chrome: CDP-based reinstall via extension_manager
+        2b. CfT: restart browser (--load-extension flag reloads automatically)
         
         Thread-safe. Called from UI thread via background thread.
         
         Returns:
-            True if extension reloaded and reconnected, False otherwise
+            True if extension reloaded/reinstalled and reconnected, False otherwise
         """
         bridge = getattr(self, '_extension_bridge', None)
-        if not bridge:
-            log.error("[AppController] No ExtensionBridge — cannot reload extension")
+        
+        # Strategy 1: WebSocket hot-reload (if extension is connected)
+        if bridge:
+            conn = None
+            try:
+                import asyncio
+                loop = getattr(self, '_loop', None) or asyncio.get_event_loop()
+                
+                # Check if extension is connected for this email
+                conn = asyncio.run_coroutine_threadsafe(
+                    asyncio.coroutine(lambda: bridge._find_connection(email))(),
+                    loop,
+                ).result(timeout=3) if hasattr(bridge, '_find_connection') else None
+            except Exception:
+                conn = None
+            
+            if conn:
+                log.info(f"[AppController] Reloading extension via WebSocket for {email}...")
+                import asyncio
+                loop = getattr(self, '_loop', None) or asyncio.get_event_loop()
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        bridge.reload_extension(email, timeout=15.0),
+                        loop,
+                    )
+                    result = future.result(timeout=20)
+                    
+                    if result:
+                        log.info(f"[AppController] ✅ Extension reloaded for {email}")
+                    else:
+                        log.warning(f"[AppController] Extension reload may have failed for {email}")
+                    
+                    self._push_extension_status()
+                    return result
+                except Exception as e:
+                    log.error(f"[AppController] Extension reload error for {email}: {e}")
+        
+        # Strategy 2: Chrome-type-aware fallback
+        pc = self._profiles_controller
+        if not pc:
+            log.error("[AppController] No ProfilesController — cannot reload extension")
             return False
         
-        log.info(f"[AppController] Reloading extension for {email}...")
+        # Find the Chrome CDP port and exe for this account
+        entry = pc._debug_browsers.get(email, {}) if hasattr(pc, '_debug_browsers') else {}
+        cdp_port = entry.get("cdp_port")
+        chrome_exe = entry.get("chrome_exe", "")
         
-        import asyncio
-        loop = getattr(self, '_loop', None) or asyncio.get_event_loop()
+        if not cdp_port:
+            log.error(f"[AppController] No CDP port found for {email} — try restarting browser")
+            return False
         
-        try:
-            future = asyncio.run_coroutine_threadsafe(
-                bridge.reload_extension(email, timeout=15.0),
-                loop,
-            )
-            result = future.result(timeout=20)
-            
-            if result:
-                log.info(f"[AppController] Extension reloaded for {email}")
-            else:
-                log.warning(f"[AppController] Extension reload may have failed for {email}")
-            
+        from core.chrome_manager import is_branded_chrome
+        
+        if is_branded_chrome(chrome_exe):
+            # Strategy 2a: Branded Chrome → CDP-based reinstall
+            log.info(f"[AppController] Branded Chrome — using CDP reinstall for {email}...")
+            try:
+                from core.extension_manager import reinstall_extension
+                from pathlib import Path
+                
+                _client_dir = Path(__file__).resolve().parent.parent
+                _extension_dir = _client_dir / "extension"
+                
+                result = reinstall_extension(cdp_port, str(_extension_dir), show_window=True)
+                
+                if result:
+                    log.info(f"[AppController] ✅ Extension reinstalled via CDP for {email}")
+                else:
+                    log.warning(f"[AppController] ⚠️ Extension CDP reinstall failed for {email}")
+                
+                self._push_extension_status()
+                return result
+            except Exception as e:
+                log.error(f"[AppController] Extension CDP reinstall error for {email}: {e}")
+                return False
+        else:
+            # Strategy 2b: CfT → restart browser (--load-extension reloads automatically)
+            log.info(f"[AppController] CfT — restarting browser to reload extension for {email}...")
+            result = self.restart_browser_for(email)
             self._push_extension_status()
             return result
+    
+    def ensure_all_extensions(self) -> dict:
+        """Check and install/update extensions across ALL connected Branded Chrome profiles.
+        
+        Called on startup after all browsers reconnect, or from UI 'Fix All'.
+        Thread-safe, can run in background thread.
+        
+        Returns:
+            Dict mapping email -> result string (e.g. '✅', '⚠️ failed', '❌ error')
+        """
+        pc = self._profiles_controller
+        if not pc or not hasattr(pc, '_debug_browsers'):
+            return {}
+        
+        from core.extension_manager import install_if_needed
+        from core.chrome_manager import is_branded_chrome
+        from pathlib import Path
+        
+        _client_dir = Path(__file__).resolve().parent.parent
+        _extension_dir = _client_dir / "extension"
+        
+        if not _extension_dir.exists() or not (_extension_dir / "manifest.json").exists():
+            log.warning("[AppController] No extension directory found — skipping batch check")
+            return {}
+        
+        results = {}
+        for email, entry in pc._debug_browsers.items():
+            port = entry.get("cdp_port")
+            chrome_exe = entry.get("chrome_exe", "")
+            
+            if not port:
+                continue
+            
+            if not is_branded_chrome(chrome_exe):
+                results[email] = "⏭️ CfT (skip)"
+                continue  # CfT uses --load-extension, skip
+            
+            try:
+                ok = install_if_needed(port, str(_extension_dir))
+                results[email] = "✅" if ok else "⚠️ failed"
+            except Exception as e:
+                results[email] = f"❌ {e}"
+                log.error(f"[AppController] Extension batch install error for {email}: {e}")
+        
+        if results:
+            log.info(f"[AppController] Extension batch check results: {results}")
+        
+        self._push_extension_status()
+        return results
+    
+    def reload_extension_for(self, email: str) -> bool:
+        """Hot-reload the Chrome extension for a specific account.
+        
+        Called from UI 🧩 Reload Extension button.
+        Uninstalls then reinstalls the extension from the local disk.
+        
+        Args:
+            email: Account email whose browser to reload extension for
+            
+        Returns:
+            True if extension was reloaded successfully
+        """
+        pc = self._profiles_controller
+        if not pc or not hasattr(pc, '_debug_browsers'):
+            log.warning(f"[AppController] No ProfilesController — cannot reload extension for {email}")
+            return False
+        
+        entry = pc._debug_browsers.get(email, {})
+        port = entry.get("cdp_port")
+        if not port:
+            log.warning(f"[AppController] No CDP port for {email} — browser not running?")
+            return False
+        
+        from core.extension_manager import reinstall_extension
+        from pathlib import Path
+        
+        _client_dir = Path(__file__).resolve().parent.parent
+        _extension_dir = _client_dir / "extension"
+        
+        if not _extension_dir.exists() or not (_extension_dir / "manifest.json").exists():
+            log.warning(f"[AppController] Extension directory not found: {_extension_dir}")
+            return False
+        
+        try:
+            log.info(f"[AppController] 🧩 Reloading extension for {email} (port {port})...")
+            ok = reinstall_extension(port, str(_extension_dir))
+            if ok:
+                log.info(f"[AppController] ✅ Extension reloaded for {email}")
+            else:
+                log.warning(f"[AppController] ⚠️ Extension reload failed for {email}")
+            
+            return ok
         except Exception as e:
-            log.error(f"[AppController] Extension reload error for {email}: {e}")
+            log.error(f"[AppController] ❌ Extension reload error for {email}: {e}")
             return False
     
     def hot_reload_app(self):
@@ -984,7 +1276,7 @@ class AppController:
                 
                 recaptcha_status = "⚪ Not loaded"
                 browser_alive = False
-                slots_display = f"0/{profile.max_slots}"
+                slots_display = f"0/{profile.max_workers}"
                 data_source = "📁 Cache"
             
             # Cookie count from browser profile
@@ -1141,27 +1433,10 @@ class AppController:
         except Exception:
             pass
         
-        # RecaptchaPool
+        # Subsystem stats via Engine facade (Cluster #3 fix)
         try:
-            if (hasattr(self, '_engine') and self._engine and
-                    hasattr(self._engine, '_recaptcha_pool') and self._engine._recaptcha_pool):
-                dashboard["recaptcha_pool"] = self._engine._recaptcha_pool.get_stats()
-        except Exception:
-            pass
-        
-        # UpscaleQueue
-        try:
-            if (hasattr(self, '_engine') and self._engine and
-                    hasattr(self._engine, '_upscale_queue') and self._engine._upscale_queue):
-                dashboard["upscale_queue"] = self._engine._upscale_queue.get_stats()
-        except Exception:
-            pass
-        
-        # AdaptiveBurstController
-        try:
-            if (hasattr(self, '_engine') and self._engine and
-                    hasattr(self._engine, '_burst_controller') and self._engine._burst_controller):
-                dashboard["burst_controller"] = self._engine._burst_controller.get_stats()
+            if hasattr(self, '_engine') and self._engine:
+                dashboard.update(self._engine.get_dashboard_stats())
         except Exception:
             pass
         
@@ -1179,34 +1454,24 @@ class AppController:
         
         Returns dict of all tunable parameters.
         """
+        # Load persisted defaults from AppSettings (C2 fix)
+        from config.settings import get_settings as _gs
+        _s = _gs()
         settings = {
-            "adaptive_burst_enabled": True,
-            "burst_min_delay": 2.0,
-            "burst_max_delay": 15.0,
-            "recaptcha_pool_enabled": True,
-            "pool_size": 2,
-            "watchdog_timeout_min": 10,
-            "journal_save_interval_sec": 30,
+            "adaptive_burst_enabled": getattr(_s, 'adaptive_burst_enabled', True),
+            "burst_min_delay": getattr(_s, 'burst_min_delay', 2.0),
+            "burst_max_delay": getattr(_s, 'burst_max_delay', 15.0),
+            "recaptcha_pool_enabled": getattr(_s, 'recaptcha_pool_enabled', True),
+            "pool_size": getattr(_s, 'recaptcha_pool_size', 2),
+            "watchdog_timeout_min": getattr(_s, 'watchdog_timeout_min', 10),
+            "journal_save_interval_sec": getattr(_s, 'journal_save_interval_sec', 30),
+            "workload_priority": getattr(_s, 'workload_priority', 'prompts_first'),
         }
         
+        # Override with live runtime values if engine is running
         try:
-            if (hasattr(self, '_engine') and self._engine and
-                    hasattr(self._engine, '_burst_controller') and self._engine._burst_controller):
-                bc = self._engine._burst_controller
-                settings["burst_min_delay"] = bc._min
-                settings["burst_max_delay"] = bc._max
-                settings["adaptive_burst_enabled"] = True
-        except Exception:
-            pass
-        
-        try:
-            if (hasattr(self, '_engine') and self._engine and
-                    hasattr(self._engine, '_recaptcha_pool') and self._engine._recaptcha_pool):
-                rp = self._engine._recaptcha_pool
-                settings["pool_size"] = rp.POOL_SIZE
-                # Keep default True — pool auto-starts with engine
-                # Only report False if user explicitly stopped it
-                # (runtime _running is False before first start_processing)
+            if hasattr(self, '_engine') and self._engine:
+                settings.update(self._engine.get_pipeline_settings())
         except Exception:
             pass
         
@@ -1238,35 +1503,16 @@ class AppController:
         log.info(f"[Pipeline] Setting {key} = {value}")
         
         try:
-            if key == "burst_min_delay":
-                if self._engine and self._engine._burst_controller:
-                    self._engine._burst_controller._min = float(value)
-            elif key == "burst_max_delay":
-                if self._engine and self._engine._burst_controller:
-                    self._engine._burst_controller._max = float(value)
-            elif key == "adaptive_burst_enabled":
-                # Toggle is informational — burst controller is always active
-                # but min/max can be set to same value to effectively disable
-                pass
-            elif key == "pool_size":
-                if self._engine and self._engine._recaptcha_pool:
-                    self._engine._recaptcha_pool.POOL_SIZE = int(value)
-            elif key == "recaptcha_pool_enabled":
-                if self._engine and self._engine._recaptcha_pool:
-                    if value and not self._engine._recaptcha_pool._running:
-                        self._engine._recaptcha_pool.start()
-                    elif not value and self._engine._recaptcha_pool._running:
-                        self._engine._recaptcha_pool.stop()
+            # Delegate engine-owned settings via facade (Cluster #3 fix)
+            if self._engine and self._engine.update_pipeline_setting(key, value):
+                pass  # Handled by engine
+            # Non-engine settings stay here (AppController-owned)
             elif key == "watchdog_timeout_min":
                 if self._task_watchdog:
                     self._task_watchdog._stuck_threshold_min = int(value)
             elif key == "journal_save_interval_sec":
                 if self._task_journal:
                     self._task_journal._save_interval = int(value)
-            elif key == "workload_priority":
-                if self._engine:
-                    self._engine._workload_priority = str(value)
-                    log.info(f"[Pipeline] Workload priority → {value}")
             else:
                 log.warning(f"[Pipeline] Unknown setting: {key}")
         except Exception as e:
@@ -1380,16 +1626,23 @@ class AppController:
         status = self._multi_account.get_status_summary()
         return status.get('accounts', [])
     
-    def set_profiles_controller(self, profiles_controller):
-        """Set the ProfilesController reference.
+    @property
+    def profiles_controller(self):
+        """Read-only access to ProfilesController (owned by AppController)."""
+        return self._profiles_controller
+    
+    def set_profiles_controller(self, profiles_controller=None):
+        """Set or replace the ProfilesController reference.
         
-        Called by UI layer (TabSettings) to bridge persistence → runtime.
-        Triggers auto-launch of headless browsers for all profiles.
+        Kept for backward compatibility. If called without argument,
+        uses the internal instance. Triggers auto-launch of headless
+        browsers for all profiles.
         """
-        self._profiles_controller = profiles_controller
+        if profiles_controller is not None:
+            self._profiles_controller = profiles_controller
         # Forward to engine so it can auto re-login on auth failures
         if self._engine:
-            self._engine._profiles_controller = profiles_controller
+            self._engine._profiles_controller = self._profiles_controller
         
         # Now that ProfilesController is available, auto-launch browsers
         self._auto_launch_browsers()
@@ -1430,8 +1683,11 @@ class AppController:
                     existing.enable()
                 elif not is_enabled and existing.is_enabled:
                     existing.disable()
-            elif is_ready and is_enabled:
-                # Profile is ready but not in runtime pool — add it
+            elif is_enabled:
+                # Profile is enabled but not in runtime pool — add it
+                # Note: is_ready is NOT required here. The account needs to be
+                # in the runtime pool so the engine/extension bridge can make it ready.
+                # preflight_check() validates actual readiness (extension, token, etc.).
                 try:
                     profile_obj = self._profiles_controller.get_profile(email)
                     if not profile_obj:
@@ -1470,7 +1726,7 @@ class AppController:
                         pass
                     
                     session.credits = profile_obj.credits
-                    session.max_slots = getattr(profile_obj, 'max_slots', 4)
+                    session.max_workers = getattr(profile_obj, 'max_workers', 20)
                     
                     # Add to runtime via async
                     future = self._run_async(
@@ -1486,7 +1742,7 @@ class AppController:
                             if acc_mgr:
                                 acc_mgr._parent_manager = self._multi_account
                                 if hasattr(self, '_extension_bridge') and self._extension_bridge:
-                                    acc_mgr._extension_bridge = self._extension_bridge
+                                    acc_mgr.extension_bridge = self._extension_bridge
                                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                                     acc_mgr.set_profiles_controller(self._profiles_controller)
                             
@@ -1504,7 +1760,7 @@ class AppController:
                             if acc_mgr:
                                 acc_mgr._parent_manager = self._multi_account
                                 if hasattr(self, '_extension_bridge') and self._extension_bridge:
-                                    acc_mgr._extension_bridge = self._extension_bridge
+                                    acc_mgr.extension_bridge = self._extension_bridge
                                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                                     acc_mgr.set_profiles_controller(self._profiles_controller)
                             
@@ -1534,7 +1790,7 @@ class AppController:
         for acc in self._multi_account._accounts:
             acc._parent_manager = self._multi_account  # for bridge auto-recovery
             if hasattr(self, '_extension_bridge') and self._extension_bridge:
-                acc._extension_bridge = self._extension_bridge
+                acc.extension_bridge = self._extension_bridge
             if hasattr(self, '_profiles_controller') and self._profiles_controller:
                 acc.set_profiles_controller(self._profiles_controller)
     
@@ -1959,6 +2215,75 @@ class AppController:
             settings=settings
         )
     
+    # === TASK ACTIONS (called by context menu) ===
+    
+    def clone_task(self, task_id: str) -> Optional[str]:
+        """Clone a task — delegates to dispatcher."""
+        new_id = self._dispatcher.clone_task(task_id)
+        if new_id:
+            self.state.queue_count += 1
+            self._notify_queue_updated()
+        return new_id
+    
+    def export_task_config(self, task_id: str) -> Optional[dict]:
+        """Export task config — delegates to dispatcher."""
+        return self._dispatcher.export_task_config(task_id)
+    
+    def fork_continuation(self, task_id: str, video_index: int, new_prompt: str) -> Optional[str]:
+        """Fork continuation — create task using completed task's frame + new prompt.
+        
+        Args:
+            task_id: Completed parent task ID
+            video_index: Which video's frame to use (usually 0)
+            new_prompt: New prompt text for the forked task
+        
+        Returns new task ID, or None on failure.
+        """
+        source = self._dispatcher.get_task(task_id)
+        if not source:
+            log.warning(f"[Fork] Source task {task_id} not found")
+            return None
+        
+        frame_uri = source.continuation_frame_uri
+        frame_local = source.continuation_frame_local_path
+        if not frame_uri and not frame_local:
+            log.warning(f"[Fork] No continuation frame on task {task_id}")
+            return None
+        
+        import uuid
+        new_id = f"fork_{uuid.uuid4().hex[:8]}"
+        
+        from core.dispatcher import Task
+        forked = Task(
+            id=new_id,
+            workflow_type=source.workflow_type,
+            prompt=new_prompt,
+            aspect_ratio=source.aspect_ratio,
+            model=source.model,
+            output_count=source.output_count,
+            duration_seconds=source.duration_seconds,
+            download_quality=source.download_quality,
+            output_folder=source.output_folder,
+            project_name=source.project_name,
+            extract_point_ms=source.extract_point_ms,
+            continuation_frame_uri=frame_uri,
+            continuation_frame_local_path=frame_local,
+            parent_task_id=task_id,
+            required_account=source.assigned_account,
+        )
+        
+        # Add to same group as source
+        for group in self._dispatcher.get_task_groups().values():
+            if any(t.id == task_id for t in group.tasks):
+                group.tasks.append(forked)
+                break
+        
+        self._dispatcher.submit_task(forked)
+        self.state.queue_count += 1
+        self._notify_queue_updated()
+        log.info(f"[Fork] {task_id} → {new_id} with prompt: {new_prompt[:50]}...")
+        return new_id
+    
     def activate_license(self, key: str) -> bool:
         """Activate license key.
         
@@ -2004,6 +2329,13 @@ class AppController:
             }
         """
         result = {"can_start": False, "accounts": [], "summary": ""}
+        
+        # Ensure runtime accounts are synced from profiles BEFORE checking
+        # (preflight_check runs before start_processing, which also syncs)
+        try:
+            self.sync_profiles_to_runtime()
+        except Exception as e:
+            log.debug(f"[preflight_check] Profile sync failed: {e}")
         
         if not self._multi_account or not self._multi_account._accounts:
             result["summary"] = "❌ Chưa có tài khoản nào được cấu hình"
@@ -2276,7 +2608,7 @@ class AppController:
     
     def _check_group_completion(self, task: Task):
         """Check if the task's group is fully completed and fire notification."""
-        for group_id, group in self._dispatcher._task_groups.items():
+        for group_id, group in self._dispatcher.get_task_groups().items():
             if any(t.id == task.id for t in group.tasks):
                 if group.status == "completed" and group_id not in self._notified_groups:
                     self._notified_groups.add(group_id)

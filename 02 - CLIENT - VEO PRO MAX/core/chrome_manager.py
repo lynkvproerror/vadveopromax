@@ -32,7 +32,8 @@ CHROME_STARTUP_TIMEOUT = 30  # seconds to wait for CDP port to respond (30s for 
 # ── Chrome for Testing (CfT) ───────────────────────────────────────────
 # Chrome branded builds (137+) removed --load-extension flag.
 # CfT is an official Google binary that supports --load-extension.
-# We auto-download CfT on first launch and prefer it over branded Chrome.
+# Strategy: prefer branded Chrome (full headers + reCAPTCHA trust),
+# fall back to CfT when branded is unavailable.
 
 CFT_API_URL = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
 CFT_PLATFORM = "win64"
@@ -183,29 +184,88 @@ def _do_cft_download(progress_callback=None) -> Optional[str]:
         return None
 
 
-def find_chrome_exe() -> Optional[str]:
-    """Locate Chrome for Testing executable.
+# ── Branded Chrome Detection ────────────────────────────────────────────
+
+def _find_branded_chrome() -> Optional[str]:
+    """Find branded Chrome installation (Program Files / Registry).
     
-    Chrome for Testing (CfT) is the ONLY supported browser.
-    CfT supports --load-extension (required for Extension Bridge).
-    Chrome branded v137+ removed this flag — NOT supported.
-    CfT is auto-downloaded on first launch if not present.
+    Branded Chrome provides full x-browser-* headers and high reCAPTCHA
+    trust scores — preferred over CfT for production use.
     """
-    # 1. Check if CfT is already downloaded
+    import winreg
+    
+    # Method 1: Windows Registry (most reliable)
+    registry_keys = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"),
+    ]
+    for hive, key_path in registry_keys:
+        try:
+            with winreg.OpenKey(hive, key_path) as key:
+                path, _ = winreg.QueryValueEx(key, "")
+                if path and Path(path).exists():
+                    # Exclude CfT binary that may be registered
+                    if "chrome-for-testing" not in path.lower():
+                        log.info(f"[ChromeManager] Found branded Chrome via registry: {path}")
+                        return path
+        except (OSError, FileNotFoundError):
+            continue
+    
+    # Method 2: Common installation paths
+    common_paths = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+    ]
+    for p in common_paths:
+        if p.exists():
+            log.info(f"[ChromeManager] Found branded Chrome at: {p}")
+            return str(p)
+    
+    return None
+
+
+def is_branded_chrome(chrome_exe: str) -> bool:
+    """Check if the given path is branded Chrome (not CfT).
+    
+    Branded Chrome v137+ does NOT support --load-extension flag.
+    Extension must be installed via CDP-based extension_manager (Developer Mode + Load Unpacked).
+    """
+    return "chrome-for-testing" not in chrome_exe.lower()
+
+
+def find_chrome_exe() -> Optional[str]:
+    """Locate Chrome executable.
+    
+    Priority order:
+    1. Branded Chrome (preferred — full x-browser-* headers, high reCAPTCHA trust)
+    2. Chrome for Testing (fallback — supports --load-extension)
+    3. Auto-download CfT (first-time setup)
+    
+    Returns path to chrome.exe or None.
+    """
+    # 1. Branded Chrome (preferred)
+    branded = _find_branded_chrome()
+    if branded:
+        log.info(f"[ChromeManager] ✅ Using branded Chrome: {branded}")
+        return branded
+    
+    # 2. CfT already downloaded
     cft = _find_cft_exe()
     if cft:
+        log.info(f"[ChromeManager] Using CfT (branded Chrome not found): {cft}")
         return cft
     
-    # 2. Try auto-download CfT (requires internet on first run)
+    # 3. Try auto-download CfT (requires internet on first run)
     cft = download_chrome_for_testing()
     if cft:
+        log.info(f"[ChromeManager] CfT auto-downloaded: {cft}")
         return cft
     
-    # 3. No CfT available — clear error (no Chrome branded fallback)
+    # 4. No Chrome available
     log.error(
-        "[ChromeManager] ❌ Chrome for Testing not found and auto-download failed. "
-        "Please ensure internet connection for first-time setup, "
-        "or manually place CfT in: " + str(_get_cft_dir())
+        "[ChromeManager] ❌ No Chrome found. Install Google Chrome or "
+        "ensure internet for CfT auto-download."
     )
     return None
 
@@ -346,40 +406,14 @@ def _is_chrome_process_alive(pid: int, profile_path: str) -> bool:
 
 
 # ── Extension Detection ──────────────────────────────────────────────────
-# Check if extension is loaded by querying CDP /json targets.
-
-
-def _is_extension_loaded(port: int) -> bool:
-    """Check if our extension is already loaded by querying CDP /json targets.
-    
-    Looks for service_worker or background_page targets with chrome-extension:// URL.
-    
-    Returns:
-        True if extension service worker is detected.
-    """
-    try:
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/json", method="GET")
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            targets = json.loads(resp.read().decode())
-        
-        for target in targets:
-            url = target.get("url", "")
-            target_type = target.get("type", "")
-            if url.startswith("chrome-extension://") and target_type in ("service_worker", "background_page"):
-                ext_id = url.split("/")[2] if len(url.split("/")) > 2 else "unknown"
-                log.info(f"[ChromeManager] Extension already loaded: {ext_id} (type={target_type})")
-                return True
-        
-        return False
-    except Exception as e:
-        log.debug(f"[ChromeManager] Could not check extension status: {e}")
-        return False
+# Moved to core/extension_manager.py (single source of truth).
+# Use: from core.extension_manager import is_extension_loaded
 
 
 # ── Pre-set Developer Mode in Chrome Profile ─────────────────────────────
 # chrome://extensions page hangs when --enable-unsafe-extension-debugging
-# is used with --remote-debugging-port. Pre-setting developer_mode in the
-# profile's Preferences file fixes this and ensures chrome://extensions loads.
+# is used with --remote-debugging-port. This flag is now CfT-only (see launch_chrome).
+# Pre-setting developer_mode in Preferences is still needed for CDP auto-install.
 
 def _ensure_developer_mode(profile_path: str):
     """Pre-set Developer Mode = ON in Chrome profile Preferences.
@@ -495,7 +529,7 @@ def launch_chrome(
         email: Account email (stored in PID file for reference)
         port: CDP port to use (auto-allocated if None)
         start_url: Initial URL to open
-        hidden: If True, launch off-screen (--window-position=-32000,-32000)
+        hidden: If True, browser will be hidden via SW_HIDE post-launch
     
     Returns:
         Dict with {pid, port, email, chrome_exe}
@@ -524,7 +558,6 @@ def launch_chrome(
         f"--user-data-dir={profile_path}",
         "--remote-allow-origins=*",
         "--enable-extensions",
-        "--enable-unsafe-extension-debugging",  # Required for unpacked extensions (CDP-installed)
         "--no-first-run",
         "--no-default-browser-check",
         # ── Anti-throttle: prevent Memory Saver, tab discarding, background throttling ──
@@ -534,15 +567,21 @@ def launch_chrome(
         "--disable-renderer-backgrounding",
     ]
 
-    # Add --load-extension flag as supplementary install method.
-    # This flag was removed from Chrome 137+ official builds but still works on
-    # Chromium and Chrome for Testing. If not supported, Chrome silently ignores it.
-    if _has_extension:
+    # --load-extension: ONLY for CfT (Chrome branded v137+ removed this flag).
+    # For branded Chrome, extension is installed via CDP extension_manager on first launch.
+    # --enable-unsafe-extension-debugging: ONLY for CfT — required for --load-extension.
+    #   Branded Chrome does NOT need it (extensions persist via UI install),
+    #   and it causes chrome://extensions page to hang with --remote-debugging-port.
+    _is_branded = is_branded_chrome(chrome_exe)
+    if _has_extension and not _is_branded:
         args.insert(-1, f"--load-extension={_extension_dir}")
-        log.info(f"[ChromeManager] Added --load-extension flag: {_extension_dir}")
-
-    if hidden:
-        args.append("--window-position=-32000,-32000")
+        args.insert(-1, "--enable-unsafe-extension-debugging")
+        log.info(f"[ChromeManager] Added --load-extension + --enable-unsafe-extension-debugging (CfT): {_extension_dir}")
+    elif _has_extension and _is_branded:
+        log.info(f"[ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)")
+    # Note: hidden browsers are handled by SW_HIDE post-launch
+    # (profiles_controller auto-hide or client_data_extractor._hide_process_windows),
+    # NOT by --window-position off-screen which caused rendering/focus issues.
 
     args.append(start_url)
 
@@ -583,11 +622,18 @@ def launch_chrome(
         log.warning(f"[ChromeManager] CDP NOT responding after {CHROME_STARTUP_TIMEOUT}s on port {port}")
         log.warning(f"[ChromeManager] CDP not responding after {CHROME_STARTUP_TIMEOUT}s")
 
-    # Extension loads via --load-extension flag at launch time.
-    # Chrome branded builds (145+) don't support CDP Extensions.loadUnpacked,
-    # so we rely solely on the --load-extension flag.
-    if _has_extension:
-        log.info(f"[ChromeManager] Extension loaded via --load-extension flag")
+    # Extension installation strategy depends on Chrome type:
+    # - CfT: loaded via --load-extension flag at launch time
+    # - Branded: installed via CDP-based extension_manager (first time only)
+    if _has_extension and not _is_branded:
+        log.info(f"[ChromeManager] Extension loaded via --load-extension flag (CfT)")
+    elif _has_extension and _is_branded and cdp_ready:
+        # Auto-install extension for branded Chrome (first time only)
+        try:
+            from core.extension_manager import install_if_needed
+            install_if_needed(port, str(_extension_dir), hidden=hidden)
+        except Exception as e:
+            log.warning(f"[ChromeManager] Extension auto-install error: {e}")
     elif not _has_extension:
         log.warning(f"[ChromeManager] No extension directory found — skipping install")
 
@@ -753,16 +799,43 @@ def launch_or_reconnect(
         # Try reconnect
         existing = reconnect_chrome(profile_path)
         if existing:
-            # On reconnect, extension persists as long as Chrome stays alive
-            # (DETACHED_PROCESS — it never restarts). Just check & log status.
             if _has_extension:
                 port = existing.get("port")
-                if port and _is_extension_loaded(port):
+                from core.extension_manager import is_extension_loaded, install_if_needed
+                if port and is_extension_loaded(port):
                     log.info(f"[ChromeManager] Reconnected — extension already loaded on port {port}")
                 else:
-                    # Extension not detected yet — likely still initializing or Chrome
-                    # was restarted externally. --load-extension flag needs a relaunch.
-                    log.info(f"[ChromeManager] Reconnected — extension not detected on port {port} (may still be initializing)")
+                    # Extension missing — recovery depends on Chrome type
+                    _is_branded = is_branded_chrome(existing.get("chrome_exe", ""))
+                    if port and _is_branded:
+                        # Branded Chrome: auto-install via CDP
+                        log.warning(f"[ChromeManager] Reconnected — extension MISSING on port {port}, auto-installing...")
+                        try:
+                            install_if_needed(port, str(_extension_dir))
+                        except Exception as e:
+                            log.error(f"[ChromeManager] Auto-reinstall on reconnect failed: {e}")
+                    elif port:
+                        # CfT: --load-extension needs relaunch — kill old, launch fresh
+                        log.warning(f"[ChromeManager] Reconnected — extension MISSING (CfT), restarting browser...")
+                        try:
+                            old_pid = existing.get("pid")
+                            if old_pid:
+                                import signal
+                                try:
+                                    os.kill(old_pid, signal.SIGTERM)
+                                    log.info(f"[ChromeManager] Killed old CfT process PID={old_pid}")
+                                except OSError:
+                                    pass  # Already dead
+                                time.sleep(1)
+                            # Remove stale PID file so reconnect doesn't find old instance
+                            _remove_pid_file(profile_path)
+                            # Launch fresh with --load-extension
+                            result = launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden)
+                            enforce_tab_limit(result.get("port", 0))
+                            return result
+                        except Exception as e:
+                            log.error(f"[ChromeManager] CfT auto-restart failed: {e}")
+                            # Fall through to return existing (degraded but alive)
             # Enforce tab limit on reconnect (prevents tab accumulation)
             enforce_tab_limit(existing.get("port", 0))
             return existing

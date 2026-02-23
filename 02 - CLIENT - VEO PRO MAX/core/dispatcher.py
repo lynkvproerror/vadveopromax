@@ -227,10 +227,16 @@ class TaskGroup:
     
     @property
     def progress(self) -> int:
+        """Average per-task progress across all tasks in the group.
+        
+        Uses each task's individual progress (0-100) rather than just
+        counting COMPLETED tasks, so the group shows meaningful progress
+        even when tasks are at 88% waiting for upscale.
+        """
         if not self.tasks:
             return 0
-        completed = sum(1 for t in self.tasks if t.state == TaskState.COMPLETED)
-        return int(completed / len(self.tasks) * 100)
+        total_progress = sum(getattr(t, 'progress', 0) or 0 for t in self.tasks)
+        return int(total_progress / len(self.tasks))
     
     @property
     def status(self) -> str:
@@ -273,6 +279,10 @@ class Dispatcher:
         self._max_concurrent = max_concurrent
         self._running_count = 0
         
+        # PA3: Per-account running task counter for fair-share balancing
+        # Prevents accounts with more workers from monopolizing the queue
+        self._per_account_running: Dict[str, int] = {}  # email → running count
+        
         # Callbacks
         self._on_task_ready: Optional[Callable[[Task], None]] = None
         self._on_task_completed: Optional[Callable[[Task], None]] = None
@@ -297,6 +307,56 @@ class Dispatcher:
     def get_replace_target(self, task_id: str) -> Optional[tuple]:
         """Get (original_task_id, video_index) if task_id is a replacement task."""
         return self._replace_target_map.get(task_id)
+    
+    # ── Public API (Cluster #2: encapsulate private internals) ──
+    
+    def get_all_tasks_dict(self) -> Dict[str, 'Task']:
+        """Return all tasks as {id: Task} dict (internal use).
+        
+        Note: The List-returning get_all_tasks() at L872 is for UI display.
+        Engine code that needs task-ID lookups should use this dict version.
+        """
+        return self._all_tasks
+    
+    def get_task_groups(self) -> Dict[str, 'TaskGroup']:
+        """Return all task groups (read-only view).
+        
+        Replaces external `dispatcher._task_groups` access.
+        """
+        return self._task_groups
+    
+    def set_on_task_ready(self, callback: Optional[Callable[['Task'], None]]):
+        """Set callback for when a task becomes ready.
+        
+        Replaces direct `dispatcher._on_task_ready = ...` assignment.
+        """
+        self._on_task_ready = callback
+    
+    def decrement_running(self):
+        """Thread-safe decrement of running count (floor at 0).
+        
+        Replaces direct `dispatcher._running_count -= 1` mutation.
+        Previously a race condition: engine mutated without lock.
+        """
+        with self._lock:
+            self._running_count = max(0, self._running_count - 1)
+    
+    def _decrement_account_running(self, email: Optional[str]):
+        """PA3: Decrement per-account running counter."""
+        if email and email in self._per_account_running:
+            self._per_account_running[email] = max(
+                0, self._per_account_running[email] - 1
+            )
+            # Clean up zero entries
+            if self._per_account_running[email] == 0:
+                self._per_account_running.pop(email, None)
+    
+    def collect_chain_descendants(self, root_id: str) -> list:
+        """Public wrapper for chain descendant collection.
+        
+        Replaces external `dispatcher._collect_chain_descendants()` calls.
+        """
+        return self._collect_chain_descendants(root_id)
     
     def submit_task(self, task: Task) -> bool:
         """Submit a new task or re-submit an existing task.
@@ -354,6 +414,7 @@ class Dispatcher:
             self._queued_task_ids.discard(task.id)  # Allow re-enqueue
             self._enqueue_task(task, priority=0)  # Requeue = high priority
             self._running_count = max(0, self._running_count - 1)
+            self._decrement_account_running(task.assigned_account)
             if self._on_task_ready:
                 self._on_task_ready(task)
     
@@ -370,18 +431,35 @@ class Dispatcher:
         
         return True
     
-    def get_next_task(self, timeout: Optional[float] = None) -> Optional[Task]:
-        """Get the next ready task.
+    def get_next_task(self, account_email: str = None) -> Optional[Task]:
+        """Pop next ready task from queue (non-blocking).
         
-        Non-blocking. Returns None if no task available.
+        PA3: When account_email is provided and multiple accounts are active,
+        applies fair-share gate — accounts running above average yield their turn.
+        This prevents accounts with more workers from monopolizing the queue.
+        Auto-degrades to no-op when only 1 account.
         
         Bug 15 note: _running_count += 1 is safe in CPython because all workers
-        run on the same asyncio event loop and get_nowait() is synchronous.
+        run in the SAME event loop thread (asyncio cooperative multitasking).
         The GIL ensures atomicity for single statements in cooperative multitasking.
         
         Dedup guard: Skips tasks that are already RUNNING (stale duplicates
         left in queue from journal restore, force retry, or re-submit).
         """
+        # PA3: Fair-share gate — only when multi-account
+        if account_email and len(self._per_account_running) > 1:
+            total = sum(self._per_account_running.values())
+            num_accounts = len(self._per_account_running)
+            avg = total / num_accounts
+            my_running = self._per_account_running.get(account_email, 0)
+            if my_running > avg + 1:
+                # This account is running above fair share — yield turn
+                log.debug(
+                    f"[Dispatcher] PA3: {account_email} running {my_running} "
+                    f"(avg={avg:.1f}) — yielding turn"
+                )
+                return None
+        
         while True:
             try:
                 _, _, task = self._ready_queue.get_nowait()
@@ -404,6 +482,13 @@ class Dispatcher:
                 task.state = TaskState.RUNNING
                 task.started_at = datetime.now()
                 self._running_count += 1
+                
+                # PA3: Track per-account running count
+                if account_email:
+                    task.assigned_account = account_email
+                    self._per_account_running[account_email] = \
+                        self._per_account_running.get(account_email, 0) + 1
+                
                 return task
             except asyncio.QueueEmpty:
                 return None
@@ -425,6 +510,7 @@ class Dispatcher:
         task.output_uris = output_uris
         task.progress = 100
         self._running_count = max(0, self._running_count - 1)
+        self._decrement_account_running(task.assigned_account)
         
         # ── Result slotting: replacement task → original task's video slot ──
         replace_target = task.replace_target
@@ -497,6 +583,7 @@ class Dispatcher:
             task.error = error
         task.completed_at = datetime.now()
         self._running_count = max(0, self._running_count - 1)
+        self._decrement_account_running(task.assigned_account)
         
         if self._on_task_failed:
             self._on_task_failed(task, error)
@@ -553,6 +640,7 @@ class Dispatcher:
         # If was running, decrement counter so dispatcher counts stay accurate
         if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
             self._running_count = max(0, self._running_count - 1)
+            self._decrement_account_running(task.assigned_account)
         
         log.info(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
         emit_event(EventType.QUEUE_UPDATED, {
@@ -701,6 +789,17 @@ class Dispatcher:
         """Get task group by ID."""
         return self._task_groups.get(group_id)
     
+    def remove_group(self, group_id: str) -> bool:
+        """Remove a task group by ID.
+        
+        Callers should cancel all tasks in the group first.
+        Returns True if group was found and removed.
+        """
+        if group_id in self._task_groups:
+            self._task_groups.pop(group_id, None)
+            return True
+        return False
+    
     def get_status_summary(self) -> dict:
         """Get queue status summary."""
         states = {}
@@ -714,6 +813,69 @@ class Dispatcher:
             "running": self.running_count,
             "by_state": states,
             "groups": len(self._task_groups),
+        }
+    
+    def clone_task(self, task_id: str) -> Optional[str]:
+        """Clone a task — fresh copy with same input data but new state.
+        
+        Returns new task ID, or None if source task not found.
+        """
+        source = self._all_tasks.get(task_id)
+        if not source:
+            return None
+        
+        import uuid
+        new_id = f"clone_{uuid.uuid4().hex[:8]}"
+        
+        cloned = Task(
+            id=new_id,
+            workflow_type=source.workflow_type,
+            prompt=source.prompt,
+            aspect_ratio=source.aspect_ratio,
+            model=source.model,
+            output_count=source.output_count,
+            duration_seconds=source.duration_seconds,
+            image_uris=list(source.image_uris),
+            image_paths=list(source.image_paths),
+            download_quality=source.download_quality,
+            output_folder=source.output_folder,
+            project_name=source.project_name,
+            extract_point_ms=source.extract_point_ms,
+        )
+        
+        # Add to same group as source
+        for group in self._task_groups.values():
+            if any(t.id == task_id for t in group.tasks):
+                group.tasks.append(cloned)
+                break
+        
+        self.submit_task(cloned)
+        log.info(f"[Dispatcher] Cloned {task_id} → {new_id}")
+        return new_id
+    
+    def export_task_config(self, task_id: str) -> Optional[dict]:
+        """Export a task's configuration as a serializable dict.
+        
+        Returns config dict, or None if task not found.
+        """
+        task = self._all_tasks.get(task_id)
+        if not task:
+            return None
+        
+        return {
+            "workflow_type": task.workflow_type,
+            "prompt": task.prompt,
+            "aspect_ratio": task.aspect_ratio,
+            "model": task.model,
+            "output_count": task.output_count,
+            "duration_seconds": task.duration_seconds,
+            "image_uris": list(task.image_uris),
+            "image_paths": list(task.image_paths),
+            "download_quality": task.download_quality,
+            "output_folder": task.output_folder,
+            "project_name": task.project_name,
+            "extract_point_ms": task.extract_point_ms,
+            "parent_task_id": task.parent_task_id,
         }
     
     def _enqueue_task(self, task: Task, priority: int = 1):
@@ -1373,6 +1535,7 @@ class Dispatcher:
             except Exception:
                 break
         self._running_count = 0  # Reset to 0 since everything is cleared
+        self._per_account_running.clear()  # PA3: Reset per-account counters
         log.info(f"[Dispatcher] Cleared all: {count} tasks removed")
         return count
     

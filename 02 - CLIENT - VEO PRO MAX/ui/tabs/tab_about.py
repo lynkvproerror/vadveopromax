@@ -84,31 +84,9 @@ class TabAbout(QWidget):
         layout.addWidget(scroll)
     
     def _create_section(self, title: str) -> tuple:
-        """Create a section frame with header."""
-        section = QFrame()
-        section.setStyleSheet(f"background-color: {Theme.SURFACE0};")
-        layout = QVBoxLayout(section)
-        layout.setContentsMargins(0, 0, 0, 8)
-        layout.setSpacing(0)
-        
-        header = QFrame()
-        header.setFixedHeight(32)
-        header.setStyleSheet(f"background-color: {Theme.SURFACE2};")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 0, 12, 0)
-        
-        title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
-        header_layout.addWidget(title_label)
-        
-        layout.addWidget(header)
-        
-        content = QWidget()
-        content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(12, 8, 12, 0)
-        layout.addWidget(content)
-        
-        return section, content_layout
+        """Create a section frame with header (delegates to shared utility)."""
+        from ui.components.section_frame import create_section
+        return create_section(title, content_spacing=0)
     
     def _create_logo_section(self) -> QWidget:
         """Create ASCII logo section."""

@@ -30,7 +30,7 @@ REQUIRED_HEADERS = {
 
 ```http
 POST /v1:uploadUserImage?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -62,7 +62,7 @@ Content-Type: application/json
 
 ```http
 POST /v1/video:batchAsyncGenerateVideoStartImage?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -100,7 +100,7 @@ Content-Type: application/json
 
 ```http
 POST /v1/video:batchAsyncGenerateVideoStartAndEndImage?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -133,7 +133,7 @@ Content-Type: application/json
 
 ```http
 POST /v1/video:batchAsyncGenerateVideoReferenceImages?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -162,7 +162,7 @@ Content-Type: application/json
 
 ```http
 POST /v1/video:batchAsyncGenerateVideoText?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -186,7 +186,7 @@ Content-Type: application/json
 
 ```http
 POST /v1/video:batchCheckAsyncVideoGenerationStatus?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -216,7 +216,7 @@ Content-Type: application/json
 
 ```http
 POST /v1/video:generatePinholeGif
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -259,7 +259,7 @@ x-client-data: <CLIENT_DATA>
 
 ```http
 POST /v1/video:batchAsyncGenerateVideoUpsampleVideo?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**
@@ -287,7 +287,7 @@ Content-Type: application/json
 
 ```http
 POST /v1/flow/upsampleImage?key={API_KEY}&clientContext.tool=PINHOLE
-Content-Type: application/json
+Content-Type: text/plain;charset=UTF-8
 ```
 
 **Payload:**

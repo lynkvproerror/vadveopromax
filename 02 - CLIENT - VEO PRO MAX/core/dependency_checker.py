@@ -26,6 +26,7 @@ REQUIRED_PACKAGES = [
     ("aiohttp", "aiohttp"),
     ("requests", "requests"),
     ("firebase-admin", "firebase_admin"),
+    ("websocket-client", "websocket"),
 ]
 
 # Google Chrome silent installer URL (Enterprise MSI — always latest stable)

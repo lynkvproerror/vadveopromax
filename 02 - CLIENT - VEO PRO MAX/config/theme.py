@@ -176,6 +176,46 @@ class Theme:
         }
         return styles.get(status, styles["info"])
     
+    _arrow_paths = None
+
+    @classmethod
+    def _generate_arrows(cls):
+        """Generate arrow PNG images for QSS (Qt needs image: url() for arrows)."""
+        if cls._arrow_paths:
+            return cls._arrow_paths
+
+        import os, tempfile
+        from PySide6.QtGui import QImage, QPainter, QColor, QPolygonF
+        from PySide6.QtCore import QPointF, Qt
+
+        d = os.path.join(tempfile.gettempdir(), 'veo_arrows')
+        os.makedirs(d, exist_ok=True)
+
+        color = QColor(cls.TEXT)
+        dim_color = QColor(cls.OVERLAY0)
+        arrows = {
+            'up': ([QPointF(6, 2), QPointF(11, 10), QPointF(1, 10)], 12),
+            'down': ([QPointF(1, 2), QPointF(11, 2), QPointF(6, 10)], 12),
+            'combo_down': ([QPointF(1, 3), QPointF(13, 3), QPointF(7, 11)], 14),
+            'up_dim': ([QPointF(6, 2), QPointF(11, 10), QPointF(1, 10)], 12),
+            'down_dim': ([QPointF(1, 2), QPointF(11, 2), QPointF(6, 10)], 12),
+        }
+        paths = {}
+        for name, (pts, sz) in arrows.items():
+            img = QImage(sz, sz, QImage.Format.Format_ARGB32)
+            img.fill(QColor(0, 0, 0, 0))
+            p = QPainter(img)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(dim_color if '_dim' in name else color)
+            p.drawPolygon(QPolygonF(pts))
+            p.end()
+            fpath = os.path.join(d, f'{name}.png')
+            img.save(fpath)
+            paths[name] = fpath.replace('\\', '/')
+        cls._arrow_paths = paths
+        return paths
+
     @classmethod
     def get_qss_stylesheet(cls) -> str:
         """Get PySide6 QSS stylesheet.
@@ -183,6 +223,7 @@ class Theme:
         Reference: license_manager_gui.py DARK_STYLESHEET
         Returns complete stylesheet for QApplication.setStyleSheet()
         """
+        arrows = cls._generate_arrows()
         return f"""
 /* ============================================ */
 /* VEO PRO MAX - Catppuccin Mocha Theme        */
@@ -288,16 +329,21 @@ QComboBox:focus {{
 }}
 
 QComboBox::drop-down {{
-    border: none;
-    width: 24px;
+    border-left: 1px solid {cls.BORDER};
+    width: 30px;
+    background-color: {cls.SURFACE1};
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+}}
+
+QComboBox::drop-down:hover {{
+    background-color: {cls.SURFACE2};
 }}
 
 QComboBox::down-arrow {{
-    image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid {cls.TEXT};
-    margin-right: 8px;
+    image: url({arrows['combo_down']});
+    width: 14px;
+    height: 14px;
 }}
 
 QComboBox QAbstractItemView {{
@@ -314,7 +360,7 @@ QSpinBox, QDoubleSpinBox {{
     border: 1px solid {cls.BORDER};
     border-radius: 4px;
     padding: 4px 8px;
-    padding-right: 20px;  /* Space for buttons on right */
+    padding-right: 28px;  /* Space for buttons on right (24px + 4px) */
     selection-background-color: {cls.BLUE};
 }}
 
@@ -331,7 +377,7 @@ QSpinBox:disabled, QDoubleSpinBox:disabled {{
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
     subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 18px;
+    width: 24px;
     border-left: 1px solid {cls.BORDER};
     border-bottom: 1px solid {cls.BORDER};
     border-top-right-radius: 3px;
@@ -350,7 +396,7 @@ QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed {{
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     subcontrol-position: bottom right;
-    width: 18px;
+    width: 24px;
     border-left: 1px solid {cls.BORDER};
     border-top: 1px solid {cls.BORDER};
     border-bottom-right-radius: 3px;
@@ -365,32 +411,32 @@ QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {{
     background-color: {cls.BLUE};
 }}
 
-/* Up arrow — triangle pointing up */
+/* Up arrow */
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
-    width: 0;
-    height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 5px solid {cls.TEXT};
+    image: url({arrows['up']});
+    width: 12px;
+    height: 12px;
 }}
 
 QSpinBox::up-arrow:disabled, QDoubleSpinBox::up-arrow:disabled,
 QSpinBox::up-arrow:off, QDoubleSpinBox::up-arrow:off {{
-    border-bottom-color: {cls.OVERLAY0};
+    image: url({arrows['up_dim']});
+    width: 12px;
+    height: 12px;
 }}
 
-/* Down arrow — triangle pointing down */
+/* Down arrow */
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
-    width: 0;
-    height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid {cls.TEXT};
+    image: url({arrows['down']});
+    width: 12px;
+    height: 12px;
 }}
 
 QSpinBox::down-arrow:disabled, QDoubleSpinBox::down-arrow:disabled,
 QSpinBox::down-arrow:off, QDoubleSpinBox::down-arrow:off {{
-    border-top-color: {cls.OVERLAY0};
+    image: url({arrows['down_dim']});
+    width: 12px;
+    height: 12px;
 }}
 
 /* === CHECK BOX === */
@@ -604,6 +650,19 @@ QFrame[frameShape="4"] {{ /* HLine */
 QFrame[frameShape="5"] {{ /* VLine */
     background-color: {cls.BORDER};
     max-width: 1px;
+}}
+
+/* === SCROLL AREA === */
+QScrollArea {{
+    border: none;
+}}
+
+/* === SETTINGS SECTIONS === */
+QFrame#settingsSection {{
+    background-color: {cls.SURFACE0};
+    border: 1px solid {cls.BORDER};
+    border-radius: 8px;
+    padding: 12px;
 }}
 """
 

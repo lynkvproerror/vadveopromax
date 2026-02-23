@@ -21,12 +21,12 @@ from config.constants import APIEndpoints, WorkflowType, AspectRatio
 
 
 # === SEED CONSTANTS ===
-SEED_MIN = 0
-SEED_MAX = 9999  # n8n uses Math.floor(Math.random() * 10000) → 0-9999
+SEED_MIN = 5000
+SEED_MAX = 24999  # HAR verified: website seeds observed 5K-24K (e.g. 23713, 14781, 23516, 16504)
 
 
 def generate_random_seed() -> int:
-    """Generate a random seed in valid range (0-9999, per n8n reference)."""
+    """Generate a random seed in valid range (5000-24999, per HAR analysis)."""
     return random.randint(SEED_MIN, SEED_MAX)
 
 
@@ -170,19 +170,22 @@ class VEOApiClient:
     ) -> Dict[str, str]:
         """Build request headers for aisandbox-pa REST endpoints.
         
-        Per n8n reference workflow:
-        - Content-Type: application/json
+        Per HAR analysis (verified 2026-02-22):
+        - Content-Type: text/plain;charset=UTF-8 (NOT application/json!)
         - Origin + Referer required for CORS
-        - Authorization: raw token (NO Bearer prefix) for generate calls
+        - Authorization: Bearer {token}
         - x-browser-* headers included for fingerprinting
         
+        IMPORTANT: _request uses data=json.dumps() NOT json=data,
+        because aiohttp json= silently overrides Content-Type to application/json.
+        
         Args:
-            access_token: OAuth2 access token. Sent as raw token.
+            access_token: OAuth2 access token.
             extra_headers: Additional headers to merge.
             account_headers: Per-account x-browser-* headers dict.
         """
         headers = {
-            "Content-Type": "application/json",
+            "Content-Type": "text/plain;charset=UTF-8",
             "Origin": "https://labs.google",
             "Referer": "https://labs.google/",
         }
@@ -219,19 +222,27 @@ class VEOApiClient:
         Per HAR analysis (verified ground truth):
         - tool: "PINHOLE" for video/image, "ASSET_MANAGER" for uploads
         - sessionId: ";{timestamp_ms}"
-        - projectId: UUID
-        - userPaygateTier: account tier
+        - projectId: only for generate endpoints, NOT for upload/upscale
+        - userPaygateTier: only for video generate endpoints
         - recaptchaContext: REQUIRED for all generation calls (HAR verified)
+        
+        HAR-verified clientContext per endpoint:
+          batchAsyncGenerateVideoText:     sessionId + tool + paygateTier + recaptcha
+          batchGenerateImages:             sessionId + tool + projectId + recaptcha
+          uploadUserImage:                 sessionId + tool (ASSET_MANAGER only)
+          batchAsyncGenerateVideoUpsampleVideo: sessionId + recaptcha ONLY
         """
         import time
         import uuid as _uuid
         ctx: Dict[str, Any] = {
             "sessionId": f";{int(time.time() * 1000)}",
-            "tool": tool,
         }
-        # projectId: always included (n8n always sends it)
-        # Fallback to generated UUID if not provided
-        ctx["projectId"] = project_id if project_id else str(_uuid.uuid4())
+        # tool: included when specified (most endpoints except upscale)
+        if tool:
+            ctx["tool"] = tool
+        # projectId: only include when explicitly provided (HAR: not in upload/upscale)
+        if project_id:
+            ctx["projectId"] = project_id
         if paygate_tier:
             ctx["userPaygateTier"] = paygate_tier
         if include_recaptcha and recaptcha_token:
@@ -258,37 +269,38 @@ class VEOApiClient:
             recaptcha_token: Goes in body clientContext, not headers.
             account_headers: Per-account x-browser-* headers dict.
         """
+        # RAW version does NOT append ?key= — match that behavior exactly
         url = f"{self.base_url}{endpoint}"
         headers = self._build_headers(access_token=access_token, account_headers=account_headers)
         
         try:
             session = await self._get_session()
             
-            # DEBUG: dump request details for 403 diagnosis
             import logging
             _log = logging.getLogger(__name__)
-            _log.debug(f"[API REQUEST] {method} {url}")
-            _log.debug(f"[API HEADERS] {json.dumps(dict(headers), indent=2, ensure_ascii=False)}")
-            if data:
-                # Show clientContext structure (mask token)
-                ctx = data.get("clientContext", {})
-                rc = ctx.get("recaptchaContext", {})
-                _log.debug(f"[API BODY] clientContext keys: {list(ctx.keys())}")
-                if rc:
-                    _log.debug(f"[API BODY] recaptchaContext: token={len(rc.get('token',''))}chars, applicationType={rc.get('applicationType','MISSING')}")
-                _log.debug(f"[API BODY] top-level keys: {list(data.keys())}")
-                # Full body dump (mask long tokens for readability)
-                import copy
-                dump = copy.deepcopy(data)
-                if "clientContext" in dump and "recaptchaContext" in dump["clientContext"]:
-                    t = dump["clientContext"]["recaptchaContext"].get("token", "")
-                    dump["clientContext"]["recaptchaContext"]["token"] = f"<{len(t)}chars>"
-                _log.debug(f"[API BODY FULL] {json.dumps(dump, indent=2, default=str, ensure_ascii=False)}")
             
-            async with session.request(method, url, headers=headers, json=data) as resp:
+            # CRITICAL: Use data=json.dumps() NOT json=data
+            # aiohttp json= overrides Content-Type to application/json
+            # but HAR shows website sends text/plain;charset=UTF-8
+            body = json.dumps(data) if data else None
+            async with session.request(method, url, headers=headers, data=body) as resp:
                 self._call_count += 1
                 response_code = resp.status
                 response_text = await resp.text()
+                
+                # On 403: dump full request details at WARNING level for diagnosis
+                if response_code == 403:
+                    _log.warning(f"[403 DEBUG] {method} {url}")
+                    # Mask tokens for readability
+                    safe_headers = {k: (v[:40] + '...' if len(str(v)) > 40 else v) for k, v in headers.items()}
+                    _log.warning(f"[403 DEBUG] Headers: {json.dumps(safe_headers, indent=2, ensure_ascii=False)}")
+                    if data:
+                        import copy
+                        dump = copy.deepcopy(data)
+                        if "clientContext" in dump and "recaptchaContext" in dump.get("clientContext", {}):
+                            t = dump["clientContext"]["recaptchaContext"].get("token", "")
+                            dump["clientContext"]["recaptchaContext"]["token"] = f"<{len(t)}chars>"
+                        _log.warning(f"[403 DEBUG] Body: {json.dumps(dump, indent=2, default=str, ensure_ascii=False)}")
                 
                 if response_code == 200:
                     try:
@@ -325,6 +337,214 @@ class VEOApiClient:
     
     # ==================== VIDEO GENERATION ====================
     
+    def build_request_body(
+        self,
+        workflow_type: str,
+        prompt: str,
+        project_id: str = "",
+        aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        model: str = "veo_3_1_t2v_fast_ultra",
+        output_count: int = 4,
+        seed: Optional[int] = None,
+        paygate_tier: str = "PAYGATE_TIER_TWO",
+        image_uris: Optional[List[str]] = None,
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Build full request body for Extension-based submission.
+        
+        Returns (endpoint_key, body) where body does NOT contain
+        recaptchaContext — Extension injects fresh token from page context.
+        
+        Args:
+            workflow_type: T2V, I2V, R2V, T2I, F2V
+            prompt: Generation prompt
+            project_id: TRPC project ID
+            aspect_ratio: Video/image aspect ratio
+            model: Model key
+            output_count: Number of outputs (1-4)
+            seed: Optional deterministic seed
+            paygate_tier: Paygate tier
+            image_uris: Image media IDs (for I2V, R2V, F2V)
+            
+        Returns:
+            Tuple of (endpoint_key, body_dict)
+            endpoint_key: 'T2V', 'I2V_SINGLE', 'I2V_DUAL', 'R2V', 'T2I'
+        """
+        import uuid as _uuid
+        
+        # Build clientContext WITHOUT recaptchaContext
+        client_ctx = self._build_client_context(
+            recaptcha_token="",  # Extension adds fresh token
+            project_id=project_id,
+            paygate_tier=paygate_tier,
+            include_recaptcha=False,  # Key: no reCAPTCHA in body
+        )
+        
+        # Build requests[] array based on workflow type
+        wt = workflow_type.upper()
+        
+        if wt in ("T2V", "F2V"):
+            requests_list = []
+            for idx in range(min(output_count, 4)):
+                actual_seed = (seed + idx) if seed is not None else generate_random_seed()
+                req_item = {
+                    "aspectRatio": aspect_ratio,
+                    "seed": validate_seed(actual_seed),
+                    "textInput": {"prompt": prompt},
+                    "videoModelKey": model,
+                    "metadata": {"sceneId": str(_uuid.uuid4())},
+                }
+                # F2V: add start image
+                if wt == "F2V" and image_uris:
+                    req_item["startImageInput"] = {
+                        "image": {"mediaImageId": image_uris[0]}
+                    }
+                requests_list.append(req_item)
+            
+            if wt == "F2V" and image_uris:
+                endpoint = "I2V_SINGLE"
+            else:
+                endpoint = "T2V"
+            
+            return endpoint, {
+                "clientContext": client_ctx,
+                "requests": requests_list,
+            }
+        
+        elif wt == "I2V":
+            requests_list = []
+            for idx in range(min(output_count, 4)):
+                actual_seed = (seed + idx) if seed is not None else generate_random_seed()
+                req_item = {
+                    "aspectRatio": aspect_ratio,
+                    "seed": validate_seed(actual_seed),
+                    "textInput": {"prompt": prompt},
+                    "videoModelKey": model,
+                    "metadata": {"sceneId": str(_uuid.uuid4())},
+                }
+                if image_uris and len(image_uris) >= 2:
+                    req_item["startImageInput"] = {"image": {"mediaImageId": image_uris[0]}}
+                    req_item["endImageInput"] = {"image": {"mediaImageId": image_uris[1]}}
+                    endpoint = "I2V_DUAL"
+                elif image_uris and len(image_uris) == 1:
+                    req_item["startImageInput"] = {"image": {"mediaImageId": image_uris[0]}}
+                    endpoint = "I2V_SINGLE"
+                else:
+                    return "I2V_SINGLE", {}  # Error: no images
+                requests_list.append(req_item)
+            
+            return endpoint, {
+                "clientContext": client_ctx,
+                "requests": requests_list,
+            }
+        
+        elif wt == "R2V":
+            requests_list = []
+            for idx in range(min(output_count, 4)):
+                actual_seed = (seed + idx) if seed is not None else generate_random_seed()
+                ref_images = [{"image": {"mediaImageId": uri}} for uri in (image_uris or [])[:3]]
+                requests_list.append({
+                    "aspectRatio": aspect_ratio,
+                    "seed": validate_seed(actual_seed),
+                    "textInput": {"prompt": prompt},
+                    "videoModelKey": model,
+                    "metadata": {"sceneId": str(_uuid.uuid4())},
+                    "referenceImageInputs": ref_images,
+                })
+            
+            return "R2V", {
+                "clientContext": client_ctx,
+                "requests": requests_list,
+            }
+        
+        elif wt == "T2I":
+            return "T2I", {
+                "clientContext": client_ctx,
+                "imageRequests": [{
+                    "prompt": prompt,
+                    "aspectRatio": aspect_ratio,
+                    "modelNameEnum": model or "GEM_PIX_2",
+                    "numImages": min(output_count, 4),
+                    "projectId": project_id,
+                }],
+            }
+        
+        else:
+            return "T2V", {}  # Unknown workflow
+
+    def build_upscale_body(
+        self,
+        video_media_id: str,
+        target_resolution: str = "VIDEO_RESOLUTION_1080P",
+        aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Build upscale video body for Extension submission.
+        
+        HAR verified: upscale uses minimal clientContext (sessionId only,
+        NO projectId, NO paygateTier, NO tool). Extension adds recaptchaContext.
+        """
+        import uuid as _uuid
+        import time as _time
+        
+        actual_seed = seed if seed is not None else generate_random_seed()
+        model_map = {
+            "VIDEO_RESOLUTION_1080P": "veo_3_1_upsampler_1080p",
+            "VIDEO_RESOLUTION_4K": "veo_3_1_upsampler_4k",
+        }
+        model_key = model_map.get(target_resolution, "veo_3_1_upsampler_1080p")
+        
+        return {
+            "clientContext": {
+                "sessionId": f";{int(_time.time() * 1000)}",
+                # recaptchaContext will be injected by Extension
+            },
+            "requests": [{
+                "aspectRatio": aspect_ratio,
+                "resolution": target_resolution,
+                "seed": validate_seed(actual_seed),
+                "videoInput": {"mediaId": video_media_id},
+                "videoModelKey": model_key,
+                "metadata": {"sceneId": str(_uuid.uuid4())},
+            }],
+        }
+    
+    def build_status_body(
+        self,
+        operations: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Build status check body for Extension submission.
+        
+        HAR verified: NO clientContext, NO recaptchaContext needed for polling.
+        Just the operations[] array.
+        """
+        return {
+            "operations": operations,
+        }
+    
+    def build_upscale_image_body(
+        self,
+        media_id: str,
+        project_id: str = "",
+        target_resolution: str = "UPSAMPLE_IMAGE_RESOLUTION_4K",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
+    ) -> Dict[str, Any]:
+        """Build image upscale body for Extension submission.
+        
+        HAR verified: uses mediaId + targetResolution + clientContext.
+        Extension adds recaptchaContext.
+        """
+        return {
+            "mediaId": media_id,
+            "targetResolution": target_resolution,
+            "clientContext": self._build_client_context(
+                recaptcha_token="",
+                project_id=project_id,
+                paygate_tier=paygate_tier,
+                include_recaptcha=False,
+            ),
+        }
+
+
     async def generate_video_t2v(
         self,
         access_token: str,
@@ -735,7 +955,7 @@ class VEOApiClient:
         # Sending expired token would cause 401, preventing credit/tier fetch.
         return await self._request(
             "GET",
-            f"{APIEndpoints.CREDITS}?key={APIEndpoints.API_KEY}",
+            f"{APIEndpoints.CREDITS}",  # _request auto-appends ?key=
             "",  # Bug 9: No access_token → no Authorization: Bearer
             "",  # No reCAPTCHA needed
             account_headers=account_headers,
