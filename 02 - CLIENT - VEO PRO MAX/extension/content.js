@@ -194,7 +194,7 @@ if (window.__veoContentLoaded) {
     }
 
 
-    // ── Anti-Idle Simulation ───────────────────────────────────────────────
+    // ── Anti-Idle Core ─────────────────────────────────────────────────────
 
     function randomBetween(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -207,12 +207,12 @@ if (window.__veoContentLoaded) {
             sendHeartbeat(); // First heartbeat immediately
         }
 
-        // 2. Random mouse simulation
+        // 2. Human-like mouse simulation
         if (!_mouseSimTimer) {
             scheduleMouseSim();
         }
 
-        // 3. Micro-scroll simulation
+        // 3. Human-like micro-scroll simulation
         if (!_scrollTimer) {
             scheduleMicroScroll();
         }
@@ -224,7 +224,7 @@ if (window.__veoContentLoaded) {
             setTimeout(checkRecaptchaWarmth, 10000);
         }
 
-        console.log('[VEO Bridge Content] 🏃 Anti-idle systems started');
+        console.log('[VEO Bridge Content] 🏃 Anti-idle systems started (human-like mode)');
     }
 
     function sendHeartbeat() {
@@ -251,37 +251,6 @@ if (window.__veoContentLoaded) {
         }, delay);
     }
 
-    function simulateMouseMove() {
-        // Only simulate when tab is hidden (background) — don't interfere with real user
-        if (document.visibilityState === 'visible') return;
-
-        try {
-            const x = randomBetween(100, Math.max(window.innerWidth - 100, 200));
-            const y = randomBetween(100, Math.max(window.innerHeight - 100, 200));
-
-            const event = new MouseEvent('mousemove', {
-                clientX: x,
-                clientY: y,
-                bubbles: true,
-                cancelable: true,
-            });
-            document.body.dispatchEvent(event);
-
-            // Occasionally also fire a pointermove for modern frameworks
-            if (Math.random() < 0.3) {
-                const pointerEvent = new PointerEvent('pointermove', {
-                    clientX: x + randomBetween(-10, 10),
-                    clientY: y + randomBetween(-10, 10),
-                    bubbles: true,
-                    cancelable: true,
-                });
-                document.body.dispatchEvent(pointerEvent);
-            }
-        } catch (e) {
-            // Silently ignore — page might have restricted body
-        }
-    }
-
     function scheduleMicroScroll() {
         const delay = randomBetween(MICRO_SCROLL_MIN, MICRO_SCROLL_MAX);
         _scrollTimer = setTimeout(() => {
@@ -290,17 +259,212 @@ if (window.__veoContentLoaded) {
         }, delay);
     }
 
-    function performMicroScroll() {
-        // Only when hidden
+
+    // ── Human-Like Activity Simulation ──────────────────────────────────────
+    // Bezier curve mouse paths, acceleration/deceleration, micro-interactions
+
+    // Persistent cursor position (remembered between simulations)
+    let _lastMouseX = null;
+    let _lastMouseY = null;
+
+    /**
+     * Cubic Bezier interpolation for smooth mouse paths.
+     * P0 = start, P1/P2 = control points, P3 = end.
+     */
+    function cubicBezier(t, p0, p1, p2, p3) {
+        const u = 1 - t;
+        return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+    }
+
+    /**
+     * Ease-in-out-cubic: mimics human acceleration → deceleration.
+     * Fast in the middle, slow at start/end (like real hand movements).
+     */
+    function easeInOutCubic(t) {
+        return t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    /**
+     * Generate a human-like Bezier path between two points.
+     * Returns array of {x, y} positions with natural curvature.
+     */
+    function generateBezierPath(x0, y0, x1, y1) {
+        const dist = Math.hypot(x1 - x0, y1 - y0);
+        // More steps for longer distances (8-25 steps)
+        const steps = Math.max(8, Math.min(25, Math.floor(dist / 15)));
+
+        // Random control points — offset from straight line for natural curve
+        // Humans rarely move in straight lines; there's always a slight arc
+        const curvature = 0.2 + Math.random() * 0.3; // 20-50% deviation
+        const midX = (x0 + x1) / 2;
+        const midY = (y0 + y1) / 2;
+        const perpX = -(y1 - y0); // Perpendicular direction
+        const perpY = x1 - x0;
+        const perpLen = Math.hypot(perpX, perpY) || 1;
+
+        // Randomly curve left or right
+        const sign = Math.random() < 0.5 ? 1 : -1;
+        const offset = dist * curvature * sign;
+
+        const cp1x = midX + (perpX / perpLen) * offset * 0.6 + (Math.random() - 0.5) * 20;
+        const cp1y = midY + (perpY / perpLen) * offset * 0.6 + (Math.random() - 0.5) * 20;
+        const cp2x = midX + (perpX / perpLen) * offset * 0.4 + (Math.random() - 0.5) * 20;
+        const cp2y = midY + (perpY / perpLen) * offset * 0.4 + (Math.random() - 0.5) * 20;
+
+        const path = [];
+        for (let i = 0; i <= steps; i++) {
+            const rawT = i / steps;
+            const t = easeInOutCubic(rawT); // Apply human-like easing
+            path.push({
+                x: cubicBezier(t, x0, cp1x, cp2x, x1),
+                y: cubicBezier(t, y0, cp1y, cp2y, y1),
+            });
+        }
+        return path;
+    }
+
+    /**
+     * Dispatch mouse events along a Bezier path with human-like timing.
+     * Includes acceleration/deceleration, micro-jitter, and occasional pauses.
+     */
+    async function humanMouseMove(targetX, targetY) {
+        const startX = _lastMouseX ?? randomBetween(200, 600);
+        const startY = _lastMouseY ?? randomBetween(200, 400);
+
+        const path = generateBezierPath(startX, startY, targetX, targetY);
+
+        for (let i = 0; i < path.length; i++) {
+            const pt = path[i];
+
+            // Add micro-jitter (±1px — hand tremor)
+            const jitterX = (Math.random() - 0.5) * 2;
+            const jitterY = (Math.random() - 0.5) * 2;
+            const finalX = Math.round(pt.x + jitterX);
+            const finalY = Math.round(pt.y + jitterY);
+
+            // Dispatch mousemove
+            document.body.dispatchEvent(new MouseEvent('mousemove', {
+                clientX: finalX, clientY: finalY,
+                bubbles: true, cancelable: true,
+            }));
+
+            // 30% chance: also fire pointermove (modern frameworks)
+            if (Math.random() < 0.3) {
+                document.body.dispatchEvent(new PointerEvent('pointermove', {
+                    clientX: finalX + (Math.random() - 0.5) * 2,
+                    clientY: finalY + (Math.random() - 0.5) * 2,
+                    bubbles: true, cancelable: true,
+                }));
+            }
+
+            _lastMouseX = finalX;
+            _lastMouseY = finalY;
+
+            // Human timing: 10-40ms between steps + occasional micro-pause
+            let delay = randomBetween(10, 40);
+            if (Math.random() < 0.08) {
+                // 8% chance of micro-pause (50-150ms) — hesitation / thinking
+                delay += randomBetween(50, 150);
+            }
+            await sleep(delay);
+        }
+    }
+
+    /**
+     * Simulate a complete human mouse interaction session.
+     * Includes: move → optional hover → optional small drift.
+     */
+    async function simulateMouseMove() {
+        // Only simulate when tab is hidden — don't interfere with real user
         if (document.visibilityState === 'visible') return;
 
         try {
-            window.scrollBy({ top: 1, behavior: 'instant' });
-            // Scroll back after a tiny delay — invisible to user
-            setTimeout(() => {
-                try { window.scrollBy({ top: -1, behavior: 'instant' }); } catch (e) { }
-            }, 50);
+            const w = Math.max(window.innerWidth || 800, 400);
+            const h = Math.max(window.innerHeight || 600, 300);
+
+            // Pick a natural target area (avoid edges — humans don't go to corners)
+            const targetX = randomBetween(w * 0.1, w * 0.9);
+            const targetY = randomBetween(h * 0.1, h * 0.8);
+
+            // Phase 1: Move to target via Bezier curve
+            await humanMouseMove(targetX, targetY);
+
+            // Phase 2: 40% chance — hover pause (reading/looking at something)
+            if (Math.random() < 0.4) {
+                await sleep(randomBetween(200, 800));
+
+                // Fire mouseover/mouseenter on nearest element
+                const el = document.elementFromPoint(targetX, targetY);
+                if (el) {
+                    el.dispatchEvent(new MouseEvent('mouseenter', {
+                        clientX: targetX, clientY: targetY,
+                        bubbles: false, cancelable: true,
+                    }));
+                    el.dispatchEvent(new MouseEvent('mouseover', {
+                        clientX: targetX, clientY: targetY,
+                        bubbles: true, cancelable: true,
+                    }));
+                }
+            }
+
+            // Phase 3: 25% chance — small drift after stopping (hand micro-movement)
+            if (Math.random() < 0.25) {
+                await sleep(randomBetween(100, 300));
+                const driftX = targetX + randomBetween(-15, 15);
+                const driftY = targetY + randomBetween(-10, 10);
+                await humanMouseMove(driftX, driftY);
+            }
+        } catch (e) {
+            // Silently ignore — page might have restricted body
+        }
+    }
+
+    /**
+     * Human-like scroll: momentum-based with slight overshoot and bounce-back.
+     */
+    async function performMicroScroll() {
+        if (document.visibilityState === 'visible') return;
+
+        try {
+            // Decide scroll direction (mostly down, sometimes up)
+            const direction = Math.random() < 0.7 ? 1 : -1;
+
+            // Human scroll: 2-5 small increments with momentum decay
+            const totalScroll = randomBetween(20, 80) * direction;
+            const steps = randomBetween(2, 5);
+            let remaining = totalScroll;
+
+            for (let i = 0; i < steps; i++) {
+                // Momentum: first scroll is biggest, then decays
+                const fraction = (steps - i) / steps;
+                const scrollAmount = Math.round(remaining * fraction * 0.5);
+                remaining -= scrollAmount;
+
+                window.scrollBy({ top: scrollAmount, behavior: 'instant' });
+
+                // Fire wheel event (reCAPTCHA listens for these)
+                document.dispatchEvent(new WheelEvent('wheel', {
+                    deltaY: scrollAmount,
+                    bubbles: true, cancelable: true,
+                }));
+
+                await sleep(randomBetween(30, 80));
+            }
+
+            // 50% chance: slight bounce-back (overshoot correction)
+            if (Math.random() < 0.5) {
+                await sleep(randomBetween(100, 250));
+                const bounce = Math.round(totalScroll * -0.15);
+                window.scrollBy({ top: bounce, behavior: 'instant' });
+            }
         } catch (e) { }
+    }
+
+    /** Promise-based sleep for async timing */
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     function checkRecaptchaWarmth() {
@@ -361,9 +525,12 @@ if (window.__veoContentLoaded) {
 
         // Simulate activity on demand (from Python app via background.js)
         if (msg.action === 'simulate_activity') {
-            simulateMouseMove();
-            performMicroScroll();
-            console.log('[VEO Bridge Content] 🖱️ Activity simulated on demand');
+            // Fire-and-forget: async Bezier simulation runs in background
+            (async () => {
+                await simulateMouseMove();
+                await performMicroScroll();
+            })().catch(() => { });
+            console.log('[VEO Bridge Content] 🖱️ Human-like activity simulation triggered');
             sendResponse({ ok: true });
             return false;
         }
@@ -391,6 +558,7 @@ if (window.__veoContentLoaded) {
             const endpointUrl = msg.endpointUrl;
             const payload = msg.payload || {};
             const needsRecaptcha = msg.needsRecaptcha !== false;
+            const endpointKey = msg.endpoint || '';
 
             console.log(
                 `[VEO Bridge Content] 🚀 submit_prompt relay: ` +
@@ -450,6 +618,7 @@ if (window.__veoContentLoaded) {
     const endpointUrl = ${JSON.stringify(endpointUrl)};
     const payload = ${JSON.stringify(payload)};
     const needsRecaptcha = ${JSON.stringify(needsRecaptcha)};
+    const endpointKey = ${JSON.stringify(endpointKey)};
 
     try {
         // ── Step 1: reCAPTCHA token ──────────────────────────────
@@ -486,15 +655,18 @@ if (window.__veoContentLoaded) {
             }
 
             try {
-                const recaptchaPromise = grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
+                // HAR verified: T2I uses IMAGE_GENERATION, video endpoints use VIDEO_GENERATION
+                const rcAction = (endpointKey === 'T2I') ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
+                const recaptchaPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
                 const recaptchaTimeout = new Promise((_, reject) =>
                     setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
                 );
                 recaptchaToken = await Promise.race([recaptchaPromise, recaptchaTimeout]);
-                if (!recaptchaToken || recaptchaToken.length < 500) {
+                // HAR verified: valid tokens are 1742-2169 chars
+                if (!recaptchaToken || recaptchaToken.length < 1000) {
                     window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
                         success: false,
-                        error: 'reCAPTCHA token too short (' + (recaptchaToken ? recaptchaToken.length : 0) + ' chars)',
+                        error: 'reCAPTCHA token too short (' + (recaptchaToken ? recaptchaToken.length : 0) + ' chars, need ≥1000)',
                         tokenLength: recaptchaToken ? recaptchaToken.length : 0
                     }}, '*');
                     return;

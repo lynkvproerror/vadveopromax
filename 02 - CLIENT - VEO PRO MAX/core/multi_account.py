@@ -141,9 +141,9 @@ class MultiAccountManager:
                 "accounts": {
                     "email@gmail.com": {
                         "score": 85,
-                        "available_slots": 3,
-                        "active_slots": 2,
-                        "max_slots": 5,
+                        "available_workers": 3,
+                        "active_workers": 2,
+                        "max_workers": 20,
                         "ext_connected": True,
                         "enabled": True,
                     }

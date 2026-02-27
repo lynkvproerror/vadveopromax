@@ -195,12 +195,8 @@ class QueueThumbnailMixin:
             layout.addStretch()
             return container
         
-        # Get input image path(s)
-        input_image = task_data.get('input_image', '')
-        input_images = task_data.get('input_images', [])
-        
-        if not input_images and input_image:
-            input_images = [input_image]
+        # Get input image path(s) — field name matches TaskDTO.image_paths
+        input_images = task_data.get('image_paths', [])
         
         for img_path in input_images[:3]:  # Max 3 thumbnails
             if img_path and self._cached_file_exists(img_path):

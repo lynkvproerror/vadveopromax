@@ -441,14 +441,18 @@ class VEOApiClient:
             requests_list = []
             for idx in range(min(output_count, 4)):
                 actual_seed = (seed + idx) if seed is not None else generate_random_seed()
-                ref_images = [{"image": {"mediaImageId": uri}} for uri in (image_uris or [])[:3]]
+                # HAR verified: referenceImages[] with imageUsageType + mediaId
+                ref_images = [
+                    {"imageUsageType": "IMAGE_USAGE_TYPE_ASSET", "mediaId": uri}
+                    for uri in (image_uris or [])[:3]
+                ]
                 requests_list.append({
                     "aspectRatio": aspect_ratio,
                     "seed": validate_seed(actual_seed),
                     "textInput": {"prompt": prompt},
                     "videoModelKey": model,
                     "metadata": {"sceneId": str(_uuid.uuid4())},
-                    "referenceImageInputs": ref_images,
+                    "referenceImages": ref_images,
                 })
             
             return "R2V", {
@@ -456,16 +460,59 @@ class VEOApiClient:
                 "requests": requests_list,
             }
         
-        elif wt == "T2I":
-            return "T2I", {
-                "clientContext": client_ctx,
-                "imageRequests": [{
+        elif wt in ("T2I", "I2I"):
+            # HAR verified: T2I uses different field names from video
+            # - URL: projects/{projectId}/flowMedia:batchGenerateImages
+            # - Array: "requests" (not "imageRequests")
+            # - Fields: imageModelName, imageAspectRatio, prompt, seed
+            # - Each request[] has its own nested clientContext
+            # - clientContext uses tool=PINHOLE, NO userPaygateTier
+            
+            # Convert VIDEO_ASPECT_RATIO → IMAGE_ASPECT_RATIO
+            img_ar = aspect_ratio.replace("VIDEO_ASPECT_RATIO_", "IMAGE_ASPECT_RATIO_")
+            if not img_ar.startswith("IMAGE_ASPECT_RATIO_"):
+                img_ar = "IMAGE_ASPECT_RATIO_LANDSCAPE"
+            
+            # T2I clientContext: sessionId + projectId + tool only (no paygateTier)
+            t2i_ctx = self._build_client_context(
+                recaptcha_token="",
+                project_id=project_id,
+                paygate_tier="",   # HAR: no userPaygateTier for T2I
+                tool="PINHOLE",
+                include_recaptcha=False,
+            )
+            
+            # Build requests[] — one item per output (HAR verified: Tao hinh image 4.har)
+            requests_list = []
+            for idx in range(min(output_count, 4)):
+                actual_seed = (seed + idx) if seed is not None else generate_random_seed()
+                
+                # HAR: imageInputs is ALWAYS present
+                # T2I: [] (empty), I2I: [{name, imageInputType}]
+                image_inputs = []
+                if image_uris:
+                    image_inputs = [
+                        {
+                            "name": uri,
+                            "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE",
+                        }
+                        for uri in image_uris
+                    ]
+                
+                req_item = {
+                    "clientContext": t2i_ctx,   # HAR: nested per-request
+                    "seed": validate_seed(actual_seed),
+                    "imageModelName": model or "GEM_PIX_2",
+                    "imageAspectRatio": img_ar,
                     "prompt": prompt,
-                    "aspectRatio": aspect_ratio,
-                    "modelNameEnum": model or "GEM_PIX_2",
-                    "numImages": min(output_count, 4),
-                    "projectId": project_id,
-                }],
+                    "imageInputs": image_inputs,  # HAR: always present
+                }
+                
+                requests_list.append(req_item)
+            
+            return "T2I", {
+                "clientContext": t2i_ctx,
+                "requests": requests_list,
             }
         
         else:
@@ -477,11 +524,16 @@ class VEOApiClient:
         target_resolution: str = "VIDEO_RESOLUTION_1080P",
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
         seed: Optional[int] = None,
+        scene_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Build upscale video body for Extension submission.
         
         HAR verified: upscale uses minimal clientContext (sessionId only,
         NO projectId, NO paygateTier, NO tool). Extension adds recaptchaContext.
+        
+        Args:
+            scene_id: Original scene UUID from generation. If provided, upscale
+                      stays in the same project. If None, creates a new scene.
         """
         import uuid as _uuid
         import time as _time
@@ -492,6 +544,9 @@ class VEOApiClient:
             "VIDEO_RESOLUTION_4K": "veo_3_1_upsampler_4k",
         }
         model_key = model_map.get(target_resolution, "veo_3_1_upsampler_1080p")
+        
+        # Reuse original sceneId when re-upscaling — keeps video in same project
+        effective_scene_id = scene_id or str(_uuid.uuid4())
         
         return {
             "clientContext": {
@@ -504,7 +559,7 @@ class VEOApiClient:
                 "seed": validate_seed(actual_seed),
                 "videoInput": {"mediaId": video_media_id},
                 "videoModelKey": model_key,
-                "metadata": {"sceneId": str(_uuid.uuid4())},
+                "metadata": {"sceneId": effective_scene_id},
             }],
         }
     
@@ -531,6 +586,8 @@ class VEOApiClient:
         """Build image upscale body for Extension submission.
         
         HAR verified: uses mediaId + targetResolution + clientContext.
+        clientContext has: sessionId, projectId, tool (PINHOLE).
+        NO userPaygateTier (HAR verified).
         Extension adds recaptchaContext.
         """
         return {
@@ -539,7 +596,7 @@ class VEOApiClient:
             "clientContext": self._build_client_context(
                 recaptcha_token="",
                 project_id=project_id,
-                paygate_tier=paygate_tier,
+                paygate_tier="",  # HAR: no userPaygateTier for image upscale
                 include_recaptcha=False,
             ),
         }

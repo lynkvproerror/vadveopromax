@@ -314,7 +314,26 @@ class AccountManager:
         # ALL workers on this account are blocked anyway (no reCAPTCHA either),
         # so waiting here is the correct behavior — not wasted time.
         if self._extension_bridge and not self._extension_bridge.is_connected(self.email):
-            log.info(f"[{self.email}] ⏳ Extension disconnected — starting active recovery")
+            # Graceful wait: extension may be reconnecting
+            log.debug(f"[{self.email}] Extension disconnected — waiting for reconnection...")
+            reconnected = await self._extension_bridge.wait_for_extension(
+                self.email, timeout=15.0
+            )
+            if reconnected:
+                # Connected! Try token extraction
+                try:
+                    result = await self._extension_bridge.request_access_token(self.email, timeout=10)
+                    token = result if isinstance(result, str) else (result.get('token') if isinstance(result, dict) else None)
+                    if token:
+                        self._session.access_token = token
+                        self._session.token_expires = datetime.now() + timedelta(minutes=55)
+                        log.info(f"[{self.email}] 🔑 Access token refreshed after reconnection")
+                        return token
+                except Exception as e:
+                    log.debug(f"[{self.email}] Token extract after reconnect failed: {e}")
+            
+            # Still not connected — fall into active recovery
+            log.debug(f"[{self.email}] Starting active extension recovery...")
             token = await self._active_extension_recovery()
             if token:
                 return token
@@ -404,13 +423,18 @@ class AccountManager:
                 log.warning(f"[{self.email}] ⏳ Extension bridge not yet available — reCAPTCHA deferred")
                 return None
         if not self._extension_bridge.is_connected(self.email):
-            connected_emails = self._extension_bridge.get_connected_emails()
-            conn_count = len(self._extension_bridge._connections)
-            log.warning(
-                f"[{self.email}] ❌ Extension not connected for this email — "
-                f"bridge has {conn_count} connection(s), registered emails: {connected_emails}"
+            # Graceful wait: extension may be reconnecting (browser restart, network blip)
+            log.debug(f"[{self.email}] Extension not connected — waiting for reconnection...")
+            reconnected = await self._extension_bridge.wait_for_extension(
+                self.email, timeout=15.0
             )
-            return None
+            if not reconnected:
+                # Still not connected — silent return, caller handles retry
+                log.debug(
+                    f"[{self.email}] Extension still offline after 15s — "
+                    f"reCAPTCHA deferred (bridge has {len(self._extension_bridge._connections)} conn(s))"
+                )
+                return None
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
@@ -795,10 +819,25 @@ class AccountManager:
     
     def get_browser_headers(self) -> dict:
         """Get x-browser-* headers from Extension bridge, with session fallback."""
+        MIN_XCD = 20  # Full x-client-data is 50+ chars
         if self._extension_bridge:
             ext_headers = self._extension_bridge.get_cached_headers(self.email)
             if ext_headers:
+                xcd = ext_headers.get('x-client-data', '')
+                xcd_len = len(xcd)
+                if xcd_len < MIN_XCD:
+                    # Bridge has short xcd — try session's guarded value
+                    session_xcd = getattr(self._session, 'client_data', '') or '' if self._session else ''
+                    if len(session_xcd) >= MIN_XCD:
+                        ext_headers = {**ext_headers, 'x-client-data': session_xcd}
+                        log.debug(f"[{self.email}] get_browser_headers: bridge xcd={xcd_len} chars → substituted session xcd={len(session_xcd)} chars")
+                    else:
+                        log.debug(f"[{self.email}] get_browser_headers: bridge xcd={xcd_len} chars, session xcd={len(session_xcd)} chars (both short)")
                 return ext_headers
+            else:
+                log.debug(f"[{self.email}] get_browser_headers: bridge returned None (cache miss or stale)")
+        else:
+            log.debug(f"[{self.email}] get_browser_headers: no _extension_bridge ref")
         # Fallback: use session-stored headers from CDP/debug browser capture
         if self._session:
             session_headers = {}

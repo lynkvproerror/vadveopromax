@@ -101,7 +101,9 @@ class PromptRow:
                 tags.append(at_quoted)
             elif at_tag:
                 tags.append(at_tag)
-        self.image_tags = tags
+        # Deduplicate while preserving first-occurrence order
+        # (same tag referenced multiple times → only one image slot)
+        self.image_tags = list(dict.fromkeys(tags))
 
 
 class PromptTable(QWidget):
@@ -155,6 +157,14 @@ class PromptTable(QWidget):
         self._image_config = self._IMAGE_CONFIGS[image_mode]
         self._image_col_count = 1 if image_mode != ImageMode.NONE else 0  # Single 'Images' column
         self._image_slots: dict = {}  # {row_idx: [ImageSlotWidget, ...]}
+        
+        # Register library change callback for auto-refresh
+        if image_mode != ImageMode.NONE:
+            try:
+                from services.image_library import get_image_library
+                get_image_library().on_change(self._on_library_changed)
+            except Exception:
+                pass
         
         self._setup_ui()
     
@@ -656,6 +666,16 @@ class PromptTable(QWidget):
         """Get image tags from slots for a specific row."""
         slots = self._image_slots.get(row_idx, [])
         return [s.tag for s in slots if s.tag]
+    
+    def _on_library_changed(self):
+        """Auto-refresh unresolved image slots when library changes.
+        
+        Called by ImageLibrary.on_change() callback.
+        Only re-resolves slots that have a tag but no image yet.
+        """
+        for row_idx, slots in self._image_slots.items():
+            for slot in slots:
+                slot.refresh_tag()
     
     def _on_slot_image_changed(self, row_idx: int, slot_idx: int, new_tag: str):
         """Handle slot image change — update [tag] in prompt text.

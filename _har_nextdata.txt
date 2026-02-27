@@ -1,8 +1,0 @@
-=== Scanning 60 HAR files for _next/data recaptcha config ===
-
-
-
-======================================================================
-SUMMARY: Found configs in 0 entries
-Unique action values found: set()
-======================================================================

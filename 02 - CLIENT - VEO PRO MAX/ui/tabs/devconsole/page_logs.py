@@ -5,7 +5,7 @@ Full-height workspace for live log viewing and JSON preview:
 - Top (~70%): Live Logs with level filter, search, auto-scroll
 - Bottom (~30%): Last submitted task JSON preview
 
-Log toolbar controls (search, level filter, auto-scroll, clear, export)
+Log toolbar controls (search, level filter, line count, auto-scroll, clear, export)
 are embedded in this page's header area.
 
 Data sources:
@@ -39,12 +39,65 @@ LEVEL_COLORS = {
     "CRITICAL": "#F38BA8",
 }
 
-# Max lines kept in log buffer
-MAX_BUFFER = 3000
-# Max lines in QPlainTextEdit (auto-trim old lines)
-MAX_DISPLAY_LINES = 1500
+# No hard limit on log buffer — user controls display via line count filter
+MAX_BUFFER = None  # Unlimited
 # Batch flush interval (ms)
 FLUSH_INTERVAL_MS = 200
+
+# Line count filter options
+LINE_COUNT_OPTIONS = {
+    "1K": 1000,
+    "2K": 2000,
+    "5K": 5000,
+    "10K": 10000,
+    "20K": 20000,
+    "All": 0,  # 0 = show all
+}
+
+# Layer/source categories for filtering
+SOURCE_CATEGORIES = [
+    "All",
+    "Extension",   # core.extension_bridge, core.extension_manager
+    "Engine",      # core.engine (includes [Foreman:] [Supervisor:])
+    "Dispatcher",  # core.dispatcher
+    "API",         # core.api_client
+    "Account",     # core.account_manager, core.multi_account
+    "Controller",  # core.app_controller
+    "Browser",     # core.chrome_manager, core.profiles_controller, core.recaptcha_session
+    "WebSocket",   # websockets.*
+    "Other",       # everything else
+]
+
+# Map logger name → category
+_SOURCE_MAP = {
+    "core.extension_bridge": "Extension",
+    "core.extension_manager": "Extension",
+    "core.engine": "Engine",
+    "core.dispatcher": "Dispatcher",
+    "core.api_client": "API",
+    "core.account_manager": "Account",
+    "core.multi_account": "Account",
+    "core.app_controller": "Controller",
+    "core.chrome_manager": "Browser",
+    "core.profiles_controller": "Browser",
+    "core.recaptcha_session": "Browser",
+    "core.recaptcha_pool": "Browser",
+    "core.adaptive_burst": "Engine",
+    "core.worker": "Engine",
+    "core.upscale_queue": "Engine",
+}
+
+def _classify_source(logger_name: str) -> str:
+    """Map logger name to display category."""
+    if not logger_name:
+        return "Other"
+    if logger_name in _SOURCE_MAP:
+        return _SOURCE_MAP[logger_name]
+    if logger_name.startswith("websockets"):
+        return "WebSocket"
+    if logger_name.startswith("core."):
+        return "Other"
+    return "Other"
 
 
 class LogsPage(QWidget):
@@ -55,12 +108,14 @@ class LogsPage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._log_buffer: deque = deque(maxlen=MAX_BUFFER)
+        self._log_buffer: list = []  # Unlimited buffer: (level, msg, source_category)
         self._pending_logs: list = []
         self._auto_scroll = True
         self._api_debug = True
         self._search_filter = ""
         self._level_filter = "DEBUG"
+        self._source_filter = "All"  # Layer/source filter
+        self._line_count_limit = 5000  # Default: show last 5K lines
         self._flush_paused = False  # Pause flush during copy
         self._setup_ui()
         self._setup_flush_timer()
@@ -105,6 +160,38 @@ class LogsPage(QWidget):
 
         tb_layout.addStretch()
 
+        # Line count filter
+        lines_label = QLabel("Lines:")
+        lines_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        tb_layout.addWidget(lines_label)
+
+        self._lines_combo = QComboBox()
+        self._lines_combo.addItems(list(LINE_COUNT_OPTIONS.keys()))
+        self._lines_combo.setCurrentText("5K")  # Default
+        self._lines_combo.setFixedWidth(70)
+        self._lines_combo.setStyleSheet(
+            f"QComboBox {{ background-color: {Theme.BASE}; color: {Theme.TEXT}; "
+            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 2px 4px; }}"
+        )
+        self._lines_combo.currentTextChanged.connect(self._on_lines_changed)
+        tb_layout.addWidget(self._lines_combo)
+
+        # Source/Layer filter
+        source_label = QLabel("Source:")
+        source_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        tb_layout.addWidget(source_label)
+
+        self._source_combo = QComboBox()
+        self._source_combo.addItems(SOURCE_CATEGORIES)
+        self._source_combo.setCurrentText("All")
+        self._source_combo.setFixedWidth(100)
+        self._source_combo.setStyleSheet(
+            f"QComboBox {{ background-color: {Theme.BASE}; color: {Theme.TEXT}; "
+            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 2px 4px; }}"
+        )
+        self._source_combo.currentTextChanged.connect(self._on_source_changed)
+        tb_layout.addWidget(self._source_combo)
+
         # API Debug toggle
         self._api_btn = QPushButton("📡 API Debug: ON")
         self._api_btn.setProperty("variant", "secondary")
@@ -148,11 +235,10 @@ class LogsPage(QWidget):
         # ── Content: Logs + JSON ─────────────────────────────
         splitter = QSplitter(Qt.Vertical)
 
-        # Log text
+        # Log text — no maxBlockCount limit, controlled by line count filter
         self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
         self._log_text.setFont(QFont(Theme.FONT_FAMILY_MONO, 10))
-        self._log_text.setMaximumBlockCount(MAX_DISPLAY_LINES)
         self._log_text.setStyleSheet(
             f"background-color: {Theme.CRUST}; color: {Theme.TEXT}; "
             f"border: none; padding: 4px;"
@@ -188,9 +274,12 @@ class LogsPage(QWidget):
         )
         self._json_text.setPlainText("No tasks submitted yet.\n")
         jf_layout.addWidget(self._json_text, stretch=1)
+        json_frame.setMinimumHeight(120)
         splitter.addWidget(json_frame)
 
-        splitter.setSizes([500, 200])
+        # Use stretch factors instead of fixed pixel sizes to prevent black gap
+        splitter.setStretchFactor(0, 7)  # Log area: 70%
+        splitter.setStretchFactor(1, 3)  # JSON preview: 30%
         layout.addWidget(splitter, stretch=1)
 
     def _setup_flush_timer(self):
@@ -202,10 +291,11 @@ class LogsPage(QWidget):
 
     # ── Public API ────────────────────────────────────────────
 
-    def append_log(self, message: str, level: str = "INFO"):
+    def append_log(self, message: str, level: str = "INFO", source: str = ""):
         """Queue a log message for batch rendering."""
-        self._log_buffer.append((level, message))
-        self._pending_logs.append((level, message))
+        cat = _classify_source(source)
+        self._log_buffer.append((level, message, cat))
+        self._pending_logs.append((level, message, cat))
 
     def update_json_preview(self, data: dict):
         """Update JSON preview panel."""
@@ -255,9 +345,12 @@ class LogsPage(QWidget):
         search = self._search_filter.lower()
 
         lines_to_add = []
-        for level, msg in self._pending_logs:
+        for level, msg, cat in self._pending_logs:
             # Level filter
             if level_order.get(level, 0) < min_level:
+                continue
+            # Source/layer filter
+            if self._source_filter != "All" and cat != self._source_filter:
                 continue
             # API debug filter
             if not self._api_debug and "api" in msg.lower():
@@ -277,8 +370,26 @@ class LogsPage(QWidget):
         cursor.movePosition(QTextCursor.End)
         cursor.insertText("\n".join(lines_to_add) + "\n")
 
-        # Update count
-        self._log_count.setText(f"{len(self._log_buffer)} logs")
+        # Apply line count limit: trim old lines from display
+        if self._line_count_limit > 0:
+            block_count = self._log_text.document().blockCount()
+            if block_count > self._line_count_limit * 1.2:  # 20% hysteresis
+                excess = block_count - self._line_count_limit
+                cursor = self._log_text.textCursor()
+                cursor.movePosition(QTextCursor.Start)
+                for _ in range(excess):
+                    cursor.movePosition(QTextCursor.Down, QTextCursor.KeepAnchor)
+                cursor.movePosition(QTextCursor.StartOfLine, QTextCursor.KeepAnchor)
+                cursor.removeSelectedText()
+                cursor.deleteChar()  # Remove trailing newline
+
+        # Update count (total buffer, not just displayed)
+        total = len(self._log_buffer)
+        displayed = self._log_text.document().blockCount()
+        if self._line_count_limit > 0 and displayed < total:
+            self._log_count.setText(f"{displayed:,}/{total:,} logs")
+        else:
+            self._log_count.setText(f"{total:,} logs")
 
         # Auto-scroll
         if self._auto_scroll:
@@ -293,8 +404,10 @@ class LogsPage(QWidget):
         search = self._search_filter.lower()
 
         filtered = []
-        for level, msg in self._log_buffer:
+        for level, msg, cat in self._log_buffer:
             if level_order.get(level, 0) < min_level:
+                continue
+            if self._source_filter != "All" and cat != self._source_filter:
                 continue
             if not self._api_debug and "api" in msg.lower():
                 continue
@@ -302,7 +415,21 @@ class LogsPage(QWidget):
                 continue
             filtered.append(msg)
 
-        self._log_text.setPlainText("\n".join(filtered[-MAX_DISPLAY_LINES:]))
+        # Apply line count limit
+        if self._line_count_limit > 0:
+            display = filtered[-self._line_count_limit:]
+        else:
+            display = filtered
+
+        self._log_text.setPlainText("\n".join(display))
+
+        # Update count
+        total = len(self._log_buffer)
+        shown = len(display)
+        if self._line_count_limit > 0 and shown < len(filtered):
+            self._log_count.setText(f"{shown:,}/{total:,} logs")
+        else:
+            self._log_count.setText(f"{total:,} logs")
 
         if self._auto_scroll:
             self._log_text.verticalScrollBar().setValue(
@@ -317,6 +444,14 @@ class LogsPage(QWidget):
 
     def _on_level_changed(self, level: str):
         self._level_filter = level
+        self._rerender_logs()
+
+    def _on_lines_changed(self, label: str):
+        self._line_count_limit = LINE_COUNT_OPTIONS.get(label, 5000)
+        self._rerender_logs()
+
+    def _on_source_changed(self, source: str):
+        self._source_filter = source
         self._rerender_logs()
 
     def _on_toggle_auto_scroll(self):
@@ -355,7 +490,7 @@ class LogsPage(QWidget):
 
                 # Logs
                 f.write("--- LOGS ---\n")
-                for _lvl, msg in self._log_buffer:
+                for _lvl, msg, _cat in self._log_buffer:
                     f.write(msg + "\n")
 
                 # JSON

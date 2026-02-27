@@ -104,6 +104,9 @@ class TaskWatchdog:
                 if stuck_count > 0:
                     log.warning(f"[Watchdog] Scan #{self._scans}: recovered {stuck_count} stuck task(s)")
                 
+                # Counter audit: detect and auto-fix _running_count mismatches
+                self._dispatcher.audit_counters()
+                
         except asyncio.CancelledError:
             pass
         except Exception as e:

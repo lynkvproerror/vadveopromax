@@ -287,9 +287,14 @@ class AppConstants:
     MAX_PARALLEL_DOWNLOADS = 3
     DOWNLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
     
-    # Polling
-    POLL_INTERVAL = 5          # seconds (HAR verified: website polls ~5s, no reCAPTCHA needed)
-    MAX_POLL_TIME = 600        # 10 minutes
+    # Polling — 2-phase strategy
+    # Phase 1 (0-30s): video never completes this fast → slow poll saves requests
+    # Phase 2 (30s+):  video likely completing soon → faster poll for responsiveness
+    POLL_PHASE1_INTERVAL = 15   # seconds (first 30s)
+    POLL_PHASE1_DURATION = 30   # seconds (how long phase 1 lasts)
+    POLL_PHASE2_INTERVAL = 8    # seconds (after 30s)
+    POLL_INTERVAL = 8           # legacy alias (used by upscale poll)
+    MAX_POLL_TIME = 600         # 10 minutes
     
     # Trial limits
     TRIAL_MAX_COOKIES = 1

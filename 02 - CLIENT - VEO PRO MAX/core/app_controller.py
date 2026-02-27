@@ -151,6 +151,8 @@ class AppController:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._loop_thread: Optional[threading.Thread] = None
         self._engine_future = None  # Track engine.start() Future for clean shutdown
+        self._keepalive_future = None  # Track keepalive loop Future
+        self._warmup_in_progress: set = set()  # Dedup proactive reCAPTCHA warmups
         
         # ProfilesController — shared singleton (also used by tab_settings)
         from core.profiles_controller import get_profiles_controller
@@ -165,6 +167,7 @@ class AppController:
         self._extension_bridge.on_readiness_token = self._on_readiness_token
         self._extension_bridge.on_account_logged_out = self._on_account_logged_out
         self._extension_bridge.on_tab_dead = self._on_tab_dead
+        self._extension_bridge.on_extension_lost = self._on_extension_lost
         
         # Wire extension bridge into RefreshManager for auto header refresh
         self._refresh_manager.set_extension_bridge(self._extension_bridge)
@@ -197,6 +200,7 @@ class AppController:
         """Number of browser slots ready to accept tasks."""
         return self._dispatcher.ready_count if self._dispatcher else 0
     
+    
     @property
     def dispatcher(self):
         """Public accessor for dispatcher (read-only operations from UI)."""
@@ -221,6 +225,10 @@ class AppController:
             return
         
         self.state.is_running = True
+        
+        # Install per-account structured logging
+        from core.account_logger import install_account_logging
+        install_account_logging()
         
         # Start async loop in background
         self._start_async_loop()
@@ -257,6 +265,13 @@ class AppController:
                 log.info(f"[AppController] Recovered {recovered} tasks from journal")
         
         self._notify_status("Controller started")
+        
+        # ★ Start Tab Keepalive service (app-level, independent of engine)
+        # Prevents Chrome from freezing VEO tabs when engine is idle.
+        # Uses two asyncio events for coordination with engine:
+        #   _keepalive_yield: SET=active, CLEAR=yield to engine
+        #   _keepalive_stop:  SET=shutdown
+        self._start_tab_keepalive()
         
         # Auto-launch Chrome browsers for all ready profiles (runs in background)
         # Must be called AFTER async loop + extension bridge are ready
@@ -311,6 +326,9 @@ class AppController:
         self._task_watchdog.stop()
         self._status_aggregator.stop()
         
+        # Stop Tab Keepalive service
+        self._stop_tab_keepalive()
+        
         # Stop Extension bridge
         if self._loop and self._extension_bridge:
             asyncio.run_coroutine_threadsafe(self._extension_bridge.stop(), self._loop)
@@ -333,11 +351,14 @@ class AppController:
                 browser_copyright=headers.get("x-browser-copyright", account._session.browser_copyright),
                 browser_year=headers.get("x-browser-year", account._session.browser_year),
             )
-            # Extension-only: session stores headers as the authoritative source
-            # Store SAPISIDHASH authorization header if provided
-            if access_token and access_token.startswith("SAPISIDHASH"):
-                account._session._sapisidhash = access_token
-                log.debug(f"[ExtensionBridge] SAPISIDHASH stored for {email}")
+            # Store authorization header if provided (Bearer or SAPISIDHASH)
+            if access_token:
+                if access_token.startswith("Bearer "):
+                    account._session._sapisidhash = access_token
+                    log.debug(f"[ExtensionBridge] Bearer token stored for {email} ({len(access_token)} chars)")
+                elif access_token.startswith("SAPISIDHASH"):
+                    account._session._sapisidhash = access_token
+                    log.debug(f"[ExtensionBridge] SAPISIDHASH stored for {email}")
             log.info(f"[ExtensionBridge] Headers updated for {email}: {list(headers.keys())}")
             
             # Cross-pollinate: if this account now has good x-client-data,
@@ -345,6 +366,7 @@ class AppController:
             new_cd = headers.get("x-client-data", "")
             if len(new_cd) >= 20:
                 self._multi_account.fix_short_client_data()
+                self._notify_status(f"🔑 {email}: x-client-data received ({len(new_cd)} chars) — tokens ready")
             
             self._push_session_data()  # Refresh Dev Console instantly
         else:
@@ -355,9 +377,25 @@ class AppController:
         
         Immediately requests fresh headers + access token so the app
         has data right away without waiting for the next auto-check cycle.
+        Also schedules proactive reCAPTCHA warm-up after page settles.
         """
         log.info(f"[ExtensionBridge] Extension connected for {email}")
         self._notify_status(f"Extension connected for {email}")
+        
+        # ★ Close CircuitBreaker immediately — extension is alive, no need to wait 30s backoff
+        if hasattr(self, '_engine') and self._engine:
+            state = self._engine._circuit_state.get(email)
+            if state in ("open", "half_open"):
+                self._engine._close_circuit_breaker(email)
+                log.info(f"[AppController] ⚡ CircuitBreaker closed on reconnect for {email}")
+        
+        # Defensive: ensure account has bridge reference NOW
+        # (startup timing: extension may connect after account created but before
+        # sync_profiles_to_runtime injects bridge)
+        account = self._multi_account.get_account(email)
+        if account:
+            self._ensure_account_bridge(account)
+        
         self._push_session_data()  # Instant DevConsole refresh
         
         # Immediate data refresh — don't wait for auto-check
@@ -365,6 +403,9 @@ class AppController:
         try:
             loop = asyncio.get_running_loop()
             asyncio.ensure_future(self._refresh_extension_data(email))
+            # Proactive reCAPTCHA warm-up: schedule after page settles (~10s)
+            # This pre-caches a valid token so "Start All" works instantly.
+            asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
         except RuntimeError:
             asyncio.run(self._refresh_extension_data(email))
         except Exception as e:
@@ -377,20 +418,140 @@ class AppController:
         API call can use it instantly (no extra round-trip to extension).
         Fix E: Also inject into RecaptchaPool so any worker can benefit.
         """
-        if not hasattr(self, '_engine') or not self._engine:
-            return
-        account = self._engine.get_account(email)
+        # Cache on AccountManager (works even before engine starts)
+        account = self._multi_account.get_account(email)
         if account:
             account._token_cache.set(token)
             account._session.update_recaptcha(token)
-            # Fix E: Inject into RecaptchaPool for cross-worker availability
+        
+        # Also inject into RecaptchaPool if engine is running
+        if hasattr(self, '_engine') and self._engine:
             pool = getattr(self._engine, '_recaptcha_pool', None)
             if pool:
                 pool.inject_token(email, token)
-            log.debug(
-                f"[ReadinessToken] Cached trial token for {email} "
-                f"({len(token)} chars) → AM + Pool"
+        
+        log.debug(
+            f"[ReadinessToken] Cached trial token for {email} "
+            f"({len(token)} chars) → AM + Pool"
+        )
+    
+    async def _proactive_recaptcha_warmup(self, email: str):
+        """Proactive reCAPTCHA warm-up — run after extension connects.
+        
+        Waits for VEO page to settle (~10s), then trial-executes
+        grecaptcha to pre-cache a valid token. This eliminates the
+        cold-start penalty when user presses "Start All".
+        
+        The valid trial token gets cached via on_readiness_token callback
+        on AccountManager + RecaptchaPool.
+        """
+        try:
+            # Dedup: skip if warmup already running for this email
+            if email in self._warmup_in_progress:
+                log.debug(f"[ProactiveWarmup] {email}: already in progress, skipping duplicate")
+                return
+            self._warmup_in_progress.add(email)
+            
+            # Wait for VEO page to fully load (reCAPTCHA widget needs ~10s)
+            log.info(f"[ProactiveWarmup] {email}: waiting 10s for reCAPTCHA widget...")
+            await asyncio.sleep(10.0)
+            
+            if not self._extension_bridge.is_connected(email):
+                log.debug(f"[ProactiveWarmup] {email}: extension disconnected, skipping")
+                return
+            
+            # Trial-execute reCAPTCHA (result cached by on_readiness_token)
+            ready = await self._extension_bridge.check_recaptcha_ready(
+                email, timeout=20.0
             )
+            
+            if ready:
+                log.info(
+                    f"[ProactiveWarmup] {email}: ✅ reCAPTCHA pre-warmed — "
+                    f"token cached, ready for instant Start All"
+                )
+                self._notify_status(f"✅ {email}: reCAPTCHA ready — account prepared")
+            else:
+                log.warning(
+                    f"[ProactiveWarmup] {email}: ⚠️ reCAPTCHA not ready yet — "
+                    f"will retry on next readiness check"
+                )
+                # Retry once after additional 10s
+                await asyncio.sleep(10.0)
+                if self._extension_bridge.is_connected(email):
+                    ready2 = await self._extension_bridge.check_recaptcha_ready(
+                        email, timeout=20.0
+                    )
+                    if ready2:
+                        log.info(f"[ProactiveWarmup] {email}: ✅ reCAPTCHA ready on retry")
+                    else:
+                        log.warning(f"[ProactiveWarmup] {email}: ❌ reCAPTCHA still not ready after retry")
+        except Exception as e:
+            log.debug(f"[ProactiveWarmup] {email}: warm-up failed (non-fatal): {e}")
+        finally:
+            self._warmup_in_progress.discard(email)
+    
+    def _start_tab_keepalive(self):
+        """Start the Tab Keepalive service (app-level).
+        
+        Creates two asyncio events for engine coordination and launches
+        the keepalive coroutine in the background async loop.
+        
+        Lifecycle:
+          App start      → keepalive ACTIVE (yield=SET)
+          start_processing → keepalive PAUSED (yield=CLEAR)
+          stop_processing  → keepalive ACTIVE (yield=SET)
+          App exit        → keepalive STOPPED (stop=SET)
+        """
+        if not self._loop:
+            log.warning("[TabKeepalive] No async loop — cannot start")
+            return
+        
+        # Create control events IN the async loop's context
+        # Must be created in the same loop that will use them
+        async def _create_and_start():
+            yield_event = asyncio.Event()
+            yield_event.set()  # Start ACTIVE (engine not running yet)
+            
+            stop_event = asyncio.Event()
+            
+            # Inject events into Engine so start_processing/stop_processing can access them
+            self._engine._keepalive_yield = yield_event
+            self._engine._keepalive_stop = stop_event
+            
+            log.info("[TabKeepalive] Service starting (app-level, independent of engine)")
+        
+        # Create events
+        future = asyncio.run_coroutine_threadsafe(_create_and_start(), self._loop)
+        try:
+            future.result(timeout=3.0)
+        except Exception as e:
+            log.error(f"[TabKeepalive] Failed to create control events: {e}")
+            return
+        
+        # Launch the keepalive coroutine (fire-and-forget)
+        self._keepalive_future = asyncio.run_coroutine_threadsafe(
+            self._engine._tab_keepalive_loop(), self._loop
+        )
+        log.info("[TabKeepalive] Service launched in background loop")
+    
+    def _stop_tab_keepalive(self):
+        """Stop the Tab Keepalive service (app shutdown)."""
+        stop_event = getattr(self._engine, '_keepalive_stop', None)
+        if stop_event:
+            # Signal stop from any thread (Event.set is thread-safe for asyncio.Event
+            # only if called from the same loop — use call_soon_threadsafe)
+            if self._loop and not self._loop.is_closed():
+                self._loop.call_soon_threadsafe(stop_event.set)
+            log.info("[TabKeepalive] Stop signal sent")
+        
+        # Wait for graceful exit
+        if self._keepalive_future:
+            try:
+                self._keepalive_future.result(timeout=5.0)
+            except Exception:
+                pass
+            self._keepalive_future = None
     
     def _on_unregistered_extension(self):
         """Callback from ExtensionBridge when a connection hasn't registered after 5s.
@@ -474,6 +635,25 @@ class AppController:
         except Exception as e:
             log.debug(f"[AppController] Status push failed after tab death: {e}")
     
+    def _on_extension_lost(self):
+        """Callback from ExtensionBridge when all connections are lost for >60s.
+        
+        Auto-reinstall extension if user accidentally removed it from Chrome.
+        Runs in background thread to avoid blocking the async event loop.
+        """
+        log.warning("[AppController] 🚨 Extension lost — auto-reinstalling...")
+        import threading
+        def _reinstall():
+            try:
+                results = self.ensure_all_extensions()
+                if results:
+                    log.info(f"[AppController] Extension auto-reinstall results: {results}")
+                else:
+                    log.warning("[AppController] No browsers available for extension reinstall")
+            except Exception as e:
+                log.error(f"[AppController] Extension auto-reinstall error: {e}")
+        threading.Thread(target=_reinstall, name="extension-lost-reinstall", daemon=True).start()
+    
     async def _refresh_extension_data(self, email: str):
         """Request fresh headers + access token from extension immediately."""
         try:
@@ -492,12 +672,16 @@ class AppController:
         
         try:
             # 2. Get fresh access token
+            # request_access_token returns Optional[str] (token directly)
             result = await self._extension_bridge.request_access_token(email, timeout=10)
-            if result and result.get('token'):
+            token = result if isinstance(result, str) else (
+                result.get('token') if isinstance(result, dict) else None
+            )
+            if token:
                 account = self._multi_account.get_account(email)
                 if account:
                     from datetime import timedelta
-                    account._session.access_token = result['token']
+                    account._session.access_token = token
                     account._session.token_expires = datetime.now() + timedelta(minutes=55)
                     log.info(f"[ExtensionBridge] ✅ Startup access token set for {email}")
         except Exception as e:
@@ -537,7 +721,7 @@ class AppController:
                 # Step 3: Open debug browsers
                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                     profiles = self._profiles_controller.get_all_profiles()
-                    ready_profiles = [p for p in profiles if p.get("email") and p.get("is_ready")]
+                    ready_profiles = [p for p in profiles if p.get("email") and p.get("is_enabled", True)]
                     total = len(ready_profiles)
                     
                     for idx, p in enumerate(ready_profiles):
@@ -554,11 +738,11 @@ class AppController:
                             await asyncio.sleep(1)
                             from config.settings import get_settings as _get_settings
                             _s = _get_settings()
-                            if _s.auto_hide_enabled and _s.auto_hide_on_engine_start:
+                            if getattr(_s, 'smart_hide_enabled', True):
                                 self._profiles_controller.hide_debug_browser(email)
                                 log.info(f"[AutoLaunch] ✅ {email} browser hidden")
                             else:
-                                log.info(f"[AutoLaunch] ✅ {email} browser visible (auto-hide disabled)")
+                                log.info(f"[AutoLaunch] ✅ {email} browser visible (smart-hide disabled)")
                         else:
                             log.warning(f"[AutoLaunch] ⚠️ Failed to open browser for {email}")
                     
@@ -569,6 +753,11 @@ class AppController:
                     log.info(f"[AutoLaunch] Connecting {len(self._multi_account._accounts)} accounts to debug browsers...")
                     await self._multi_account.startup_browsers(headless=True)
                     log.info("[AutoLaunch] ✅ All accounts connected to browsers")
+                    
+                    # Defensive sweep: ensure bridge is injected on ALL accounts
+                    # (covers startup timing race where accounts created before bridge)
+                    for acc in self._multi_account._accounts:
+                        self._ensure_account_bridge(acc)
                 else:
                     log.info("[AutoLaunch] No accounts to connect")
                 
@@ -594,8 +783,20 @@ class AppController:
                 except Exception as e:
                     log.warning(f"[AutoLaunch] Extension batch check failed: {e}")
                 
+                # Step 7: Proactive reCAPTCHA warm-up for ALL connected emails.
+                # _on_extension_connect already schedules warmup for naturally-connecting
+                # extensions, but Step 5's assign_email() bypass that callback.
+                # Fire warmup for any connected email that didn't get one yet.
+                if self._extension_bridge:
+                    connected = self._extension_bridge.get_connected_emails()
+                    for email in connected:
+                        asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+                    if connected:
+                        log.info(f"[AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for {len(connected)} emails")
+                
                 self._push_browser_status()
                 log.info("[AutoLaunch] ✅ Background browser launch complete")
+                self._notify_status("🌐 Browsers launched — waiting for extension connection...")
                     
             except Exception as e:
                 log.error(f"[AutoLaunch] Failed to launch browsers: {e}")
@@ -716,6 +917,46 @@ class AppController:
         self._push_browser_status()
         self._push_session_data()
         self._push_extension_status()
+        
+        # Auto-restart if browser closed unexpectedly
+        if state == "closed":
+            log.warning(f"[AppController] 🔴 Browser closed for {email} — scheduling auto-restart in 5s")
+            import threading
+            
+            def _auto_restart():
+                import time
+                time.sleep(5)
+                # Verify Chrome is really dead (not just Playwright disconnect)
+                pc = self._profiles_controller
+                if pc:
+                    profile = pc.get_profile(email) if hasattr(pc, 'get_profile') else None
+                    if profile and getattr(profile, 'browser_profile_path', ''):
+                        from pathlib import Path
+                        pid_file = Path(profile.browser_profile_path) / ".chrome_pid.json"
+                        if pid_file.exists():
+                            try:
+                                import json as _json, os as _os
+                                data = _json.loads(pid_file.read_text())
+                                pid = data.get("pid")
+                                if pid:
+                                    _os.kill(pid, 0)  # Signal 0 = check existence
+                                    log.info(f"[AppController] Chrome PID={pid} still alive — skip restart for {email}")
+                                    return
+                            except (ProcessLookupError, PermissionError):
+                                pass  # Process dead — proceed with restart
+                            except Exception:
+                                pass
+                
+                log.info(f"[AppController] 🔄 Auto-restarting browser for {email}...")
+                try:
+                    self.restart_browser_for(email)
+                    log.info(f"[AppController] ✅ Browser auto-restarted for {email}")
+                    # Re-run extension ensure after restart
+                    self.ensure_all_extensions()
+                except Exception as e:
+                    log.error(f"[AppController] ❌ Auto-restart failed for {email}: {e}")
+            
+            threading.Thread(target=_auto_restart, daemon=True, name=f"auto-restart-{email}").start()
     
     def restart_browser_for(self, email: str) -> bool:
         """Kill and relaunch Chrome browser for a specific account.
@@ -816,10 +1057,17 @@ class AppController:
             log.error("[AppController] No ProfilesController — cannot reload extension")
             return False
         
-        # Find the Chrome CDP port and exe for this account
-        entry = pc._debug_browsers.get(email, {}) if hasattr(pc, '_debug_browsers') else {}
-        cdp_port = entry.get("cdp_port")
-        chrome_exe = entry.get("chrome_exe", "")
+        # Find the Chrome CDP port and exe from PID file (stored by chrome_manager)
+        # NOTE: _debug_browsers stores {cmd_queue, state, context, page} — no cdp_port
+        cdp_port = None
+        chrome_exe = ""
+        profile = pc.get_profile(email)
+        if profile and profile.browser_profile_path:
+            from core.chrome_manager import _load_pid_file
+            pid_data = _load_pid_file(profile.browser_profile_path)
+            if pid_data:
+                cdp_port = pid_data.get("port")
+                chrome_exe = pid_data.get("chrome_exe", "")
         
         if not cdp_port:
             log.error(f"[AppController] No CDP port found for {email} — try restarting browser")
@@ -841,6 +1089,21 @@ class AppController:
                 
                 if result:
                     log.info(f"[AppController] ✅ Extension reinstalled via CDP for {email}")
+                    # Wait for extension to reconnect via WebSocket before updating status
+                    if bridge:
+                        try:
+                            import asyncio
+                            loop = getattr(self, '_loop', None) or asyncio.get_event_loop()
+                            connected = asyncio.run_coroutine_threadsafe(
+                                bridge.wait_for_extension(email, timeout=15.0),
+                                loop,
+                            ).result(timeout=20)
+                            if connected:
+                                log.info(f"[AppController] ✅ Extension reconnected for {email}")
+                            else:
+                                log.warning(f"[AppController] Extension did not reconnect within 15s for {email}")
+                        except Exception as e:
+                            log.warning(f"[AppController] Wait for extension reconnect failed: {e}")
                 else:
                     log.warning(f"[AppController] ⚠️ Extension CDP reinstall failed for {email}")
                 
@@ -853,6 +1116,17 @@ class AppController:
             # Strategy 2b: CfT → restart browser (--load-extension reloads automatically)
             log.info(f"[AppController] CfT — restarting browser to reload extension for {email}...")
             result = self.restart_browser_for(email)
+            # Wait for extension to reconnect via WebSocket
+            if result and bridge:
+                try:
+                    import asyncio
+                    loop = getattr(self, '_loop', None) or asyncio.get_event_loop()
+                    asyncio.run_coroutine_threadsafe(
+                        bridge.wait_for_extension(email, timeout=15.0),
+                        loop,
+                    ).result(timeout=20)
+                except Exception:
+                    pass
             self._push_extension_status()
             return result
     
@@ -882,15 +1156,46 @@ class AppController:
         
         results = {}
         for email, entry in pc._debug_browsers.items():
-            port = entry.get("cdp_port")
-            chrome_exe = entry.get("chrome_exe", "")
+            # _debug_browsers stores {cmd_queue, state, context, page} — no cdp_port
+            # Read CDP port from chrome_manager PID file instead
+            port = None
+            chrome_exe = ""
+            profile = pc.get_profile(email)
+            if profile and profile.browser_profile_path:
+                from core.chrome_manager import _load_pid_file
+                pid_data = _load_pid_file(profile.browser_profile_path)
+                if pid_data:
+                    port = pid_data.get("port")
+                    chrome_exe = pid_data.get("chrome_exe", "")
             
             if not port:
+                results[email] = "⚠️ no CDP port"
                 continue
             
             if not is_branded_chrome(chrome_exe):
                 results[email] = "⏭️ CfT (skip)"
                 continue  # CfT uses --load-extension, skip
+            
+            # Fast path: if extension bridge already connected for this email,
+            # the extension is provably working — skip CDP service_worker check
+            # (MV3 service workers suspend quickly, causing false negatives)
+            # BUT still check version to detect outdated extensions
+            if (self._extension_bridge 
+                    and self._extension_bridge.is_connected(email)):
+                from core.extension_manager import get_local_extension_version, _get_installed_extension_version
+                local_ver = get_local_extension_version()
+                installed_ver = _get_installed_extension_version(port)
+                if local_ver and installed_ver and installed_ver == local_ver:
+                    # Confirmed same version — skip reinstall
+                    results[email] = "✅ bridge connected"
+                    log.info(f"[AppController] Extension v{installed_ver} connected via bridge for {email} — up-to-date")
+                    continue
+                elif local_ver and installed_ver and installed_ver != local_ver:
+                    log.warning(f"[AppController] Extension connected but outdated: installed={installed_ver}, local={local_ver} — reinstalling...")
+                    # Fall through to install_if_needed below
+                else:
+                    log.info(f"[AppController] Extension connected but version unknown (installed={installed_ver}, local={local_ver}) — checking...")
+                    # Fall through to install_if_needed below
             
             try:
                 ok = install_if_needed(port, str(_extension_dir))
@@ -905,51 +1210,9 @@ class AppController:
         self._push_extension_status()
         return results
     
-    def reload_extension_for(self, email: str) -> bool:
-        """Hot-reload the Chrome extension for a specific account.
-        
-        Called from UI 🧩 Reload Extension button.
-        Uninstalls then reinstalls the extension from the local disk.
-        
-        Args:
-            email: Account email whose browser to reload extension for
-            
-        Returns:
-            True if extension was reloaded successfully
-        """
-        pc = self._profiles_controller
-        if not pc or not hasattr(pc, '_debug_browsers'):
-            log.warning(f"[AppController] No ProfilesController — cannot reload extension for {email}")
-            return False
-        
-        entry = pc._debug_browsers.get(email, {})
-        port = entry.get("cdp_port")
-        if not port:
-            log.warning(f"[AppController] No CDP port for {email} — browser not running?")
-            return False
-        
-        from core.extension_manager import reinstall_extension
-        from pathlib import Path
-        
-        _client_dir = Path(__file__).resolve().parent.parent
-        _extension_dir = _client_dir / "extension"
-        
-        if not _extension_dir.exists() or not (_extension_dir / "manifest.json").exists():
-            log.warning(f"[AppController] Extension directory not found: {_extension_dir}")
-            return False
-        
-        try:
-            log.info(f"[AppController] 🧩 Reloading extension for {email} (port {port})...")
-            ok = reinstall_extension(port, str(_extension_dir))
-            if ok:
-                log.info(f"[AppController] ✅ Extension reloaded for {email}")
-            else:
-                log.warning(f"[AppController] ⚠️ Extension reload failed for {email}")
-            
-            return ok
-        except Exception as e:
-            log.error(f"[AppController] ❌ Extension reload error for {email}: {e}")
-            return False
+    # NOTE: reload_extension_for() defined above (line ~799) — Chrome-type-aware
+    # version with WebSocket hot-reload + Branded/CfT fallback strategies.
+    # A simpler duplicate was here previously and has been removed.
     
     def hot_reload_app(self):
         """Restart the entire Python process.
@@ -1030,7 +1293,7 @@ class AppController:
                 info = {
                     "email": acc.email,
                     "enabled": acc.is_enabled,
-                    "slots": acc.max_slots,
+                    "slots": acc.max_workers,
                     "has_browser": has_browser,
                     "state": state,
                 }
@@ -1095,17 +1358,19 @@ class AppController:
         
         log.info(f"[AppController] Account {email} {'enabled' if enabled else 'disabled'}")
     
-    def set_account_max_slots(self, email: str, value: int):
+    def set_account_max_workers(self, email: str, value: int):
         """Set max concurrent workers for an account.
         
         Called from Settings UI when user changes the workers spinner.
-        Method name kept as set_account_max_slots for backward compat.
         """
         acc = self._multi_account.get_account(email)
         if acc:
             acc.set_max_workers(value)
         
-        log.info(f"[AppController] Account {email} max_slots → {value}")
+        log.info(f"[AppController] Account {email} max_workers → {value}")
+    
+    # Backward compat alias
+    set_account_max_slots = set_account_max_workers
     
     def get_session_data(self) -> list:
         """Get session data (tokens, cookies, profile info) for all accounts.
@@ -1465,7 +1730,7 @@ class AppController:
             "pool_size": getattr(_s, 'recaptcha_pool_size', 2),
             "watchdog_timeout_min": getattr(_s, 'watchdog_timeout_min', 10),
             "journal_save_interval_sec": getattr(_s, 'journal_save_interval_sec', 30),
-            "workload_priority": getattr(_s, 'workload_priority', 'prompts_first'),
+            "workload_priority": getattr(_s, 'workload_priority', '720p_priority'),
         }
         
         # Override with live runtime values if engine is running
@@ -1743,6 +2008,21 @@ class AppController:
                                 acc_mgr._parent_manager = self._multi_account
                                 if hasattr(self, '_extension_bridge') and self._extension_bridge:
                                     acc_mgr.extension_bridge = self._extension_bridge
+                                    # FIX: Bridge may already have cached headers from
+                                    # earlier connections. Populate session immediately
+                                    # to prevent stale x-client-data (8 chars from disk).
+                                    cached = self._extension_bridge.get_cached_headers(email, max_age_seconds=0)
+                                    if cached:
+                                        acc_mgr._session.update_browser_headers(
+                                            browser_validation=cached.get('x-browser-validation', ''),
+                                            client_data=cached.get('x-client-data', ''),
+                                            browser_channel=cached.get('x-browser-channel', 'stable'),
+                                            browser_copyright=cached.get('x-browser-copyright', ''),
+                                            browser_year=cached.get('x-browser-year', ''),
+                                        )
+                                        xcd_len = len(cached.get('x-client-data', ''))
+                                        if xcd_len >= 20:
+                                            log.info(f"[sync] {email}: populated session from bridge cache (x-client-data={xcd_len} chars)")
                                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                                     acc_mgr.set_profiles_controller(self._profiles_controller)
                             
@@ -1752,8 +2032,10 @@ class AppController:
                                     self._engine.add_account_hot(acc_mgr)
                                     
                         except Exception as e:
-                            log.warning(f"Failed to sync {email}: {type(e).__name__}: {e}")
-                            import traceback; traceback.print_exc()
+                            if isinstance(e, TimeoutError):
+                                log.debug(f"Sync {email}: timeout (browser not ready yet)")
+                            else:
+                                log.warning(f"Failed to sync {email}: {type(e).__name__}: {e}")
                             # Even on timeout, the account may have been added —
                             # inject bridge defensively so it's ready when needed
                             acc_mgr = self._multi_account.get_account(email)
@@ -1761,6 +2043,16 @@ class AppController:
                                 acc_mgr._parent_manager = self._multi_account
                                 if hasattr(self, '_extension_bridge') and self._extension_bridge:
                                     acc_mgr.extension_bridge = self._extension_bridge
+                                    # Populate session from bridge cache (same fix as success path)
+                                    cached = self._extension_bridge.get_cached_headers(email, max_age_seconds=0)
+                                    if cached and len(cached.get('x-client-data', '')) >= 20:
+                                        acc_mgr._session.update_browser_headers(
+                                            browser_validation=cached.get('x-browser-validation', ''),
+                                            client_data=cached.get('x-client-data', ''),
+                                            browser_channel=cached.get('x-browser-channel', 'stable'),
+                                            browser_copyright=cached.get('x-browser-copyright', ''),
+                                            browser_year=cached.get('x-browser-year', ''),
+                                        )
                                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                                     acc_mgr.set_profiles_controller(self._profiles_controller)
                             
@@ -1787,25 +2079,42 @@ class AppController:
         
         # Ensure ExtensionBridge + ProfilesController + parent ref are injected on ALL accounts
         # (covers newly-created accounts from sync AND existing ones)
+        # Also populate session headers from bridge cache to prevent stale x-client-data
         for acc in self._multi_account._accounts:
             acc._parent_manager = self._multi_account  # for bridge auto-recovery
             if hasattr(self, '_extension_bridge') and self._extension_bridge:
                 acc.extension_bridge = self._extension_bridge
+                # FIX: ensure session has latest bridge headers
+                cached = self._extension_bridge.get_cached_headers(acc.email, max_age_seconds=0)
+                if cached:
+                    current_xcd = acc._session.client_data or ''
+                    bridge_xcd = cached.get('x-client-data', '')
+                    if len(bridge_xcd) > len(current_xcd):
+                        acc._session.update_browser_headers(
+                            browser_validation=cached.get('x-browser-validation', acc._session.browser_validation or ''),
+                            client_data=bridge_xcd,
+                            browser_channel=cached.get('x-browser-channel', acc._session.browser_channel or 'stable'),
+                            browser_copyright=cached.get('x-browser-copyright', acc._session.browser_copyright or ''),
+                            browser_year=cached.get('x-browser-year', acc._session.browser_year or ''),
+                        )
+                        log.info(f"[sync] {acc.email}: bridge cache → session x-client-data ({len(current_xcd)}→{len(bridge_xcd)} chars)")
             if hasattr(self, '_profiles_controller') and self._profiles_controller:
                 acc.set_profiles_controller(self._profiles_controller)
     
-    def set_account_max_slots(self, email: str, max_slots: int):
+    def set_account_max_workers(self, email: str, max_workers: int):
         """Set max_workers on runtime AccountManager for a given email.
         
         Called by UI when user changes Workers SpinBox.
-        Method name kept as set_account_max_slots for backward compat.
         """
         acc = self._multi_account.get_account(email)
         if acc:
-            acc.set_max_workers(max_slots)
+            acc.set_max_workers(max_workers)
             logging.getLogger(__name__).info(
-                f"Runtime max_workers for {email} → {max_slots}"
+                f"Runtime max_workers for {email} → {max_workers}"
             )
+    
+    # Backward compat alias
+    set_account_max_slots = set_account_max_workers
     
     # Safe concurrency limit: max concurrent API calls per account
     # e.g. 2 workers × 4 outputs = 8 API calls — safe ceiling
@@ -1940,11 +2249,14 @@ class AppController:
                     task.image_uris = remote  # Only keep actual remote URIs/mediaIds
             
             # === Tag resolution: [tag] → local image path ===
-            # Only resolve if task has no explicit image_uris or image_paths already
+            # Only for image-based workflows (I2V, R2V, I2I, F2V).
+            # T2V NEVER uses Image Library tags — it only receives images
+            # from continuation (parent task frame extraction).
             # Bug 1 fix: Also check image_paths — they may have been populated by
             # _resolve_tags_to_paths() in add_i2v_batch() and then moved from
             # image_uris to image_paths by the local/remote split above (line 1031-1037)
-            if not task.image_uris and not task.image_paths:
+            if (not task.image_uris and not task.image_paths
+                    and task.workflow_type not in ("T2V", "T2I")):
                 import re
                 tags = re.findall(r'\[([^\]]+)\]', prompt)
                 if tags:
@@ -1962,10 +2274,7 @@ class AppController:
                         
                         if resolved_paths:
                             task.image_paths = resolved_paths
-                            # Auto-switch T2V → I2V when tags detected
-                            if task.workflow_type == "T2V":
-                                task.workflow_type = "I2V"
-                                log.info(f"  [AUTO] T2V → I2V (tags detected)")
+                            log.info(f"  [TAG] Resolved {len(resolved_paths)} image(s) for {task.workflow_type} task {i}")
                     except ImportError:
                         log.warning("  ImageLibrary not available for tag resolution")
             # === End tag resolution ===
@@ -2031,7 +2340,7 @@ class AppController:
         log.info(f"{'='*60}")
         # === END DEBUG ===
         
-        # Push JSON preview to DevConsole if available
+        # Push JSON preview to DevConsole if available (thread-safe)
         if self._dev_console and hasattr(self._dev_console, 'update_json_preview'):
             preview = {
                 "group_id": group_id,
@@ -2056,7 +2365,16 @@ class AppController:
                 ],
             }
             try:
-                self._dev_console.update_json_preview(preview)
+                from PySide6.QtCore import QMetaObject, Qt, QThread
+                # Stash data for the safe slot to pick up
+                self._pending_json_preview = preview
+                if QThread.currentThread() == self._dev_console.thread():
+                    self._dev_console.update_json_preview(preview)
+                else:
+                    QMetaObject.invokeMethod(
+                        self._dev_console, "update_json_preview_safe",
+                        Qt.ConnectionType.QueuedConnection
+                    )
             except Exception:
                 pass
         
@@ -2161,21 +2479,22 @@ class AppController:
             prompts: List of PromptRow objects with image_tags (up to 3)
             settings: Sidebar settings dict
         """
-        all_images = []
+        per_prompt_images = {}
         prompt_texts = []
         continuation_map = {}
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
             if hasattr(p, 'image_tags') and p.image_tags:
                 resolved = self._resolve_tags_to_paths(list(p.image_tags[:3]))  # Max 3
-                all_images.extend(resolved)
+                if resolved:
+                    per_prompt_images[i] = resolved
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
         
         return self.submit_prompts(
             prompts=prompt_texts,
             workflow=WorkflowType.R2V,
-            images=all_images if all_images else None,
+            per_prompt_images=per_prompt_images if per_prompt_images else None,
             settings=settings,
             continuation_map=continuation_map if continuation_map else None
         )
@@ -2443,6 +2762,13 @@ class AppController:
         
         self.state.is_processing = True
         
+        # ★ Pause Tab Keepalive — engine takes over tab management
+        # Prevents conflict: both keepalive and engine use executeScript
+        # on the same tabs (Chrome serializes → delays reCAPTCHA tokens)
+        if hasattr(self._engine, '_keepalive_yield'):
+            self._engine._keepalive_yield.clear()  # CLEAR = yield to engine
+            log.info("[TabKeepalive] Paused — engine processing")
+        
         # Issue E: Sync profiles to runtime before starting
         self.sync_profiles_to_runtime()
         
@@ -2452,6 +2778,13 @@ class AppController:
         
         # Pass settings reference for hot-apply (engine reads live values)
         self._engine._settings = self.settings
+        
+        # Apply saved pipeline settings to engine at startup
+        # Without this, workload_priority stays at default '720p_priority'
+        # even if user previously selected 'upscale_priority' in Settings tab.
+        # Affects ALL workflows (T2V, I2V, R2V, I2I, T2I).
+        for key, value in self.get_pipeline_settings().items():
+            self._engine.update_pipeline_setting(key, value)
         
         # Wire engine callbacks
         self._engine._on_progress = self._handle_progress
@@ -2482,7 +2815,38 @@ class AppController:
         # Start log exporter (captures warnings/errors for auto-export)
         self._log_exporter.start()
         
+        # Verify callback chain integrity before engine starts
+        self._verify_callback_chain()
+        
         log.info("[Engine] Processing started")
+    
+    def _verify_callback_chain(self):
+        """Verify all critical callbacks are wired before engine runs.
+        
+        One-time check at engine start. Logs WARNING for each missing callback.
+        Would have caught the broken progress callback bug immediately.
+        """
+        checks = {
+            'progress → UI': getattr(self, '_on_progress', None) is not None,
+            'dispatcher._on_progress_callback': getattr(self._dispatcher, '_on_progress_callback', None) is not None,
+            'queue_updated': bool(getattr(self, '_on_queue_updated', None)),
+            'status_changed': getattr(self, '_on_status_changed', None) is not None,
+            'engine._on_progress': getattr(self._engine, '_on_progress', None) is not None,
+            'engine._on_task_completed': getattr(self._engine, '_on_task_completed', None) is not None,
+            'engine._on_task_failed': getattr(self._engine, '_on_task_failed', None) is not None,
+        }
+        
+        all_ok = True
+        for name, ok in checks.items():
+            if not ok:
+                log.warning(f"[CallbackCheck] ⚠️ {name} is NOT wired — updates will NOT reach UI!")
+                all_ok = False
+        
+        if all_ok:
+            log.info(f"[CallbackCheck] ✅ All {len(checks)} callbacks verified OK")
+        else:
+            broken = [n for n, ok in checks.items() if not ok]
+            log.error(f"[CallbackCheck] ❌ {len(broken)} callback(s) broken: {', '.join(broken)}")
     
     async def _start_recaptcha_pool(self):
         """Start reCAPTCHA pool inside the async event loop.
@@ -2496,54 +2860,104 @@ class AppController:
     def stop_processing(self):
         """Stop processing via Engine.
         
-        Properly awaits engine shutdown to prevent 'Task was destroyed'
-        warnings from orphaned asyncio tasks.
+        Non-blocking: signals engine to stop immediately, then runs
+        the heavy shutdown (await TaskGroup, close sessions) in a
+        background thread to keep the UI responsive.
         """
+        if not self.state.is_processing:
+            return
         self.state.is_processing = False
         
+        # ★ Resume Tab Keepalive — engine no longer managing tabs
+        if hasattr(self._engine, '_keepalive_yield'):
+            self._engine._keepalive_yield.set()  # SET = keepalive active
+            log.info("[TabKeepalive] Resumed — engine stopped")
+        
         # Signal Engine to stop (sets stop_event → workers exit loops)
-        stop_future = self._run_async(self._engine.stop())
-        if stop_future:
+        # This is instant — just sets an asyncio.Event
+        self._run_async(self._engine.stop())
+        
+        self._notify_status("Stopping…")
+        
+        # Heavy shutdown in background thread (blocks up to 28s)
+        import threading
+        threading.Thread(
+            target=self._shutdown_engine_bg,
+            name="engine-shutdown",
+            daemon=True,
+        ).start()
+    
+    def _shutdown_engine_bg(self):
+        """Background shutdown — runs blocking .result() calls off UI thread.
+        
+        Called by stop_processing() in a daemon thread.
+        """
+        try:
+            # Wait for engine.start() TaskGroup to fully complete
+            # (foremen exit, pipelines drain, browsers disconnect)
+            if self._engine_future:
+                try:
+                    self._engine_future.result(timeout=15.0)
+                except Exception:
+                    pass
+                self._engine_future = None
+            
+            # Stop Watchdog
             try:
-                stop_future.result(timeout=5.0)
+                self._task_watchdog.stop()
             except Exception:
                 pass
-        
-        # Wait for engine.start() to fully complete
-        # (TaskGroup collects workers → finally block closes browsers)
-        if self._engine_future:
+            
+            # Phase 3A: Stop UpscaleQueue
             try:
-                self._engine_future.result(timeout=15.0)
+                self._engine._upscale_queue.stop()
             except Exception:
                 pass
-            self._engine_future = None
-        
-        # Stop Watchdog
-        self._task_watchdog.stop()
-        
-        # Phase 3A: Stop UpscaleQueue
-        self._engine._upscale_queue.stop()
-        
-        # Phase 4A: Stop reCAPTCHA Pool
-        if (self._engine._recaptcha_pool and
-                self._engine._recaptcha_pool._running):
-            self._engine._recaptcha_pool.stop()
-        
-        # Force-save journal after engine stop
-        self._task_journal.force_save()
-        
-        # Auto-export structured logs (TESTER only)
-        self._auto_export_logs()
-        
-        # Stop log exporter handler
-        self._log_exporter.stop()
-        
-        self._notify_status("Processing stopped")
+            
+            # Phase 3B: Stop ExtensionBridge (WebSocket server + heartbeat)
+            bridge = getattr(self, '_extension_bridge', None)
+            if bridge:
+                bridge_future = self._run_async(bridge.stop())
+                if bridge_future:
+                    try:
+                        bridge_future.result(timeout=5.0)
+                    except Exception:
+                        pass
+            
+            # Phase 3C: Close API client session
+            if hasattr(self._engine, '_api_client') and self._engine._api_client:
+                close_future = self._run_async(self._engine._api_client.close())
+                if close_future:
+                    try:
+                        close_future.result(timeout=3.0)
+                    except Exception:
+                        pass
+            
+            # Phase 4A: Stop reCAPTCHA Pool
+            if (self._engine._recaptcha_pool and
+                    self._engine._recaptcha_pool._running):
+                self._engine._recaptcha_pool.stop()
+            
+            # Force-save journal after engine stop
+            self._task_journal.force_save()
+            
+            # Auto-export structured logs (TESTER only)
+            self._auto_export_logs()
+            
+            # Stop log exporter handler
+            self._log_exporter.stop()
+            
+            log.info("[AppController] Engine shutdown complete")
+        except Exception as e:
+            log.error(f"[AppController] Shutdown error: {e}")
+        finally:
+            self._notify_status("Processing stopped")
     
     def _auto_export_logs(self):
         """Auto-export structured session logs (TESTER only)."""
         try:
-            if not self._license_client.can_see_dev_console():
+            if not hasattr(self._license_client, 'can_see_dev_console') or \
+                    not self._license_client.can_see_dev_console():
                 return  # Not a TESTER — skip
             
             filepath = self._log_exporter.export(
@@ -2565,6 +2979,12 @@ class AppController:
             return
         
         self._run_async(self._engine.pause())
+        
+        # ★ Resume keepalive when engine paused (workers sleeping, tabs need keepalive)
+        if hasattr(self._engine, '_keepalive_yield'):
+            self._loop.call_soon_threadsafe(self._engine._keepalive_yield.set)
+            log.info("[TabKeepalive] Resumed — engine paused")
+        
         self._notify_status("Processing paused")
     
     def resume_processing(self):
@@ -2576,6 +2996,11 @@ class AppController:
             return
         if not self._engine.is_paused:
             return
+        
+        # ★ Pause keepalive when engine resumes (engine takes back tab management)
+        if hasattr(self._engine, '_keepalive_yield'):
+            self._loop.call_soon_threadsafe(self._engine._keepalive_yield.clear)
+            log.info("[TabKeepalive] Paused — engine resumed")
         
         self._run_async(self._engine.resume())
         self._notify_status("Processing resumed")
@@ -2599,22 +3024,29 @@ class AppController:
     
     def _handle_task_completed(self, task: Task):
         """Handle task completion + detect group completion."""
-        if self._on_task_completed:
+        # Check group completion FIRST — if group just completed,
+        # skip per-task toast to avoid duplicate notifications
+        group_completed = self._check_group_completion(task)
+        
+        if not group_completed and self._on_task_completed:
             self._on_task_completed(task)
         self._notify_queue_updated()
-        
-        # Check if this task's group is now fully completed
-        self._check_group_completion(task)
     
-    def _check_group_completion(self, task: Task):
-        """Check if the task's group is fully completed and fire notification."""
+    def _check_group_completion(self, task: Task) -> bool:
+        """Check if the task's group is fully completed and fire notification.
+        
+        Returns:
+            True if a group completion was detected and notified.
+        """
         for group_id, group in self._dispatcher.get_task_groups().items():
             if any(t.id == task.id for t in group.tasks):
                 if group.status == "completed" and group_id not in self._notified_groups:
                     self._notified_groups.add(group_id)
                     if self._on_group_completed:
                         self._on_group_completed(group)
+                    return True
                 break
+        return False
     
     def _handle_task_failed(self, task: Task, error: str):
         """Handle task failure."""
@@ -2644,8 +3076,15 @@ class AppController:
             self._on_queue_updated.append(callback)
     
     def set_progress_callback(self, callback):
-        """Register callback for per-task progress updates (used by TabQueue)."""
+        """Register callback for per-task progress updates (used by TabQueue).
+        
+        Wires directly into Dispatcher._on_progress_callback so engine's
+        update_progress() calls reach the UI in real-time.
+        """
         self._on_progress = callback
+        # Wire into dispatcher — this is where update_progress() actually fires
+        if hasattr(self._dispatcher, '_on_progress_callback'):
+            self._dispatcher._on_progress_callback = callback
     
     def _notify_status(self, status: str):
         """Notify status change."""
@@ -2719,14 +3158,16 @@ class AppController:
         """Get license status for status bar display."""
         try:
             info = self._license_client.license_info
+            trial = self._license_client.get_trial_status()
             return {
                 "is_licensed": self._license_client.is_licensed,
-                "is_trial": getattr(self._license_client, 'is_trial', False),
+                "is_trial": self._license_client.is_trial,
+                "trial_expired": trial.get("expired", False) and not self._license_client.is_licensed,
                 "tier": info.tier.value if info else None,
-                "days_remaining": info.days_remaining if info else 0,
+                "days_remaining": trial.get("days_remaining", 0),
             }
         except Exception:
-            return {"is_licensed": False, "is_trial": False, "tier": None, "days_remaining": 0}
+            return {"is_licensed": False, "is_trial": False, "trial_expired": False, "tier": None, "days_remaining": 0}
     
     def get_account_summary(self) -> Dict:
         """Get account summary for status bar display."""
@@ -2875,6 +3316,26 @@ class AppController:
         """Get (original_task_id, video_index) if task_id is a replacement task."""
         return self._dispatcher.get_replace_target(task_id)
     
+    def _ensure_account_bridge(self, account):
+        """Defensive injection: ensure account has extension_bridge + profiles_controller.
+        
+        During startup, accounts may be created before bridge injection completes.
+        This ensures the bridge is always available for on-demand operations
+        (re-upscale, re-download, manual retry) regardless of startup timing.
+        """
+        if not account:
+            return
+        if not account.extension_bridge and hasattr(self, '_extension_bridge') and self._extension_bridge:
+            account.extension_bridge = self._extension_bridge
+            import logging
+            logging.getLogger(__name__).info(
+                f"[BridgeInject] Injected extension_bridge into {account.email} (lazy)"
+            )
+        if not account._profiles_controller and hasattr(self, '_profiles_controller') and self._profiles_controller:
+            account.set_profiles_controller(self._profiles_controller)
+        if not getattr(account, '_parent_manager', None):
+            account._parent_manager = self._multi_account
+    
     def _get_account_for_reupscale(self, task_id: str):
         """Get account for re-upscale: MUST use assigned_account.
         
@@ -2893,6 +3354,7 @@ class AppController:
         if task.assigned_account:
             account = self._multi_account.get_account(task.assigned_account)
             if account:
+                self._ensure_account_bridge(account)
                 return account, None
             # Account exists in config but not loaded/available
             return None, (
@@ -2902,7 +3364,9 @@ class AppController:
         
         # No assigned_account recorded (legacy tasks before account tracking)
         if self._multi_account._accounts:
-            return self._multi_account._accounts[0], None
+            account = self._multi_account._accounts[0]
+            self._ensure_account_bridge(account)
+            return account, None
         
         return None, "⚠️ No account available for re-upscale"
     
@@ -2919,18 +3383,25 @@ class AppController:
             return
         
         async def _run():
-            account, error = self._get_account_for_reupscale(task_id)
-            if not account:
-                self._notify_status(error)
-                return
-            
-            result = await self._engine.re_upscale_task(task_id, account, failed_only=failed_only)
-            # Trigger queue refresh so UI updates status
-            for cb in self._on_queue_updated:
-                try:
-                    cb({})
-                except Exception:
-                    pass
+            try:
+                log.info(f"[ReUpscale] Starting re-upscale for task {task_id} (failed_only={failed_only})")
+                account, error = self._get_account_for_reupscale(task_id)
+                if not account:
+                    log.warning(f"[ReUpscale] {error}")
+                    self._notify_status(error)
+                    return
+                
+                result = await self._engine.re_upscale_task(task_id, account, failed_only=failed_only)
+                log.info(f"[ReUpscale] Task {task_id} finished: {'success' if result else 'failed'}")
+            except Exception as e:
+                log.error(f"[ReUpscale] Task {task_id} crashed: {e}", exc_info=True)
+            finally:
+                # Trigger queue refresh so UI updates status
+                for cb in self._on_queue_updated:
+                    try:
+                        cb({})
+                    except Exception:
+                        pass
         
         asyncio.run_coroutine_threadsafe(_run(), self._loop)
     
@@ -2944,20 +3415,27 @@ class AppController:
             return
         
         async def _run():
-            account, error = self._get_account_for_reupscale(task_id)
-            if not account:
-                self._notify_status(error)
-                return
-            
-            result = await self._engine.re_upscale_single_video(
-                task_id, video_index, account
-            )
-            # Trigger queue refresh so UI updates status
-            for cb in self._on_queue_updated:
-                try:
-                    cb({})
-                except Exception:
-                    pass
+            try:
+                log.info(f"[ReUpscale] Starting re-upscale for {task_id}[{video_index}]")
+                account, error = self._get_account_for_reupscale(task_id)
+                if not account:
+                    log.warning(f"[ReUpscale] {error}")
+                    self._notify_status(error)
+                    return
+                
+                result = await self._engine.re_upscale_single_video(
+                    task_id, video_index, account
+                )
+                log.info(f"[ReUpscale] {task_id}[{video_index}] finished: {'success' if result else 'failed'}")
+            except Exception as e:
+                log.error(f"[ReUpscale] {task_id}[{video_index}] crashed: {e}", exc_info=True)
+            finally:
+                # Trigger queue refresh so UI updates status
+                for cb in self._on_queue_updated:
+                    try:
+                        cb({})
+                    except Exception:
+                        pass
         
         asyncio.run_coroutine_threadsafe(_run(), self._loop)
     
@@ -2971,18 +3449,25 @@ class AppController:
             return
         
         async def _run():
-            account, error = self._get_account_for_reupscale(task_id)
-            if not account:
-                self._notify_status(error)
-                return
-            
-            result = await self._engine.re_download_720p(task_id, account)
-            # Trigger queue refresh so UI updates
-            for cb in self._on_queue_updated:
-                try:
-                    cb({})
-                except Exception:
-                    pass
+            try:
+                log.info(f"[ReDownload] Starting re-download 720p for task {task_id}")
+                account, error = self._get_account_for_reupscale(task_id)
+                if not account:
+                    log.warning(f"[ReDownload] {error}")
+                    self._notify_status(error)
+                    return
+                
+                result = await self._engine.re_download_720p(task_id, account)
+                log.info(f"[ReDownload] Task {task_id} finished: {'success' if result else 'failed'}")
+            except Exception as e:
+                log.error(f"[ReDownload] Task {task_id} crashed: {e}", exc_info=True)
+            finally:
+                # Trigger queue refresh so UI updates
+                for cb in self._on_queue_updated:
+                    try:
+                        cb({})
+                    except Exception:
+                        pass
         
         asyncio.run_coroutine_threadsafe(_run(), self._loop)
     
@@ -2996,20 +3481,27 @@ class AppController:
             return
         
         async def _run():
-            account, error = self._get_account_for_reupscale(task_id)
-            if not account:
-                self._notify_status(error)
-                return
-            
-            result = await self._engine.re_download_single_720p(
-                task_id, video_index, account
-            )
-            # Trigger queue refresh so UI updates
-            for cb in self._on_queue_updated:
-                try:
-                    cb({})
-                except Exception:
-                    pass
+            try:
+                log.info(f"[ReDownload] Starting re-download 720p for {task_id}[{video_index}]")
+                account, error = self._get_account_for_reupscale(task_id)
+                if not account:
+                    log.warning(f"[ReDownload] {error}")
+                    self._notify_status(error)
+                    return
+                
+                result = await self._engine.re_download_single_720p(
+                    task_id, video_index, account
+                )
+                log.info(f"[ReDownload] {task_id}[{video_index}] finished: {'success' if result else 'failed'}")
+            except Exception as e:
+                log.error(f"[ReDownload] {task_id}[{video_index}] crashed: {e}", exc_info=True)
+            finally:
+                # Trigger queue refresh so UI updates
+                for cb in self._on_queue_updated:
+                    try:
+                        cb({})
+                    except Exception:
+                        pass
         
         asyncio.run_coroutine_threadsafe(_run(), self._loop)
     
@@ -3051,6 +3543,9 @@ class AppController:
     
     def set_progress_callback(self, callback: Callable[[str, int, str], None]):
         self._on_progress = callback
+        # Wire into dispatcher so update_progress() reaches UI
+        if hasattr(self._dispatcher, '_on_progress_callback'):
+            self._dispatcher._on_progress_callback = callback
     
     def set_queue_updated_callback(self, callback: Callable[[Dict], None]):
         if not hasattr(self, '_on_queue_updated') or not isinstance(self._on_queue_updated, list):

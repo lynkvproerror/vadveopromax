@@ -51,7 +51,8 @@ class ToastWidget(QFrame):
         """)
         self.setMinimumWidth(300)
         self.setMaximumWidth(420)
-        self.setFixedHeight(48)
+        self.setMinimumHeight(40)
+        self.setMaximumHeight(80)
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -143,9 +144,23 @@ class ToastManager:
     def __init__(self, parent_window):
         self._parent = parent_window
         self._toasts: list = []
+        self._tester_mode: bool = False  # False = User mode (hide tester toasts)
     
-    def show_toast(self, message: str, level: str = "info", duration: int = 4000):
-        """Show a new toast notification."""
+    def set_tester_mode(self, enabled: bool):
+        """Toggle tester mode. False = User mode (system toasts hidden)."""
+        self._tester_mode = enabled
+    
+    def show_toast(self, message: str, level: str = "info", duration: int = 4000,
+                   audience: str = "user"):
+        """Show a new toast notification.
+        
+        Args:
+            audience: 'user' (visible to all) or 'tester' (system/technical, hidden in User mode)
+        """
+        # Audience filter: tester-only toasts are hidden in User mode
+        if audience == "tester" and not self._tester_mode:
+            return  # Silently drop — user doesn't need system internals
+        
         # Enforce max visible
         while len(self._toasts) >= self.MAX_VISIBLE:
             oldest = self._toasts.pop(0)

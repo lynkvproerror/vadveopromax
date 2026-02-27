@@ -110,8 +110,14 @@ class TabSettings(
         self.setting_combos = {}
         self.output_toggles = {}
         self._restore_sub_toggles = {}
+        
+        # Tester-only sections (hidden for regular users)
+        self._tester_sections: list = []
 
         self._setup_ui()
+        
+        # Apply audience visibility (User vs Tester)
+        self._apply_audience_visibility()
 
         # Periodic refresh: ext status column every 5 s
         self._ext_timer = QTimer(self)
@@ -130,6 +136,22 @@ class TabSettings(
         main_layout.addWidget(scroll)
 
         container = QWidget()
+        # Global fix: prevent spinbox text from being clipped by up/down arrow buttons
+        container.setStyleSheet(container.styleSheet() + f"""
+            QSpinBox, QDoubleSpinBox {{
+                padding-right: 20px;
+                color: {Theme.TEXT};
+                background-color: {Theme.SURFACE1};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+            }}
+            QSpinBox::up-button, QDoubleSpinBox::up-button {{
+                width: 18px;
+            }}
+            QSpinBox::down-button, QDoubleSpinBox::down-button {{
+                width: 18px;
+            }}
+        """)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
@@ -138,17 +160,27 @@ class TabSettings(
         self._initializing = True
 
         # Build all sections via mixins
+        # ── User sections (visible to everyone) ──
         layout.addWidget(self._create_profiles_section())   # SettingsProfilesMixin
         layout.addWidget(self._create_defaults_section())    # SettingsSectionsMixin
         layout.addWidget(self._create_output_section())      # SettingsSectionsMixin
         layout.addWidget(self._create_continuation_section())# SettingsSectionsMixin
-        layout.addWidget(self._create_worker_section())      # SettingsSectionsMixin
-        layout.addWidget(self._create_browser_visibility_section())  # SettingsSectionsMixin
-        layout.addWidget(self._create_session_section())     # SettingsSectionsMixin
         layout.addWidget(self._create_notification_section())# SettingsSectionsMixin
+        layout.addWidget(self._create_post_queue_section())  # SettingsSectionsMixin
         layout.addWidget(self._create_ui_section())          # SettingsSectionsMixin
-        layout.addWidget(self._create_pipeline_section())    # SettingsPipelineEnhancerMixin
-        layout.addWidget(self._create_enhancer_section())    # SettingsPipelineEnhancerMixin
+        
+        # ── Tester sections (hidden for regular users) ──
+        tester_widgets = [
+            self._create_worker_section(),                    # SettingsSectionsMixin
+            self._create_browser_visibility_section(),        # SettingsSectionsMixin
+            self._create_session_section(),                   # SettingsSectionsMixin
+            self._create_pipeline_section(),                  # SettingsPipelineEnhancerMixin
+            self._create_enhancer_section(),                  # SettingsPipelineEnhancerMixin
+        ]
+        for w in tester_widgets:
+            layout.addWidget(w)
+            self._tester_sections.append(w)
+        
         layout.addWidget(self._create_action_buttons())      # core
 
         # All sections built — allow auto-save signals now
@@ -172,6 +204,23 @@ class TabSettings(
         layout.addWidget(header)
 
         return section, layout
+    
+    def _apply_audience_visibility(self):
+        """Show/hide tester-only sections based on license tier.
+        
+        User mode: Profiles, Defaults, Output, Continuation, Notification, Post-Queue, UI
+        Tester mode: + Worker, Browser Visibility, Session, Pipeline, Enhancer
+        """
+        is_tester = False
+        try:
+            if self.controller and hasattr(self.controller, '_license_client'):
+                lc = self.controller._license_client
+                is_tester = hasattr(lc, 'can_see_dev_console') and lc.can_see_dev_console()
+        except Exception:
+            pass
+        
+        for section in self._tester_sections:
+            section.setVisible(is_tester)
 
     def _create_enable_row(self, label: str, checked: bool = True,
                            bold: bool = False, color: str = None,
@@ -337,6 +386,15 @@ class TabSettings(
             if hasattr(self, '_get_selected_sound'):
                 s.notify_sound_file = self._get_selected_sound()
 
+            # ── Post-Queue Action ──
+            if hasattr(self, 'post_queue_switch'):
+                s.post_queue_action_enabled = self.post_queue_switch.isToggled()
+            if hasattr(self, 'post_queue_action_combo'):
+                _reverse_map = {"🔌 Do Nothing": "nothing", "⚡ Shutdown": "shutdown", "💤 Sleep": "sleep"}
+                s.post_queue_action = _reverse_map.get(
+                    self.post_queue_action_combo.currentText(), "nothing"
+                )
+
             # ── Enhancer Toggles ──
             if hasattr(self, '_enhance_context_toggle'):
                 s.enhance_context_menu = self._enhance_context_toggle.isToggled()
@@ -346,11 +404,8 @@ class TabSettings(
                 s.enhance_auto_continuation = self._enhance_auto_toggle.isToggled()
 
             # ── Browser Visibility ──
-            if hasattr(self, 'auto_hide_master_switch'):
-                s.auto_hide_enabled = self.auto_hide_master_switch.isToggled()
-            if hasattr(self, '_auto_hide_sub_toggles'):
-                for attr_name, toggle in self._auto_hide_sub_toggles.items():
-                    setattr(s, attr_name, toggle.isToggled())
+            if hasattr(self, 'smart_hide_switch'):
+                s.smart_hide_enabled = self.smart_hide_switch.isToggled()
 
             # ── Pipeline Optimization ──
             if hasattr(self, 'burst_switch'):
@@ -369,7 +424,7 @@ class TabSettings(
                 s.journal_save_interval_sec = self.journal_interval.value()
             if hasattr(self, 'workload_priority') and hasattr(self, '_wp_map'):
                 s.workload_priority = self._wp_map.get(
-                    self.workload_priority.currentIndex(), 'prompts_first'
+                    self.workload_priority.currentIndex(), '720p_priority'
                 )
 
             # ── UI (Language) ──
@@ -462,12 +517,15 @@ class TabSettings(
             if hasattr(self, 'sound_file_combo'):
                 self.sound_file_combo.setCurrentIndex(0)  # default sound
 
+            # ── Post-Queue Action ──
+            if hasattr(self, 'post_queue_switch'):
+                self.post_queue_switch.setToggled(False)
+            if hasattr(self, 'post_queue_action_combo'):
+                self.post_queue_action_combo.setCurrentText("🔌 Do Nothing")
+
             # ── Browser Visibility ──
-            if hasattr(self, 'auto_hide_master_switch'):
-                self.auto_hide_master_switch.setToggled(True)
-            if hasattr(self, '_auto_hide_sub_toggles'):
-                for attr_name, toggle in self._auto_hide_sub_toggles.items():
-                    toggle.setToggled(True)
+            if hasattr(self, 'smart_hide_switch'):
+                self.smart_hide_switch.setToggled(True)
 
             # ── Pipeline Optimization ──
             if hasattr(self, 'burst_switch'):
@@ -485,7 +543,7 @@ class TabSettings(
             if hasattr(self, 'journal_interval'):
                 self.journal_interval.setValue(30)
             if hasattr(self, 'workload_priority'):
-                self.workload_priority.setCurrentIndex(1)  # prompts_first
+                self.workload_priority.setCurrentIndex(0)  # 720p_priority
 
             # ── Language ──
             if hasattr(self, 'lang_menu'):
@@ -586,13 +644,17 @@ class TabSettings(
             self.notify_toast_toggle.setToggled(bool(settings["notify_toast_enabled"]))
         if "notify_sound_enabled" in settings and hasattr(self, 'notify_sound_toggle'):
             self.notify_sound_toggle.setToggled(bool(settings["notify_sound_enabled"]))
+        # Post-Queue Action
+        if "post_queue_action_enabled" in settings and hasattr(self, 'post_queue_switch'):
+            self.post_queue_switch.setToggled(bool(settings["post_queue_action_enabled"]))
+        if "post_queue_action" in settings and hasattr(self, 'post_queue_action_combo'):
+            _action_map = {"nothing": "🔌 Do Nothing", "shutdown": "⚡ Shutdown", "sleep": "💤 Sleep"}
+            self.post_queue_action_combo.setCurrentText(
+                _action_map.get(settings["post_queue_action"], "🔌 Do Nothing")
+            )
         # Browser Visibility
-        if "auto_hide_enabled" in settings and hasattr(self, 'auto_hide_master_switch'):
-            self.auto_hide_master_switch.setToggled(bool(settings["auto_hide_enabled"]))
-        if hasattr(self, '_auto_hide_sub_toggles'):
-            for attr_name, toggle in self._auto_hide_sub_toggles.items():
-                if attr_name in settings:
-                    toggle.setToggled(bool(settings[attr_name]))
+        if "smart_hide_enabled" in settings and hasattr(self, 'smart_hide_switch'):
+            self.smart_hide_switch.setToggled(bool(settings["smart_hide_enabled"]))
         # Enhancer
         if "enhance_context_menu" in settings and hasattr(self, '_enhance_context_toggle'):
             self._enhance_context_toggle.setToggled(bool(settings["enhance_context_menu"]))
@@ -667,8 +729,11 @@ class TabSettings(
             "notify_toast_enabled": self.notify_toast_toggle.isToggled() if hasattr(self, 'notify_toast_toggle') else True,
             "notify_sound_enabled": self.notify_sound_toggle.isToggled() if hasattr(self, 'notify_sound_toggle') else True,
             "notify_sound_file": self._get_selected_sound() if hasattr(self, '_get_selected_sound') else "default",
+            # Post-Queue Action
+            "post_queue_action_enabled": self.post_queue_switch.isToggled() if hasattr(self, 'post_queue_switch') else False,
+            "post_queue_action": self.post_queue_action_combo.currentText() if hasattr(self, 'post_queue_action_combo') else "nothing",
             # Browser Visibility
-            "auto_hide_enabled": self.auto_hide_master_switch.isToggled() if hasattr(self, 'auto_hide_master_switch') else True,
+            "smart_hide_enabled": self.smart_hide_switch.isToggled() if hasattr(self, 'smart_hide_switch') else True,
             # Pipeline Optimization
             "adaptive_burst_enabled": self.burst_switch.isToggled() if hasattr(self, 'burst_switch') else True,
             "burst_min_delay": self.burst_min.value() if hasattr(self, 'burst_min') else 2.0,
@@ -677,14 +742,10 @@ class TabSettings(
             "recaptcha_pool_size": self.pool_size.value() if hasattr(self, 'pool_size') else 2,
             "watchdog_timeout_min": self.watchdog_timeout.value() if hasattr(self, 'watchdog_timeout') else 10,
             "journal_save_interval_sec": self.journal_interval.value() if hasattr(self, 'journal_interval') else 30,
-            "workload_priority": self._wp_map.get(self.workload_priority.currentIndex(), 'prompts_first') if hasattr(self, '_wp_map') and hasattr(self, 'workload_priority') else 'prompts_first',
+            "workload_priority": self._wp_map.get(self.workload_priority.currentIndex(), '720p_priority') if hasattr(self, '_wp_map') and hasattr(self, 'workload_priority') else '720p_priority',
         }
         # Granular restore sub-toggles
         if hasattr(self, '_restore_sub_toggles'):
             for attr_name, toggle in self._restore_sub_toggles.items():
-                result[attr_name] = toggle.isToggled()
-        # Browser visibility sub-toggles
-        if hasattr(self, '_auto_hide_sub_toggles'):
-            for attr_name, toggle in self._auto_hide_sub_toggles.items():
                 result[attr_name] = toggle.isToggled()
         return result

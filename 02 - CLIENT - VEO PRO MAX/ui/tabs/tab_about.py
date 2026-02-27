@@ -96,10 +96,12 @@ class TabAbout(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         
         logo = QLabel(self.ASCII_LOGO)
-        logo.setFont(QFont("JetBrains Mono", 7))
+        logo.setFont(QFont("Consolas", 9))
         logo.setStyleSheet(f"color: {Theme.BLUE};")
         logo.setAlignment(Qt.AlignCenter)
-        layout.addWidget(logo)
+        logo.setWordWrap(False)
+        logo.setMinimumWidth(600)  # Prevent shrinking below logo width
+        layout.addWidget(logo, alignment=Qt.AlignCenter)
         
         return frame
     

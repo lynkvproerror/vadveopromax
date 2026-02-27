@@ -601,3 +601,7 @@ class GenerationTabBase(QWidget):
                 rows.append(PromptRow(**kwargs))
             self.prompt_table.set_prompts(rows)
             self._update_parsed_count(len(rows))
+        else:
+            # No saved prompts (e.g. T2I clears after add) — re-parse from input text
+            if self.prompt_input.toPlainText().strip():
+                self._parse_prompts()

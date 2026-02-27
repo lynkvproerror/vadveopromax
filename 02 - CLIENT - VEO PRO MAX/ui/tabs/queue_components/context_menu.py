@@ -64,7 +64,7 @@ class QueueContextMenuMixin:
         task_status = task_data.get('status', '') if task_data else ''
         download_quality = task_data.get('download_quality', '720p') if task_data else '720p'
         video_outputs = task_data.get('video_outputs', []) if task_data else []
-        has_upscale_quality = download_quality in ('1080p', '4K')
+        has_upscale_quality = download_quality.upper() in ('1080P', '4K', '2K')
         
         failed_count = sum(
             1 for vo in video_outputs
@@ -254,14 +254,21 @@ class QueueContextMenuMixin:
         target_q = video_info.get('target_quality', '1080p')
         task_id = video_info.get('task_id', '')
         best_file = video_info.get('best_file', '')
-        has_upscale = target_q in ('1080p', '4K')
+        has_upscale = target_q.upper() in ('1080P', '4K', '2K')
         is_failed = bc == 'red' or quality in ('failed', 'retrying') or video_info.get('upscale_status') == 'failed'
         
+        # Detect image vs video by file extension or quality label
+        is_image = (
+            quality.upper() in ('1K', '2K')
+            or (best_file and Path(best_file).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'))
+        )
+        item_label = "Image" if is_image else "Video"
+        
         status_map = {
-            'red': f"❌ Video {idx+1}: {video_info.get('upscale_error','failed')}",
-            'blue': f"✅ Video {idx+1}: {quality}",
-            'yellow': f"🟡 Video {idx+1}: 720p",
-            'purple': f"♻️ Video {idx+1}: retrying",
+            'red': f"❌ {item_label} {idx+1}: {video_info.get('upscale_error','failed')}",
+            'blue': f"✅ {item_label} {idx+1}: {quality}",
+            'yellow': f"🟡 {item_label} {idx+1}: {quality or '720p'}",
+            'purple': f"♻️ {item_label} {idx+1}: processing",
         }
         info_action = menu.addAction(status_map.get(bc, f"⏳ Video {idx+1}: pending"))
         info_action.setEnabled(False)
@@ -288,6 +295,12 @@ class QueueContextMenuMixin:
             menu.addAction("📂 Open in Explorer").triggered.connect(
                 lambda: self._open_file_in_explorer(best_file)
             )
+            
+            # Add to Image Library — only for image files
+            if Path(best_file).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'):
+                menu.addAction("🖼️ Add to Image Library").triggered.connect(
+                    lambda c=False, f=best_file: self._on_add_to_library(f)
+                )
         
         menu.exec(parent_widget.mapToGlobal(pos))
     
@@ -386,3 +399,100 @@ class QueueContextMenuMixin:
             parent = folder.parent
             if parent.exists():
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(parent)))
+    
+    def _on_add_to_library(self, file_path: str):
+        """Add an image file to the Image Library with tag input dialog."""
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+            QPushButton, QComboBox, QDialogButtonBox,
+        )
+        from PySide6.QtGui import QPixmap
+        
+        try:
+            from services.image_library import get_image_library
+            library = get_image_library()
+        except Exception:
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast("⚠️ Image Library not available", "warning")
+            return
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("🖼️ Add to Image Library")
+        dialog.setFixedSize(400, 340)
+        dialog.setStyleSheet(f"background-color: {Theme.BASE}; color: {Theme.TEXT};")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        
+        # Image preview
+        preview = QLabel()
+        preview.setFixedSize(200, 200)
+        preview.setAlignment(Qt.AlignCenter)
+        preview.setStyleSheet(
+            f"background-color: {Theme.SURFACE0}; border: 1px solid {Theme.SURFACE2}; border-radius: 8px;"
+        )
+        pixmap = QPixmap(file_path)
+        if not pixmap.isNull():
+            scaled = pixmap.scaled(196, 196, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            preview.setPixmap(scaled)
+        
+        preview_row = QHBoxLayout()
+        preview_row.addStretch()
+        preview_row.addWidget(preview)
+        preview_row.addStretch()
+        layout.addLayout(preview_row)
+        
+        # File name
+        name_label = QLabel(f"📄 {Path(file_path).name}")
+        name_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        name_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(name_label)
+        
+        # Tag input
+        tag_label = QLabel("Tags (comma separated):")
+        tag_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        layout.addWidget(tag_label)
+        
+        tag_input = QLineEdit(Path(file_path).stem)
+        tag_input.setMinimumHeight(32)
+        tag_input.setPlaceholderText("e.g. cat, sunset, hero")
+        tag_input.setStyleSheet(
+            f"background-color: {Theme.SURFACE0}; color: {Theme.TEXT}; "
+            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 4px 8px;"
+        )
+        layout.addWidget(tag_input)
+        
+        # Category combo
+        cat_row = QHBoxLayout()
+        cat_lbl = QLabel("Category:")
+        cat_lbl.setStyleSheet(f"color: {Theme.TEXT};")
+        cat_row.addWidget(cat_lbl)
+        
+        cat_combo = QComboBox()
+        cat_combo.setStyleSheet(f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT};")
+        for cat in library.get_categories():
+            cat_combo.addItem(cat)
+        cat_row.addWidget(cat_combo, stretch=1)
+        layout.addLayout(cat_row)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        tag_input.setFocus()
+        tag_input.selectAll()
+        
+        if dialog.exec() == QDialog.Accepted:
+            tags = [t.strip() for t in tag_input.text().split(",") if t.strip()]
+            if not tags:
+                tags = [Path(file_path).stem]
+            category = cat_combo.currentText()
+            library.add_image(file_path, tags=tags, category=category)
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast(f"🖼️ Added to library: [{tags[0]}]", "success")
+

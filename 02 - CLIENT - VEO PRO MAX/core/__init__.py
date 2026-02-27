@@ -13,7 +13,7 @@ from .multi_account import MultiAccountManager
 
 # Task Management
 from .dispatcher import Dispatcher, Task, TaskGroup, TaskState
-from .worker import Worker, WorkerResult, WorkerState
+from .worker import PromptExecutor, Worker, WorkerResult, WorkerState  # Worker = alias
 from .project_manager import ProjectManager
 from .engine import Engine
 
@@ -79,7 +79,8 @@ __all__ = [
     "Task",
     "TaskGroup",
     "TaskState",
-    "Worker",
+    "PromptExecutor",
+    "Worker",  # backward compat alias
     "WorkerResult",
     "WorkerState",
     "ProjectManager",

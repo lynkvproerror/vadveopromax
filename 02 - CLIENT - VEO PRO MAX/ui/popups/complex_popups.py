@@ -489,7 +489,7 @@ class ImageManagerPopup(BasePopup):
                     default_cats.append((cat, icon))
         
         for name, icon in default_cats:
-            btn = QPushButton(f"{icon} {name}")
+            btn = _DroppableCategoryButton(f"{icon} {name}", name, self)
             is_active = (name == self._selected_category)
             btn.setStyleSheet(f"""
                 QPushButton {{
@@ -621,7 +621,7 @@ class ImageManagerPopup(BasePopup):
         from PySide6.QtGui import QPixmap
         
         tag_text = img.tags[0] if img.tags else img.filename
-        card = _DraggableImageCard(img.path, tag_text, self.THUMB_SIZE)
+        card = _DraggableImageCard(img.path, tag_text, self.THUMB_SIZE, image_id=img.id)
         
         # Thumbnail
         pixmap = QPixmap(img.path)
@@ -703,7 +703,7 @@ class ImageManagerPopup(BasePopup):
         self._add_files_to_library(files)
     
     def _add_files_to_library(self, files):
-        """Add image files to library with optional tag input."""
+        """Add image files to library — per-image tag popup with preview."""
         if not files or not self._library:
             return
         IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff'}
@@ -711,26 +711,107 @@ class ImageManagerPopup(BasePopup):
         if not valid_files:
             return
         
-        # Ask user for tags (comma separated)
-        from PySide6.QtWidgets import QInputDialog
-        default_tags = ", ".join(Path(f).stem for f in valid_files[:3])
-        if len(valid_files) > 3:
-            default_tags += ", ..."
-        tags_text, ok = QInputDialog.getText(
-            self, "Add Tags",
-            f"Tags for {len(valid_files)} image(s) (comma separated):",
-            text=default_tags
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+            QScrollArea, QDialogButtonBox, QFrame,
         )
+        from PySide6.QtGui import QPixmap
         
         cat = self._selected_category if self._selected_category != "All" else "All"
         
+        # Build per-image tag dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"🖼️ Add {len(valid_files)} Image(s) to Library")
+        dialog.setMinimumWidth(480)
+        dialog.setMaximumHeight(600)
+        dialog.setStyleSheet(f"background-color: {Theme.BASE}; color: {Theme.TEXT};")
+        
+        dlg_layout = QVBoxLayout(dialog)
+        dlg_layout.setContentsMargins(16, 12, 16, 12)
+        dlg_layout.setSpacing(8)
+        
+        # Header
+        header = QLabel(f"Set tags for each image  ·  Category: {cat}")
+        header.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 12px;")
+        dlg_layout.addWidget(header)
+        
+        # Scrollable list of image rows
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(
+            f"QScrollArea {{ background: {Theme.SURFACE0}; border-radius: 8px; border: none; }}"
+        )
+        container = QWidget()
+        rows_layout = QVBoxLayout(container)
+        rows_layout.setContentsMargins(8, 8, 8, 8)
+        rows_layout.setSpacing(10)
+        
+        tag_inputs = []  # parallel list of QLineEdit
+        
         for f in valid_files:
-            if ok and tags_text.strip():
-                tags = [t.strip() for t in tags_text.split(",") if t.strip()]
+            row = QFrame()
+            row.setStyleSheet(
+                f"QFrame {{ background: {Theme.SURFACE1}; border-radius: 6px; "
+                f"border: 1px solid {Theme.SURFACE2}; }}"
+            )
+            row_lay = QHBoxLayout(row)
+            row_lay.setContentsMargins(8, 8, 8, 8)
+            row_lay.setSpacing(10)
+            
+            # Thumbnail
+            thumb = QLabel()
+            thumb.setFixedSize(80, 80)
+            thumb.setAlignment(Qt.AlignCenter)
+            thumb.setStyleSheet("border: none; background: transparent;")
+            pix = QPixmap(f)
+            if not pix.isNull():
+                thumb.setPixmap(pix.scaled(76, 76, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             else:
-                tags = [Path(f).stem]
-            self._library.add_image(f, tags=tags, category=cat)
-        self._reload_grid()
+                thumb.setText("🖼️")
+            row_lay.addWidget(thumb)
+            
+            # Info + tag input column
+            info_col = QVBoxLayout()
+            info_col.setSpacing(4)
+            
+            fname = QLabel(Path(f).name)
+            fname.setStyleSheet(f"color: {Theme.TEXT}; font-size: 11px; font-weight: bold; border: none;")
+            fname.setWordWrap(True)
+            info_col.addWidget(fname)
+            
+            tag_edit = QLineEdit(Path(f).stem)
+            tag_edit.setMinimumHeight(28)
+            tag_edit.setPlaceholderText("tag1, tag2, tag3")
+            tag_edit.setStyleSheet(
+                f"background: {Theme.SURFACE0}; color: {Theme.TEXT}; "
+                f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 2px 6px;"
+            )
+            info_col.addWidget(tag_edit)
+            tag_inputs.append(tag_edit)
+            
+            row_lay.addLayout(info_col, stretch=1)
+            rows_layout.addWidget(row)
+        
+        scroll.setWidget(container)
+        dlg_layout.addWidget(scroll, stretch=1)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dlg_layout.addWidget(buttons)
+        
+        # Focus first tag input
+        if tag_inputs:
+            tag_inputs[0].setFocus()
+            tag_inputs[0].selectAll()
+        
+        if dialog.exec() == QDialog.Accepted:
+            for f, tag_edit in zip(valid_files, tag_inputs):
+                raw = tag_edit.text().strip()
+                tags = [t.strip() for t in raw.split(",") if t.strip()] if raw else [Path(f).stem]
+                self._library.add_image(f, tags=tags, category=cat)
+            self._reload_grid()
     
     def _on_delete_image(self, image_id: str):
         """Delete image from library."""
@@ -835,14 +916,66 @@ class ImageManagerPopup(BasePopup):
         if self._on_select:
             self._on_select(tag)
 
+    def _move_image_to_category(self, image_id: str, category: str):
+        """Move a library image to another category (called by droppable category buttons)."""
+        if self._library:
+            self._library.update_image_category(image_id, category)
+            self._reload_grid()
+
+
+class _DroppableCategoryButton(QPushButton):
+    """Category button that accepts drops from library image cards.
+    
+    Accepts internal library drags (MIME_LIBRARY_IMAGE_ID) to move images
+    between categories. Shows green highlight on drag-over.
+    """
+    
+    MIME_LIBRARY_IMAGE_ID = "application/x-veo-library-image-id"
+    
+    def __init__(self, text: str, category_name: str, popup: ImageManagerPopup):
+        super().__init__(text)
+        self._category_name = category_name
+        self._popup = popup
+        self.setAcceptDrops(True)
+    
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(self.MIME_LIBRARY_IMAGE_ID):
+            event.acceptProposedAction()
+            # Visual feedback: highlight
+            self.setStyleSheet(self.styleSheet().replace(
+                f"background-color: transparent",
+                f"background-color: {Theme.GREEN}"
+            ).replace(
+                f"background-color: {Theme.SURFACE2}",
+                f"background-color: {Theme.GREEN}"
+            ))
+        else:
+            event.ignore()
+    
+    def dragLeaveEvent(self, event):
+        # Restore original style — full reload is cheapest
+        self._popup._rebuild_category_buttons()
+    
+    def dropEvent(self, event):
+        if event.mimeData().hasFormat(self.MIME_LIBRARY_IMAGE_ID):
+            image_id = bytes(event.mimeData().data(self.MIME_LIBRARY_IMAGE_ID)).decode('utf-8')
+            self._popup._move_image_to_category(image_id, self._category_name)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
 
 class _DraggableImageCard(QFrame):
-    """Image card that supports drag-out to prompt thumbnails."""
+    """Image card that supports drag-out to prompt thumbnails and between categories."""
     
-    def __init__(self, image_path: str, tag_text: str, thumb_size: int = 100):
+    # Custom MIME type for internal library drag (carries image_id)
+    MIME_LIBRARY_IMAGE_ID = "application/x-veo-library-image-id"
+    
+    def __init__(self, image_path: str, tag_text: str, thumb_size: int = 100, image_id: str = ""):
         super().__init__()
         self._image_path = image_path
         self._tag_text = tag_text
+        self._image_id = image_id
         self._drag_start_pos = None
         
         self.setFixedSize(thumb_size + 16, thumb_size + 50)
@@ -900,6 +1033,9 @@ class _DraggableImageCard(QFrame):
         # Set file URL so ImageSlotWidget can accept it
         mime.setUrls([QUrl.fromLocalFile(self._image_path)])
         mime.setText(self._tag_text)
+        # Include library image ID for internal category drag
+        if self._image_id:
+            mime.setData(self.MIME_LIBRARY_IMAGE_ID, self._image_id.encode('utf-8'))
         drag.setMimeData(mime)
         
         # Create drag pixmap from thumbnail
@@ -907,7 +1043,7 @@ class _DraggableImageCard(QFrame):
             drag.setPixmap(self.thumb.pixmap().scaled(
                 64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         
-        drag.exec(Qt.CopyAction)
+        drag.exec(Qt.CopyAction | Qt.MoveAction)
         self._drag_start_pos = None
 
 

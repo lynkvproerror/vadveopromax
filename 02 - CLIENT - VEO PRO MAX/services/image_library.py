@@ -8,7 +8,7 @@ Manages image library with tags for use in I2V, I2I, and R2V workflows.
 import json
 import shutil
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field, asdict
 import uuid
 
@@ -70,8 +70,26 @@ class ImageLibrary:
         self._index_file = self._library_path / "index.json"
         self._images: List[LibraryImage] = []
         self._categories: List[str] = self.DEFAULT_CATEGORIES.copy()
+        self._on_change_callbacks: List[Callable] = []
         
         self._load_index()
+    
+    def on_change(self, callback: Callable):
+        """Register a callback to be notified when library changes.
+        
+        Callbacks are called with no arguments after add/remove/update.
+        Used by PromptTable to auto-refresh unresolved image tags.
+        """
+        if callback not in self._on_change_callbacks:
+            self._on_change_callbacks.append(callback)
+    
+    def _notify_change(self):
+        """Notify all registered callbacks that library contents changed."""
+        for cb in self._on_change_callbacks:
+            try:
+                cb()
+            except Exception:
+                pass
     
     def _load_index(self):
         """Load library index from JSON."""
@@ -160,6 +178,7 @@ class ImageLibrary:
         image = LibraryImage.create(final_path, normalized_tags, category)
         self._images.append(image)
         self._save_index()
+        self._notify_change()
         
         return image
     
@@ -198,6 +217,7 @@ class ImageLibrary:
             
             self._images.remove(image)
             self._save_index()
+            self._notify_change()
     
     def resolve_tag(self, tag: str) -> Optional[LibraryImage]:
         """
@@ -261,6 +281,7 @@ class ImageLibrary:
         if image:
             image.tags = [t.lower().strip() for t in tags]
             self._save_index()
+            self._notify_change()
     
     def update_image_category(self, image_id: str, category: str):
         """Update category for an image."""

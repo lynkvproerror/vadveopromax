@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 2
+SETTINGS_VERSION = 7
 
 
 @dataclass
@@ -69,11 +69,7 @@ class AppSettings:
     use_persistent_profile: bool = True
     
     # === BROWSER VISIBILITY ===
-    auto_hide_enabled: bool = True              # Master toggle for all auto-hide
-    auto_hide_on_launch: bool = True            # A: Hide Chrome on debug browser open
-    auto_hide_on_engine_start: bool = True      # B: Hide during "Start Engine" auto-launch
-    auto_hide_on_data_extract: bool = True      # C: Hide during x-client-data extraction
-    auto_hide_on_worker_start: bool = True      # D: Engine browsers use headless mode
+    smart_hide_enabled: bool = True             # ON = hide on success, show on 403 error; OFF = always visible
     
     # === CONTINUATION ===
     continuation_enabled: bool = True
@@ -87,7 +83,14 @@ class AppSettings:
     recaptcha_pool_size: int = 2
     watchdog_timeout_min: int = 10           # minutes
     journal_save_interval_sec: int = 30      # seconds
-    workload_priority: str = "prompts_first" # balanced | prompts_first | upscale_first
+    workload_priority: str = "720p_priority" # 720p_priority | upscale_priority
+    auto_retry_download: bool = True         # Auto re-generate when 720p download fails
+    auto_retry_download_max: int = 3         # Max re-generation attempts before marking failed
+    prewarm_enabled: bool = True              # Pre-warm reCAPTCHA after idle period
+    prewarm_idle_threshold: int = 10          # minutes — trigger soft recovery if idle > this
+    smart_recovery_enabled: bool = True       # Smart Recovery: Credit Window + Diagnose-Remedy
+    credit_passive_interval: int = 5          # minutes — passive credit recovery interval
+    credit_probe_after: int = 3               # credits threshold for probe request
     
     # === ENHANCER IMAGE (AI Upscale — Real-ESRGAN + GFPGAN) ===
     enhance_context_menu: bool = True        # Toggle 1: Right-click → ✨ Enhance Image
@@ -103,6 +106,10 @@ class AppSettings:
     notify_toast_enabled: bool = True        # In-app toast on group complete
     notify_sound_enabled: bool = True        # Sound on group complete
     notify_sound_file: str = "default"       # "default" | "success" | "chime" | custom path
+    
+    # === POST-QUEUE ACTION ===
+    post_queue_action_enabled: bool = False  # Master toggle
+    post_queue_action: str = "nothing"       # "nothing" | "shutdown" | "sleep"
     
     # === PATHS ===
     profiles_folder: str = ""
@@ -169,8 +176,34 @@ class AppSettings:
                 'recaptcha_pool_size': 2,
                 'watchdog_timeout_min': 10,
                 'journal_save_interval_sec': 30,
-                'workload_priority': 'prompts_first',
+                'workload_priority': '720p_priority',
                 'ui_language': 'English',
+            },
+            # 2 → 3: Add auto-retry download settings
+            2: lambda d: {**d,
+                'auto_retry_download': True,
+                'auto_retry_download_max': 3,
+            },
+            # 3 → 4: Add post-queue action (shutdown/sleep)
+            3: lambda d: {**d,
+                'post_queue_action_enabled': False,
+                'post_queue_action': 'nothing',
+            },
+            # 4 → 5: Simplify browser visibility — 5 toggles → 1 smart_hide
+            4: lambda d: {
+                **{k: v for k, v in d.items() if not k.startswith('auto_hide')},
+                'smart_hide_enabled': d.get('auto_hide_enabled', True),
+            },
+            # 5 → 6: Add pre-warm idle recovery settings
+            5: lambda d: {**d,
+                'prewarm_enabled': True,
+                'prewarm_idle_threshold': 10,
+            },
+            # 6 → 7: Add Smart Recovery settings
+            6: lambda d: {**d,
+                'smart_recovery_enabled': True,
+                'credit_passive_interval': 5,
+                'credit_probe_after': 3,
             },
         }
         

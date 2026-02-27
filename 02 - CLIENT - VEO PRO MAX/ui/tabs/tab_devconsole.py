@@ -46,7 +46,7 @@ from PySide6.QtCore import QObject
 
 class _LogSignalBridge(QObject):
     """Bridge object that holds the signal (must be QObject subclass)."""
-    log_received = Signal(str, str)
+    log_received = Signal(str, str, str)  # (message, level, source)
 
 
 class QtLogHandler(logging.Handler):
@@ -67,8 +67,13 @@ class QtLogHandler(logging.Handler):
         try:
             msg = self.format(record)
             level = record.levelname
+            source = record.name  # e.g. 'core.engine', 'core.extension_bridge'
             # Emit signal — will be received on GUI thread
-            self.bridge.log_received.emit(msg, level)
+            self.bridge.log_received.emit(msg, level, source)
+        except RuntimeError:
+            # Signal source has been deleted (Qt cleanup during shutdown)
+            # Silently ignore — app is exiting
+            pass
         except Exception:
             self.handleError(record)
 
@@ -377,11 +382,11 @@ class TabDevConsole(QWidget):
             if root.level > logging.DEBUG:
                 root.setLevel(logging.DEBUG)
     
-    @Slot(str, str)
-    def _on_log_received(self, message: str, level: str):
+    @Slot(str, str, str)
+    def _on_log_received(self, message: str, level: str, source: str = ""):
         """Route incoming log message to LogsPage + Network API filter."""
-        # Forward to logs page
-        self._logs_page.append_log(message, level)
+        # Forward to logs page with source for layer filtering
+        self._logs_page.append_log(message, level, source)
         
         # Update toolbar log count
         count = len(self._logs_page._log_buffer)
@@ -423,6 +428,14 @@ class TabDevConsole(QWidget):
         """Update JSON Preview panel."""
         self._logs_page.update_json_preview(data)
     
+    @Slot()
+    def update_json_preview_safe(self):
+        """Thread-safe slot: read stashed JSON preview from controller and update."""
+        if self.controller and hasattr(self.controller, '_pending_json_preview'):
+            data = self.controller._pending_json_preview
+            if data:
+                self._logs_page.update_json_preview(data)
+    
     def update_performance(self, data: dict):
         """Update Performance panel."""
         self._queue_page.update_performance(data)
@@ -430,6 +443,13 @@ class TabDevConsole(QWidget):
     def update_engine_dashboard(self, data: dict):
         """Update Engine Dashboard with aggregated monitoring data."""
         self._dashboard_page.update_dashboard(data)
+        # Forward per-account data to accounts page
+        if 'prewarm' in data:
+            self._accounts_page.update_prewarm_data(data['prewarm'])
+        if 'circuit_breaker_status' in data:
+            self._accounts_page.update_circuit_data(data['circuit_breaker_status'])
+        if 'cooldowns' in data:
+            self._accounts_page.update_cooldown_data(data['cooldowns'])
     
     def update_browser_status(self, accounts: list):
         """Update browser status for all accounts."""

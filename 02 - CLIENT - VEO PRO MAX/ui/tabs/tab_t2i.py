@@ -33,7 +33,7 @@ class TabT2I(GenerationTabBase):
     SHOW_CONTINUATION = False
     SHOW_IMAGE_LIBRARY = False
     IMAGE_MODE = None
-    CLEAR_AFTER_ADD = True
+    CLEAR_AFTER_ADD = False
     
     def _create_sidebar_widget(self):
         """Use ImageSidebar instead of VideoSidebar."""

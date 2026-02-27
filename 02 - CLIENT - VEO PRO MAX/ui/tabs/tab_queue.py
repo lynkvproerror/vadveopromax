@@ -86,6 +86,7 @@ class TabQueue(
         self._retry_pending = []  # Staggered retry queue
         self._input_pulse_thumbs: List[QLabel] = []  # Thumbnails with pulsing border
         self._input_pulse_phase = False  # Toggle for pulse animation
+        self._post_queue_triggered = False  # Guard: prevent double-trigger
         
         # ── Phase 1 Performance Caches ──
         self._pixmap_cache: OrderedDict = OrderedDict()  # path → scaled QPixmap
@@ -247,6 +248,15 @@ class TabQueue(
             try:
                 # Store retry progress on slot for _apply_thumb_effect to use
                 slot._retry_progress = progress
+                # Ensure video_info reflects retrying state so animation_engine
+                # enters the retry rendering path (quality=='retrying' check)
+                vi = getattr(slot, '_video_info', None)
+                if vi and isinstance(vi, dict):
+                    vi['quality'] = 'retrying'
+                    vi['border_color'] = 'purple'
+                elif vi is None:
+                    slot._video_info = {'quality': 'retrying', 'border_color': 'purple'}
+                slot._border_color_name = 'purple'
                 task_status = getattr(widget, '_task_status', 'completed')
                 self._apply_thumb_effect(slot, progress, task_status)
             except RuntimeError:
@@ -277,13 +287,29 @@ class TabQueue(
     def _on_auto_refresh_tick(self):
         """Periodic queue refresh while engine is running (every 2s)."""
         self._refresh_queue_from_controller()
-        # Auto-stop timer if engine no longer processing
+        # Auto-stop timer if engine no longer processing AND upscale queue is idle
         if self.controller and hasattr(self.controller, 'state'):
             if not self.controller.state.is_processing:
-                self._auto_refresh_timer.stop()
                 self._is_processing = False
                 self._is_paused = False
                 self._update_button_states()
+                
+                # Keep timer alive while upscale queue has work
+                upscale_active = False
+                engine = getattr(self.controller, '_engine', None)
+                if engine:
+                    uq = getattr(engine, '_upscale_queue', None)
+                    if uq:
+                        stats = uq.get_stats()
+                        upscale_active = (
+                            stats.get('pending_jobs', 0) > 0 or
+                            stats.get('active_workers', 0) > 0
+                        )
+                
+                if not upscale_active:
+                    self._auto_refresh_timer.stop()
+        # Check post-queue action every tick (handles upscale-only completion)
+        self._check_post_queue_action()
     
     # ── UI Setup ─────────────────────────────────────────────────
     
@@ -428,6 +454,20 @@ class TabQueue(
         self.stop_btn.clicked.connect(self._on_stop_all)
         self.stop_btn.setEnabled(False)
         layout.addWidget(self.stop_btn)
+        
+        # Post-queue action dropdown — synced with Settings tab
+        from config.settings import get_settings as _gs
+        _s = _gs()
+        _action_map = {"nothing": "🔌 Do Nothing", "shutdown": "⚡ Shutdown", "sleep": "💤 Sleep"}
+        saved_action = _action_map.get(getattr(_s, 'post_queue_action', 'nothing'), "🔌 Do Nothing")
+        
+        self.post_queue_combo = QComboBox()
+        self.post_queue_combo.addItems(["🔌 Do Nothing", "⚡ Shutdown", "💤 Sleep"])
+        self.post_queue_combo.setCurrentText(saved_action)
+        self.post_queue_combo.setFixedWidth(140)
+        self.post_queue_combo.setToolTip("Action after all tasks complete")
+        self.post_queue_combo.currentIndexChanged.connect(self._post_queue_combo_changed)
+        layout.addWidget(self.post_queue_combo)
         
         layout.addStretch()
         
@@ -819,6 +859,7 @@ class TabQueue(
         if item.status not in ("failed", "cancelled"):
             retry_btn.hide()
         aw_layout.addWidget(retry_btn)
+        widget.retry_btn = retry_btn  # Store for status-update toggling
         
         # Delete button
         delete_btn = QPushButton("\u2715")
@@ -1053,8 +1094,8 @@ class TabQueue(
                         main_window.show_toast(check["summary"], "success", duration=3000)
             
             self.start_all.emit()
-            if self.controller:
-                self.controller.start_processing()
+            # Note: start_all signal is connected to controller.start_processing() in app.py
+            # — no direct call needed here
             self._is_processing = self.controller.state.is_processing if self.controller else True
             self._is_paused = False
             self._auto_refresh_timer.start()
@@ -1106,6 +1147,10 @@ class TabQueue(
         failed_items = [i for i in self._queue_items if i.status == "failed"]
         if not failed_items:
             return
+        
+        # Bug 5 fix: Debounce — disable button for 3s to prevent double-click
+        self.retry_failed_btn.setEnabled(False)
+        QTimer.singleShot(3000, lambda: self.retry_failed_btn.setEnabled(True))
         
         self._retry_pending = list(failed_items)
         total = len(self._retry_pending)
@@ -1254,3 +1299,137 @@ class TabQueue(
                 self._refresh_item_widget(item)
                 break
         self._update_stats()
+    
+    # ── Post-Queue Action ─────────────────────────────────────────
+    
+    def _post_queue_combo_changed(self, index: int):
+        """Sync Queue dropdown → AppSettings (two-way sync with Settings tab)."""
+        _reverse_map = {"🔌 Do Nothing": "nothing", "⚡ Shutdown": "shutdown", "💤 Sleep": "sleep"}
+        try:
+            from config.settings import get_settings, save_settings
+            s = get_settings()
+            text = self.post_queue_combo.currentText()
+            s.post_queue_action = _reverse_map.get(text, "nothing")
+            s.post_queue_action_enabled = (s.post_queue_action != "nothing")
+            save_settings()
+        except Exception:
+            pass
+    
+    def _check_post_queue_action(self):
+        """Check if ALL queue groups are done (including upscale) → trigger action."""
+        if self._post_queue_triggered:
+            return
+        if not self.controller:
+            return
+        
+        from config.settings import get_settings
+        s = get_settings()
+        action = getattr(s, 'post_queue_action', 'nothing')
+        if action == 'nothing':
+            return
+        
+        # Use dispatcher task states (source of truth, not UI widgets)
+        try:
+            dispatcher = self.controller._dispatcher
+            groups = dispatcher.get_task_groups()
+            if not groups:
+                return  # No tasks in queue
+            
+            from core.dispatcher import TaskState
+            pending = 0
+            processing = 0
+            completed = 0
+            for group in groups.values():
+                for task in group.tasks:
+                    if task.state in (TaskState.PENDING, TaskState.READY, TaskState.WAITING):
+                        pending += 1
+                    elif task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                        processing += 1
+                    elif task.state == TaskState.COMPLETED:
+                        completed += 1
+                    # FAILED/CANCELLED are ignored (don't block shutdown)
+            
+            if pending > 0 or processing > 0 or completed == 0:
+                return
+            
+            # Also check upscale queue — don't shutdown while upscaling
+            engine = getattr(self.controller, '_engine', None)
+            if engine:
+                uq = getattr(engine, '_upscale_queue', None)
+                if uq:
+                    stats = uq.get_stats()
+                    if stats.get('pending_jobs', 0) > 0 or stats.get('active_workers', 0) > 0:
+                        return  # Upscale still running
+        except Exception:
+            return  # Safe fallback — don't trigger on error
+        
+        self._post_queue_triggered = True
+        self._execute_post_queue_action(action)
+    
+    def _execute_post_queue_action(self, action: str):
+        """Execute shutdown or sleep with countdown toast."""
+        import subprocess
+        import logging
+        log = logging.getLogger("queue")
+        
+        main_window = self.window()
+        
+        if action == "shutdown":
+            log.info("[Queue] Post-queue action: SHUTDOWN in 60s")
+            # Schedule shutdown with 60s delay (cancelable via `shutdown /a`)
+            try:
+                subprocess.Popen(["shutdown", "/s", "/t", "60"], shell=True)
+            except Exception as e:
+                log.error(f"[Queue] Shutdown command failed: {e}")
+                return
+            
+            if main_window and hasattr(main_window, 'show_toast'):
+                main_window.show_toast(
+                    "⚡ All tasks done! Shutting down in 60 seconds...\n"
+                    "Click Cancel below or run 'shutdown /a' to abort.",
+                    "warning", duration=55000
+                )
+            # Show cancel button via separate timer
+            self._shutdown_cancel_timer = QTimer(self)
+            self._shutdown_cancel_timer.setSingleShot(True)
+            self._shutdown_cancel_timer.setInterval(55000)
+            self._shutdown_cancel_timer.timeout.connect(
+                lambda: setattr(self, '_post_queue_triggered', False)
+            )
+            self._shutdown_cancel_timer.start()
+            
+        elif action == "sleep":
+            log.info("[Queue] Post-queue action: SLEEP")
+            if main_window and hasattr(main_window, 'show_toast'):
+                main_window.show_toast(
+                    "💤 All tasks done! Putting computer to sleep...",
+                    "info", duration=5000
+                )
+            # Delay 5s then sleep
+            QTimer.singleShot(5000, lambda: self._do_sleep())
+    
+    def _do_sleep(self):
+        """Execute sleep command."""
+        import subprocess
+        import logging
+        try:
+            subprocess.Popen(
+                ["rundll32", "powrprof.dll,SetSuspendState", "0,1,0"],
+                shell=True
+            )
+        except Exception as e:
+            logging.getLogger("queue").error(f"[Queue] Sleep command failed: {e}")
+    
+    def _cancel_post_queue_action(self):
+        """Cancel a pending shutdown."""
+        import subprocess
+        import logging
+        try:
+            subprocess.Popen(["shutdown", "/a"], shell=True)
+            self._post_queue_triggered = False
+            logging.getLogger("queue").info("[Queue] Shutdown cancelled")
+            main_window = self.window()
+            if main_window and hasattr(main_window, 'show_toast'):
+                main_window.show_toast("✅ Shutdown cancelled.", "success", duration=3000)
+        except Exception as e:
+            logging.getLogger("queue").error(f"[Queue] Cancel shutdown failed: {e}")

@@ -239,11 +239,40 @@ class QueueGroupMixin:
     def _update_task_widget_data(self, widget: QFrame, td: dict):
         """Update an existing task row widget with new data (no destroy/recreate)."""
         try:
-            widget._task_status = td.get('status', 'running')
+            new_status = td.get('status', 'running')
+            widget._task_status = new_status
             if hasattr(widget, 'status_label'):
                 self._update_status_label(widget, td)
             if hasattr(widget, 'thumb_slots'):
                 self._update_thumb_slot_data(widget, td)
+            
+            # Toggle retry button visibility based on new status
+            if hasattr(widget, 'retry_btn'):
+                if new_status in ('failed', 'cancelled'):
+                    widget.retry_btn.show()
+                else:
+                    widget.retry_btn.hide()
+            
+            # Update left border accent color
+            status_colors = {
+                'ready': Theme.SUBTEXT0, 'pending': Theme.SUBTEXT0,
+                'waiting': Theme.YELLOW if hasattr(Theme, 'YELLOW') else Theme.SUBTEXT0,
+                'running': Theme.BLUE, 'waiting_poll': Theme.BLUE,
+                'completed': Theme.GREEN, 'failed': Theme.RED,
+                'cancelled': Theme.SUBTEXT0,
+            }
+            accent = status_colors.get(new_status, Theme.SUBTEXT0)
+            widget.setStyleSheet(f"""
+                QFrame#queueItemRow {{
+                    background-color: {Theme.SURFACE1};
+                    border-bottom: 1px solid {Theme.SURFACE0};
+                    border-left: 3px solid {accent};
+                }}
+                QFrame#queueItemRow:hover {{
+                    background-color: {Theme.SURFACE2};
+                }}
+                QFrame#queueItemRow > * {{ border: none; }}
+            """)
         except RuntimeError:
             pass
     

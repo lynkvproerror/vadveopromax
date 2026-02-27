@@ -458,6 +458,107 @@ def _ensure_developer_mode(profile_path: str):
         log.warning(f"[ChromeManager] ⚠️ Could not set developer mode: {e}")
 
 
+# ── Variations Seed Copy ─────────────────────────────────────────────────
+
+# Chrome Variations Service stores experiment seed in Local State.
+# New automation profiles have NO seed → x-client-data = "CjIKAA==" (8 chars).
+# This causes reCAPTCHA to get a very low trust score → 403.
+# Fix: copy seed data from user's real Chrome profile into automation profile.
+
+_VARIATIONS_KEYS = [
+    "variations_compressed_seed",
+    "variations_seed_signature",
+    "variations_country_code",
+    "variations_permanent_consistency_country",
+    "variations_seed_date",
+    "variations_crash_streak",
+    "variations_safe_seed_date",
+]
+
+
+def _find_user_chrome_local_state() -> Optional[Path]:
+    """Find user's main Chrome Local State file."""
+    candidates = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data" / "Local State",
+        Path(os.environ.get("ProgramFiles", "")) / "Google" / "Chrome" / "Application" / ".." / ".." / ".." 
+            / "User Data" / "Local State",
+    ]
+    for p in candidates:
+        try:
+            resolved = p.resolve()
+            if resolved.exists() and resolved.stat().st_size > 100:
+                return resolved
+        except Exception:
+            continue
+    return None
+
+
+def _copy_variations_seed(profile_path: str):
+    """Copy Chrome Variations seed from user's Chrome to automation profile.
+    
+    This populates x-client-data with real experiment data (48+ chars)
+    instead of empty proto (8 chars), dramatically improving reCAPTCHA
+    trust scores for automated Chrome instances.
+    
+    Safe: only copies variation seed keys, nothing else.
+    Idempotent: overwrites existing seed data (always use latest).
+    """
+    source = _find_user_chrome_local_state()
+    if not source:
+        log.warning("[ChromeManager] ⚠️ No user Chrome Local State found — x-client-data may be short")
+        return
+    
+    # Target: automation profile's Local State
+    target = Path(profile_path) / "Local State"
+    
+    try:
+        # Read source
+        with open(source, "r", encoding="utf-8") as f:
+            source_data = json.load(f)
+        
+        # Extract Variations keys
+        seed_data = {}
+        for key in _VARIATIONS_KEYS:
+            if key in source_data:
+                seed_data[key] = source_data[key]
+        
+        if not seed_data:
+            log.warning("[ChromeManager] ⚠️ No Variations seed found in user Chrome")
+            return
+        
+        # Read or create target
+        target_data = {}
+        if target.exists():
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    target_data = json.load(f)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                target_data = {}
+        
+        # Check if seed already copied (same signature = skip)
+        old_sig = target_data.get("variations_seed_signature", "")
+        new_sig = seed_data.get("variations_seed_signature", "")
+        if old_sig and old_sig == new_sig:
+            log.debug(f"[ChromeManager] Variations seed already up-to-date for {Path(profile_path).name}")
+            return
+        
+        # Merge seed into target
+        target_data.update(seed_data)
+        
+        # Write target
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(target_data, f, indent=2)
+        
+        seed_size = len(seed_data.get("variations_compressed_seed", ""))
+        log.info(
+            f"[ChromeManager] ✅ Variations seed copied to {Path(profile_path).name} "
+            f"(seed={seed_size} chars, {len(seed_data)} keys)"
+        )
+    except Exception as e:
+        log.warning(f"[ChromeManager] ⚠️ Could not copy Variations seed: {e}")
+
+
 # ── Windows Efficiency Mode ──────────────────────────────────────────────
 
 def _disable_efficiency_mode(pid: int):
@@ -546,6 +647,9 @@ def launch_chrome(
 
     # Pre-set Developer Mode so chrome://extensions loads properly
     _ensure_developer_mode(profile_path)
+    
+    # Copy Variations seed from user's Chrome → ensures x-client-data is populated
+    _copy_variations_seed(profile_path)
 
     # Resolve Extension path (inside client app directory)
     _client_dir = Path(__file__).resolve().parent.parent  # 02 - CLIENT - VEO PRO MAX/
@@ -624,16 +728,12 @@ def launch_chrome(
 
     # Extension installation strategy depends on Chrome type:
     # - CfT: loaded via --load-extension flag at launch time
-    # - Branded: installed via CDP-based extension_manager (first time only)
+    # - Branded: handled by ensure_all_extensions() after all browsers are up
+    #   (has bridge-aware check to avoid reinstalling when extension is already connected)
     if _has_extension and not _is_branded:
         log.info(f"[ChromeManager] Extension loaded via --load-extension flag (CfT)")
     elif _has_extension and _is_branded and cdp_ready:
-        # Auto-install extension for branded Chrome (first time only)
-        try:
-            from core.extension_manager import install_if_needed
-            install_if_needed(port, str(_extension_dir), hidden=hidden)
-        except Exception as e:
-            log.warning(f"[ChromeManager] Extension auto-install error: {e}")
+        log.info(f"[ChromeManager] Branded Chrome — extension install deferred to ensure_all_extensions()")
     elif not _has_extension:
         log.warning(f"[ChromeManager] No extension directory found — skipping install")
 

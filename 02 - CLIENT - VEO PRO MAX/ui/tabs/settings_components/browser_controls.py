@@ -606,8 +606,11 @@ class SettingsBrowserControlsMixin:
             self.profiles_controller.update_profile(email, max_workers=value)
 
         # Propagate to runtime AccountManager._session.max_workers
-        if self.controller and hasattr(self.controller, 'set_account_max_slots'):
-            self.controller.set_account_max_slots(email, value)
+        if self.controller:
+            setter = getattr(self.controller, 'set_account_max_workers',
+                             getattr(self.controller, 'set_account_max_slots', None))
+            if setter:
+                setter(email, value)
 
         print(f"[Settings] Account {email} max_workers → {value}")
 

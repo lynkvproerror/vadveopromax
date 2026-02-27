@@ -1,5 +1,5 @@
 """
-VEO Pro Max - Worker (THỢ)
+VEO Pro Max - PromptExecutor (formerly Worker / THỢ)
 
 Reference: MULTITHREADING_ARCHITECTURE.md
 Role: Execute individual tasks using assigned account
@@ -42,7 +42,9 @@ class WorkerResult:
     operation_names: List[str] = None           # ALL op names (ordered)
     scene_ids: List[str] = None                 # ALL scene IDs (ordered)
     output_uris: list = None
+    media_ids: list = None                      # T2I: mediaIds for upscale API
     error: Optional[str] = None
+    data: dict = None                           # Raw response data (for debugging)
     
     def __post_init__(self):
         if self.output_uris is None:
@@ -51,10 +53,12 @@ class WorkerResult:
             self.operation_names = []
         if self.scene_ids is None:
             self.scene_ids = []
+        if self.media_ids is None:
+            self.media_ids = []
 
 
-class Worker:
-    """THỢ - Executes individual tasks.
+class PromptExecutor:
+    """THỢ — Prompt executor.
     
     Receives: task + account + project_id
     Executes: API call with assigned account
@@ -138,20 +142,21 @@ class Worker:
                         error="reCAPTCHA token expired and refresh failed"
                     )
             
-            # Gap #1 fix: Validate reCAPTCHA quality (same as upscale_queue)
-            # Garbage tokens (<500 chars) from extension glitches cause 403
-            if recaptcha_token and len(recaptcha_token) < 500:
+            # Gap #1 fix: Validate reCAPTCHA quality
+            # Garbage tokens (<1000 chars) from extension glitches cause 403
+            # HAR verified: valid tokens are 1742-2169 chars
+            if recaptcha_token and len(recaptcha_token) < 1000:
                 log.warning(
-                    f"[Worker] reCAPTCHA token too short ({len(recaptcha_token)} chars), "
+                    f"[Worker] reCAPTCHA token too short ({len(recaptcha_token)} chars, need ≥1000), "
                     f"invalidating and retrying once"
                 )
                 account.invalidate_recaptcha()
                 async with account.recaptcha_lock:
                     recaptcha_token = await account.refresh_recaptcha()
-                if not recaptcha_token or len(recaptcha_token) < 500:
+                if not recaptcha_token or len(recaptcha_token) < 1000:
                     return WorkerResult(
                         success=False,
-                        error=f"reCAPTCHA token garbage ({len(recaptcha_token or '')} chars)"
+                        error=f"reCAPTCHA token garbage ({len(recaptcha_token or '')} chars, need ≥1000)"
                     )
             
             self._report_progress(task.id, 10, "✅ reCAPTCHA ready")
@@ -397,15 +402,17 @@ class Worker:
         
         # Extract direct outputs for sync operations
         output_uris = []
+        media_ids = []
         
         # HAR: batchGenerateImages returns {media: [{image: {generatedImage: {fifeUrl, ...}}}]}
         if "media" in data:
             for item in data["media"]:
                 gen_img = (item.get("image") or {}).get("generatedImage", {})
                 fife_url = gen_img.get("fifeUrl", "")
-                media_id = item.get("name", "")  # Used for upscale
+                media_id = item.get("mediaId", "") or item.get("name", "")
                 if fife_url:
                     output_uris.append(fife_url)
+                    media_ids.append(media_id)
                 elif media_id:
                     output_uris.append(media_id)
         
@@ -422,6 +429,7 @@ class Worker:
             operation_names=operation_names,
             scene_ids=scene_ids,
             output_uris=output_uris,
+            media_ids=media_ids,
         )
     
     def _report_progress(self, task_id: str, progress: int, status_text: str = ""):
@@ -440,3 +448,7 @@ class Worker:
             "state": self.state.value,
             "current_task": self.current_task_id,
         }
+
+
+# Backward compat alias
+Worker = PromptExecutor

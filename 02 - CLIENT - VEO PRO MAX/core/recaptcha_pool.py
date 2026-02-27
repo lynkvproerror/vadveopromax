@@ -98,10 +98,10 @@ class RecaptchaPool:
         
         Args:
             email: Account email.
-            token: reCAPTCHA token string (must be >500 chars to be useful).
+            token: reCAPTCHA token string (must be ≥1000 chars to be useful).
         """
-        if not token or len(token) < 500:
-            return  # Reject garbage tokens
+        if not token or len(token) < 1000:
+            return  # Reject garbage tokens (valid tokens are 1742-2169 chars)
         pool = self._pools.get(email)
         if pool is None:
             return  # Account not registered
@@ -115,10 +115,49 @@ class RecaptchaPool:
             f"(pool={len(pool)}/{self.POOL_SIZE})"
         )
     
-    def start(self):
-        """Start background refill loop."""
+    def start(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+        """Start background refill loop.
+        
+        Args:
+            loop: Optional event loop. If not provided, tries get_running_loop(),
+                  then falls back to get_event_loop() for sync callers.
+        """
+        if self._running:
+            return  # Already started
         self._running = True
-        self._task = asyncio.create_task(self._refill_loop())
+        
+        # Try to create task in the current running loop
+        try:
+            target_loop = loop or asyncio.get_running_loop()
+            self._task = target_loop.create_task(self._refill_loop())
+        except RuntimeError:
+            # No running loop (called from sync context, e.g. UI thread)
+            # Get or create an event loop and schedule the task
+            try:
+                target_loop = loop or asyncio.get_event_loop()
+                if target_loop.is_running():
+                    # Loop exists but we're not in it — schedule from outside
+                    import concurrent.futures
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._refill_loop(), target_loop
+                    )
+                    self._task = None  # Can't get asyncio.Task from sync context
+                    log.info("[RecaptchaPool] Scheduled refill loop via run_coroutine_threadsafe")
+                else:
+                    log.warning(
+                        "[RecaptchaPool] No running event loop available — "
+                        "pool will start when engine loop begins"
+                    )
+                    self._running = False
+                    return
+            except RuntimeError:
+                log.warning(
+                    "[RecaptchaPool] Cannot start — no event loop available. "
+                    "Pool will start when engine calls start() inside its loop."
+                )
+                self._running = False
+                return
+        
         log.info(
             f"[RecaptchaPool] Started — pool_size={self.POOL_SIZE}, "
             f"ttl={self.TOKEN_TTL}s, refill_interval={self.REFILL_INTERVAL}s"

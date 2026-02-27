@@ -1,5 +1,0 @@
- 23x  /v1:uploadUserImage
-  8x  /v1:fetchUserRecommendations
-  5x  /v1:checkAppAvailability
-
-Total: 36 requests

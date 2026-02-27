@@ -1,9 +1,0 @@
-\n| Endpoint | Method | Bearer Auth | Cookie Auth | API Key | reCAPTCHA | Tool=PINHOLE | Found In |\n|---|---|---|---|---|---|---|---|\n| `/v1/credits` | GET | ❌ | ❌ | ✅ | ❌ | ❌ | 4 |
-| `/v1/media/{ID}` | GET | ❌ | ❌ | ✅ | ❌ | ✅ | 12 |
-| `/fx/api/trpc/{ID}` | POST | ❌ | ❌ | ❌ | ❌ | ❌ | 45 |
-| `/g/collect` | POST | ❌ | ❌ | ❌ | ❌ | ❌ | 42 |
-| `/v1/flow/upsampleImage` | POST | ❌ | ❌ | ❌ | ✅ | ✅ | 4 |
-| `/v1/projects/{ID}/{ID}` | POST | ❌ | ❌ | ❌ | ✅ | ✅ | 5 |
-| `/v1/{ID}` | POST | ❌ | ❌ | ❌ | ✅ | ✅ | 23 |
-| `/v1:uploadUserImage` | POST | ❌ | ❌ | ❌ | ❌ | ✅ | 12 |
-| `/{ID}` | POST | ❌ | ❌ | ❌ | ❌ | ✅ | 3 |

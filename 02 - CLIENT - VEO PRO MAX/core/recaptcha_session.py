@@ -457,8 +457,9 @@ class RecaptchaBrowserSession:
             ''')
             
             if token:
-                if len(token) < 500:
-                    log.warning(f"[RecaptchaBrowserSession] ⚠️ Token suspiciously short ({len(token)} chars < 500), rejecting")
+                # HAR verified: valid tokens are 1742-2169 chars
+                if len(token) < 1000:
+                    log.warning(f"[RecaptchaBrowserSession] ⚠️ Token suspiciously short ({len(token)} chars < 1000), rejecting")
                     return None
                 log.info(f"[RecaptchaBrowserSession] ✅ reCAPTCHA token obtained ({len(token)} chars)")
             else:

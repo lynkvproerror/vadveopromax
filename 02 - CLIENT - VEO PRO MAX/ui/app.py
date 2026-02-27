@@ -32,7 +32,6 @@ from ui.tabs.tab_i2i import TabI2I
 from ui.tabs.tab_queue import TabQueue
 from ui.tabs.tab_settings import TabSettings
 from ui.tabs.tab_license import TabLicense
-from ui.tabs.tab_about import TabAbout
 from ui.tabs.tab_devconsole import TabDevConsole
 
 if TYPE_CHECKING:
@@ -55,8 +54,8 @@ class MainWindow(QMainWindow):
     └──────────────────────────────────────────────────────────────────────────────┘
     """
     
-    # Thread-safe toast signal: (message, level, duration)
-    _toast_signal = Signal(str, str, int)
+    # Thread-safe toast signal: (message, level, duration, audience)
+    _toast_signal = Signal(str, str, int, str)
     
     # Thread-safe network status signal: (latency_ms, online)
     _net_signal = Signal(int, bool)
@@ -132,7 +131,6 @@ class MainWindow(QMainWindow):
             ("Queue", "queue", TabQueue),
             ("Settings", "settings", TabSettings),
             ("License", "license", TabLicense),
-            ("About", "about", TabAbout),
         ]
         
         # Create actual migrated tabs
@@ -159,8 +157,14 @@ class MainWindow(QMainWindow):
         
         # Toast notification manager
         self._toast_manager = ToastManager(self)
-        self._toast_signal.connect(self._show_toast_on_main_thread)
+        self._toast_signal.connect(
+            self._show_toast_on_main_thread,
+            Qt.ConnectionType.UniqueConnection,
+        )
         self._net_signal.connect(self._update_network_signal)
+        
+        # Wire tester mode from license (if controller available)
+        self._sync_tester_mode()
     
     def _create_status_bar(self):
         """Create status bar at bottom."""
@@ -267,7 +271,7 @@ class MainWindow(QMainWindow):
                     self.controller.stop_perf_timer()
                 if hasattr(self.controller, 'dev_console'):
                     self.controller.dev_console = None
-            self.show_toast("DevConsole hidden", "info")
+            self.show_toast("DevConsole hidden", "info", audience="tester")
         else:
             # Add dev console tab (use actual migrated TabDevConsole)
             dev_widget = TabDevConsole(controller=self.controller)
@@ -284,7 +288,7 @@ class MainWindow(QMainWindow):
                 self.controller.start_perf_timer()
             
             self._dev_console_visible = True
-            self.show_toast("DevConsole visible (Ctrl+Shift+D to hide)", "info")
+            self.show_toast("DevConsole visible (Ctrl+Shift+D to hide)", "info", audience="tester")
     
     def _connect_controller(self):
         """Connect controller callbacks for UI updates."""
@@ -304,6 +308,9 @@ class MainWindow(QMainWindow):
         
         # Group completed (notification)
         self.controller.set_group_completed_callback(self._on_group_completed)
+        
+        # Status changes (controller start/stop, account events, errors)
+        self.controller.set_status_callback(self._on_engine_status)
         
         # === INITIAL STATUS BAR DATA ===
         self._update_license_widget()
@@ -386,10 +393,21 @@ class MainWindow(QMainWindow):
             sound = getattr(self.settings, 'notify_sound_file', 'default')
             self._notification_manager.play(sound, duration_ms=4000)
     
+    def _on_engine_status(self, status: str):
+        """Handle status changes from AppController (16+ events).
+        
+        Events include: controller start/stop, account add/enable/disable,
+        processing start/pause/resume/stop, license activation, errors.
+        """
+        import logging
+        logging.getLogger("veo").info(f"[Status] {status}")
+        if hasattr(self, 'show_toast'):
+            self.show_toast(status, level="info", audience="tester")
+    
     @Slot()
     def _on_clear_failed(self):
         """Handle clear failed tasks."""
-        self.show_toast("Cleared failed tasks", "info")
+        self.show_toast("Cleared failed tasks", "info", audience="tester")
     
     @Slot(dict)
     def _on_settings_changed(self, settings: dict):
@@ -407,7 +425,7 @@ class MainWindow(QMainWindow):
             if tab and hasattr(tab, 'sidebar') and hasattr(tab.sidebar, 'apply_defaults'):
                 tab.sidebar.apply_defaults()
         
-        self.show_toast("Settings updated → all tabs synced", "success")
+        self.show_toast("Settings updated → all tabs synced", "success", audience="tester")
     
     @Slot(dict)
     def _update_queue_status(self, status: dict):
@@ -431,6 +449,14 @@ class MainWindow(QMainWindow):
         if not self.controller or not hasattr(self.controller, 'get_license_status'):
             return
         try:
+            # Priority 1: Check hardcoded role (independent of Firebase)
+            if hasattr(self.controller, '_license_client'):
+                lc = self.controller._license_client
+                if hasattr(lc, 'can_see_dev_console') and lc.can_see_dev_console():
+                    self.update_license_status("Tester")
+                    return
+            
+            # Priority 2: Firebase-based license
             ls = self.controller.get_license_status()
             if ls.get("is_licensed"):
                 tier = ls.get("tier", "PRO")
@@ -438,8 +464,10 @@ class MainWindow(QMainWindow):
             elif ls.get("is_trial"):
                 days = ls.get("days_remaining", 0)
                 self.update_license_status(f"Trial ({days}d)")
+            elif ls.get("trial_expired"):
+                self.update_license_status("Trial Expired")
             else:
-                self.update_license_status("N/A")
+                self.update_license_status("Unlicensed")
         except Exception:
             pass
     
@@ -464,6 +492,9 @@ class MainWindow(QMainWindow):
         # Worker pool status → DevConsole
         if hasattr(self.controller, 'push_status_updates'):
             self.controller.push_pool_status()  # Only pool status on timer, not full push
+        
+        # License status (may be N/A at init if _license_client not yet ready)
+        self._update_license_widget()
     
     def _update_memory(self):
         """Update memory usage in status bar."""
@@ -492,29 +523,50 @@ class MainWindow(QMainWindow):
         """Update status bar message (no-op, status_label removed)."""
         pass
     
-    def show_toast(self, message: str, level: str = "info", duration: int = 4000):
+    def show_toast(self, message: str, level: str = "info", duration: int = 4000,
+                   audience: str = "user"):
         """Show a floating toast notification (thread-safe).
         
-        Emits signal to ensure toast is always created on the main thread.
-        QTimer and QPropertyAnimation require the main event loop.
+        Args:
+            audience: 'user' (visible to all) or 'tester' (system/technical, hidden in User mode)
+        
+        If called from main thread → direct call (avoids signal double-fire).
+        If called from worker thread → emit signal for cross-thread delivery.
         """
         try:
-            self._toast_signal.emit(message, level, duration)
+            from PySide6.QtCore import QThread
+            if QThread.currentThread() == self.thread():
+                # Same thread — call directly, no signal needed
+                self._show_toast_on_main_thread(message, level, duration, audience)
+            else:
+                # Cross-thread — use signal/slot for thread safety
+                self._toast_signal.emit(message, level, duration, audience)
         except Exception as e:
-            print(f"[Toast] Failed to emit signal: {e}")
+            print(f"[Toast] Failed to show toast: {e}")
     
-    @Slot(str, str, int)
-    def _show_toast_on_main_thread(self, message: str, level: str, duration: int):
+    @Slot(str, str, int, str)
+    def _show_toast_on_main_thread(self, message: str, level: str, duration: int,
+                                    audience: str = "user"):
         """Actually create and show the toast (runs on main thread via signal)."""
         try:
-            self._toast_manager.show_toast(message, level, duration)
+            self._toast_manager.show_toast(message, level, duration, audience=audience)
         except Exception as e:
             print(f"[Toast] Failed: {e}")
+    
+    def _sync_tester_mode(self):
+        """Sync tester mode from license — call after controller is set."""
+        try:
+            if self.controller and hasattr(self.controller, '_license_client'):
+                lc = self.controller._license_client
+                is_tester = hasattr(lc, 'can_see_dev_console') and lc.can_see_dev_console()
+                self._toast_manager.set_tester_mode(is_tester)
+        except Exception:
+            pass  # Default: User mode (tester toasts hidden)
     
     # ── Session Persistence ─────────────────────────────────────
     
     def closeEvent(self, event):
-        """Save session state before closing."""
+        """Save session state and kill all Chrome before closing."""
         if self.controller:
             try:
                 tabs_data = {}
@@ -528,6 +580,15 @@ class MainWindow(QMainWindow):
                 print(f"[App] Session saved ({len(tabs_data)} tabs)")
             except Exception as e:
                 print(f"[App] Session save failed: {e}")
+            
+            # Kill all managed Chrome browsers on app exit
+            try:
+                pc = getattr(self.controller, '_profiles_controller', None)
+                if pc and hasattr(pc, 'kill_all_debug_browsers'):
+                    pc.kill_all_debug_browsers()
+                    print("[App] All managed Chrome processes killed")
+            except Exception as e:
+                print(f"[App] Chrome cleanup failed: {e}")
         
         super().closeEvent(event)
     

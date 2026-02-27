@@ -102,13 +102,20 @@ class DashboardPage(QWidget):
 
     def update_dashboard(self, data: dict):
         """Update all cards from AppController.get_engine_dashboard() data."""
-        self._update_throughput(data.get("aggregator", {}))
+        agg = data.get("aggregator", {})
+        self._update_throughput(agg)
         self._update_accounts(
             data.get("health_scores", {}),
             data.get("burst_controller", {}),
+            data.get("circuit_breaker_status", {}),
+            data.get("cooldowns", {}),
+            data.get("rate_locks", {}),
         )
         self._update_subsystems(data)
-        self._update_bottlenecks(data.get("bottlenecks", []))
+        self._update_bottlenecks(
+            data.get("bottlenecks", []),
+            recent_errors=agg.get("recent_errors", []),
+        )
         self._timestamp.setText(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
 
     # ── Card renderers ────────────────────────────────────────
@@ -139,31 +146,80 @@ class DashboardPage(QWidget):
         ]
         self._throughput_card.setPlainText("\n".join(lines))
 
-    def _update_accounts(self, hs: dict, burst: dict):
+    def _update_accounts(self, hs: dict, burst: dict,
+                         circuit: dict = None, cooldowns: dict = None,
+                         rate_locks: dict = None):
         accounts = hs.get("accounts", {})
         burst_accounts = burst.get("accounts", {})
+        circuit = circuit or {}
+        cooldowns = cooldowns or {}
+        rate_locks = rate_locks or {}
 
         if not accounts:
             self._accounts_card.setPlainText("No accounts active")
             return
 
-        lines = [f"{'Account':<22} {'Slots':>5} {'Score':>6} {'Burst':>6} {'Ext':>4}"]
-        lines.append(f"{'─' * 22} {'─' * 5} {'─' * 6} {'─' * 6} {'─' * 4}")
+        lines = [f"{'Account':<22} {'Slots':>5} {'Score':>6} {'Burst':>6} {'CB':>5} {'CD':>6} {'Ext':>4}"]
+        lines.append(f"{'─' * 22} {'─' * 5} {'─' * 6} {'─' * 6} {'─' * 5} {'─' * 6} {'─' * 4}")
 
         for email, info in accounts.items():
             short = email[:19] + ".." if len(email) > 21 else email
-            slots = f"{info.get('active_slots', 0)}/{info.get('max_slots', 5)}"
+            slots = f"{info.get('active_workers', 0)}/{info.get('max_workers', 20)}"
             score = info.get("score", 0)
             ext = "✅" if info.get("ext_connected") else "❌"
             b_delay = burst_accounts.get(email, {}).get("delay", "-")
             b_str = f"{b_delay}s" if isinstance(b_delay, (int, float)) else str(b_delay)
-            lines.append(f"{short:<22} {slots:>5} {score:>6} {b_str:>6} {ext:>4}")
+            
+            # Circuit Breaker column
+            cb_info = circuit.get(email, {})
+            cb_state = cb_info.get("state", "closed")
+            cb_403 = cb_info.get("consecutive_403", 0)
+            if cb_state == "closed":
+                cb_str = "🟢"
+            elif cb_state == "half_open":
+                cb_str = "🟡P"
+            else:  # open
+                cb_str = f"🔴{cb_403}"
+            
+            # Cooldown column
+            cd_info = cooldowns.get(email, {})
+            cd_remaining = cd_info.get("remaining_sec", 0)
+            if cd_remaining > 0:
+                cd_str = f"❄️{cd_remaining}s"
+            else:
+                cd_str = "✅"
+            
+            lines.append(f"{short:<22} {slots:>5} {score:>6} {b_str:>6} {cb_str:>5} {cd_str:>6} {ext:>4}")
 
         self._accounts_card.setPlainText("\n".join(lines))
 
     def _update_subsystems(self, data: dict):
         lines = []
 
+        # Tab Keepalive
+        ka = data.get("keepalive", {})
+        if ka:
+            state = ka.get('state', 'NOT_STARTED')
+            state_icons = {
+                "ACTIVE": "🟢 ACTIVE",
+                "PAUSED": "⏸️ PAUSED (Engine Processing)",
+                "STOPPED": "🔴 STOPPED",
+                "NOT_STARTED": "⚪ Not Started",
+            }
+            controller = ka.get('controller', '?')
+            ping_count = ka.get('last_ping_count', 0)
+            ping_time = ka.get('last_ping_time', 0)
+            if ping_time > 0:
+                ago = int(datetime.now().timestamp() - ping_time)
+                ping_ago = f"{ago}s ago" if ago < 120 else f"{ago // 60}m ago"
+            else:
+                ping_ago = "never"
+            lines.append(f"• Tab Keepalive: {state_icons.get(state, state)}")
+            lines.append(f"  └ Controller: {controller}  |  Last: {ping_count} tabs ({ping_ago})")
+        else:
+            lines.append("• Tab Keepalive: ⚪ Not Started")
+
+        # reCAPTCHA Pool (with per-account depth)
         pool = data.get("recaptcha_pool", {})
         if pool:
             lines.append(
@@ -171,9 +227,15 @@ class DashboardPage(QWidget):
                 f"misses={pool.get('misses', 0)}, "
                 f"rate={pool.get('hit_rate', 0):.1f}%"
             )
+            pool_sizes = pool.get("pool_sizes", {})
+            if pool_sizes:
+                for email, depth in pool_sizes.items():
+                    short = email.split('@')[0][:12]
+                    lines.append(f"  └ {short}: {depth} token(s) ready")
         else:
             lines.append("• reCAPTCHA Pool: not active")
 
+        # Upscale Queue
         uq = data.get("upscale_queue", {})
         if uq:
             lines.append(
@@ -184,6 +246,7 @@ class DashboardPage(QWidget):
         else:
             lines.append("• Upscale Queue: not active")
 
+        # Adaptive Burst
         burst = data.get("burst_controller", {})
         if burst:
             lines.append(
@@ -192,11 +255,74 @@ class DashboardPage(QWidget):
         else:
             lines.append("• Adaptive Burst: not active")
 
+        # Workload Priority
+        wp = data.get("workload_priority", "")
+        if wp:
+            wp_display = {
+                "720p_priority": "720p First (all prompts → then upscale)",
+                "upscale_priority": "Upscale First (inline upscale)",
+            }
+            lines.append(f"• Workload: {wp_display.get(wp, wp)}")
+
+        # Pre-warm stats
+        pw = data.get("prewarm", {})
+        if pw:
+            enabled = "✅ ON" if pw.get('enabled', True) else "❌ OFF"
+            threshold = pw.get('threshold_sec', 600)
+            lines.append(f"• Pre-warm: {enabled} (threshold: {threshold // 60}m)")
+            for email, acct in pw.get('accounts', {}).items():
+                short = email.split('@')[0][:12]
+                idle = acct.get('current_idle_secs', 0)
+                count = acct.get('total_prewarms', 0)
+                idle_str = f"{idle // 60}m{idle % 60}s" if idle > 60 else f"{idle}s"
+                lines.append(f"  └ {short}: idle={idle_str}, warms={count}")
+
+        # Rate Locks
+        rl = data.get("rate_locks", {})
+        if rl:
+            locked_count = sum(1 for v in rl.values() if v.get("locked"))
+            total = len(rl)
+            if locked_count > 0:
+                lines.append(f"• Rate Locks: 🔒 {locked_count}/{total} locked")
+            else:
+                lines.append(f"• Rate Locks: 🔓 {total} free")
+
         self._subsystems_card.setPlainText("\n".join(lines))
 
-    def _update_bottlenecks(self, bottlenecks: list):
+    def _update_bottlenecks(self, bottlenecks: list, recent_errors: list = None):
+        lines = []
         if bottlenecks:
-            lines = [f"• {bn}" for bn in bottlenecks]
+            for bn in bottlenecks:
+                if isinstance(bn, dict):
+                    bn_type = bn.get("type", "unknown")
+                    if bn_type == "stuck_task":
+                        elapsed = bn.get('elapsed_sec', 0)
+                        stage = bn.get('stage', '?')
+                        task_id = str(bn.get('task_id', ''))[:8]
+                        lines.append(f"⚠️ Stuck: {task_id}.. ({elapsed // 60}m, stage={stage})")
+                    elif bn_type == "high_error_rate":
+                        rate = bn.get('success_rate', 0)
+                        lines.append(f"⚠️ Low success rate: {rate:.1f}%")
+                    elif bn_type == "frequent_watchdog":
+                        recoveries = bn.get('recoveries', 0)
+                        lines.append(f"⚠️ Watchdog recoveries: {recoveries}")
+                    else:
+                        lines.append(f"⚠️ {bn_type}: {bn}")
+                else:
+                    lines.append(f"• {bn}")
         else:
-            lines = ["✅ No bottlenecks detected"]
+            lines.append("✅ No bottlenecks detected")
+
+        # Recent Errors (from StatusAggregator)
+        if recent_errors:
+            lines.append("")
+            lines.append("── Recent Errors ──")
+            for err in recent_errors[-5:]:
+                if isinstance(err, dict):
+                    t = err.get("time", "")
+                    reason = str(err.get("reason", "?"))[:70]
+                    lines.append(f"  {t} | {reason}")
+                else:
+                    lines.append(f"  {str(err)[:80]}")
+
         self._bottlenecks_card.setPlainText("\n".join(lines))

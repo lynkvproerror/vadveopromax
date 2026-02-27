@@ -32,6 +32,9 @@ class AccountsPage(QWidget):
         self._session_data: list = []
         self._browser_data: list = []
         self._extension_data: dict = {}
+        self._prewarm_data: dict = {}  # email → {total_prewarms, current_idle_secs, ...}
+        self._circuit_data: dict = {}  # email → {state, consecutive_403, open_duration_sec}
+        self._cooldown_data: dict = {} # email → {remaining_sec, backoff_level, until}
         self._setup_ui()
 
     def _setup_ui(self):
@@ -121,6 +124,21 @@ class AccountsPage(QWidget):
         self._extension_data = status or {}
         self._render_all()
 
+    def update_prewarm_data(self, prewarm: dict):
+        """Update pre-warm stats from engine dashboard."""
+        self._prewarm_data = prewarm.get('accounts', {}) if prewarm else {}
+        self._render_all()
+
+    def update_circuit_data(self, data: dict):
+        """Update circuit breaker status per-account from engine dashboard."""
+        self._circuit_data = data or {}
+        self._render_all()
+
+    def update_cooldown_data(self, data: dict):
+        """Update cooldown status per-account from engine dashboard."""
+        self._cooldown_data = data or {}
+        self._render_all()
+
     # ── Render ────────────────────────────────────────────────
 
     def _render_all(self):
@@ -200,6 +218,40 @@ class AccountsPage(QWidget):
             bs = browser_state_map.get(b.get("state", "closed"), "⚪ Off")
             enabled = "✅" if b.get("enabled", acc.get("is_enabled")) else "❌"
             lines.append(f"Browser: {bs}  |  Enabled: {enabled}")
+
+            # Pre-warm / Idle
+            pw_acct = self._prewarm_data.get(email, {})
+            if pw_acct:
+                idle = pw_acct.get('current_idle_secs', 0)
+                warms = pw_acct.get('total_prewarms', 0)
+                idle_str = f"{idle // 60}m{idle % 60}s" if idle > 60 else f"{idle}s"
+                lines.append(f"Pre-warm: idle={idle_str}  |  Warms: {warms}")
+
+            # Circuit Breaker
+            cb = self._circuit_data.get(email, {})
+            if cb:
+                cb_state = cb.get("state", "closed")
+                cb_403 = cb.get("consecutive_403", 0)
+                cb_dur = cb.get("open_duration_sec", 0)
+                cb_icons = {
+                    "closed": "🟢 OK",
+                    "open": f"🔴 OPEN ({cb_dur}s)",
+                    "half_open": "🟡 PROBING",
+                }
+                lines.append(f"Circuit: {cb_icons.get(cb_state, cb_state)}  |  Consecutive 403s: {cb_403}")
+
+            # Cooldown
+            cd = self._cooldown_data.get(email, {})
+            if cd:
+                cd_remaining = cd.get("remaining_sec", 0)
+                cd_level = cd.get("backoff_level", 0)
+                cd_until = cd.get("until", "?")
+                level_map = {0: "30s", 1: "60s", 2: "120s", 3: "180s"}
+                level_str = level_map.get(cd_level, f"{cd_level}")
+                lines.append(
+                    f"Cooldown: ❄️ {cd_remaining}s remaining  |  "
+                    f"Level: {cd_level} ({level_str})  |  Until: {cd_until}"
+                )
 
             card.setPlainText("\n".join(lines))
 

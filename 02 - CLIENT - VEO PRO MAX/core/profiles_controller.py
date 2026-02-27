@@ -182,7 +182,7 @@ class ChromeProfile:
         Status priority:
         1. 🔴 Expired - Token đã hết hạn, cần login lại
         2. 🟠 Expiring - Token sắp hết hạn (< 5 phút)
-        3. 🟡 Login - Chưa đăng nhập hoặc chưa có token
+        3. 🟢 Login - Chưa đăng nhập hoặc chưa có token
         4. 🟢 Ready - Sẵn sàng sử dụng
         """
         # Check token expiry if available
@@ -201,7 +201,7 @@ class ChromeProfile:
         
         # Fallback to is_ready check
         if not self.is_ready:
-            return "🟡 Login"
+            return "🟢 Login"
         return "🟢 Ready"
     
     def to_dict(self) -> dict:
@@ -1226,13 +1226,17 @@ class ProfilesController:
                 
                 try:
                     from core.chrome_manager import launch_or_reconnect, kill_chrome, has_tab_with_url
+                    from config.settings import get_settings as _get_settings
+                    
+                    _s = _get_settings()
+                    _should_hide = getattr(_s, 'smart_hide_enabled', True)
                     
                     # Launch or reconnect to persistent Chrome
                     chrome_info = launch_or_reconnect(
                         str(profile_path),
                         email=email,
                         start_url="about:blank",
-                        hidden=True,
+                        hidden=_should_hide,
                     )
                     chrome_pid = chrome_info["pid"]
                     cdp_port = chrome_info["port"]
@@ -1240,16 +1244,16 @@ class ProfilesController:
                     
                     log.info(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port} ({'reconnected' if is_reconnect else 'new'})")
                     
-                    # Hide browser windows (if auto-hide enabled)
+                    # Collect HWNDs for later show/hide commands
                     browser_hwnds = _find_hwnds_by_pid(chrome_pid)
-                    from config.settings import get_settings as _get_settings
-                    _s = _get_settings()
-                    if _s.auto_hide_enabled and _s.auto_hide_on_launch:
+                    if _should_hide:
+                        # Ensure all windows are hidden (launch_chrome already hides,
+                        # but child windows may appear after launch)
                         _win32_hide_hwnds(browser_hwnds)
                         log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — hidden for {email}")
                         _initial_state = "hidden"
                     else:
-                        log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — visible for {email} (auto-hide disabled)")
+                        log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — visible for {email} (smart-hide disabled)")
                         _initial_state = "visible"
                     
                     if on_state_change:
@@ -1279,17 +1283,30 @@ class ProfilesController:
                         log.debug(f"[DEBUG] Step 1: ✅ Connected. Contexts: {len(browser.contexts)}")
                         context = browser.contexts[0] if browser.contexts else browser.new_context()
                         
-                        # Step 2: Reuse existing pages
+                        # Step 2: Reuse existing pages — prefer one already on /tools/flow
                         existing_pages = context.pages
                         log.debug(f"[DEBUG] Step 2: Found {len(existing_pages)} existing page(s)")
                         if existing_pages:
-                            page = existing_pages[0]
-                            log.debug(f"[DEBUG] Step 2: ✅ Reusing tab: {page.url}")
+                            # Prefer a page already on /tools/flow to avoid duplicating it
+                            page = None
+                            for ep in existing_pages:
+                                try:
+                                    if "/tools/flow" in (ep.url or ""):
+                                        page = ep
+                                        log.debug(f"[DEBUG] Step 2: ✅ Reusing existing flow tab: {ep.url}")
+                                        break
+                                except Exception:
+                                    pass
+                            if not page:
+                                page = existing_pages[0]
+                                log.debug(f"[DEBUG] Step 2: ✅ Reusing tab: {page.url}")
                         else:
                             page = context.new_page()
                             log.debug(f"[DEBUG] Step 2: ✅ Created new tab")
                         
                         # Step 2b: Close excess tabs (enforce max 3)
+                        # Uses CDP Target.closeTarget — works on pinned tabs too
+                        # (Playwright page.close() silently fails on pinned tabs)
                         ALLOWED_FRAGMENTS = ["mail.google.com", "youtube.com", "labs.google"]
                         if len(existing_pages) > 3:
                             log.info(f"[ProfilesController] Tab cleanup: {len(existing_pages)} tabs → closing excess")
@@ -1312,7 +1329,26 @@ class ProfilesController:
                                 if p == page:
                                     continue  # Don't close the page we're using
                                 try:
-                                    p.close()
+                                    # CDP Target.closeTarget handles pinned tabs
+                                    import urllib.request, json as _json
+                                    _targets_resp = urllib.request.urlopen(
+                                        f"http://127.0.0.1:{cdp_port}/json", timeout=3
+                                    )
+                                    _targets = _json.loads(_targets_resp.read())
+                                    _page_url = p.url or ""
+                                    _closed_via_cdp = False
+                                    for _t in _targets:
+                                        if _t.get("url") == _page_url and _t.get("type") == "page":
+                                            _tid = _t.get("id")
+                                            if _tid:
+                                                urllib.request.urlopen(
+                                                    f"http://127.0.0.1:{cdp_port}/json/close/{_tid}",
+                                                    timeout=3
+                                                )
+                                                _closed_via_cdp = True
+                                                break
+                                    if not _closed_via_cdp:
+                                        p.close()  # Fallback
                                     closed += 1
                                 except Exception:
                                     pass
@@ -1341,6 +1377,10 @@ class ProfilesController:
                                 "x-client-data",
                             ]
                             
+                            # Anti-spam: track last logged state to avoid 70+ identical lines/sec
+                            import time as _cdp_time
+                            _extra_info_state = {"last_log": 0.0, "last_keys": ""}
+                            
                             def on_request_will_be_sent(event):
                                 url = event.get("request", {}).get("url", "")
                                 if "googleapis.com" in url or "aisandbox" in url:
@@ -1364,7 +1404,14 @@ class ProfilesController:
                                             captured_headers[key] = h_val
                                             found.append(key)
                                 if found:
-                                    log.debug(f"[DEBUG] CDP ExtraInfo captured: {found}")
+                                    # Throttle + dedup: only log when keys change OR every 10s
+                                    now = _cdp_time.monotonic()
+                                    keys_sig = str(sorted(found))
+                                    if (keys_sig != _extra_info_state["last_keys"]
+                                            or now - _extra_info_state["last_log"] > 10.0):
+                                        _extra_info_state["last_log"] = now
+                                        _extra_info_state["last_keys"] = keys_sig
+                                        log.debug(f"[DEBUG] CDP ExtraInfo captured: {found}")
                             
                             cdp_session.on("Network.requestWillBeSent", on_request_will_be_sent)
                             cdp_session.on("Network.requestWillBeSentExtraInfo", on_request_extra_info)
@@ -1699,6 +1746,44 @@ class ProfilesController:
         entry["cmd_queue"].put("kill")
         log.info(f"[ProfilesController] 🔒 Signaled kill for {email}")
         return True
+    
+    def kill_all_debug_browsers(self):
+        """Kill ALL debug browsers on app exit.
+        
+        1. Send 'kill' command to each active debug browser thread
+        2. Fallback: kill any orphaned Chrome via PID files
+        """
+        if not hasattr(self, '_debug_browsers'):
+            return
+        
+        # Phase 1: Signal kill to all active browser threads
+        emails = list(self._debug_browsers.keys())
+        for email in emails:
+            try:
+                entry = self._debug_browsers.get(email)
+                if entry and entry.get("cmd_queue"):
+                    entry["cmd_queue"].put("kill")
+                    log.info(f"[ProfilesController] 🔒 Signaled kill for {email}")
+            except Exception as e:
+                log.warning(f"[ProfilesController] Kill signal failed for {email}: {e}")
+        
+        # Phase 2: Fallback — kill any Chrome still alive via PID files
+        import time
+        time.sleep(1)  # Give threads a moment to process kill commands
+        try:
+            from core.chrome_manager import kill_all_managed_chromes
+            # Find the browser_profiles directory
+            profiles_dir = None
+            for profile in self._profiles:
+                if profile.browser_profile_path:
+                    from pathlib import Path
+                    profiles_dir = str(Path(profile.browser_profile_path).parent)
+                    break
+            if profiles_dir:
+                kill_all_managed_chromes(profiles_dir)
+                log.info(f"[ProfilesController] 🔒 Killed all managed Chrome processes")
+        except Exception as e:
+            log.warning(f"[ProfilesController] Fallback Chrome kill failed: {e}")
     
     def is_debug_browser_open(self, email: str) -> bool:
         """Check if a debug browser is currently open (visible or hidden)."""

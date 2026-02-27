@@ -34,7 +34,7 @@ class TabI2I(GenerationTabBase):
     SHOW_CONTINUATION = False
     SHOW_IMAGE_LIBRARY = True
     IMAGE_MODE = ImageMode.I2I
-    CLEAR_AFTER_ADD = True
+    CLEAR_AFTER_ADD = False
     PROMPT_TABLE_ACCENT = Theme.PURPLE
     
     def _create_sidebar_widget(self):

@@ -240,8 +240,8 @@ class SettingsProfilesMixin:
             self.profiles_table.setItem(actual_row, 4, credits_item)
 
             # Status (col 5) - Uses enhanced status_display from ChromeProfile - centered
-            # Status values: 🔴 Expired, 🟠 Expiring, 🟡 Login, 🟢 Ready
-            status = acc.get('status', '🟡 Login')
+            # Status values: 🔴 Expired, 🟠 Expiring, 🟢 Login, 🟢 Ready
+            status = acc.get('status', '🟢 Login')
             status_item = QTableWidgetItem(status)
             status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -260,7 +260,7 @@ class SettingsProfilesMixin:
                 "• 1 worker = 1 video at a time\n"
                 "• 20 = maximum parallel generation"
             )
-            slots_spin.setFixedWidth(75)
+            slots_spin.setFixedWidth(72)
             # Explicit style: ensure number is visible on dark table background
             slots_spin.setStyleSheet(f"""
                 QSpinBox {{
@@ -269,7 +269,7 @@ class SettingsProfilesMixin:
                     border: 1px solid {Theme.BORDER};
                     border-radius: 3px;
                     padding: 2px 4px;
-                    padding-right: 24px;
+                    padding-right: 18px;
                     font-size: 13px;
                     font-weight: bold;
                 }}

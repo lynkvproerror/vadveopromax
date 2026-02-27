@@ -202,10 +202,19 @@ class ImageSlotWidget(QFrame):
                 self._tag_label.setText(tag)
                 self._tag_label.setToolTip(img.path)
                 return
-        # Tag not found — show tag name but empty thumbnail
-        self._tag_label.setText(f"[{tag}] ❌")
-        self._tag_label.setToolTip(f"Tag '{tag}' not found in library")
+        # Tag not found — show pending indicator (auto-refreshes when library changes)
+        self._tag_label.setText(f"⏳ {tag}")
+        self._tag_label.setToolTip(f"Waiting for '{tag}' in library")
         self._show_empty_state()
+    
+    def refresh_tag(self):
+        """Re-resolve stored tag from library.
+        
+        Called by PromptTable when ImageLibrary changes.
+        Only re-resolves if tag is set but image is missing.
+        """
+        if self._tag and not self._image_path:
+            self.set_tag(self._tag)
     
     def set_image_path(self, path: str, auto_tag: str = ""):
         """Set image directly from file path.

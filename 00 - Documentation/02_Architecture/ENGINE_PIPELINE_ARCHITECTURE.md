@@ -1,9 +1,10 @@
 # 🏭 Engine Pipeline Architecture — Mô Hình Nhà Xưởng
 
-> **Version**: 9.0 • **Updated**: 2026-02-22  
+> **Version**: 9.1 • **Updated**: 2026-02-25  
 > **Scope**: Orchestration Engine — component roles, data flow, pipeline, rate limiting, token, data integrity, fault tolerance.  
 > **Convention**: `[CURRENT]` = đã implement. `[TARGET]` = đề xuất, chưa implement.  
-> **See also**: [CONCURRENCY_MODEL.md](./CONCURRENCY_MODEL.md) — ĐẠI CHỦ/CHỦ/THẦU/THỢ hierarchy, video-based units, account isolation.
+> **See also**: [CONCURRENCY_MODEL.md](./CONCURRENCY_MODEL.md) — ĐẠI CHỦ/CHỦ/THẦU/THỢ hierarchy, video-based units, account isolation.  
+> **See also**: [TAB_KEEPALIVE_ARCHITECTURE.md](./TAB_KEEPALIVE_ARCHITECTURE.md) — Chrome Tab Freeze prevention, reCAPTCHA protection.
 
 ---
 
@@ -780,6 +781,11 @@ class StatusAggregator:
 | Circuit breaker | `engine.py` | `_trip/_close/_half_open_circuit_breaker()` L340-485 |
 | Circuit monitor | `engine.py` | `_circuit_breaker_monitor()` in TaskGroup |
 | 5-layer retry gate | `engine.py` | L1137-1145 (`wait_cooldown` + `wait_circuit`) |
+| **Tab Keepalive loop** | `engine.py` | `_tab_keepalive_loop()` — managed by AppController |
+| **Keepalive lifecycle** | `app_controller.py` | `_start/_stop_tab_keepalive()`, yield events in start/stop/pause/resume |
+| **Cooldown keepalive** | `engine.py` | `wait_for_cooldown()` — ping tab mỗi 20s |
+| **reCAPTCHA Pre-warm** | `engine.py` | `_account_foreman_loop()` — Gate 2 trước task đầu tiên |
+| **reCAPTCHA Retry gate** | `engine.py` | Retry loop — requeue nếu reCAPTCHA not ready |
 
 ---
 
@@ -811,4 +817,7 @@ class StatusAggregator:
 | **reCAPTCHA Readiness Probe** | ✅ `[CURRENT]` | §4.7 | — |
 | **5-Layer Anti-Spam Defense** | ✅ `[CURRENT]` | §4.8 | — |
 | **Circuit Breaker (Cầu Dao)** | ✅ `[CURRENT]` | §9.5 | — |
+| **Tab Keepalive Service** | ✅ `[CURRENT]` | [TAB_KEEPALIVE_ARCHITECTURE.md](./TAB_KEEPALIVE_ARCHITECTURE.md) | — |
+| **reCAPTCHA Pre-warm Gate** | ✅ `[CURRENT]` | [TAB_KEEPALIVE_ARCHITECTURE.md](./TAB_KEEPALIVE_ARCHITECTURE.md) §5.2 | — |
+| **reCAPTCHA Retry Gate** | ✅ `[CURRENT]` | [TAB_KEEPALIVE_ARCHITECTURE.md](./TAB_KEEPALIVE_ARCHITECTURE.md) §5.2 | — |
 | **Account Load Balancer** | 🔲 `[TARGET]` | §8.2, §11.1 | 🟢 Perf |

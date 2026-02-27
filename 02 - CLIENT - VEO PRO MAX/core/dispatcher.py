@@ -90,9 +90,9 @@ class VideoOutputInfo:
             return "purple"
         if self.quality == "retrying":
             return "purple"  # Per-video retry in progress
-        if self.quality in ("1080p", "4K"):
+        if self.quality in ("1080p", "4K", "2K"):
             return "blue"
-        if self.quality == "720p":
+        if self.quality in ("720p", "1K"):
             return "yellow"
         return "gray"
 
@@ -135,6 +135,7 @@ class Task:
     error: Optional[str] = None
     retry_attempts: int = 0        # Track retries for UI display
     chain_retry_count: int = 0     # Auto-retry count for chain root (engine-level)
+    dl_retry_generation_count: int = 0  # Download failure re-generation attempts (max from settings)
     
     # Results
     operation_name: Optional[str] = None
@@ -158,6 +159,7 @@ class Task:
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     assigned_account: Optional[str] = None
+    excluded_accounts: set = field(default_factory=set)  # Smart Recovery: accounts that failed this task
     project_id: Optional[str] = None
     
     @property
@@ -283,10 +285,14 @@ class Dispatcher:
         # Prevents accounts with more workers from monopolizing the queue
         self._per_account_running: Dict[str, int] = {}  # email → running count
         
+        # Smart Recovery: CreditWindow reference for credit-based routing
+        self._credit_window = None  # Set via set_credit_window()
+        
         # Callbacks
         self._on_task_ready: Optional[Callable[[Task], None]] = None
         self._on_task_completed: Optional[Callable[[Task], None]] = None
         self._on_task_failed: Optional[Callable[[Task, str], None]] = None
+        self._on_progress_callback: Optional[Callable[[str, int, str], None]] = None
     
     @property
     def ready_count(self) -> int:
@@ -403,18 +409,26 @@ class Dispatcher:
         
         return True
     
-    def requeue_task(self, task: Task):
-        """Re-queue a task that was interrupted (e.g., by engine stop).
+    def requeue_running_task(self, task: Task):
+        """Re-queue a task that was interrupted (e.g., by engine stop/pause).
         
         Bug 7: Called when engine pauses to re-queue RUNNING/WAITING_POLL tasks.
         Task state should already be set to READY by the caller.
         Decrements _running_count since the task is no longer running.
+        Clears assigned_account so any foreman can pick it up.
         """
         if task.state == TaskState.READY:
             self._queued_task_ids.discard(task.id)  # Allow re-enqueue
             self._enqueue_task(task, priority=0)  # Requeue = high priority
             self._running_count = max(0, self._running_count - 1)
             self._decrement_account_running(task.assigned_account)
+            prev_account = task.assigned_account
+            task.assigned_account = None  # Allow cross-account pickup
+            log.info(
+                f"[Dispatcher] 🔄 requeue_running_task({task.id}): "
+                f"account={prev_account} → None, "
+                f"running_count={self._running_count}"
+            )
             if self._on_task_ready:
                 self._on_task_ready(task)
     
@@ -431,13 +445,16 @@ class Dispatcher:
         
         return True
     
+    def set_credit_window(self, credit_window) -> None:
+        """Set CreditWindow reference for credit-based task routing."""
+        self._credit_window = credit_window
+    
     def get_next_task(self, account_email: str = None) -> Optional[Task]:
         """Pop next ready task from queue (non-blocking).
         
-        PA3: When account_email is provided and multiple accounts are active,
-        applies fair-share gate — accounts running above average yield their turn.
-        This prevents accounts with more workers from monopolizing the queue.
-        Auto-degrades to no-op when only 1 account.
+        Smart Recovery: Credit check FIRST — suspended accounts get nothing.
+        PA3: Fair-share gate with suspended-aware average calculation.
+        Excluded accounts: tasks that failed on this account are skipped.
         
         Bug 15 note: _running_count += 1 is safe in CPython because all workers
         run in the SAME event loop thread (asyncio cooperative multitasking).
@@ -446,30 +463,54 @@ class Dispatcher:
         Dedup guard: Skips tasks that are already RUNNING (stale duplicates
         left in queue from journal restore, force retry, or re-submit).
         """
-        # PA3: Fair-share gate — only when multi-account
-        if account_email and len(self._per_account_running) > 1:
-            total = sum(self._per_account_running.values())
-            num_accounts = len(self._per_account_running)
-            avg = total / num_accounts
+        # Smart Recovery: Credit check — suspended accounts cannot pick tasks
+        if account_email and self._credit_window:
+            if not self._credit_window.can_accept_task(account_email):
+                return None
+            # Slow start check
             my_running = self._per_account_running.get(account_email, 0)
-            if my_running > avg + 1:
-                # This account is running above fair share — yield turn
+            if not self._credit_window.check_slow_start(account_email, my_running):
                 log.debug(
-                    f"[Dispatcher] PA3: {account_email} running {my_running} "
-                    f"(avg={avg:.1f}) — yielding turn"
+                    f"[Dispatcher] SlowStart: {account_email} at cap "
+                    f"(running={my_running}) — yielding"
                 )
                 return None
         
+        # PA3: Fair-share gate — only when multi-account
+        # Smart Recovery: exclude suspended accounts from average calc
+        if account_email and len(self._per_account_running) > 1:
+            # Count only active (non-suspended) accounts for fair avg
+            active_counts = {}
+            for email, count in self._per_account_running.items():
+                if self._credit_window and self._credit_window.is_suspended(email):
+                    continue  # Skip suspended accounts
+                active_counts[email] = count
+            
+            if len(active_counts) > 1:
+                total = sum(active_counts.values())
+                num_active = len(active_counts)
+                avg = total / num_active
+                my_running = active_counts.get(account_email, 0)
+                if my_running > avg + 1:
+                    log.debug(
+                        f"[Dispatcher] PA3: {account_email} running {my_running} "
+                        f"(avg={avg:.1f}, active_accounts={num_active}) — yielding turn"
+                    )
+                    return None
+        
+        # Deferred items: tasks that can't go to this account (excluded)
+        deferred = []
+        
         while True:
             try:
-                _, _, task = self._ready_queue.get_nowait()
+                priority, counter, task = self._ready_queue.get_nowait()
                 self._queued_task_ids.discard(task.id)
                 
                 # Defense-in-depth: skip stale duplicates
-                if task.state == TaskState.RUNNING:
+                if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
                     log.warning(
                         f"[Dispatcher] Skipped duplicate task {task.id} "
-                        f"(already RUNNING) — stale queue entry"
+                        f"(already {task.state.value}) — stale queue entry"
                     )
                     continue  # Drain stale entry, try next
                 if task.state in (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED):
@@ -478,6 +519,12 @@ class Dispatcher:
                         f"(state={task.state.value}) — stale queue entry"
                     )
                     continue  # Drain stale entry, try next
+                
+                # Smart Recovery: skip tasks that excluded this account
+                excluded = getattr(task, 'excluded_accounts', set())
+                if account_email and account_email in excluded:
+                    deferred.append((priority, counter, task))
+                    continue  # Try next task
                 
                 task.state = TaskState.RUNNING
                 task.started_at = datetime.now()
@@ -489,10 +536,110 @@ class Dispatcher:
                     self._per_account_running[account_email] = \
                         self._per_account_running.get(account_email, 0) + 1
                 
+                log.info(
+                    f"[Dispatcher] 📋 Task {task.id} READY → RUNNING "
+                    f"(account={account_email}, running_count={self._running_count})"
+                )
+                
+                # Put deferred items back before returning
+                for item in deferred:
+                    self._ready_queue.put_nowait(item)
+                    self._queued_task_ids.add(item[2].id)
+                if deferred:
+                    log.debug(
+                        f"[Dispatcher] Deferred {len(deferred)} tasks "
+                        f"(excluded {account_email})"
+                    )
+                
                 return task
             except asyncio.QueueEmpty:
+                # Put deferred items back
+                for item in deferred:
+                    self._ready_queue.put_nowait(item)
+                    self._queued_task_ids.add(item[2].id)
+                if deferred:
+                    log.debug(
+                        f"[Dispatcher] Deferred {len(deferred)} tasks "
+                        f"(excluded {account_email})"
+                    )
                 return None
     
+    # ── Counter Audit ──────────────────────────────────────────
+    
+    def audit_counters(self) -> dict:
+        """Audit running counters vs actual task states.
+        
+        Compares tracked _running_count and _per_account_running with
+        actual task states. Logs ERROR on mismatch and auto-fixes.
+        
+        Returns:
+            Dict with audit results for DevConsole/StatusAggregator.
+        """
+        actual_running = sum(
+            1 for t in self._all_tasks.values()
+            if t.state in (TaskState.RUNNING, TaskState.WAITING_POLL)
+        )
+        
+        # Per-account actual counts
+        actual_per_account = {}
+        for t in self._all_tasks.values():
+            if t.state in (TaskState.RUNNING, TaskState.WAITING_POLL) and t.assigned_account:
+                actual_per_account[t.assigned_account] = \
+                    actual_per_account.get(t.assigned_account, 0) + 1
+        
+        mismatches = []
+        
+        # Check total running count
+        if actual_running != self._running_count:
+            mismatches.append(
+                f"_running_count: tracked={self._running_count}, actual={actual_running}"
+            )
+            log.error(
+                f"[AUDIT] ❌ _running_count MISMATCH: "
+                f"tracked={self._running_count}, actual={actual_running} — auto-fixing"
+            )
+            self._running_count = actual_running
+        
+        # Check per-account counts
+        all_accounts = set(list(self._per_account_running.keys()) + list(actual_per_account.keys()))
+        for email in all_accounts:
+            tracked = self._per_account_running.get(email, 0)
+            actual = actual_per_account.get(email, 0)
+            if tracked != actual:
+                mismatches.append(
+                    f"_per_account[{email}]: tracked={tracked}, actual={actual}"
+                )
+                log.error(
+                    f"[AUDIT] ❌ _per_account_running[{email}] MISMATCH: "
+                    f"tracked={tracked}, actual={actual} — auto-fixing"
+                )
+                if actual > 0:
+                    self._per_account_running[email] = actual
+                else:
+                    self._per_account_running.pop(email, None)
+        
+        # Clean up accounts with 0 running (stale entries)
+        for email in list(self._per_account_running.keys()):
+            if self._per_account_running[email] <= 0:
+                self._per_account_running.pop(email, None)
+        
+        result = {
+            'running_count': self._running_count,
+            'per_account': dict(self._per_account_running),
+            'mismatches': mismatches,
+            'ok': len(mismatches) == 0,
+        }
+        
+        if mismatches:
+            log.warning(f"[AUDIT] Fixed {len(mismatches)} counter mismatch(es)")
+        else:
+            log.debug(
+                f"[AUDIT] ✅ Counters OK — running={self._running_count}, "
+                f"accounts={dict(self._per_account_running)}"
+            )
+        
+        return result
+
     def complete_task(
         self,
         task_id: str,
@@ -511,6 +658,11 @@ class Dispatcher:
         task.progress = 100
         self._running_count = max(0, self._running_count - 1)
         self._decrement_account_running(task.assigned_account)
+        log.info(
+            f"[Dispatcher] ✅ Task {task_id} → COMPLETED "
+            f"(account={task.assigned_account}, outputs={len(output_uris)}, "
+            f"running_count={self._running_count})"
+        )
         
         # ── Result slotting: replacement task → original task's video slot ──
         replace_target = task.replace_target
@@ -584,6 +736,11 @@ class Dispatcher:
         task.completed_at = datetime.now()
         self._running_count = max(0, self._running_count - 1)
         self._decrement_account_running(task.assigned_account)
+        log.warning(
+            f"[Dispatcher] ❌ Task {task_id} → FAILED "
+            f"(account={task.assigned_account}, error={error[:80]}, "
+            f"running_count={self._running_count})"
+        )
         
         if self._on_task_failed:
             self._on_task_failed(task, error)
@@ -734,7 +891,7 @@ class Dispatcher:
                 task.continuation_frame_uri = frame_uri
                 task.continuation_frame_local_path = frame_local_path  # For UI thumbnail
                 task.image_uris = [frame_uri]
-                task.required_account = parent_account  # D2: same account
+                task.required_account = None  # DD1: Relaxed D2 — cross-account continuation
                 
                 # Move to ready queue
                 task.state = TaskState.READY
@@ -769,11 +926,12 @@ class Dispatcher:
                 # Still update status_text (stage label), just skip progress decrease
                 if status_text:
                     task.status_text = status_text
-                return
-            task.progress = new_progress
-            if status_text:
-                task.status_text = status_text
-            # Notify UI callback if registered
+            else:
+                task.progress = new_progress
+                if status_text:
+                    task.status_text = status_text
+            # ALWAYS notify UI callback — even on skipped progress decrease,
+            # so status_text changes (e.g. "⬆️ Re-upscaling...") reach the UI
             if hasattr(self, '_on_progress_callback') and self._on_progress_callback:
                 self._on_progress_callback(task_id, task.progress, status_text)
     
@@ -903,11 +1061,14 @@ class Dispatcher:
         on_ready: Optional[Callable[[Task], None]] = None,
         on_completed: Optional[Callable[[Task], None]] = None,
         on_failed: Optional[Callable[[Task, str], None]] = None,
+        on_progress: Optional[Callable[[str, int, str], None]] = None,
     ):
         """Set event callbacks."""
         self._on_task_ready = on_ready
         self._on_task_completed = on_completed
         self._on_task_failed = on_failed
+        if on_progress is not None:
+            self._on_progress_callback = on_progress
     
     def clear_completed(self):
         """Clear completed tasks from tracking."""
@@ -933,8 +1094,16 @@ class Dispatcher:
             if t.state == TaskState.COMPLETED
         ]
     
-    def retry_task(self, task_id: str) -> bool:
-        """Retry a failed task by resetting state to READY.
+    def retry_task(self, task_id: str, force: bool = False) -> bool:
+        """Retry a task by resetting state and re-queuing.
+        
+        Unified entry point for both checkpoint-resume retry and full regeneration.
+        
+        Args:
+            task_id: ID of the task to retry
+            force: If False (default), preserves stage checkpoint — foreman resumes
+                   from where it left off. If True, fully resets task: deletes all
+                   outputs, thumbnails, video_outputs, and re-generates from scratch.
         
         If the task is a chain root with failed descendants,
         automatically uses retry_chain() to preserve continuation identity.
@@ -942,6 +1111,12 @@ class Dispatcher:
         task = self._all_tasks.get(task_id)
         if not task:
             return False
+        
+        if force:
+            # Full regeneration — delegates to _force_reset_and_retry()
+            return self._force_reset_and_retry(task_id)
+        
+        # Checkpoint-resume retry — only works for FAILED/CANCELLED tasks
         if task.state not in (TaskState.FAILED, TaskState.CANCELLED):
             return False
         
@@ -953,18 +1128,16 @@ class Dispatcher:
         task.error = None
         task.progress = 0
         task.retry_attempts += 1
-        # I2V image loss fix: clear stale media IDs so engine re-uploads
-        # from image_paths. MediaIds are account-bound and expire.
+        # Clear stale media IDs so engine re-uploads from image_paths.
+        # MediaIds are account-bound and expire between sessions.
         task.image_uris.clear()
         task.image_upload_status = ""
-        # D2: Pin retry to same account
-        # INIT stage: prefer same (project_id reuse), SUBMITTED+: require same (operation_name bound)
-        if task.assigned_account:
-            task.required_account = task.assigned_account
-        # NOTE: task.stage preserved — worker will resume from checkpoint
+        # DD1: Relaxed D2 — allow cross-account retry
+        task.required_account = None
+        # Stage preserved — foreman will resume from checkpoint
         self._queued_task_ids.discard(task.id)  # Allow re-enqueue
         self._enqueue_task(task, priority=0)  # Retry = high priority
-        # Wake up engine workers waiting for tasks
+        # Wake up scheduler waiting for tasks
         if self._on_task_ready:
             self._on_task_ready(task)
         return True
@@ -1034,9 +1207,8 @@ class Dispatcher:
         # I2V image loss fix: clear stale media IDs so engine re-uploads
         root.image_uris = []
         root.image_upload_status = ""
-        # D2: Pin retry to same account — project_id is account-bound
-        if root.assigned_account:
-            root.required_account = root.assigned_account
+        # DD1: Relaxed D2 — allow cross-account retry
+        root.required_account = None
         self._queued_task_ids.discard(root.id)  # Allow re-enqueue
         self._enqueue_task(root, priority=0)
         
@@ -1084,18 +1256,76 @@ class Dispatcher:
     def requeue_task(self, task) -> bool:
         """Re-queue a running task without incrementing retry count.
         
-        Used by network error handler: task goes back to queue
-        and will be picked up after engine resumes.
+        Used by network error handler / cooldown requeue: task goes back to queue
+        and will be picked up after engine resumes — potentially by a different account.
+        
+        Important: Decrements running counters and clears assigned_account
+        so the task is eligible for any account's foreman to pick up.
         """
         if not task:
             return False
+        prev_state = task.state
+        prev_account = task.assigned_account
         task.state = TaskState.READY
         task.error = None
         # NOTE: Don't increment retry_attempts — this isn't a real failure
         # NOTE: Preserve task.stage — resume from checkpoint after reconnect
+        
+        # Decrement running counters if task was actually running
+        if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+            self._running_count = max(0, self._running_count - 1)
+            self._decrement_account_running(task.assigned_account)
+        
+        # Clear account binding so any foreman can pick this task
+        task.assigned_account = None
+        
         self._queued_task_ids.discard(task.id)  # Allow re-enqueue
         self._enqueue_task(task, priority=0)  # High priority: was already running
+        log.info(
+            f"[Dispatcher] 🔄 requeue_task({task.id}): "
+            f"{prev_state.value if hasattr(prev_state, 'value') else prev_state} → READY, "
+            f"account={prev_account} → None, "
+            f"running_count={self._running_count}"
+        )
         return True
+    
+    def migrate_tasks(self, from_account: str) -> int:
+        """Migrate all READY/queued tasks away from a suspended account.
+        
+        Smart Recovery: Called when CreditWindow suspends an account.
+        Sets excluded_accounts so the task won't come back to this account.
+        Wakes other foremen via _on_task_ready callback.
+        
+        Returns:
+            Number of tasks migrated.
+        """
+        migrated = 0
+        for task in self._all_tasks.values():
+            if task.state != TaskState.READY:
+                continue
+            # Migrate tasks that were assigned to this account or have no assignment
+            if task.assigned_account == from_account or task.assigned_account is None:
+                task.assigned_account = None
+                if not hasattr(task, 'excluded_accounts'):
+                    task.excluded_accounts = set()
+                task.excluded_accounts.add(from_account)
+                migrated += 1
+        
+        if migrated > 0:
+            log.info(
+                f"[Dispatcher] 🔀 migrate_tasks: moved {migrated} task(s) "
+                f"away from {from_account}"
+            )
+            # Wake other foremen
+            if self._on_task_ready:
+                self._on_task_ready(None)
+        else:
+            log.debug(
+                f"[Dispatcher] migrate_tasks: no READY tasks to migrate "
+                f"from {from_account}"
+            )
+        
+        return migrated
     
     def retry_all_failed(self) -> int:
         """Retry all failed tasks. Returns count retried."""
@@ -1107,10 +1337,11 @@ class Dispatcher:
         return count
     
     def force_retry_task(self, task_id: str) -> bool:
-        """Force retry a task regardless of current state (including COMPLETED).
-        
-        Fully resets the task: clears all outputs, thumbnails, video_outputs,
-        upscale state. Re-queues as READY for fresh generation.
+        """Backward-compatible wrapper. Use retry_task(task_id, force=True) instead."""
+        return self.retry_task(task_id, force=True)
+    
+    def _force_reset_and_retry(self, task_id: str) -> bool:
+        """Full reset + retry: deletes all outputs and regenerates from scratch.
         
         Accepts ANY state including COMPLETED and RUNNING.
         

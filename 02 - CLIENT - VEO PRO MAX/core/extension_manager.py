@@ -17,6 +17,7 @@ Works for both branded Chrome and CfT, but:
 
 import json
 import logging
+import os
 import time
 import threading
 import urllib.request
@@ -34,6 +35,10 @@ EXTENSION_NAME = "VEO Pro Max Bridge"
 _install_locks = {}
 _install_locks_guard = threading.Lock()
 
+# Throttle DEBUG log: track which ports have already been logged as "loaded"
+# so we don't spam every 5s poll cycle. Reset on install/uninstall.
+_extension_logged_ports: set = set()
+
 
 # ── Extension Detection (Single Source of Truth) ─────────────────────────
 
@@ -43,7 +48,9 @@ def _is_our_extension(target: dict) -> bool:
     Verifies:
     - URL is chrome-extension://
     - Target type is service_worker or background_page
-    - Title contains EXTENSION_NAME *or* URL contains background.js
+    - Title contains EXTENSION_NAME, OR URL contains background.js
+      (Chrome CDP returns SW title as 'Service Worker chrome-extension://ID/background.js'
+       — NOT the extension name from manifest.json)
     """
     url = target.get("url", "")
     title = target.get("title", "")
@@ -53,10 +60,11 @@ def _is_our_extension(target: dict) -> bool:
         return False
     if target_type not in ("service_worker", "background_page"):
         return False
-    # Verify identity: title match OR background.js in URL
+    # Match by extension name in title (if Chrome provides it)
     if EXTENSION_NAME.lower() in title.lower():
         return True
-    if "background.js" in url:
+    # Match by background.js URL (Chrome uses 'Service Worker chrome-extension://ID/background.js' as title)
+    if "background.js" in url and target_type == "service_worker":
         return True
     return False
 
@@ -66,6 +74,9 @@ def is_extension_loaded(port: int) -> bool:
     
     Verifies the service_worker title matches EXTENSION_NAME to avoid
     false positives from other installed extensions.
+    
+    Uses _extension_logged_ports to throttle DEBUG logging:
+    only logs the first detection after a previous miss/reset.
     
     Returns:
         True if our extension service worker is detected.
@@ -77,11 +88,16 @@ def is_extension_loaded(port: int) -> bool:
         
         for t in targets:
             if _is_our_extension(t):
-                log.debug(f"[ExtMgr] Extension loaded: {t.get('url', '')}")
+                # Throttle: only log first detection per port (avoid 5s spam)
+                if port not in _extension_logged_ports:
+                    log.debug(f"[ExtMgr] Extension loaded: {t.get('url', '')}")
+                    _extension_logged_ports.add(port)
                 return True
     except Exception as e:
         log.debug(f"[ExtMgr] CDP check error: {e}")
     
+    # Extension not found — reset log throttle so next detection is logged
+    _extension_logged_ports.discard(port)
     return False
 
 
@@ -408,6 +424,43 @@ JS_CONFIRM_REMOVE_DIALOG = """
 """
 
 
+# ── Win32 Safe Path Helper ───────────────────────────────────────────────
+
+def _get_safe_path(folder_path: str) -> str:
+    r"""Copy extension to a clean TEMP path for folder picker dialogs.
+    
+    When the extension path contains special characters (#, etc.) that
+    cause Chrome's folder picker dialog to fail, copy the extension to
+    %TEMP%\veo_extension (clean path, no special chars).
+    
+    Returns:
+        Clean TEMP path, or original path if copy fails.
+    """
+    import tempfile
+    import shutil
+    
+    safe_dir = os.path.join(tempfile.gettempdir(), "veo_extension")
+    
+    try:
+        # Remove old copy
+        if os.path.exists(safe_dir):
+            shutil.rmtree(safe_dir, ignore_errors=True)
+        
+        # Copy extension to clean path
+        shutil.copytree(folder_path, safe_dir)
+        
+        # Verify manifest exists in copy
+        if os.path.isfile(os.path.join(safe_dir, "manifest.json")):
+            log.info(f"[ExtMgr] Copied extension to safe path: {safe_dir}")
+            return safe_dir
+        else:
+            log.warning(f"[ExtMgr] Copy missing manifest.json: {safe_dir}")
+    except Exception as e:
+        log.warning(f"[ExtMgr] _get_safe_path copy error: {e}")
+    
+    return folder_path  # Fallback to original
+
+
 # ── Win32 Folder Picker (100% Keyboard-Free) ────────────────────────────
 
 def _type_folder_path_win32(folder_path: str, delay: float = 0.05):
@@ -521,6 +574,13 @@ def _type_folder_path_win32(folder_path: str, delay: float = 0.05):
     # Normalize to backslashes for Windows folder picker dialog
     folder_path_normalized = str(folder_path).replace("/", "\\")
     
+    # Convert to junction-based safe path if path contains special characters
+    # (#, etc.) that cause the folder picker's navigation to fail
+    if any(c in folder_path_normalized for c in '#'):
+        log.warning(f"[ExtMgr] Path has '#' — creating junction: {folder_path_normalized}")
+        folder_path_normalized = _get_safe_path(folder_path_normalized)
+        log.warning(f"[ExtMgr] Using path for dialog: {folder_path_normalized}")
+    
     WM_GETTEXT = 0x000D
     WM_GETTEXTLENGTH = 0x000E
     EM_SETSEL = 0x00B1
@@ -567,44 +627,63 @@ def _type_folder_path_win32(folder_path: str, delay: float = 0.05):
     
     log.info(f"[ExtMgr] Set folder path via WM_SETTEXT: {folder_path_normalized}")
     
-    # ── Step 4: Submit the path by sending Enter to the edit control ──
-    # NOTE: BM_CLICK on the OK button does NOT use the filename text!
-    # It selects whatever is highlighted in the folder tree view.
-    # Instead, send VK_RETURN directly to the edit control via PostMessage.
-    # This is NOT keyboard simulation (SendInput) — it's a targeted window message.
+    # ── Step 4: Navigate and confirm the folder selection ──
+    # BM_CLICK alone selects what's in the TREE VIEW (defaults to D:\Downloads).
+    # Enter alone navigates but then clears the filename field.
+    # HYBRID: Enter navigates the tree to our path → BM_CLICK confirms it.
+    
     WM_KEYDOWN = 0x0100
     WM_KEYUP = 0x0101
     VK_RETURN = 0x0D
+    IDOK = 1
+    BM_CLICK = 0x00F5
     
     # lParam for Enter key: scan code 0x1C, repeat count 1
-    ENTER_DOWN_LPARAM = (0x1C << 16) | 1          # 0x001C0001
-    ENTER_UP_LPARAM = (0x1C << 16) | 1 | (3 << 30)  # 0xC01C0001 (bit 30+31 set)
+    ENTER_DOWN_LPARAM = (0x1C << 16) | 1
+    ENTER_UP_LPARAM = (0x1C << 16) | 1 | (3 << 30)
     
-    # First Enter: navigates to the folder path
-    log.info(f"[ExtMgr] Sending Enter to edit control to navigate...")
+    # Step 4a: Press Enter on edit control → navigates folder tree to our path
+    # CRITICAL: Wait for dialog to process WM_SETTEXT before pressing Enter.
+    # Without delay, Enter navigates to the PREVIOUS path (race condition).
+    time.sleep(1.0)  # Let dialog fully process the new text
+    
+    # Re-verify text is still set (defensive)
+    _set_and_verify_text(target_edit, folder_path_normalized, retries=1)
+    time.sleep(0.5)
+    
+    log.info(f"[ExtMgr] Pressing Enter to navigate to: {folder_path_normalized}")
+    user32.SendMessageW(target_edit, WM_KEYDOWN, VK_RETURN, ENTER_DOWN_LPARAM)
+    time.sleep(0.05)
+    user32.SendMessageW(target_edit, WM_KEYUP, VK_RETURN, ENTER_UP_LPARAM)
+    time.sleep(2.0)
+    
+    if not user32.IsWindow(dialog_hwnd):
+        # Enter might have already confirmed (unlikely but handle it)
+        log.info(f"[ExtMgr] ✅ Folder selected via Enter: {folder_path_normalized}")
+        return True
+    
+    # Step 4b: Click "Select Folder" button — tree is now on our folder
+    ok_btn = user32.GetDlgItem(dialog_hwnd, IDOK)
+    if ok_btn:
+        log.info("[ExtMgr] Clicking Select Folder to confirm navigated directory...")
+        user32.SendMessageW(ok_btn, BM_CLICK, 0, 0)
+        time.sleep(1.5)
+    
+    if not user32.IsWindow(dialog_hwnd):
+        log.info(f"[ExtMgr] ✅ Folder picker completed: {folder_path_normalized}")
+        return True
+    
+    # Fallback: re-set path and try Enter one more time
+    log.warning("[ExtMgr] Dialog still open — retry: re-set path + Enter")
+    _set_and_verify_text(target_edit, folder_path_normalized, retries=1)
+    time.sleep(0.3)
     user32.PostMessageW(target_edit, WM_KEYDOWN, VK_RETURN, ENTER_DOWN_LPARAM)
     time.sleep(0.05)
     user32.PostMessageW(target_edit, WM_KEYUP, VK_RETURN, ENTER_UP_LPARAM)
     time.sleep(2.0)
     
-    # Check if dialog is still open
     if user32.IsWindow(dialog_hwnd):
-        # Re-verify the path is still set (dialog may have cleared it after navigation)
-        _set_and_verify_text(target_edit, folder_path_normalized, retries=1)
-        time.sleep(0.3)
-        
-        # Second Enter: confirms the folder selection
-        log.info("[ExtMgr] Dialog still open — sending Enter again to confirm...")
-        user32.PostMessageW(target_edit, WM_KEYDOWN, VK_RETURN, ENTER_DOWN_LPARAM)
-        time.sleep(0.05)
-        user32.PostMessageW(target_edit, WM_KEYUP, VK_RETURN, ENTER_UP_LPARAM)
-        time.sleep(1.5)
-    
-    # Verify dialog dismissed
-    if user32.IsWindow(dialog_hwnd):
-        # Final fallback: try BM_CLICK on OK button
-        log.warning("[ExtMgr] Dialog still open — trying BM_CLICK on OK...")
-        ok_btn = user32.GetDlgItem(dialog_hwnd, IDOK)
+        # Final: click OK
         if ok_btn:
             user32.SendMessageW(ok_btn, BM_CLICK, 0, 0)
             time.sleep(1.0)
@@ -746,23 +825,158 @@ def _install_extension_impl(port: int, extension_dir: str) -> bool:
             log.error("[ExtMgr] ❌ Folder picker failed")
             return False
         
-        # Step 5: Clean up extensions tabs (safe — avoids killing Chrome)
-        time.sleep(2)
-        _cleanup_extensions_tabs(port)
-        
-        # Step 6: Verify extension loaded
-        time.sleep(2)
-        if is_extension_loaded(port):
-            log.info("[ExtMgr] ✅ Extension installed and verified!")
-            return True
-        
-        # Give more time
+        # Step 5: Wait for Chrome to process the loaded extension
+        # DON'T close extensions tab yet — Chrome needs it to finish registration
         time.sleep(3)
-        if is_extension_loaded(port):
-            log.info("[ExtMgr] ✅ Extension installed (delayed verification)")
-            return True
         
-        log.warning("[ExtMgr] ⚠️ Install flow completed but extension not detected")
+        # Step 5b: Check if extension card appeared in DOM (diagnostic)
+        ws_url = _get_extensions_ws_url(port)
+        if ws_url:
+            try:
+                ext_name = EXTENSION_NAME
+                js_check = f"""
+(function() {{
+    const mgr = document.querySelector('extensions-manager');
+    if (!mgr || !mgr.shadowRoot) return 'no_manager';
+    
+    const itemsList = mgr.shadowRoot.querySelector('extensions-item-list')
+                   || mgr.shadowRoot.querySelector('#items-list');
+    if (!itemsList || !itemsList.shadowRoot) return 'no_items_list';
+    
+    const cards = itemsList.shadowRoot.querySelectorAll('extensions-item');
+    for (const card of cards) {{
+        if (!card.shadowRoot) continue;
+        const nameEl = card.shadowRoot.querySelector('#name');
+        if (nameEl && nameEl.textContent.trim() === '{ext_name}') {{
+            // Check for errors
+            const errBtn = card.shadowRoot.querySelector('#errors-button');
+            const hasErrors = errBtn && errBtn.offsetParent !== null;
+            const enableToggle = card.shadowRoot.querySelector('#enableToggle');
+            const isEnabled = enableToggle ? enableToggle.checked : null;
+            return JSON.stringify({{
+                id: card.id,
+                hasErrors: hasErrors,
+                isEnabled: isEnabled,
+            }});
+        }}
+    }}
+    return 'not_found';
+}})()
+"""
+                result = _cdp_evaluate(ws_url, js_check, timeout=5.0)
+                card_info = result.get("result", {}).get("result", {}).get("value", "unknown")
+                log.info(f"[ExtMgr] Post-install card check: {card_info}")
+                
+                # If extension has errors, read the actual error messages
+                if isinstance(card_info, str) and card_info not in ("not_found", "no_manager", "no_items_list", "unknown"):
+                    import json as _json
+                    try:
+                        info = _json.loads(card_info)
+                        if info.get("hasErrors"):
+                            log.warning(f"[ExtMgr] ⚠️ Extension has errors! ID={info.get('id')}")
+                            # Read error details by clicking Errors button and reading error list
+                            ext_id = info.get("id", "")
+                            js_errors = f"""
+(function() {{
+    const mgr = document.querySelector('extensions-manager');
+    if (!mgr || !mgr.shadowRoot) return 'no_manager';
+    const itemsList = mgr.shadowRoot.querySelector('extensions-item-list')
+                   || mgr.shadowRoot.querySelector('#items-list');
+    if (!itemsList || !itemsList.shadowRoot) return 'no_items';
+    const cards = itemsList.shadowRoot.querySelectorAll('extensions-item');
+    for (const card of cards) {{
+        if (card.id !== '{ext_id}') continue;
+        if (!card.shadowRoot) return 'no_shadow';
+        // Click errors button to expand
+        const errBtn = card.shadowRoot.querySelector('#errors-button');
+        if (errBtn) errBtn.click();
+        // Read error section
+        const errSection = card.shadowRoot.querySelector('extensions-error-list');
+        if (errSection && errSection.shadowRoot) {{
+            const items = errSection.shadowRoot.querySelectorAll('.error-message');
+            const errors = [];
+            items.forEach(el => errors.push(el.textContent.trim().substring(0, 200)));
+            return JSON.stringify(errors);
+        }}
+        // Fallback: try to read any visible error text
+        const allText = card.shadowRoot.textContent || '';
+        const errMatch = allText.match(/Error[^\\n]{{0,300}}/gi);
+        return JSON.stringify(errMatch || ['no_error_text_found']);
+    }}
+    return 'card_not_found';
+}})()
+"""
+                            err_result = _cdp_evaluate(ws_url, js_errors, timeout=5.0)
+                            err_text = err_result.get("result", {}).get("result", {}).get("value", "unknown")
+                            log.warning(f"[ExtMgr] Extension errors: {err_text}")
+                    except Exception as e:
+                        log.debug(f"[ExtMgr] Error reading extension errors: {e}")
+                        
+            except Exception as e:
+                log.debug(f"[ExtMgr] Post-install DOM check error: {e}")
+        
+        # Step 6: Verify extension loaded — poll up to 15s (1s interval)
+        # Keep extensions tab open during polling — Chrome needs it for initial registration
+        for verify_attempt in range(15):
+            time.sleep(1)
+            if is_extension_loaded(port):
+                log.info(f"[ExtMgr] ✅ Extension installed and verified! (after {verify_attempt + 1}s)")
+                _cleanup_extensions_tabs(port)
+                
+                # Step 6b: Wake the service worker — ensure it connects WebSocket
+                # MV3 SW may have ws stuck in bad state (CONNECTING on wrong port)
+                try:
+                    req = urllib.request.Request(f"http://127.0.0.1:{port}/json", method="GET")
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        targets = json.loads(resp.read())
+                    for t in targets:
+                        if t.get("type") == "service_worker" and "chrome-extension://" in t.get("url", ""):
+                            sw_ws = t.get("webSocketDebuggerUrl", "")
+                            if sw_ws:
+                                log.info(f"[ExtMgr] 🔌 Waking service worker via CDP: {sw_ws[:60]}...")
+                                # Diagnostic + force reconnect + inject content.js
+                                js_wake = """
+(function() {
+    const info = {
+        ws_state: ws ? ws.readyState : 'null',
+        wsConnected: wsConnected,
+        portIndex: currentPortIndex,
+        tabCount: Object.keys(tabState).length,
+    };
+    // Force-reset and reconnect on correct port
+    try { if (ws) ws.close(); } catch(e) {}
+    ws = null;
+    wsConnected = false;
+    currentPortIndex = 0;
+    connectWebSocket();
+    // Re-inject content.js into VEO tabs (needed for reCAPTCHA)
+    injectExistingTabs();
+    return JSON.stringify(info);
+})()
+"""
+                                result = _cdp_evaluate(sw_ws, js_wake, timeout=5.0)
+                                diag = result.get("result", {}).get("result", {}).get("value", "unknown")
+                                log.info(f"[ExtMgr] ✅ SW wake-up result: {diag}")
+                            break
+                except Exception as e:
+                    log.debug(f"[ExtMgr] SW wake-up error (non-fatal): {e}")
+                
+                return True
+        
+        # Step 7: Diagnostic — log what CDP /json shows
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/json", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                targets = json.loads(resp.read())
+            ext_targets = [t for t in targets if "chrome-extension://" in t.get("url", "")]
+            log.warning(f"[ExtMgr] ⚠️ Extension targets in CDP: {len(ext_targets)}")
+            for t in ext_targets:
+                log.warning(f"[ExtMgr]   type={t.get('type')} title={t.get('title')!r} url={t.get('url','')[:80]}")
+        except Exception:
+            pass
+        
+        _cleanup_extensions_tabs(port)
+        log.warning("[ExtMgr] ⚠️ Install flow completed but extension not detected after 15s")
         return False
         
     except Exception as e:
@@ -846,8 +1060,64 @@ def uninstall_extension(port: int, ext_id: Optional[str] = None) -> bool:
         return False
 
 
+def _find_extension_id_via_dom(port: int) -> Optional[str]:
+    """Find our extension ID via chrome://extensions page DOM.
+    
+    Unlike get_extension_id() which needs an active service_worker in CDP /json,
+    this works even when the MV3 service worker is suspended — searches
+    extension cards by name in the shadow DOM.
+    
+    Returns:
+        Extension ID string or None if not found.
+    """
+    ws_url = _open_extensions_page(port)
+    if not ws_url:
+        return None
+    
+    time.sleep(2.5)
+    ws_url = _get_extensions_ws_url(port) or ws_url
+    
+    ext_name = EXTENSION_NAME  # "VEO Pro Max Bridge"
+    js = f"""
+(function() {{
+    const mgr = document.querySelector('extensions-manager');
+    if (!mgr || !mgr.shadowRoot) return null;
+    
+    const itemsList = mgr.shadowRoot.querySelector('extensions-item-list')
+                   || mgr.shadowRoot.querySelector('#items-list');
+    if (!itemsList || !itemsList.shadowRoot) return null;
+    
+    const cards = itemsList.shadowRoot.querySelectorAll('extensions-item');
+    for (const card of cards) {{
+        if (!card.shadowRoot) continue;
+        const nameEl = card.shadowRoot.querySelector('#name');
+        if (nameEl && nameEl.textContent.trim() === '{ext_name}') {{
+            return card.id;  // extension ID
+        }}
+    }}
+    return null;
+}})()
+"""
+    try:
+        result = _cdp_evaluate(ws_url, js, timeout=5.0)
+        ext_id = result.get("result", {}).get("result", {}).get("value")
+        if ext_id:
+            log.info(f"[ExtMgr] Found extension via DOM: {ext_id}")
+        else:
+            log.debug(f"[ExtMgr] Extension not found in DOM")
+        return ext_id
+    except Exception as e:
+        log.debug(f"[ExtMgr] DOM extension search error: {e}")
+        return None
+    finally:
+        _cleanup_extensions_tabs(port)
+
+
 def reinstall_extension(port: int, extension_dir: str, **kwargs) -> bool:
     """Uninstall then reinstall extension.
+    
+    Uses DOM-based detection to find existing extension even when
+    MV3 service worker is suspended (CDP /json won't show it).
     
     Args:
         port: Chrome CDP port
@@ -858,22 +1128,133 @@ def reinstall_extension(port: int, extension_dir: str, **kwargs) -> bool:
     """
     log.info(f"[ExtMgr] 🔄 Reinstalling extension...")
     
-    # Step 1: Uninstall (if present)
-    if is_extension_loaded(port):
-        if not uninstall_extension(port):
+    # Step 1: Find existing extension via DOM (works with suspended service workers)
+    ext_id = get_extension_id(port)  # Try fast CDP /json first
+    if not ext_id:
+        ext_id = _find_extension_id_via_dom(port)  # Fallback: DOM search
+    
+    # Step 2: Uninstall if found
+    if ext_id:
+        log.info(f"[ExtMgr] Found existing extension {ext_id} — removing before reinstall")
+        if not uninstall_extension(port, ext_id=ext_id):
             log.warning("[ExtMgr] Uninstall failed — trying install anyway")
         time.sleep(2)
+    else:
+        log.info("[ExtMgr] No existing extension found — fresh install")
     
-    # Step 2: Install
+    # Step 3: Install
     return install_extension(port, extension_dir)
 
 
+def _update_unpacked_extension(port: int, extension_dir: str) -> bool:
+    """Update unpacked extension files and trigger Chrome to reload them.
+    
+    For version updates, this is MUCH faster and more reliable than
+    uninstall+reinstall (which has confirm dialog issues on Chrome v137+).
+    
+    Steps:
+    1. Refresh temp copy (if # path) with updated source files
+    2. Click the extension's "Update" (↻) button via chrome://extensions DOM
+    3. Verify new version loaded
+    
+    Returns:
+        True if update succeeded, False if should fall back to reinstall.
+    """
+    ext_id = get_extension_id(port)
+    if not ext_id:
+        log.debug("[ExtMgr] Cannot update — no extension ID found")
+        return False
+    
+    # Step 1: Refresh temp copy if path has special characters
+    if any(c in extension_dir for c in '#'):
+        _get_safe_path(extension_dir)  # This deletes old temp + copies fresh
+        log.info("[ExtMgr] Refreshed temp extension copy for update")
+    
+    # Step 2: Open chrome://extensions and click the update/reload button
+    ws_url = _open_extensions_page(port)
+    if not ws_url:
+        return False
+    
+    time.sleep(2.0)
+    ws_url = _get_extensions_ws_url(port) or ws_url
+    
+    # Click the "Update" button on the extension toolbar OR the per-extension reload
+    js_update = f"""
+(function() {{
+    const mgr = document.querySelector('extensions-manager');
+    if (!mgr || !mgr.shadowRoot) return 'no_manager';
+    
+    // Method 1: Click per-extension reload/update button
+    const itemsList = mgr.shadowRoot.querySelector('extensions-item-list')
+                   || mgr.shadowRoot.querySelector('#items-list');
+    if (itemsList && itemsList.shadowRoot) {{
+        const items = itemsList.shadowRoot.querySelectorAll('extensions-item');
+        for (const item of items) {{
+            if (item.id === '{ext_id}' && item.shadowRoot) {{
+                // Try reload button (present for unpacked extensions)
+                const reloadBtn = item.shadowRoot.querySelector('#reload-button')
+                               || item.shadowRoot.querySelector('[title="Reload"]')
+                               || item.shadowRoot.querySelector('cr-icon-button[iron-icon="cr:refresh"]');
+                if (reloadBtn) {{
+                    reloadBtn.click();
+                    return 'clicked_reload';
+                }}
+            }}
+        }}
+    }}
+    
+    // Method 2: Click global "Update" button in toolbar
+    const toolbar = mgr.shadowRoot.querySelector('extensions-toolbar');
+    if (toolbar && toolbar.shadowRoot) {{
+        const updateBtn = toolbar.shadowRoot.querySelector('#updateNow')
+                       || toolbar.shadowRoot.querySelector('#update-button');
+        if (updateBtn) {{
+            updateBtn.click();
+            return 'clicked_global_update';
+        }}
+        // Method 3: Trigger the update via Dev mode reload
+        const devToggle = toolbar.shadowRoot.querySelector('#devMode');
+        // Dev mode should already be on; try the "Update" 
+    }}
+    
+    return 'no_update_button';
+}})()
+"""
+    try:
+        result = _cdp_evaluate(ws_url, js_update, timeout=5.0)
+        update_result = result.get("result", {}).get("result", {}).get("value", "unknown")
+        log.info(f"[ExtMgr] Update click result: {update_result}")
+        
+        if update_result in ("clicked_reload", "clicked_global_update"):
+            # Wait for Chrome to process the reload
+            time.sleep(3)
+            
+            # Verify new version
+            _cleanup_extensions_tabs(port)
+            new_ver = _get_installed_extension_version(port)
+            local_ver = get_local_extension_version()
+            if new_ver and new_ver == local_ver:
+                log.info(f"[ExtMgr] ✅ Extension updated to v{new_ver} via reload")
+                return True
+            else:
+                log.warning(f"[ExtMgr] Update click succeeded but version still {new_ver} (expected {local_ver})")
+                return False
+        else:
+            log.debug(f"[ExtMgr] No update button found: {update_result}")
+            _cleanup_extensions_tabs(port)
+            return False
+    except Exception as e:
+        log.debug(f"[ExtMgr] Extension update error: {e}")
+        _cleanup_extensions_tabs(port)
+        return False
+
+
 def install_if_needed(port: int, extension_dir: str, **kwargs) -> bool:
-    """Install extension if missing, or reinstall if version outdated.
+    """Install extension if missing, or update/reinstall if version outdated.
     
     Checks:
     1. Is extension loaded at all? → install
-    2. Is installed version != local version? → reinstall
+    2. Is installed version != local version? → update (fast) → reinstall (fallback)
     
     Drop-in replacement for auto_install_extension.auto_install_extension_if_needed().
     Called from chrome_manager.launch_chrome() and ensure_chrome_running().
@@ -885,16 +1266,33 @@ def install_if_needed(port: int, extension_dir: str, **kwargs) -> bool:
     Returns:
         True if extension is (or becomes) loaded and up-to-date
     """
-    if not is_extension_loaded(port):
-        log.info("[ExtMgr] Extension not loaded — installing...")
-        return install_extension(port, extension_dir)
+    # Retry a few times — on startup, service worker may take seconds to register
+    loaded = is_extension_loaded(port)
+    if not loaded:
+        for attempt in range(1, 4):
+            time.sleep(2)
+            loaded = is_extension_loaded(port)
+            if loaded:
+                log.debug(f"[ExtMgr] Extension appeared after {attempt * 2}s wait")
+                break
+    
+    if not loaded:
+        log.info("[ExtMgr] Extension not loaded after retries — reinstalling (will remove stale if any)...")
+        return reinstall_extension(port, extension_dir)
     
     # Version check: compare installed vs local manifest
     local_ver = get_local_extension_version()
     if local_ver:
         installed_ver = _get_installed_extension_version(port)
         if installed_ver and installed_ver != local_ver:
-            log.warning(f"[ExtMgr] ⚠️ Version mismatch: installed={installed_ver}, local={local_ver} — reinstalling...")
+            log.warning(f"[ExtMgr] ⚠️ Version mismatch: installed={installed_ver}, local={local_ver}")
+            
+            # Try fast update first (refresh files + reload button)
+            if _update_unpacked_extension(port, extension_dir):
+                return True
+            
+            # Fallback: full reinstall
+            log.warning(f"[ExtMgr] Fast update failed — falling back to full reinstall")
             return reinstall_extension(port, extension_dir)
         elif installed_ver:
             log.info(f"[ExtMgr] Extension v{installed_ver} up-to-date — skipping")

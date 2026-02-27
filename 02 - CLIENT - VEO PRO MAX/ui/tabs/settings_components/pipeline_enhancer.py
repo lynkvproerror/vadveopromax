@@ -37,7 +37,7 @@ class SettingsPipelineEnhancerMixin:
             'pool_size': getattr(_s, 'recaptcha_pool_size', 2),
             'watchdog_timeout_min': getattr(_s, 'watchdog_timeout_min', 10),
             'journal_save_interval_sec': getattr(_s, 'journal_save_interval_sec', 30),
-            'workload_priority': getattr(_s, 'workload_priority', 'prompts_first'),
+            'workload_priority': getattr(_s, 'workload_priority', '720p_priority'),
         }
 
         def _update(key):
@@ -165,18 +165,20 @@ class SettingsPipelineEnhancerMixin:
         wp_row.addWidget(wp_label)
         self.workload_priority = QComboBox()
         self.workload_priority.addItems([
-            "⚖️ Balanced",
-            "📝 Prompts First",
-            "⬆️ Upscale First"
+            "📥 720p Priority",
+            "⬆️ Upscale Priority"
         ])
         self.workload_priority.setFixedWidth(160)
         # Map display names to engine values
-        self._wp_map = {0: 'balanced', 1: 'prompts_first', 2: 'upscale_first'}
-        current_wp = ps.get('workload_priority', 'prompts_first')
+        self._wp_map = {0: '720p_priority', 1: 'upscale_priority'}
+        current_wp = ps.get('workload_priority', '720p_priority')
+        # Migration: map old names to new
+        _migration = {'prompts_first': '720p_priority', 'balanced': '720p_priority', 'upscale_first': 'upscale_priority'}
+        current_wp = _migration.get(current_wp, current_wp)
         reverse_map = {v: k for k, v in self._wp_map.items()}
         self.workload_priority.setCurrentIndex(reverse_map.get(current_wp, 0))
         self.workload_priority.currentIndexChanged.connect(
-            lambda idx: _update('workload_priority')(self._wp_map.get(idx, 'balanced'))
+            lambda idx: _update('workload_priority')(self._wp_map.get(idx, '720p_priority'))
         )
         wp_row.addWidget(self.workload_priority)
         wp_hint = QLabel("Controls resource allocation")
@@ -184,6 +186,76 @@ class SettingsPipelineEnhancerMixin:
         wp_row.addWidget(wp_hint)
         wp_row.addStretch()
         layout.addLayout(wp_row)
+
+        # --- Auto-Retry Download ---
+        self.auto_retry_dl_switch = self._create_enable_row(
+            "🔄 Auto-Retry Download:", checked=getattr(_s, 'auto_retry_download', True),
+            bold=True, color=Theme.PEACH if hasattr(Theme, 'PEACH') else Theme.YELLOW
+        )
+        layout.addLayout(self.auto_retry_dl_switch._row_layout)
+
+        retry_dl_container = QWidget()
+        retry_dl_layout = QVBoxLayout(retry_dl_container)
+        retry_dl_layout.setContentsMargins(0, 0, 0, 0)
+
+        max_retry_row = QHBoxLayout()
+        max_retry_label = QLabel("Max Retries:")
+        max_retry_label.setFixedWidth(150)
+        max_retry_label.setStyleSheet(f"color: {Theme.TEXT};")
+        max_retry_row.addWidget(max_retry_label)
+        self.dl_retry_max = QSpinBox()
+        self.dl_retry_max.setRange(1, 10)
+        self.dl_retry_max.setValue(getattr(_s, 'auto_retry_download_max', 3))
+        self.dl_retry_max.setFixedWidth(100)
+        self.dl_retry_max.setSuffix(" times")
+        self.dl_retry_max.valueChanged.connect(self._save_pipeline_settings)
+        max_retry_row.addWidget(self.dl_retry_max)
+
+        retry_hint = QLabel("Failed downloads re-generate then retry")
+        retry_hint.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; margin-left: 8px;")
+        max_retry_row.addWidget(retry_hint)
+        max_retry_row.addStretch()
+        retry_dl_layout.addLayout(max_retry_row)
+
+        layout.addWidget(retry_dl_container)
+        retry_dl_container.setVisible(self.auto_retry_dl_switch.isToggled())
+        self.auto_retry_dl_switch.toggled_signal.connect(retry_dl_container.setVisible)
+        self.auto_retry_dl_switch.toggled_signal.connect(self._save_pipeline_settings)
+
+        # --- Pre-warm (Idle Recovery) ---
+        self.prewarm_switch = self._create_enable_row(
+            "🔥 Pre-warm (Idle Recovery):", checked=getattr(_s, 'prewarm_enabled', True),
+            bold=True, color=Theme.GREEN
+        )
+        layout.addLayout(self.prewarm_switch._row_layout)
+
+        prewarm_container = QWidget()
+        prewarm_layout = QVBoxLayout(prewarm_container)
+        prewarm_layout.setContentsMargins(0, 0, 0, 0)
+
+        pw_row = QHBoxLayout()
+        pw_label = QLabel("Idle Threshold:")
+        pw_label.setFixedWidth(150)
+        pw_label.setStyleSheet(f"color: {Theme.TEXT};")
+        pw_row.addWidget(pw_label)
+        self.prewarm_threshold = QSpinBox()
+        self.prewarm_threshold.setRange(5, 60)
+        self.prewarm_threshold.setValue(getattr(_s, 'prewarm_idle_threshold', 10))
+        self.prewarm_threshold.setFixedWidth(100)
+        self.prewarm_threshold.setSuffix(" min")
+        self.prewarm_threshold.valueChanged.connect(_update('prewarm_idle_threshold'))
+        pw_row.addWidget(self.prewarm_threshold)
+
+        pw_hint = QLabel("Trigger soft recovery if idle longer than this")
+        pw_hint.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; margin-left: 8px;")
+        pw_row.addWidget(pw_hint)
+        pw_row.addStretch()
+        prewarm_layout.addLayout(pw_row)
+
+        layout.addWidget(prewarm_container)
+        prewarm_container.setVisible(self.prewarm_switch.isToggled())
+        self.prewarm_switch.toggled_signal.connect(prewarm_container.setVisible)
+        self.prewarm_switch.toggled_signal.connect(_update('prewarm_enabled'))
 
         return section
 
@@ -214,8 +286,16 @@ class SettingsPipelineEnhancerMixin:
             settings.watchdog_timeout_min = self.watchdog_timeout.value()
             settings.journal_save_interval_sec = self.journal_interval.value()
             settings.workload_priority = self._wp_map.get(
-                self.workload_priority.currentIndex(), 'prompts_first'
+                self.workload_priority.currentIndex(), '720p_priority'
             )
+            if hasattr(self, 'auto_retry_dl_switch'):
+                settings.auto_retry_download = self.auto_retry_dl_switch.isToggled()
+            if hasattr(self, 'dl_retry_max'):
+                settings.auto_retry_download_max = self.dl_retry_max.value()
+            if hasattr(self, 'prewarm_switch'):
+                settings.prewarm_enabled = self.prewarm_switch.isToggled()
+            if hasattr(self, 'prewarm_threshold'):
+                settings.prewarm_idle_threshold = self.prewarm_threshold.value()
             save_settings()
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save pipeline settings: {e}')

@@ -12,6 +12,7 @@
  */
 
 // ── State ──────────────────────────────────────────────────────────────
+const EXT_VERSION = chrome.runtime.getManifest().version; // e.g. '2.1'
 const WEBSOCKET_PORTS = [8765, 8766, 8767]; // Primary + fallback ports
 const RECONNECT_INTERVAL = 3000; // 3 seconds
 const MAX_TABS = 3; // Maximum number of browser tabs allowed (Gmail, YouTube, VEO Flow)
@@ -44,11 +45,51 @@ const pendingRecaptcha = {};
 const shortTokenCounts = {};
 const SHORT_TOKEN_RELOAD_THRESHOLD = 3;
 
+// ★ Debounce timers for headers_update (email → timerId)
+// Collapses 6+ duplicate sends from a single page reload into 1
+const _headersDebounceTimers = {};
+const HEADERS_DEBOUNCE_MS = 2000;  // 2s window
+
 // Content heartbeat tracking
 const HEARTBEAT_TIMEOUT = 45000;  // 45s without heartbeat = frozen tab
 const FROZEN_RELOAD_MAX = 3;      // Max reloads per window before declaring tab dead
 const FROZEN_RELOAD_WINDOW = 300000; // 5 min window for reload cap
 let _heartbeatCheckTimer = null;
+
+// ★ Global tab reload cooldown: prevents cascading reloads during startup.
+// Multiple systems (recaptcha check, heartbeat, header refresh) can all try
+// to reload the same tab. Without cooldown, the VEO page (13s+ load time)
+// never finishes loading → grecaptcha never initializes → 330-char tokens.
+const RELOAD_COOLDOWN_MS = 20000; // 20s between reloads per tab
+const tabLastReloadTime = {};     // tabId → Date.now() of last reload
+
+/**
+ * Reload a tab with global cooldown protection.
+ * Returns true if reload was executed, false if skipped (cooldown active).
+ */
+async function safeTabReload(tabId, reason, bypassCache = false) {
+  const now = Date.now();
+  const lastReload = tabLastReloadTime[tabId] || 0;
+  const elapsed = now - lastReload;
+
+  if (elapsed < RELOAD_COOLDOWN_MS) {
+    console.debug(
+      `[VEO Bridge] ⏳ Skipping reload for tab ${tabId} — ` +
+      `cooldown active (${Math.ceil((RELOAD_COOLDOWN_MS - elapsed) / 1000)}s remaining, reason: ${reason})`
+    );
+    return false;
+  }
+
+  try {
+    await chrome.tabs.reload(tabId, { bypassCache });
+    tabLastReloadTime[tabId] = now;
+    console.log(`[VEO Bridge] 🔄 Reloaded tab ${tabId} (reason: ${reason})`);
+    return true;
+  } catch (e) {
+    console.debug(`[VEO Bridge] Tab ${tabId} reload failed: ${e.message}`);
+    return false;
+  }
+}
 
 
 // ── WebSocket Connection ───────────────────────────────────────────────
@@ -78,6 +119,7 @@ function connectWebSocket() {
             action: 'register',
             email: state.email,
             tabId: parseInt(tabId),
+            version: EXT_VERSION,
           });
 
           // Push cached headers immediately (don't wait for next webRequest)
@@ -206,10 +248,10 @@ async function handleAppMessage(msg) {
             // Use async/await for proper Promise resolution by chrome.scripting
             try {
               const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
-              if (token && token.length > 500) {
+              if (token && token.length >= 1000) {
                 return { token, tokenLength: token.length };
               }
-              return { token: null, error: `Token too short (${token ? token.length : 0} chars)`, tokenLength: token ? token.length : 0 };
+              return { token: null, error: `Token too short (${token ? token.length : 0} chars, need ≥1000)`, tokenLength: token ? token.length : 0 };
             } catch (err) {
               return { token: null, error: err.message, tokenLength: 0 };
             }
@@ -232,12 +274,10 @@ async function handleAppMessage(msg) {
               `${shortTokenCounts[tabId]} consecutive short tokens (reCAPTCHA widget broken)`
             );
             shortTokenCounts[tabId] = 0;
-            try {
-              await chrome.tabs.reload(tabId, { bypassCache: true });
+            const reloaded = await safeTabReload(tabId, 'short-token-threshold', true);
+            if (reloaded) {
               // Wait for page to reload and reCAPTCHA to re-initialize
               await new Promise(r => setTimeout(r, 5000));
-            } catch (reloadErr) {
-              console.debug(`[VEO Bridge] Tab reload failed: ${reloadErr.message}`);
             }
           }
         } else if (result?.token) {
@@ -390,6 +430,20 @@ async function handleAppMessage(msg) {
       break;
     }
 
+    case 'reload_extension': {
+      // Bridge detected version mismatch → self-reload to pick up new code
+      const reason = msg.reason || 'version mismatch';
+      const targetVer = msg.target_version || 'unknown';
+      console.warn(
+        `[VEO Bridge] 🔄 Reload requested: ${reason} → target v${targetVer} (current v${EXT_VERSION})`
+      );
+      // Small delay to let the log message be sent
+      setTimeout(() => {
+        chrome.runtime.reload();
+      }, 1000);
+      break;
+    }
+
     case 'assign_email': {
       // Server tells us which email this browser belongs to
       // (fallback when content.js email detection fails)
@@ -402,7 +456,7 @@ async function handleAppMessage(msg) {
       let existingTabId = findTabForEmail(email);
       if (existingTabId) {
         console.log(`[VEO Bridge] Email ${email} already assigned to tab ${existingTabId}`);
-        wsSend({ action: 'register', email, tabId: existingTabId });
+        wsSend({ action: 'register', email, tabId: existingTabId, version: EXT_VERSION });
         break;
       }
 
@@ -417,7 +471,7 @@ async function handleAppMessage(msg) {
         }
         tabState[tabId].email = email;
         console.log(`[VEO Bridge] Assigned email ${email} to existing VEO tab ${tabId} (${targetTab.url})`);
-        wsSend({ action: 'register', email, tabId });
+        wsSend({ action: 'register', email, tabId, version: EXT_VERSION });
       } else {
         // No VEO tab exists — check tab limit before creating
         const allTabs = await chrome.tabs.query({ currentWindow: true });
@@ -427,6 +481,7 @@ async function handleAppMessage(msg) {
             action: 'register',
             email,
             tabId: null,
+            version: EXT_VERSION,
             error: `Tab limit reached (${MAX_TABS})`,
           });
         } else {
@@ -438,7 +493,8 @@ async function handleAppMessage(msg) {
           });
           tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
           console.log(`[VEO Bridge] Created VEO tab ${newTab.id} for ${email}`);
-          wsSend({ action: 'register', email, tabId: newTab.id });
+          wsSend({ action: 'register', email, tabId: newTab.id, version: EXT_VERSION });
+          try { chrome.tabs.update(newTab.id, { autoDiscardable: false }); } catch (_) { }
           startZombieTimer(newTab.id);
         }
       }
@@ -464,8 +520,8 @@ async function handleAppMessage(msg) {
       // Layer 1: Deep readiness check — trial-execute a real token.
       // A simple `typeof execute === 'function'` check is NOT sufficient:
       // it returns true before the widget is fully initialized, causing
-      // 330-char garbage tokens. Instead, we actually call execute() and
-      // check that the returned token is > 500 chars.
+      // 330-538 char garbage tokens. Instead, we actually call execute() and
+      // check that the returned token is ≥ 1500 chars (HAR: valid = 1742-2169).
       // The valid token is sent back for caching (not wasted).
       const tabId = findTabForEmail(msg.email);
       if (!tabId) {
@@ -545,17 +601,25 @@ async function handleAppMessage(msg) {
             }
 
             // Trial execute — the real test (async/await for proper serialization)
+            // NOTE: Use VIDEO_GENERATION as the trial action (most common endpoint).
+            // The actual submit_prompt handler always generates its own fresh token
+            // with the correct action (IMAGE_GENERATION for T2I/UPSCALE_IMAGE,
+            // VIDEO_GENERATION for video endpoints). The trial token here is only
+            // used to verify widget health — but since it may be cached by the pool,
+            // we tag it with trialAction so Python can avoid action mismatches.
+            const trialAction = 'VIDEO_GENERATION';
             try {
-              const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
+              const token = await grecaptcha.enterprise.execute(siteKey, { action: trialAction });
               return {
-                ready: !!(token && token.length > 500),
+                ready: !!(token && token.length >= 1500),
                 grecaptchaLoaded: true,
                 enterpriseLoaded: true,
                 executeAvailable: true,
                 pageLoaded: true,
                 hasRecaptchaScript: true,
-                token: (token && token.length > 500) ? token : null,
+                token: (token && token.length >= 1500) ? token : null,
                 tokenLength: token ? token.length : 0,
+                trialAction,  // tag so pool knows what action this token was generated for
               };
             } catch (err) {
               return {
@@ -574,8 +638,10 @@ async function handleAppMessage(msg) {
           args: [],
         });
 
+        // VEO page takes 13+ seconds to fully load after reload.
+        // Use 20s timeout to avoid premature "frozen" detection during startup.
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('executeScript timeout (8s) — tab may be frozen')), 8000)
+          setTimeout(() => reject(new Error('executeScript timeout (20s) — tab may be frozen')), 20000)
         );
 
         const results = await Promise.race([scriptPromise, timeoutPromise]);
@@ -590,14 +656,9 @@ async function handleAppMessage(msg) {
       } catch (e) {
         console.warn(`[VEO Bridge] check_recaptcha_ready failed for ${msg.email}: ${e.message}`);
 
-        // If tab is frozen, try to wake it up by reloading
+        // If tab is frozen, try to wake it up (with cooldown protection)
         if (e.message.includes('timeout') || e.message.includes('frozen')) {
-          console.log(`[VEO Bridge] 🔄 Attempting to wake frozen tab ${tabId}...`);
-          try {
-            await chrome.tabs.reload(tabId, { bypassCache: false });
-          } catch (reloadErr) {
-            console.debug(`[VEO Bridge] Tab reload failed: ${reloadErr.message}`);
-          }
+          await safeTabReload(tabId, 'recaptcha-check-timeout');
         }
 
         wsSend({
@@ -651,14 +712,31 @@ async function handleAppMessage(msg) {
           I2V_SINGLE: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage',
           I2V_DUAL: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage',
           R2V: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages',
-          T2I: 'https://aisandbox-pa.googleapis.com/v1/flowMedia:batchGenerateImages',
+          // T2I: dynamic — requires projects/{projectId}/ prefix (see below)
           STATUS: 'https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus',
           UPSCALE_VIDEO: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo',
           UPLOAD: 'https://aisandbox-pa.googleapis.com/v1:uploadUserImage',
           UPSCALE_IMAGE: 'https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage',
         };
 
-        const endpointUrl = ENDPOINTS[msg.endpoint] || msg.endpointUrl;
+        // T2I/I2I: URL requires projects/{projectId}/ prefix per HAR
+        let endpointUrl;
+        if (msg.endpoint === 'T2I') {
+          const projectId = msg.payload?.body?.clientContext?.projectId || '';
+          if (!projectId) {
+            wsSend({
+              action: 'submit_prompt_result',
+              requestId: msg.requestId,
+              success: false,
+              error: 'T2I requires projectId in clientContext',
+            });
+            return;
+          }
+          endpointUrl = `https://aisandbox-pa.googleapis.com/v1/projects/${projectId}/flowMedia:batchGenerateImages`;
+        } else {
+          endpointUrl = ENDPOINTS[msg.endpoint] || msg.endpointUrl;
+        }
+
         if (!endpointUrl) {
           wsSend({
             action: 'submit_prompt_result',
@@ -678,7 +756,7 @@ async function handleAppMessage(msg) {
         const scriptPromise = chrome.scripting.executeScript({
           target: { tabId },
           world: 'MAIN',
-          func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken) => {
+          func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey) => {
             // ── Step 1: Extract reCAPTCHA site key ────────────────────────
             let siteKey = null;
             if (needsRecaptcha) {
@@ -711,15 +789,21 @@ async function handleAppMessage(msg) {
             let recaptchaToken = null;
             if (needsRecaptcha) {
               try {
-                const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
+                // HAR verified: T2I/UPSCALE_IMAGE use IMAGE_GENERATION, video endpoints use VIDEO_GENERATION
+                // UPSCALE_IMAGE is an image-domain operation (upsampleImage API), same reCAPTCHA action as T2I
+                const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
+                const rcAction = imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
+                const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
                 const rcTimeout = new Promise((_, reject) =>
                   setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
                 );
                 recaptchaToken = await Promise.race([rcPromise, rcTimeout]);
-                if (!recaptchaToken || recaptchaToken.length < 500) {
+                // HAR verified: valid tokens are 1742-2169 chars
+                // A 538-char token passed old threshold (500) but was rejected by Google
+                if (!recaptchaToken || recaptchaToken.length < 1000) {
                   return {
                     success: false,
-                    error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars)`,
+                    error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1000)`,
                     tokenLength: recaptchaToken ? recaptchaToken.length : 0,
                   };
                 }
@@ -731,19 +815,29 @@ async function handleAppMessage(msg) {
             // ── Step 3: Build request body ────────────────────────────────
             const body = payload.body || {};
             if (needsRecaptcha && recaptchaToken) {
-              if (!body.clientContext) body.clientContext = {};
-              body.clientContext.recaptchaContext = {
+              const rcCtx = {
                 token: recaptchaToken,
                 applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
               };
+              // Top-level clientContext
+              if (!body.clientContext) body.clientContext = {};
+              body.clientContext.recaptchaContext = rcCtx;
+              // Per-request clientContext (HAR: T2I/I2I requires nested reCAPTCHA)
+              if (Array.isArray(body.requests)) {
+                for (const req of body.requests) {
+                  if (req.clientContext) {
+                    req.clientContext.recaptchaContext = rcCtx;
+                  }
+                }
+              }
             }
 
             // ── Step 4: Get access token ──────────────────────────────────
-            // Priority: 1) fresh token from webRequest headers (passed in)
-            //              cachedAccessToken is full Authorization header value
-            //              e.g. "Bearer ya29.xxx" or "SAPISIDHASH xxx"
+            // Priority: 1) fresh Bearer token from webRequest headers
             //           2) fallback to __NEXT_DATA__ (may be stale after ~1h)
-            let authHeaderValue = cachedAccessToken || null;
+            // IMPORTANT: Only use Bearer tokens. SAPISIDHASH is Google internal
+            // auth and causes 403 on VEO API (HAR-verified 27/02/2026).
+            let authHeaderValue = (cachedAccessToken && cachedAccessToken.startsWith('Bearer ')) ? cachedAccessToken : null;
             if (!authHeaderValue) {
               const nextDataEl = document.getElementById('__NEXT_DATA__');
               if (nextDataEl) {
@@ -770,13 +864,25 @@ async function handleAppMessage(msg) {
             }
 
             const controller = new AbortController();
-            const fetchTimer = setTimeout(() => controller.abort(), 20000);
+            // T2I is synchronous — server generates images before responding (~37s per HAR)
+            // Video endpoints are async — return operation name immediately
+            const fetchTimeout = (endpointKey === 'T2I' || endpointKey === 'I2I') ? 90000 : 20000;
+            const fetchTimer = setTimeout(() => controller.abort(), fetchTimeout);
             try {
+              // Diagnostic: log what we're about to send
+              const bodyStr = JSON.stringify(body);
+              console.log(
+                `[VEO Bridge] 📡 T2I fetch: url=${endpointUrl.substring(0, 120)}`,
+                `\n  auth=${authHeaderValue ? authHeaderValue.substring(0, 30) + '...' : 'NONE'}`,
+                `\n  bodySize=${bodyStr.length} bodyKeys=${Object.keys(body).join(',')}`,
+                `\n  hasRecaptcha=${!!body.clientContext?.recaptchaContext}`,
+                `\n  reqCount=${body.requests?.length || 0}`,
+              );
               const resp = await fetch(endpointUrl, {
                 method: 'POST',
                 headers,
                 credentials: 'include',
-                body: JSON.stringify(body),
+                body: bodyStr,
                 signal: controller.signal,
               });
               clearTimeout(fetchTimer);
@@ -807,7 +913,7 @@ async function handleAppMessage(msg) {
             } catch (fetchErr) {
               clearTimeout(fetchTimer);
               const errMsg = fetchErr.name === 'AbortError'
-                ? 'fetch timeout (20s) — API did not respond'
+                ? `fetch timeout (${fetchTimeout / 1000}s) — API did not respond`
                 : `fetch failed: ${fetchErr.message}`;
               return {
                 success: false,
@@ -821,11 +927,14 @@ async function handleAppMessage(msg) {
             msg.payload || {},
             msg.needsRecaptcha !== false, // default: true
             tabState[tabId]?.accessToken || null, // fresh token from webRequest headers
+            msg.endpoint || '', // endpoint key for reCAPTCHA action selection
           ],
         });
 
+        // T2I/I2I: synchronous response (up to ~90s), video: async (quick)
+        const scriptTimeout = (msg.endpoint === 'T2I' || msg.endpoint === 'I2I') ? 120000 : 30000;
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('submit_prompt timeout (30s)')), 30000)
+          setTimeout(() => reject(new Error(`submit_prompt timeout (${scriptTimeout / 1000}s)`)), scriptTimeout)
         );
 
         const results = await Promise.race([scriptPromise, timeoutPromise]);
@@ -833,13 +942,51 @@ async function handleAppMessage(msg) {
 
         console.log(
           `[VEO Bridge] ${result.success ? '✅' : '❌'} submit_prompt result: ` +
-          `status=${result.status || 'N/A'} token=${result.tokenLength || 0}chars`
+          `status=${result.status || 'N/A'} token=${result.tokenLength || 0}chars` +
+          (result.error ? ` error=${result.error}` : '') +
+          (result.data?.error ? ` apiError=${JSON.stringify(result.data.error).substring(0, 200)}` : '')
         );
+
+        // Trim large response data to prevent WebSocket overflow.
+        // UPSCALE_VIDEO responses can be ~1MB+ (include video frame data).
+        // Python only needs operation name/sceneId, not the video binary.
+        let trimmedResult = { ...result };
+        if (result.data) {
+          const dataStr = JSON.stringify(result.data);
+          if (dataStr.length > 50000) { // >50KB = likely contains video data
+            console.log(
+              `[VEO Bridge] ✂️ Trimming large response: ${(dataStr.length / 1024).toFixed(0)}KB → keeping metadata only`
+            );
+            // Deep-strip large binary fields while preserving structure.
+            // API response: {operations: [{operation: {name: "..."}, sceneId: "...", response: {videos: [{encodedVideo: "HUGE"}]}}]}
+            // Python needs: operations[].operation.name, operations[].sceneId
+            const strip = (obj) => {
+              if (!obj || typeof obj !== 'object') return obj;
+              if (Array.isArray(obj)) return obj.map(strip);
+              const out = {};
+              for (const [k, v] of Object.entries(obj)) {
+                // Skip known huge fields
+                if (k === 'encodedVideo' || k === 'encodedImage') continue;
+                // Recursively strip nested objects, but skip huge string values
+                if (typeof v === 'string' && v.length > 10000) {
+                  out[k] = `[trimmed ${v.length} chars]`;
+                } else if (typeof v === 'object') {
+                  out[k] = strip(v);
+                } else {
+                  out[k] = v;
+                }
+              }
+              return out;
+            };
+            trimmedResult.data = strip(result.data);
+            trimmedResult._trimmed = true;
+          }
+        }
 
         wsSend({
           action: 'submit_prompt_result',
           requestId: msg.requestId,
-          ...result,
+          ...trimmedResult,
         });
       } catch (e) {
         console.error(`[VEO Bridge] ❌ submit_prompt failed for ${msg.email}: ${e.message}`);
@@ -1015,8 +1162,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
         headers[name] = h.value;
       }
 
-      // Capture Authorization (contains SAPISIDHASH with access info)
-      if (name === 'authorization') {
+      // Capture Authorization — ONLY Bearer tokens (OAuth2 access tokens).
+      // SAPISIDHASH is Google's 1st-party internal auth (accounts.google.com)
+      // and must NOT be used for VEO API calls (causes 403).
+      // HAR-verified: VEO API requires "Bearer ya29..." format.
+      if (name === 'authorization' && h.value && h.value.startsWith('Bearer ')) {
         authHeader = h.value;
       }
     }
@@ -1048,14 +1198,25 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       state.accessToken = authHeader;
     }
 
-    // Auto-push to app if connected and we have an email
+    // Auto-push to app if connected and we have an email (debounced)
     if (state.email && Object.keys(headers).length > 0) {
-      wsSend({
-        action: 'headers_update',
-        email: state.email,
-        headers: state.headers,
-        accessToken: state.accessToken,
-      });
+      const email = state.email;
+      // Clear existing timer — restart debounce window
+      if (_headersDebounceTimers[email]) {
+        clearTimeout(_headersDebounceTimers[email]);
+      }
+      _headersDebounceTimers[email] = setTimeout(() => {
+        delete _headersDebounceTimers[email];
+        const s = tabState[details.tabId];
+        if (s && s.email) {
+          wsSend({
+            action: 'headers_update',
+            email: s.email,
+            headers: s.headers,
+            accessToken: s.accessToken,
+          });
+        }
+      }, HEADERS_DEBOUNCE_MS);
     }
   },
   {
@@ -1088,11 +1249,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     console.log(`[VEO Bridge] Tab ${tabId} registered: ${msg.email}`);
 
+    // ★ Fix #4: Prevent Chrome from discarding/suspending this tab
+    // Chrome Energy Saver suspends background tabs, killing reCAPTCHA widget
+    // and causing token generation failures. autoDiscardable: false prevents this.
+    try {
+      chrome.tabs.update(tabId, { autoDiscardable: false });
+      console.log(`[VEO Bridge] Tab ${tabId} marked autoDiscardable=false (anti-suspend)`);
+    } catch (e) {
+      console.debug(`[VEO Bridge] autoDiscardable update failed for tab ${tabId}: ${e.message}`);
+    }
+
     // Notify app
     wsSend({
       action: 'register',
       email: msg.email,
       tabId: tabId,
+      version: EXT_VERSION,
     });
 
     sendResponse({ ok: true });
@@ -1233,10 +1405,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.discarded === true && state.email) {
     console.warn(`[VEO Bridge] ⚠️ Tab ${tabId} (${state.email}) DISCARDED by Memory Saver`);
     wsSend({ action: 'tab_discarded', email: state.email, tabId });
-    // Auto-reload to restore content script
+    // Auto-reload to restore content script (with cooldown protection)
     setTimeout(() => {
-      chrome.tabs.reload(tabId, { bypassCache: false }).catch(() => { });
-      console.log(`[VEO Bridge] 🔄 Auto-reloaded discarded tab ${tabId}`);
+      safeTabReload(tabId, 'memory-saver-discard');
     }, 1000);
     return;
   }
@@ -1268,7 +1439,92 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 
-// ── Heartbeat Check — Detect Frozen Tabs ───────────────────────────────
+// ── Tab Close Detection — Reassign Email to Remaining VEO Tab ──────────
+// When a VEO tab with a registered email is closed, find another VEO tab
+// and reassign the email so operations can continue without interruption.
+
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  const state = tabState[tabId];
+  if (!state || !state.email) {
+    // Tab wasn't tracked or had no email — just clean up
+    delete tabState[tabId];
+    delete tabLastReloadTime[tabId];
+    return;
+  }
+
+  const orphanedEmail = state.email;
+  console.warn(`[VEO Bridge] ❌ Tab ${tabId} (${orphanedEmail}) closed — looking for replacement...`);
+
+  // Clean up closed tab state
+  delete tabState[tabId];
+  delete tabLastReloadTime[tabId];
+  delete shortTokenCounts[tabId];
+
+  // Notify app that the email's tab was closed
+  wsSend({
+    action: 'tab_closed',
+    email: orphanedEmail,
+    tabId: tabId,
+  });
+
+  // Check if email is already assigned to another tab (e.g., duplicate registration)
+  const existingTabId = findTabForEmail(orphanedEmail);
+  if (existingTabId) {
+    console.log(`[VEO Bridge] ✅ Email ${orphanedEmail} already registered on tab ${existingTabId}`);
+    wsSend({ action: 'register', email: orphanedEmail, tabId: existingTabId, version: EXT_VERSION });
+    return;
+  }
+
+  // Find another VEO tab without an email assignment
+  try {
+    const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    // Prefer unassigned tab, fallback to any VEO tab
+    let targetTab = veoTabs.find(t => t.id !== tabId && !tabState[t.id]?.email);
+    if (!targetTab) {
+      targetTab = veoTabs.find(t => t.id !== tabId);
+    }
+
+    if (targetTab) {
+      const newTabId = targetTab.id;
+      if (!tabState[newTabId]) {
+        tabState[newTabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+      }
+      tabState[newTabId].email = orphanedEmail;
+      console.log(`[VEO Bridge] 🔄 Reassigned ${orphanedEmail} to existing VEO tab ${newTabId}`);
+
+      // Inject content.js to ensure the tab can communicate
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: newTabId },
+          files: ['content.js'],
+        });
+      } catch (e) {
+        console.debug(`[VEO Bridge] Content.js inject on reassign: ${e.message}`);
+      }
+
+      // Re-register with Python app
+      wsSend({ action: 'register', email: orphanedEmail, tabId: newTabId, version: EXT_VERSION });
+
+      // Prevent Chrome from discarding this tab (same as initial registration)
+      try { chrome.tabs.update(newTabId, { autoDiscardable: false }); } catch (_) { }
+
+      // Push any cached headers from the new tab
+      const newState = tabState[newTabId];
+      if (Object.keys(newState.headers).length > 0) {
+        wsSend({
+          action: 'headers_update',
+          email: orphanedEmail,
+          headers: newState.headers,
+          accessToken: newState.accessToken,
+        });
+      }
+    } else {
+      console.warn(`[VEO Bridge] ⚠️ No remaining VEO tab for ${orphanedEmail} — will reconnect when new tab opens`);
+    }
+  } catch (e) {
+    console.error(`[VEO Bridge] Tab reassignment failed: ${e.message}`);
+  }
+});
 
 function checkHeartbeats() {
   const now = Date.now();
@@ -1324,12 +1580,11 @@ function checkHeartbeats() {
         reloadAttempt: state._frozenReloadCount,
       });
 
-      // Try to wake it up by reloading
-      chrome.tabs.reload(parseInt(tabId), { bypassCache: false }).then(() => {
-        console.log(`[VEO Bridge] 🔄 Auto-reloaded frozen tab ${tabId} (attempt ${state._frozenReloadCount})`);
-        state.lastHeartbeat = now; // Reset to avoid immediate re-trigger
-      }).catch(e => {
-        console.debug(`[VEO Bridge] Tab ${tabId} reload failed: ${e.message}`);
+      // Try to wake it up by reloading (with cooldown protection)
+      safeTabReload(parseInt(tabId), `heartbeat-frozen-attempt-${state._frozenReloadCount}`).then(didReload => {
+        if (didReload) {
+          state.lastHeartbeat = now; // Reset to avoid immediate re-trigger
+        }
       });
     }
   }
@@ -1500,9 +1755,8 @@ async function reloadVeoTabs(email = null) {
       }
 
       try {
-        await chrome.tabs.reload(tab.id, { bypassCache: false });
-        reloaded++;
-        console.log(`[VEO Bridge] 🔄 Reloaded tab ${tab.id} for header refresh`);
+        const didReload = await safeTabReload(tab.id, 'header-refresh');
+        if (didReload) reloaded++;
       } catch (e) {
         console.debug(`[VEO Bridge] Could not reload tab ${tab.id}: ${e.message}`);
       }

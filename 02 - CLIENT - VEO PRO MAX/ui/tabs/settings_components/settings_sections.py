@@ -825,81 +825,121 @@ class SettingsSectionsMixin:
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save UI settings: {e}')
 
+    # ── Post-Queue Action Section ──────────────────────────────────
+
+    def _create_post_queue_section(self) -> QWidget:
+        """Create Post-Queue Action section — auto shutdown/sleep after queue completes."""
+        section, layout = self._create_section("⚡ Post-Queue Action")
+
+        from config.settings import get_settings
+        settings = get_settings()
+
+        saved_enabled = getattr(settings, 'post_queue_action_enabled', False)
+        saved_action = getattr(settings, 'post_queue_action', 'nothing')
+
+        # Row 1: Master toggle
+        self.post_queue_switch = self._create_enable_row(
+            "Auto action after queue completes:", checked=saved_enabled
+        )
+        layout.addLayout(self.post_queue_switch._row_layout)
+
+        # Row 2: Action selector (visible only when toggle ON)
+        self._post_queue_action_container = QWidget()
+        action_layout = QHBoxLayout(self._post_queue_action_container)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+
+        action_label = QLabel("Action:")
+        action_label.setFixedWidth(150)
+        action_label.setStyleSheet(f"color: {Theme.TEXT};")
+        action_layout.addWidget(action_label)
+
+        self.post_queue_action_combo = QComboBox()
+        self.post_queue_action_combo.addItems(["🔌 Do Nothing", "⚡ Shutdown", "💤 Sleep"])
+        # Map saved value to display text
+        _action_map = {"nothing": "🔌 Do Nothing", "shutdown": "⚡ Shutdown", "sleep": "💤 Sleep"}
+        self.post_queue_action_combo.setCurrentText(_action_map.get(saved_action, "🔌 Do Nothing"))
+        self.post_queue_action_combo.setFixedWidth(160)
+        action_layout.addWidget(self.post_queue_action_combo)
+
+        action_layout.addStretch()
+        layout.addWidget(self._post_queue_action_container)
+
+        # Show/hide action selector based on toggle
+        self._post_queue_action_container.setVisible(saved_enabled)
+        self.post_queue_switch.toggled_signal.connect(
+            lambda checked: self._post_queue_action_container.setVisible(checked)
+        )
+
+        # Description
+        desc = QLabel("⚠️ When enabled, the selected action runs automatically after all tasks complete (failed tasks are ignored).")
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px;")
+        layout.addWidget(desc)
+
+        # Auto-save
+        self.post_queue_switch.toggled_signal.connect(self._save_post_queue_settings)
+        self.post_queue_action_combo.currentIndexChanged.connect(
+            lambda: self._save_post_queue_settings()
+        )
+
+        return section
+
+    def _save_post_queue_settings(self, *args):
+        """Persist post-queue action settings to AppSettings."""
+        if getattr(self, '_initializing', False):
+            return
+        from config.settings import get_settings, save_settings
+        settings = get_settings()
+        settings.post_queue_action_enabled = self.post_queue_switch.isToggled()
+        # Map display text to stored value
+        _reverse_map = {"🔌 Do Nothing": "nothing", "⚡ Shutdown": "shutdown", "💤 Sleep": "sleep"}
+        settings.post_queue_action = _reverse_map.get(
+            self.post_queue_action_combo.currentText(), "nothing"
+        )
+        save_settings()
+
     # ── Browser Visibility Section ─────────────────────────────────
 
     def _create_browser_visibility_section(self) -> QWidget:
-        """Create Browser Visibility section with master toggle + sub-options.
+        """Create Browser Visibility section — single Smart-Hide toggle.
 
-        Pattern: same as _create_session_section() — master toggle controls
-        visibility of sub-container with per-stage auto-hide toggles.
+        ON = Hide browsers after launch & successful submit.
+             Show errored account's browser on 403 Phase 2 hard restart.
+             Re-hide after 3 consecutive successful prompts.
+        OFF = All browsers always visible.
         """
         section, layout = self._create_section("🌐 Browser Visibility")
 
-        # Load saved values
+        # Load saved value
         from config.settings import get_settings
         s = get_settings()
-        saved_master = getattr(s, 'auto_hide_enabled', True)
-        saved_on_launch = getattr(s, 'auto_hide_on_launch', True)
-        saved_on_engine = getattr(s, 'auto_hide_on_engine_start', True)
-        saved_on_extract = getattr(s, 'auto_hide_on_data_extract', True)
-        saved_on_worker = getattr(s, 'auto_hide_on_worker_start', True)
+        saved = getattr(s, 'smart_hide_enabled', True)
 
-        # Master toggle
-        self.auto_hide_master_switch = self._create_enable_row(
-            "Auto-Hide Browsers:", checked=saved_master
+        # Single Smart-Hide toggle
+        self.smart_hide_switch = self._create_enable_row(
+            "Smart-Hide Browser:", checked=saved
         )
-        layout.addLayout(self.auto_hide_master_switch._row_layout)
+        layout.addLayout(self.smart_hide_switch._row_layout)
 
-        # === Sub-container (visible when master is ON) ===
-        self._auto_hide_sub_container = QFrame()
-        self._auto_hide_sub_container.setStyleSheet(f"margin-left: 16px; padding: 4px 0;")
-        sub_layout = QVBoxLayout(self._auto_hide_sub_container)
-        sub_layout.setContentsMargins(0, 4, 0, 4)
-        sub_layout.setSpacing(4)
-
-        sub_label = QLabel("Choose when to auto-hide:")
-        sub_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-style: italic;")
-        sub_layout.addWidget(sub_label)
-
-        # Sub-toggles
-        self._auto_hide_sub_toggles = {}
-
-        stages = [
-            ("On browser launch:",         "auto_hide_on_launch",       saved_on_launch),
-            ("On engine start:",           "auto_hide_on_engine_start", saved_on_engine),
-            ("On data extraction:",        "auto_hide_on_data_extract", saved_on_extract),
-            ("Engine workers (headless):", "auto_hide_on_worker_start", saved_on_worker),
-        ]
-
-        for label_text, attr_name, checked in stages:
-            toggle = self._create_enable_row(label_text, checked=checked)
-            sub_layout.addLayout(toggle._row_layout)
-            toggle.toggled_signal.connect(self._save_browser_visibility_settings)
-            self._auto_hide_sub_toggles[attr_name] = toggle
-
-        # Warning for headless
-        headless_warn = QLabel("⚠️ Disabling 'Engine workers' shows Chrome windows during generation")
-        headless_warn.setWordWrap(True)
-        headless_warn.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px; margin-top: 2px;")
-        sub_layout.addWidget(headless_warn)
-
-        layout.addWidget(self._auto_hide_sub_container)
-
-        # Show/hide sub-toggles based on master state
-        self._auto_hide_sub_container.setVisible(saved_master)
-        self.auto_hide_master_switch.toggled_signal.connect(
-            lambda checked: self._auto_hide_sub_container.setVisible(checked)
+        # Description
+        desc = QLabel(
+            "ON = Ẩn browser sau launch & submit OK. "
+            "Hiện khi lỗi 403, tự ẩn lại sau 3 prompt thành công.\n"
+            "OFF = Tất cả browser luôn hiện."
         )
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px;")
+        layout.addWidget(desc)
 
-        # Auto-save on any toggle change
-        self.auto_hide_master_switch.toggled_signal.connect(self._save_browser_visibility_settings)
+        # Auto-save on toggle change
+        self.smart_hide_switch.toggled_signal.connect(self._save_browser_visibility_settings)
 
         return section
 
     def _save_browser_visibility_settings(self, *args):
-        """Persist browser visibility toggles to AppSettings immediately.
+        """Persist Smart-Hide toggle to AppSettings immediately.
         
-        Hot-apply: when master toggle changes, immediately hide/show
+        Hot-apply: when toggle changes, immediately hide/show
         all running debug browsers without requiring app restart.
         """
         if getattr(self, '_initializing', False):
@@ -907,22 +947,20 @@ class SettingsSectionsMixin:
         from config.settings import get_settings, save_settings
         settings = get_settings()
         
-        # Detect master toggle change for hot-apply
-        old_master = settings.auto_hide_enabled
-        new_master = self.auto_hide_master_switch.isToggled()
+        # Detect toggle change for hot-apply
+        old_value = settings.smart_hide_enabled
+        new_value = self.smart_hide_switch.isToggled()
         
-        settings.auto_hide_enabled = new_master
-        for attr_name, toggle in self._auto_hide_sub_toggles.items():
-            setattr(settings, attr_name, toggle.isToggled())
+        settings.smart_hide_enabled = new_value
         save_settings()
         
         # Hot-apply: hide or show all running debug browsers
-        if old_master != new_master and self.controller:
+        if old_value != new_value and self.controller:
             pc = getattr(self.controller, '_profiles_controller', None)
             if pc and hasattr(pc, '_debug_browsers'):
                 for email in list(pc._debug_browsers.keys()):
                     try:
-                        if new_master:
+                        if new_value:
                             pc.hide_debug_browser(email)
                         else:
                             pc.show_debug_browser(email)
