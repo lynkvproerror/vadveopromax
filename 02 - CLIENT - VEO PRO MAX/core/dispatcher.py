@@ -1355,6 +1355,14 @@ class Dispatcher:
         if not task:
             return False
         
+        # ── Decrement running counters if task was actively running ──
+        prev_state = task.state
+        if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+            self._running_count = max(0, self._running_count - 1)
+            self._decrement_account_running(task.assigned_account)
+            log.info(f"[ForceRetry] Decremented running counters for {task_id} "
+                     f"(was {prev_state.value}, running_count={self._running_count})")
+        
         # ── Identify continuation children (before deleting outputs) ──
         children_ids = [
             t.id for t in self._all_tasks.values()
