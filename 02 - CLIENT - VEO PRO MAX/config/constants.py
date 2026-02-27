@@ -272,6 +272,18 @@ class TokenLifetime:
     SESSION_COOKIE = 604800     # 7 days
 
 
+# === X-CLIENT-DATA VALIDATION ===
+# Chrome Variations Service generates x-client-data header.
+# HAR-verified: valid values are 48+ chars (experiment flags).
+# After browser launch, Variations needs ~10-15s to load → short 8-char value.
+# Use this as the single threshold across ALL modules.
+MIN_VALID_XCD = 50  # was 20 in most files, 40 in remedy, 50 in engine
+
+# After browser restart, wait this long for Variations Service to produce
+# a valid x-client-data before falling back to borrow.
+XCD_VARIATIONS_WAIT_TIMEOUT = 20  # seconds
+
+
 # === APP CONSTANTS ===
 class AppConstants:
     """Application-wide constants."""

@@ -930,7 +930,7 @@ class TabQueue(
                 self._rebuild_group_children(gw, g)
             else:
                 # Create new group
-                expanded = self._group_expanded.get(gid, True)
+                expanded = self._group_expanded.get(gid, False)
                 container = self._create_group_widget(g, expanded)
                 self._group_expanded[gid] = expanded
                 self.queue_layout.insertWidget(

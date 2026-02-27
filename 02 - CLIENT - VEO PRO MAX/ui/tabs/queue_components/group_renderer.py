@@ -427,7 +427,7 @@ class QueueGroupMixin:
         gw = self._group_widgets.get(group_id)
         if not gw:
             return
-        expanded = not self._group_expanded.get(group_id, True)
+        expanded = not self._group_expanded.get(group_id, False)
         self._group_expanded[group_id] = expanded
         gw['content'].setVisible(expanded)
         gw['arrow'].setText("▼" if expanded else "▶")

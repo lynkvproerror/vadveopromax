@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.constants import TokenLifetime
+from config.constants import TokenLifetime, MIN_VALID_XCD
 
 
 class AccountState(str, Enum):
@@ -226,10 +226,9 @@ class AccountSession:
         self.browser_validation = browser_validation
         
         # Guard: don't downgrade x-client-data to a shorter/stale value
-        MIN_GOOD_LENGTH = 20  # Full x-client-data is typically 50+ chars
         existing = self.client_data or ""
         new_val = client_data or ""
-        if len(existing) >= MIN_GOOD_LENGTH and len(new_val) < MIN_GOOD_LENGTH:
+        if len(existing) >= MIN_VALID_XCD and len(new_val) < MIN_VALID_XCD:
             import logging
             logging.getLogger("veo").warning(
                 f"x-client-data downgrade blocked: "

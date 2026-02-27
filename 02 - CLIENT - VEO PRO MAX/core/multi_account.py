@@ -21,6 +21,11 @@ from core.account_manager import AccountManager
 
 log = logging.getLogger(__name__)
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).parent.parent))
+from config.constants import MIN_VALID_XCD
+
 
 class MultiAccountManager:
     """ĐẠI CHỦ - Manages multiple VEO account managers (CHỦ).
@@ -334,17 +339,22 @@ class MultiAccountManager:
         Service not loaded), we can safely borrow from another profile
         that has the full value.
         
-        Note: No longer launches temp Chrome for extraction — Extension
-        bridge provides x-client-data from the managed browser's headers.
-        Cross-pollination is triggered again when Extension sends fresh data.
+        Only borrows from accounts with active Extension connection
+        (confirms Chrome is alive with valid Variations data).
         
         This fixes reCAPTCHA 403 errors caused by short x-client-data.
         """
-        MIN_GOOD = 20  # Full x-client-data is typically 50+ chars
-        best = self.get_best_client_data()
+        best = ""
+        best_source = None
+        for acc in self._accounts:
+            cd = acc.session.client_data or ""
+            # Only consider accounts with active Extension (valid PID)
+            has_ext = acc.extension_bridge and acc.extension_bridge.is_connected(acc.email)
+            if len(cd) > len(best) and has_ext:
+                best = cd
+                best_source = acc.email
         
-        if len(best) < MIN_GOOD:
-            # Don't launch temp Chrome — Extension will provide data shortly
+        if len(best) < MIN_VALID_XCD:
             log.info(
                 f"⏳ No account has good x-client-data yet (best={len(best)} chars). "
                 f"Extension bridge will provide fresh value from browser headers."
@@ -354,10 +364,10 @@ class MultiAccountManager:
         fixed = 0
         for acc in self._accounts:
             cd = acc.session.client_data or ""
-            if len(cd) < MIN_GOOD:
+            if len(cd) < MIN_VALID_XCD:
                 log.info(
                     f"🔄 [{acc.email}] x-client-data too short ({len(cd)} chars), "
-                    f"borrowing from pool ({len(best)} chars)"
+                    f"borrowing from {best_source} ({len(best)} chars)"
                 )
                 acc.session.client_data = best
                 fixed += 1

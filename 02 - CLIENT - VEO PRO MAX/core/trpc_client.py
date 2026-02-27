@@ -67,7 +67,7 @@ class TRPCClient:
     
     async def create_project(
         self,
-        title: str = "VEO Pro Max",
+        title: str = "My Video Project",
         tool_name: str = TOOL_FLOW,
     ) -> Optional[str]:
         """Create a new project via TRPC.

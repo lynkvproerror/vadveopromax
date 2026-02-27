@@ -124,6 +124,26 @@ def _win32_show_hwnds(hwnds: list):
         user32.SetWindowPos(hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER)
         user32.ShowWindow(hwnd, SW_RESTORE)
 
+def _win32_send_to_back(hwnds: list):
+    """Send Chrome windows behind all other windows (no focus steal).
+    
+    Uses SetWindowPos with HWND_BOTTOM to push Chrome to the back of
+    the Z-order. Windows remain visible but behind the active application.
+    Also uses SWP_NOACTIVATE to prevent Chrome from stealing focus.
+    
+    Called after Chrome launch when smart_hide is disabled but we don't
+    want Chrome to cover the user's IDE/workspace.
+    """
+    HWND_BOTTOM = 1
+    SWP_NOSIZE = 0x0001
+    SWP_NOMOVE = 0x0002
+    SWP_NOACTIVATE = 0x0010
+    for hwnd in hwnds:
+        user32.SetWindowPos(
+            hwnd, HWND_BOTTOM, 0, 0, 0, 0,
+            SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
+        )
+
 
 
 
@@ -1253,7 +1273,9 @@ class ProfilesController:
                         log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — hidden for {email}")
                         _initial_state = "hidden"
                     else:
-                        log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — visible for {email} (smart-hide disabled)")
+                        # Send Chrome behind other windows instead of on top
+                        _win32_send_to_back(browser_hwnds)
+                        log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — visible (sent to back) for {email} (smart-hide disabled)")
                         _initial_state = "visible"
                     
                     if on_state_change:

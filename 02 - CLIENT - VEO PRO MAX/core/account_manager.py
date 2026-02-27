@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.session import AccountSession, AccountState, SubscriptionType, PaygateTier
-from config.constants import TokenLifetime
+from config.constants import TokenLifetime, MIN_VALID_XCD, XCD_VARIATIONS_WAIT_TIMEOUT
 from core.project_manager import ProjectManager
 from core.recaptcha_session import RecaptchaBrowserSession, TokenCache
 
@@ -594,12 +594,11 @@ class AccountManager:
                     log.error(f"[{email}] open_browser_for_debug error: {e}")
                     return False
             
-            # Step 4: Invalidate cached tokens AND browser headers (force fresh extraction)
-            saved_client_data = self._session.client_data or ""
+            saved_client_data = self._session.client_data or ""  # For logging only
             self._session.access_token = None
             self._session.token_expires = None
             self._session.recaptcha_token = None
-            self._session.client_data = ""          # Must clear to accept new value
+            self._session.client_data = ""          # Must clear to accept new value from new PID
             self._session.browser_validation = ""   # Also browser-specific
             self._session.browser_copyright = ""
             self._session.browser_year = ""
@@ -609,24 +608,33 @@ class AccountManager:
             try:
                 await self.ensure_browser(headless=True)
                 
-                # Step 6: Fix x-client-data if new browser value is too short
-                # Chrome Variations Service may not have loaded yet → short value.
-                # Restore cached pre-restart value if it was good and new is short.
-                current_cd = self._session.client_data or ""
-                MIN_GOOD = 20  # Full x-client-data is typically 50+ chars
-                if len(current_cd) < MIN_GOOD and len(saved_client_data) >= MIN_GOOD:
-                    log.info(
-                        f"[{email}] Restoring cached x-client-data "
-                        f"({len(saved_client_data)} chars, new was {len(current_cd)} chars)"
-                    )
-                    self._session.client_data = saved_client_data
-                elif len(current_cd) < MIN_GOOD:
-                    log.warning(
-                        f"[{email}] ⚠️ x-client-data short ({len(current_cd)} chars) — "
-                        f"Engine will borrow from pool after restart"
-                    )
+            # Step 6: Wait for Variations Service to produce valid x-client-data
+                # After restart, Chrome needs ~10-15s for Variations Service to load.
+                # DO NOT restore the old cached value — it belonged to the killed PID
+                # and causes 403 when paired with new PID's reCAPTCHA token.
+                import time as _time
+                wait_start = _time.monotonic()
+                while _time.monotonic() - wait_start < XCD_VARIATIONS_WAIT_TIMEOUT:
+                    current_cd = self._session.client_data or ""
+                    if len(current_cd) >= MIN_VALID_XCD:
+                        log.info(f"[{email}] ✅ x-client-data ready ({len(current_cd)} chars, waited {_time.monotonic() - wait_start:.1f}s)")
+                        break
+                    # Also check bridge cache directly
+                    if self._extension_bridge:
+                        bridge_headers = self._extension_bridge.get_cached_headers(email, max_age_seconds=0)
+                        if bridge_headers:
+                            bxcd = bridge_headers.get('x-client-data', '')
+                            if len(bxcd) >= MIN_VALID_XCD:
+                                self._session.client_data = bxcd
+                                log.info(f"[{email}] ✅ x-client-data from bridge ({len(bxcd)} chars, waited {_time.monotonic() - wait_start:.1f}s)")
+                                break
+                    await asyncio.sleep(1)
                 else:
-                    log.info(f"[{email}] x-client-data OK ({len(current_cd)} chars)")
+                    current_cd = self._session.client_data or ""
+                    log.warning(
+                        f"[{email}] ⚠️ x-client-data still short ({len(current_cd)} chars) "
+                        f"after {XCD_VARIATIONS_WAIT_TIMEOUT}s — engine borrow_headers will fix"
+                    )
                 
                 log.info(f"[{email}] ✅ Browser restart complete — fresh PID, tokens, reCAPTCHA")
                 return True
@@ -819,7 +827,7 @@ class AccountManager:
     
     def get_browser_headers(self) -> dict:
         """Get x-browser-* headers from Extension bridge, with session fallback."""
-        MIN_XCD = 20  # Full x-client-data is 50+ chars
+        MIN_XCD = MIN_VALID_XCD  # Shared constant (50)
         if self._extension_bridge:
             ext_headers = self._extension_bridge.get_cached_headers(self.email)
             if ext_headers:

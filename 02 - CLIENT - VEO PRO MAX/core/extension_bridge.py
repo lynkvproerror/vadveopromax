@@ -38,6 +38,11 @@ except ImportError:
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config.constants import MIN_VALID_XCD
+
 try:
     import websockets
     from websockets.asyncio.server import serve as ws_serve
@@ -510,6 +515,65 @@ class ExtensionBridge:
                 self._cleanup_request_timing(request_id)
                 self._pending_requests.pop(request_id, None)
                 self._pending_request_conns.pop(request_id, None)  # GAP #9
+
+    async def navigate_to_url(
+        self, email: str, url: str, timeout: float = 35.0
+    ) -> Optional[dict]:
+        """Navigate the Extension tab to a specific URL.
+        
+        Uses chrome.tabs.update (extension-level) for clean navigation.
+        Waits for page load to complete (document.readyState === 'complete').
+        
+        Args:
+            email: Account email to identify the tab.
+            url: Target URL to navigate to.
+            timeout: Max seconds to wait for navigation + load.
+            
+        Returns:
+            dict with {success, loadTime, url, timedOut} or None if failed.
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] navigate_to_url: no connection for {email}")
+            return None
+        
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+        self._pending_request_conns[request_id] = conn
+        
+        try:
+            log.info(f"[ExtensionBridge] 📍 Navigating {email} to: {url}")
+            await self._ws_send(conn, {
+                'action': 'navigate_tab',
+                'requestId': request_id,
+                'email': email,
+                'url': url,
+            })
+            
+            result = await asyncio.wait_for(future, timeout=timeout)
+            
+            if result.get('success'):
+                log.info(
+                    f"[ExtensionBridge] ✅ Navigation complete for {email}: "
+                    f"{result.get('loadTime', '?')}s"
+                )
+            else:
+                error = result.get('error', 'unknown')
+                log.warning(
+                    f"[ExtensionBridge] ❌ Navigation failed for {email}: {error}"
+                )
+            return result
+            
+        except asyncio.TimeoutError:
+            log.error(
+                f"[ExtensionBridge] navigate_to_url timed out for {email} ({timeout}s)"
+            )
+            return None
+        finally:
+            self._cleanup_request_timing(request_id)
+            self._pending_requests.pop(request_id, None)
+            self._pending_request_conns.pop(request_id, None)
 
     async def submit_prompt(
         self,
@@ -1247,7 +1311,7 @@ class ExtensionBridge:
                 # Guard: don't downgrade x-client-data in bridge cache
                 # Chrome Variations Service needs ~15s after launch; Extension
                 # sends truncated 8-char value during that window.
-                MIN_XCD = 20  # Full x-client-data is 50+ chars
+                MIN_XCD = MIN_VALID_XCD  # Shared constant (50)
                 new_xcd = headers.get('x-client-data', '')
                 old_headers = conn.headers.get(email, {})
                 old_xcd = old_headers.get('x-client-data', '')
@@ -1479,6 +1543,13 @@ class ExtensionBridge:
 
         elif action == 'activity_simulated':
             # Response to simulate_activity request
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
+        elif action == 'navigate_tab_result':
             request_id = msg.get('requestId')
             if request_id and request_id in self._pending_requests:
                 future = self._pending_requests[request_id]

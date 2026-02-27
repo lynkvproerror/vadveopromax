@@ -33,7 +33,7 @@ class ProjectManager:
         access_token: str = "",
         api_client=None,
         trpc_client=None,
-        title: str = "VEO Pro Max",
+        title: str = "My Video Project",
     ) -> Optional[str]:
         """Get cached project ID or create a new one.
         
@@ -69,7 +69,7 @@ class ProjectManager:
     async def _create_project(
         self,
         trpc_client=None,
-        title: str = "VEO Pro Max",
+        title: str = "My Video Project",
     ) -> Optional[str]:
         """Create a new VEO project via TRPC.
         

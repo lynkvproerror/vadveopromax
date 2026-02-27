@@ -142,7 +142,9 @@ function connectWebSocket() {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        handleAppMessage(msg);
+        handleAppMessage(msg).catch(e => {
+          console.error('[VEO Bridge] Async handler error:', e.message || e);
+        });
       } catch (e) {
         console.error('[VEO Bridge] Failed to parse message:', e);
       }
@@ -998,6 +1000,86 @@ async function handleAppMessage(msg) {
         });
       } finally {
         clearInterval(keepaliveTimer);
+      }
+      break;
+    }
+
+    case 'navigate_tab': {
+      // Navigate VEO tab to a specific URL (e.g. project page)
+      // Uses chrome.tabs.update — cleaner than window.location.href
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      const targetUrl = msg.url;
+      if (!targetUrl) {
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: 'No URL specified',
+        });
+        return;
+      }
+
+      try {
+        const startTime = Date.now();
+        console.log(`[VEO Bridge] 📍 Navigating tab ${tabId} to: ${targetUrl}`);
+
+        // Navigate using chrome.tabs.update
+        await chrome.tabs.update(tabId, { url: targetUrl });
+
+        // Wait 1.5s for tab to actually START loading
+        // (tab.status can briefly remain 'complete' before navigation kicks in)
+        await new Promise(r => setTimeout(r, 1500));
+
+        // Poll for page to finish loading (every 500ms, max 25s)
+        const maxWait = 25000;
+        let loadComplete = false;
+        while (Date.now() - startTime < maxWait + 1500) {
+          try {
+            const tab = await chrome.tabs.get(tabId);
+            if (tab.status === 'complete') {
+              loadComplete = true;
+              break;
+            }
+          } catch (e) {
+            // Tab might be mid-navigation — continue polling
+          }
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        if (loadComplete) {
+          console.log(`[VEO Bridge] ✅ Navigation complete in ${loadTime}s: ${targetUrl}`);
+        } else {
+          console.warn(`[VEO Bridge] ⚠️ Navigation timeout (${loadTime}s): ${targetUrl}`);
+        }
+
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: loadComplete,
+          loadTime: parseFloat(loadTime),
+          url: targetUrl,
+          timedOut: !loadComplete,
+        });
+      } catch (e) {
+        console.error(`[VEO Bridge] ❌ Navigation failed: ${e.message}`);
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: e.message,
+        });
       }
       break;
     }

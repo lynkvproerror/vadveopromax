@@ -82,6 +82,11 @@ class AccountSupervisor:
         # All foremen wait on this before entering their main loop.
         self._startup_done = asyncio.Event()
         
+        # Progressive unlock: set after first foreman submits successfully.
+        # Foremen idx>0 wait on this before entering main loop.
+        # Prevents 8 foremen burst-submitting when reCAPTCHA is broken.
+        self._first_submit_ok = asyncio.Event()
+        
         self._running = False
 
     async def report_error(self, error_type: str, details: str = ""):
@@ -125,6 +130,11 @@ class AccountSupervisor:
             await self.engine._wait_for_account_ready(self.account, timeout=30.0)
             await self.engine._check_app_availability(self.account)
             
+            # Create project + navigate browser BEFORE reCAPTCHA init.
+            # This ensures reCAPTCHA widget initializes on the correct
+            # project page context (avoids token rejection).
+            await self._ensure_project_page()
+            
             log.info(f"[Supervisor:{self.email}] Pre-warming reCAPTCHA...")
             rc_ready = await self.engine._wait_for_recaptcha_ready(
                 self.account, max_wait=30.0,
@@ -133,6 +143,16 @@ class AccountSupervisor:
                 log.warning(
                     f"[Supervisor:{self.email}] ⚠️ reCAPTCHA not ready — "
                     f"foremen will retry before first submit"
+                )
+            
+            # Probe submit: test reCAPTCHA pipeline with real token
+            # before unblocking foremen. This catches the case where
+            # grecaptcha.execute works but server rejects the token.
+            probe_ok = await self._probe_submit()
+            if not probe_ok:
+                log.warning(
+                    f"[Supervisor:{self.email}] ⚠️ Probe submit failed — "
+                    f"foreman-0 will proceed cautiously, others wait"
                 )
             
             await self.engine._pre_upload_r2v_images(self.account)
@@ -187,6 +207,147 @@ class AccountSupervisor:
             self._running = False
             self._allow_submit.set()  # Don't leave foreman blocked
             log.info(f"[Supervisor:{self.email}] Stopped")
+
+    async def _ensure_project_page(self):
+        """Create project if needed and navigate browser to project page.
+        
+        Called during startup BEFORE reCAPTCHA init so the widget
+        initializes on the correct project page context.
+        
+        Escalation:
+        1. Try to reuse existing project
+        2. Create new project via TRPC
+        3. Retry once on failure
+        """
+        account = self.account
+        email = self.email
+        
+        # Create project if not exists
+        if not account.project_id:
+            trpc_client = None
+            if account._browser_session and account._browser_session.is_ready:
+                trpc_client = TRPCClient(account._browser_session._page)
+            
+            project_id = None
+            
+            # Step 1: Try to reuse existing project
+            if trpc_client:
+                try:
+                    projects = await trpc_client.get_projects()
+                    if projects:
+                        project_id = projects[0].get("projectId")
+                        if project_id:
+                            log.info(
+                                f"[Supervisor:{email}] ♻️ Reusing existing project: "
+                                f"{project_id}"
+                            )
+                except Exception:
+                    pass  # Fall through to create
+            
+            # Step 2: Create new project if no existing one
+            if not project_id:
+                for attempt in range(2):
+                    try:
+                        project_id = await account.project_manager.get_or_create_project(
+                            email=email,
+                            access_token=account.get_access_token(),
+                            api_client=self.engine._api_client,
+                            trpc_client=trpc_client,
+                            title="My Video Project",
+                        )
+                        if project_id:
+                            break
+                        
+                        if attempt == 0:
+                            log.warning(
+                                f"[Supervisor:{email}] ⚠️ Project creation failed — "
+                                f"retrying in 3s..."
+                            )
+                            await asyncio.sleep(3)
+                    except Exception as e:
+                        if attempt == 0:
+                            log.warning(
+                                f"[Supervisor:{email}] ⚠️ Project creation error: {e} — "
+                                f"retrying in 3s..."
+                            )
+                            await asyncio.sleep(3)
+                        else:
+                            log.error(
+                                f"[Supervisor:{email}] ❌ Project creation failed after "
+                                f"2 attempts: {e}"
+                            )
+            
+            if project_id:
+                account.set_project_id(project_id)
+                log.info(f"[Supervisor:{email}] ✅ Project ready: {project_id}")
+            else:
+                log.error(
+                    f"[Supervisor:{email}] ❌ No projectId after 2 attempts — "
+                    f"account may not function correctly"
+                )
+                return
+        
+        # Navigate to project page
+        project_id = account.project_id
+        if project_id:
+            log.info(f"[Supervisor:{email}] 📍 Navigating to project page...")
+            await self.engine._navigate_to_project_page(account, project_id)
+
+    async def _probe_submit(self) -> bool:
+        """Probe: verify reCAPTCHA pipeline is functional before unblocking foremen.
+        
+        Validates that the extension can produce a valid reCAPTCHA token.
+        Does NOT make server-side HTTP calls (those require browser cookies
+        which are unavailable from Python). The actual submit by foreman-0
+        will verify end-to-end acceptance.
+        
+        Returns:
+            True if probe succeeded (valid token obtained), False otherwise.
+        """
+        account = self.account
+        bridge = account.extension_bridge
+        if not bridge:
+            log.info(f"[Supervisor:{self.email}] No extension bridge — skipping probe")
+            return True  # Can't probe without bridge
+        
+        for attempt in range(2):
+            try:
+                log.info(
+                    f"[Supervisor:{self.email}] 🧪 Probe "
+                    f"(attempt {attempt + 1}/2) — validating reCAPTCHA token..."
+                )
+                
+                # Get a real reCAPTCHA token from extension
+                token = await bridge.request_recaptcha(
+                    self.email, timeout=15
+                )
+                if not token or len(token) < 1000:
+                    log.warning(
+                        f"[Supervisor:{self.email}] 🧪 Probe: reCAPTCHA token "
+                        f"too short ({len(token) if token else 0} chars)"
+                    )
+                    if attempt < 1:
+                        await asyncio.sleep(10)
+                    continue
+                
+                # Token is valid (>1000 chars) — pipeline is functional
+                log.info(
+                    f"[Supervisor:{self.email}] 🧪 ✅ Probe OK — "
+                    f"reCAPTCHA token valid ({len(token)} chars)"
+                )
+                self._first_submit_ok.set()  # Pipeline verified
+                return True
+                        
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning(
+                    f"[Supervisor:{self.email}] 🧪 Probe exception: {e}"
+                )
+                if attempt < 1:
+                    await asyncio.sleep(10)
+        
+        return False
 
     async def _handle_403(self, details: str):
         """Handle 403/reCAPTCHA errors — multi-phase recovery.
@@ -622,6 +783,13 @@ class Engine:
         """Auto-clear cooldown and wake all waiters when timer expires."""
         self._account_cooldowns.pop(email, None)
         self._cooldown_timers.pop(email, None)
+        # Fix #1: Decay backoff by 1 on timer expiry (not full reset).
+        # Full reset happens on success (clear_account_cooldown).
+        # Without this, consecutive failures escalate 30→60→120→180s
+        # and only a success can break the spiral.
+        current = self._account_cooldown_backoff.get(email, 0)
+        if current > 0:
+            self._account_cooldown_backoff[email] = max(0, current - 1)
         evt = self._cooldown_events.get(email)
         if evt:
             evt.set()  # Wake all waiters simultaneously
@@ -752,7 +920,8 @@ class Engine:
         """
         import time
         start = time.monotonic()
-        MIN_GOOD = 40  # HAR-verified: valid x-client-data is 48 chars
+        from config.constants import MIN_VALID_XCD
+        MIN_GOOD = MIN_VALID_XCD  # Shared constant (50)
         email = account.email
         
         # Throttle: avoid 30+ identical debug lines during readiness wait
@@ -839,6 +1008,69 @@ class Engine:
             None, self._execute_js_on_account, account, js_expression, timeout
         )
     
+    async def _ensure_runtime_project(self, account, title: str = "My Video Project"):
+        """Ensure account has a project — shared by Supervisor startup + foreman runtime.
+        
+        Steps:
+        1. Try to reuse existing project via get_projects()
+        2. Create new project with retry if no existing one
+        3. Navigate to project page if newly created
+        
+        Args:
+            account: AccountManager instance
+            title: Project title (use task.project_name or generic default)
+        """
+        email = account.email
+        trpc_client = None
+        if account._browser_session and account._browser_session.is_ready:
+            trpc_client = TRPCClient(account._browser_session._page)
+        
+        project_id = None
+        
+        # Step 1: Reuse existing project
+        if trpc_client:
+            try:
+                projects = await trpc_client.get_projects()
+                if projects:
+                    project_id = projects[0].get("projectId")
+                    if project_id:
+                        log.info(f"[Engine:{email}] ♻️ Reusing existing project: {project_id}")
+            except Exception:
+                pass
+        
+        # Step 2: Create new with retry
+        if not project_id:
+            for attempt in range(2):
+                try:
+                    project_id = await account.project_manager.get_or_create_project(
+                        email=email,
+                        access_token=account.get_access_token(),
+                        api_client=self._api_client,
+                        trpc_client=trpc_client,
+                        title=title,
+                    )
+                    if project_id:
+                        break
+                    if attempt == 0:
+                        log.warning(f"[Engine:{email}] ⚠️ Project creation failed — retrying in 3s...")
+                        await asyncio.sleep(3)
+                except Exception as e:
+                    if attempt == 0:
+                        log.warning(f"[Engine:{email}] ⚠️ Project error: {e} — retrying in 3s...")
+                        await asyncio.sleep(3)
+                    else:
+                        log.error(f"[Engine:{email}] ❌ Project creation failed after 2 attempts: {e}")
+        
+        if project_id:
+            account.set_project_id(project_id)
+            # Navigate if not already on this project page
+            if self._navigated_project.get(email) != project_id:
+                await self._navigate_to_project_page(account, project_id)
+        else:
+            log.warning(
+                f"⚠️ No projectId for {email} — generation requests may fail"
+            )
+    
     async def _check_app_availability(self, account):
         """Fix 3: checkAppAvailability — HAR-verified startup signal.
         
@@ -875,33 +1107,189 @@ class Engine:
                 log.warning(f"[Foreman:{email}] checkAppAvailability: {result}")
         except Exception as e:
             log.warning(f"[Foreman:{email}] checkAppAvailability failed: {e}")
-    
+
+    # Track which project page each account is currently on
+    _navigated_project: dict = {}  # email → project_id
+
     async def _navigate_to_project_page(self, account, project_id: str):
-        """Fix 2: Navigate browser to project page for proper reCAPTCHA context.
-        
+        """Navigate the browser tab to the specific project page.
+
+        Skips if browser is already on the correct project page.
+        Detects locale prefix (e.g. /vi/) from the current browser URL
+        and includes it in the target URL.
+
         HAR evidence: Real browsers navigate to /tools/flow/project/{id}
-        before submitting. This triggers:
-        1. flow.projectInitialData (4.2s server load)
+        before submitting. This ensures:
+        1. flow.projectInitialData loads (4.2s server load)
         2. auth/session recheck
-        3. fetchUserAcknowledgement(FLOW_IMAGE_UPLOAD_TOS)
-        
-        Without this, reCAPTCHA context is tied to /tools/flow home → 403.
+        3. reCAPTCHA context is tied to the correct project page
         """
         email = account.email
-        project_url = f"https://labs.google/fx/tools/flow/project/{project_id}"
-        
-        try:
-            log.info(f"[Foreman:{email}] Navigating to project page: {project_url}")
-            await self._execute_js_on_account_async(
-                account, f"window.location.href = '{project_url}'"
+
+        # Skip if already on this project page
+        if self._navigated_project.get(email) == project_id:
+            log.debug(f"[Foreman:{email}] Already on project page {project_id} — skipping navigation")
+            return
+
+        # Detect locale prefix from current browser URL
+        # e.g. labs.google/fx/vi/tools/flow → locale = "vi/"
+        locale_prefix = ""
+        bridge = getattr(account, 'extension_bridge', None)
+        if bridge and bridge.is_connected(email):
+            try:
+                import re
+                # Get current tab URL from the extension's tabState
+                conn = bridge._find_connection(email)
+                if conn and hasattr(conn, '_registered_email'):
+                    # Check cached tab URL from bridge
+                    for cid, c in bridge._connections.items():
+                        if getattr(c, '_registered_email', None) == email:
+                            tab_url = getattr(c, '_tab_url', '') or ''
+                            match = re.search(r'labs\.google/fx/([a-z]{2}(?:-[a-z]{2})?)/tools', tab_url)
+                            if match:
+                                locale_prefix = f"{match.group(1)}/"
+                                log.debug(f"[Foreman:{email}] Detected locale: {locale_prefix}")
+                            break
+            except Exception:
+                pass
+
+        # If we couldn't detect locale from bridge, try from profiles_controller
+        if not locale_prefix:
+            import re
+            pc = getattr(account, '_profiles_controller', None) or \
+                 getattr(self, '_profiles_controller', None)
+            if pc:
+                try:
+                    current_url = getattr(pc, '_last_url', {}).get(email, '')
+                    if current_url:
+                        match = re.search(r'labs\.google/fx/([a-z]{2}(?:-[a-z]{2})?)/tools', current_url)
+                        if match:
+                            locale_prefix = f"{match.group(1)}/"
+                except Exception:
+                    pass
+
+        # Fallback: use "vi/" as default locale (most common for this user)
+        if not locale_prefix:
+            locale_prefix = "vi/"
+            log.debug(f"[Foreman:{email}] Using default locale: {locale_prefix}")
+
+        project_url = f"https://labs.google/fx/{locale_prefix}tools/flow/project/{project_id}"
+
+        nav_success = False
+
+        if bridge and bridge.is_connected(email):
+            try:
+                log.info(f"[Foreman:{email}] 📍 Navigating to project page: {project_url}")
+                result = await bridge.navigate_to_url(email, project_url, timeout=35.0)
+                
+                # Level 1-2: Retry bridge navigation once on failure
+                if not result or not result.get('success'):
+                    error = result.get('error', 'unknown') if result else 'no_result'
+                    log.warning(
+                        f"[Foreman:{email}] ⚠️ Navigation failed ({error}) — retrying in 3s..."
+                    )
+                    await asyncio.sleep(3)
+                    result = await bridge.navigate_to_url(email, project_url, timeout=35.0)
+                
+                if result and result.get('success'):
+                    nav_success = True
+                else:
+                    error = result.get('error', 'unknown') if result else 'no_result'
+                    log.warning(
+                        f"[Foreman:{email}] ⚠️ Bridge navigation failed 2x ({error})"
+                    )
+                    
+                    # Level 3: JS fallback — window.location.href
+                    try:
+                        log.info(f"[Foreman:{email}] 📍 Trying JS fallback navigation...")
+                        await self._execute_js_on_account_async(
+                            account, f"window.location.href = '{project_url}'"
+                        )
+                        await asyncio.sleep(8)
+                        nav_success = True
+                        log.info(f"[Foreman:{email}] ✅ JS fallback navigation OK")
+                    except Exception as js_err:
+                        log.warning(f"[Foreman:{email}] JS fallback also failed: {js_err}")
+                    
+                    # Level 4: Browser restart + re-navigate
+                    if not nav_success:
+                        try:
+                            log.warning(
+                                f"[Foreman:{email}] 🔄 Escalating to browser restart "
+                                f"after 3 navigation failures..."
+                            )
+                            ok = await account.restart_browser()
+                            if ok:
+                                log.info(f"[Foreman:{email}] ✅ Browser restarted — re-navigating...")
+                                await asyncio.sleep(5)
+                                # Re-check bridge after restart
+                                if bridge and bridge.is_connected(email):
+                                    result = await bridge.navigate_to_url(
+                                        email, project_url, timeout=35.0
+                                    )
+                                    if result and result.get('success'):
+                                        nav_success = True
+                                        log.info(
+                                            f"[Foreman:{email}] ✅ Post-restart navigation OK"
+                                        )
+                            else:
+                                log.error(f"[Foreman:{email}] ❌ Browser restart failed")
+                        except Exception as restart_err:
+                            log.error(
+                                f"[Foreman:{email}] Browser restart escalation failed: {restart_err}"
+                            )
+                
+            except Exception as e:
+                log.warning(f"[Foreman:{email}] Project page navigation failed: {e}")
+        else:
+            # No extension: use execute_js directly
+            try:
+                log.info(f"[Foreman:{email}] 📍 Navigating via JS: {project_url}")
+                await self._execute_js_on_account_async(
+                    account, f"window.location.href = '{project_url}'"
+                )
+                await asyncio.sleep(8)
+                nav_success = True
+                log.info(f"[Foreman:{email}] ✅ Project page loaded (JS fallback)")
+            except Exception as e:
+                log.warning(f"[Foreman:{email}] Project page navigation failed (JS): {e}")
+
+        if nav_success:
+            self._navigated_project[email] = project_id
+            
+            # Wait for content script re-inject + reCAPTCHA widget init
+            import time as _time
+            wait_start = _time.monotonic()
+            max_wait = 15  # seconds
+            recaptcha_ready = False
+            
+            if bridge and bridge.is_connected(email):
+                for attempt in range(max_wait // 2):
+                    await asyncio.sleep(2)
+                    try:
+                        ready_result = await bridge.check_recaptcha_ready(email, timeout=5.0)
+                        if ready_result and ready_result.get('ready'):
+                            elapsed = _time.monotonic() - wait_start
+                            log.info(
+                                f"[Foreman:{email}] ✅ reCAPTCHA ready on project page "
+                                f"({elapsed:.1f}s after navigation)"
+                            )
+                            recaptcha_ready = True
+                            break
+                    except Exception:
+                        pass
+            
+            if not recaptcha_ready:
+                elapsed = _time.monotonic() - wait_start
+                log.warning(
+                    f"[Foreman:{email}] ⚠️ reCAPTCHA not ready after {elapsed:.1f}s "
+                    f"post-navigation — foreman will handle via pre-submit check"
+                )
+        else:
+            log.error(
+                f"[Foreman:{email}] ❌ All 4 navigation levels failed — "
+                f"account may not function correctly"
             )
-            
-            # Wait for projectInitialData to load (HAR: 4.2s)
-            await asyncio.sleep(6)
-            
-            log.info(f"[Foreman:{email}] ✅ Project page loaded — reCAPTCHA context updated")
-        except Exception as e:
-            log.warning(f"[Foreman:{email}] Project page navigation failed: {e}")
     
     CIRCUIT_TRIP_THRESHOLD = 5    # consecutive 403s to trip breaker
     CIRCUIT_MONITOR_INTERVAL = 10  # seconds between health checks
@@ -2091,16 +2479,36 @@ class Engine:
             await supervisor._startup_done.wait()
             log.debug(f"[{fid}] Supervisor startup done — entering main loop")
         
-        # ── Staggered startup: foreman-0 starts immediately, ────────
-        # foreman-1 at +1.5s, foreman-2 at +3s, etc.
-        # Prevents all foremen requesting reCAPTCHA simultaneously.
+        # ── Progressive startup: foreman-0 starts first, ────────
+        # foremen 1+ wait for first successful submit.
+        # Prevents 8 foremen burst-submitting when reCAPTCHA is broken.
         try:
             foreman_idx = int(fid.rsplit('-', 1)[-1])
         except (ValueError, IndexError):
             foreman_idx = 0
+        
         if foreman_idx > 0:
-            startup_delay = foreman_idx * 1.5
-            log.debug(f"[{fid}] Stagger delay: {startup_delay:.1f}s")
+            # Wait for first submit to succeed (max 90s)
+            if supervisor and not supervisor._first_submit_ok.is_set():
+                log.info(f"[{fid}] ⏳ Waiting for foreman-0 first submit success...")
+                try:
+                    await asyncio.wait_for(
+                        supervisor._first_submit_ok.wait(), timeout=90.0
+                    )
+                    log.info(f"[{fid}] ✅ First submit verified — starting")
+                except asyncio.TimeoutError:
+                    log.warning(f"[{fid}] ⚠️ First submit timeout (90s) — starting anyway")
+            # Stagger: use anti-detect delay from settings (respects Settings tab)
+            from config.settings import get_settings as _get_stagger_settings
+            _s = _get_stagger_settings()
+            if getattr(_s, 'anti_detect_enabled', True):
+                import random
+                startup_delay = random.uniform(
+                    _s.anti_detect_delay_min, _s.anti_detect_delay_max
+                )
+            else:
+                startup_delay = foreman_idx * 1.5  # Fallback if anti-detect disabled
+            log.debug(f"[{fid}] Stagger delay: {startup_delay:.1f}s (anti-detect={'on' if getattr(_s, 'anti_detect_enabled', True) else 'off'})")
             await asyncio.sleep(startup_delay)
         
         # Track active pipeline tasks for this foreman
@@ -2128,6 +2536,13 @@ class Engine:
                     if self._stop_event.is_set():
                         break
                     log.info(f"[{fid}] ✅ Abort cleared, resuming")
+                    # Fix #2: Staggered resume — random delay per foreman
+                    # to prevent thundering herd (all 8 foremen submitting
+                    # simultaneously after circuit breaker closes → burst → 429/403).
+                    import random as _rng
+                    stagger = _rng.uniform(1.0, 5.0)
+                    log.info(f"[{fid}] Stagger {stagger:.1f}s before resume")
+                    await asyncio.sleep(stagger)
                 
                 # Step 1: Two-phase admission — acquire 1 worker first
                 worker_count = 0
@@ -2241,31 +2656,11 @@ class Engine:
                     # Worker.execute() already handles reCAPTCHA refresh (step B5).
                     # Having it in both places caused double-refresh and wasted 200-500ms.
                     
-                    # Step 5: Ensure project exists (CHỦ's ProjectManager)
+                    # Step 5: Ensure project exists (shared logic)
                     if not account.project_id:
-                        try:
-                            trpc_client = None
-                            if account._browser_session and account._browser_session.is_ready:
-                                trpc_client = TRPCClient(account._browser_session._page)
-                            
-                            project_id = await account.project_manager.get_or_create_project(
-                                email=account.email,
-                                access_token=account.get_access_token(),
-                                api_client=self._api_client,
-                                trpc_client=trpc_client,
-                                title=task.project_name or "VEO Pro Max",
-                            )
-                            if project_id:
-                                account.set_project_id(project_id)
-                                # NOTE: Do NOT navigate browser to /project/{id}.
-                                # Live logs proved this destroys the reCAPTCHA widget:
-                                # tokens drop from 2148→538 chars, tab freezes, browser
-                                # restarts cascade.  API fetch() from page context works
-                                # regardless of tab URL — keep tab on /tools/flow.
-                            else:
-                                log.warning(f"⚠️ No projectId for {account.email} — generation requests may fail (TRPC createProject returned None)")
-                        except Exception as e:
-                            log.warning(f"⚠️ TRPC project creation failed for {account.email}: {e} — continuing without projectId")
+                        await self._ensure_runtime_project(
+                            account, title=task.project_name or "My Video Project"
+                        )
                     
                     # Step 5.5: Auto-detect paygate tier (once per account)
                     if account.paygate_tier == "PAYGATE_TIER_TWO":
@@ -2769,6 +3164,11 @@ class Engine:
                                 
                                 backoff = recovery_result.backoff or 5
                                 
+                                # Fix ⑧: Exponential backoff — scale with attempt
+                                # attempt 0 → base, 1 → 1.5x, 2 → 2.25x, ...
+                                # Prevents rapid-fire failures burning credits
+                                backoff = min(int(backoff * (1.5 ** attempt)), 60)
+                                
                                 log.info(
                                     f"[Recovery] {acct_email}: recovery "
                                     f"{'OK' if recovery_result.success else 'tried'} "
@@ -2820,6 +3220,11 @@ class Engine:
                         self._last_successful_submit[account.email] = time.time()
                         # Smart Recovery: +1 credit on success
                         self._credit_window.record_success(account.email)
+                        # Progressive unlock: signal other foremen to start
+                        supervisor = self._supervisors.get(account.email)
+                        if supervisor and not supervisor._first_submit_ok.is_set():
+                            supervisor._first_submit_ok.set()
+                            log.info(f"[{fid}] 🚀 First submit success → unlocking remaining foremen")
                         # Smart-Hide: countdown to re-hide browser after 403 recovery
                         _sh_remaining = self._smart_hide_rehide_countdown.get(account.email, 0)
                         if _sh_remaining > 0:
@@ -5574,6 +5979,13 @@ class Engine:
                                     # Fix: borrow x-client-data from other accounts
                                     # after restart (new browser may have short value)
                                     self._account_manager.fix_short_client_data()
+                                    # Fix #3: Wait for x-client-data recovery after restart
+                                    # Chrome Variations Service needs 15-30s to generate
+                                    # full x-client-data. Without this gate, attempts 4-5
+                                    # fire with 8-char stale value → guaranteed 403.
+                                    log.info(f"⏳ Upscale: Waiting for x-client-data recovery...")
+                                    await self._wait_for_account_ready(account, timeout=30.0)
+                                    await self._wait_for_recaptcha_ready(account, max_wait=15.0)
                                 else:
                                     log.error(f"❌ Upscale: Browser restart returned False")
                             except Exception as restart_err:

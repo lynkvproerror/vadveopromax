@@ -256,19 +256,52 @@ VM_INDICATORS = ["VBOX", "VMWARE", "QEMU", "XEN", "HYPERV"]
 
 ---
 
-## VIII. Tab License (UI)
+## IX. 🦀 Rust Native Security Hardening (NEW)
 
-### Giao diện kích hoạt license:
-- **Trial banner**: Countdown số ngày trial còn lại
-- **Activation form**: Nhập license key `XXXX-XXXX-XXXX-XXXX`
-- **Pricing cards**: 5 gói (1M → Vĩnh viễn) với glassmorphism UI
-- **Usage stats**: Total generations, downloads, last gen time
+> **Tài liệu chi tiết**: [`RUST_SECURITY_HARDENING.md`](./reference_docs/RUST_SECURITY_HARDENING.md)
 
-> Source: `ui/tabs/tab_license.py` → `TabLicense`
+### Mục tiêu
+Compile critical security modules (License Verify, Integrity Check, Anti-Debug, HWID) sang **Rust native binary** (.pyd/.so) thông qua **PyO3** — chống decompile, chống patch, chống crack.
+
+### So sánh
+
+| Attack | Python (hiện tại) | Rust (new) |
+|--------|-------------------|------------|
+| Decompile | ⚠️ `uncompyle6` | ❌ Impossible |
+| Strings extract | ⚠️ Plaintext | ❌ Encrypted |
+| Bytecode patch | ⚠️ Easy | ❌ No bytecode |
+| Debug attach | ⚠️ `pydevd` | ❌ 5-layer anti-debug |
+| Memory dump | ⚠️ Plaintext RAM | ✅ Zeroed after use |
+
+### Priority
+- **P0**: License Verify, Integrity Check
+- **P1**: HWID Binding, Anti-Debug
+- **P2**: Crypto (AES/HMAC), Trial Protection
+- **P3**: Environment Check (VM/Sandbox)
 
 ---
 
-## IX. File Map — Toàn bộ files liên quan
+## IX.B. 🛡️ Attack Surface Analysis (NEW)
+
+> **Tài liệu chi tiết**: [`ATTACK_SURFACE_ANALYSIS.md`](./reference_docs/ATTACK_SURFACE_ANALYSIS.md)
+
+**49 attack vectors** được phân tích toàn diện, bao gồm:
+- 8 Binary/Static attacks (PyInstaller extract, loader, process hollowing...)
+- 6 Runtime/Dynamic attacks (monkey patch, import hook, Frida...)
+- 6 Network/MITM attacks (SSL pinning, replay, server emulation, DNS spoof...)
+- 5 License attacks (keygen, shared keys...)
+- 6 Environment manipulation (VM snapshot, FS virtualization...)
+- 3 Build/Deploy attacks (code signing, supply chain...)
+- 3 Data leak attacks (log leak, clipboard, memory forensics)
+- 6 Extension/Browser attacks (WebSocket hijack, CDP abuse, token theft, sideload...)
+- 4 Python-specific attacks (inspect/gc, ctypes, race condition, differential analysis)
+- 5 Infrastructure/Human attacks (rootkit, social engineering, credential stuffing...)
+
+**Coverage: 49/49 = 100%** ✅
+
+---
+
+## X. File Map — Toàn bộ files liên quan
 
 ### Documentation (`00 - Documentation/`)
 
@@ -288,6 +321,8 @@ VM_INDICATORS = ["VBOX", "VMWARE", "QEMU", "XEN", "HYPERV"]
 | `05_Security/docs/LICENSE_MANAGER_GUI_PLAN.md` | Admin GUI plan |
 | `05_Security/docs/LICENSE_MANAGER_GUI_CHANGELOG.md` | Admin GUI changelog |
 | `05_Security/docs/SECURITY_CHANGELOG.md` | Security changelog |
+| `05_Security/docs/RUST_SECURITY_HARDENING.md` | 🦀 Rust native binary security — anti-crack, anti-tamper |
+| `05_Security/docs/ATTACK_SURFACE_ANALYSIS.md` | 🛡️ 35 attack vectors — full coverage analysis |
 | `03_Backend/FIREBASE_SECURITY_RULES.md` | Firestore security rules |
 | `03_Backend/TOKEN_SECURITY.md` | Token security |
 | `01_UI_UX/TAB_08_LICENSE.md` | License tab UI spec |
@@ -309,3 +344,4 @@ VM_INDICATORS = ["VBOX", "VMWARE", "QEMU", "XEN", "HYPERV"]
 | `services/permissions.py` | Role-based feature gating (canonical) |
 | `config/constants.py` | LicenseTier enum, AppConstants |
 | `ui/tabs/tab_license.py` | License UI tab |
+| `veo_security/` | 🦀 Rust crate — native security modules (planned) |

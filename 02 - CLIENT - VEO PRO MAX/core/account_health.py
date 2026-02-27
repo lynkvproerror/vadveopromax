@@ -22,8 +22,8 @@ log = logging.getLogger(__name__)
 # ── Constants ──────────────────────────────────────────────────
 MAX_CREDITS = 10
 SUSPEND_THRESHOLD = 0
-PROBE_THRESHOLD = 3
-PASSIVE_INTERVAL = 300        # seconds (5 min)
+PROBE_THRESHOLD = 1
+PASSIVE_INTERVAL = 60         # seconds (1 min) — was 300s, too slow for recovery
 SLOW_START_CREDITS = 5
 
 
@@ -174,6 +174,9 @@ class CreditWindow:
         
         Call this every ~60 seconds from a background coroutine.
         
+        Also detects accounts suspended too long (>180s) and flags them
+        for browser restart to break out of permanent suspension loops.
+        
         Returns:
             List of emails that became probe-ready.
         """
@@ -183,6 +186,19 @@ class CreditWindow:
         for email, h in self._accounts.items():
             if not h.suspended:
                 continue
+            
+            suspended_secs = int(now - h.suspended_at)
+            
+            # Flag for browser restart if suspended > 3 minutes
+            # This breaks the abc14-style loop where account is excluded
+            # permanently because the underlying issue is never fixed
+            if (suspended_secs > 180 and 
+                    not getattr(h, 'restart_requested', False)):
+                h.restart_requested = True
+                log.warning(
+                    f"[CreditWindow] {email}: suspended >{suspended_secs}s — "
+                    f"flagging for browser restart recovery"
+                )
             
             elapsed = now - h.last_passive_tick
             if elapsed < self._passive_interval:
@@ -194,7 +210,7 @@ class CreditWindow:
             
             log.info(
                 f"[CreditWindow] {email}: passive +1 credit "
-                f"(now {h.credits}, suspended {int(now - h.suspended_at)}s ago)"
+                f"(now {h.credits}, suspended {suspended_secs}s ago)"
             )
             
             # Check probe readiness
@@ -207,6 +223,23 @@ class CreditWindow:
                 )
         
         return probe_ready
+    
+    def get_restart_needed(self) -> list:
+        """Get list of suspended accounts that need browser restart.
+        
+        Returns emails where restart_requested=True.
+        Caller should restart browser and call clear_restart_flag().
+        """
+        return [
+            email for email, h in self._accounts.items()
+            if h.suspended and getattr(h, 'restart_requested', False)
+        ]
+    
+    def clear_restart_flag(self, email: str) -> None:
+        """Clear restart flag after browser has been restarted."""
+        h = self._accounts.get(email)
+        if h:
+            h.restart_requested = False
     
     # ── Reactivation ──────────────────────────────────────────
     

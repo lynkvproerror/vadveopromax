@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
 from core.error_classifier import ErrorType, classify_error, ERROR_CREDIT_COST
+from config.constants import MIN_VALID_XCD
 
 log = logging.getLogger(__name__)
 
@@ -75,10 +76,12 @@ async def verify_account_health(
         checks["extension"] = False
     
     # 2. x-client-data valid length?
+    # Fix #4a: Threshold 100→40 to match _wait_for_account_ready MIN_GOOD.
+    # HAR-verified: valid x-client-data is 48+ chars. 100 was too strict.
     if ext_bridge and hasattr(ext_bridge, '_header_cache'):
         cache = ext_bridge._header_cache.get(email, {})
         xcd = cache.get("x-client-data", "")
-        checks["xcd_valid"] = len(xcd) > 100
+        checks["xcd_valid"] = len(xcd) > MIN_VALID_XCD
     else:
         checks["xcd_valid"] = True  # Can't check = assume OK
     
@@ -93,13 +96,18 @@ async def verify_account_health(
         checks["recaptcha_ready"] = False
     
     # 4. Probe request (only if all other checks pass)
+    # Fix #4b: Use reCAPTCHA token generation as probe instead of
+    # lightweight headers refresh. This actually tests the critical
+    # path that fails in production (abc14 passed old probe but
+    # failed first real task with 403).
     if not skip_probe and all(checks.values()) and ext_bridge:
         try:
-            # Use lightweight headers refresh as probe
-            result = await ext_bridge.refresh_headers_lightweight(
+            # Generate a real reCAPTCHA token — this tests the full
+            # reCAPTCHA pipeline (widget loaded + evaluation OK)
+            token = await ext_bridge.request_recaptcha(
                 email, timeout=10
             )
-            checks["probe_ok"] = bool(result)
+            checks["probe_ok"] = bool(token and len(token) > 100)
         except Exception:
             checks["probe_ok"] = False
     elif not skip_probe:
@@ -245,9 +253,9 @@ _ACTIONS = {
 REMEDY_CHAINS: Dict[ErrorType, List[Remedy]] = {
     
     ErrorType.RECAPTCHA_403: [
-        Remedy("borrow_headers", "Copy x-client-data from healthy account", 0),
         Remedy("reload_page", "Full page reload → fresh reCAPTCHA context", 10),
         Remedy("soft_recovery", "Navigate away + back → reset reCAPTCHA", 8),
+        Remedy("hard_restart", "Kill Chrome + relaunch for fresh reCAPTCHA", 15),
         Remedy("suspend", "Suspend account + migrate tasks", 0),
     ],
     

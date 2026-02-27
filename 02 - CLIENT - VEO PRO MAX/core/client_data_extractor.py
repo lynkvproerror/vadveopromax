@@ -29,7 +29,8 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 # Minimum length for a "good" x-client-data value
-MIN_GOOD_LENGTH = 20
+from config.constants import MIN_VALID_XCD
+MIN_GOOD_LENGTH = MIN_VALID_XCD  # Shared constant (50)
 
 # Files needed for Chrome Variations Service (copy from default profile)
 VARIATIONS_FILES = [
