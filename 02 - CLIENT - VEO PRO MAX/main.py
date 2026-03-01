@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 VEO Pro Max - Entry Point (PySide6)
-Version: 2.0.0
+Version: 2.1.0
 """
 
 import sys
@@ -57,7 +57,7 @@ def main():
         # Create Qt application
         app = QApplication(sys.argv)
         app.setApplicationName("VEO Pro Max")
-        app.setApplicationVersion("2.0.0")
+        app.setApplicationVersion("2.1.0")
         
         # Apply theme
         theme_manager = ThemeManager()

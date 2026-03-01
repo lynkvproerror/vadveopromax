@@ -149,8 +149,22 @@ def run_nuitka_build():
         # Output mode
         "--standalone",
 
+        # Auto-accept downloads (MinGW64, ccache)
+        "--assume-yes-for-downloads",
+
         # PySide6 plugin (auto-includes Qt DLLs)
         "--enable-plugin=pyside6",
+
+        # Exclude heavy ML packages not needed by app
+        "--nofollow-import-to=torch",
+        "--nofollow-import-to=tensorflow",
+        "--nofollow-import-to=numpy",
+        "--nofollow-import-to=scipy",
+        "--nofollow-import-to=matplotlib",
+        "--nofollow-import-to=pandas",
+        "--nofollow-import-to=cv2",
+        "--nofollow-import-to=PIL",
+        "--nofollow-import-to=sklearn",
 
         # Include packages that may not be auto-detected
         "--include-package=security",
