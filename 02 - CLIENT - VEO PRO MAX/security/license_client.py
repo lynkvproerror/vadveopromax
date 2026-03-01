@@ -317,7 +317,7 @@ class LicenseStorage:
             
             # === ANTI-TAMPER ===
             nonce,                        # Random per save
-            self.APP_VERSION,             # Detect version mismatch
+            "VEO_SIG_V3",                 # Static marker (version-agnostic)
             str(len(str(data_for_len))),  # Data length (excluding meta-fields)
             
             # === OBFUSCATION ===
@@ -353,7 +353,8 @@ class LicenseStorage:
         """Save license data locally (AES-256 encrypted + HMAC signed)."""
         # Add signature BEFORE encryption
         license_data['_sig'] = self._generate_signature(license_data)
-        license_data['_sig_version'] = 2  # Signature format version
+        license_data['_sig_version'] = 3  # v3: version-agnostic signature
+        license_data['_app_version'] = self.APP_VERSION  # Informational only
         
         data_str = json.dumps(license_data, default=str)
         
@@ -366,7 +367,7 @@ class LicenseStorage:
         self.LICENSE_FILE.write_bytes(encrypted)
     
     def load(self) -> Optional[dict]:
-        """Load license data and verify signature."""
+        """Load license data, verify signature, and auto-migrate old formats."""
         if not self.LICENSE_FILE.exists():
             return None
         
@@ -381,12 +382,25 @@ class LicenseStorage:
             
             data = json.loads(decrypted.decode())
             
-            # 🔒 ALWAYS VERIFY SIGNATURE (no version bypass!)
-            if not self._verify_signature(data):
-                self.clear()
-                return None
+            # 🔒 VERIFY SIGNATURE
+            if self._verify_signature(data):
+                return data
             
-            return data
+            # 🔄 MIGRATION: old sig_version (v2) used APP_VERSION in signature
+            # → fails when app upgrades. Try to migrate by re-signing.
+            old_version = data.get('_sig_version', 0)
+            if old_version <= 2 and data.get('key'):
+                log.info(f"[LicenseStorage] Migrating license from sig v{old_version} → v3")
+                # Re-sign with new version-agnostic format
+                data.pop('_sig', None)
+                data.pop('_nonce', None)
+                self.save(data)  # save() uses v3 signature
+                log.info("[LicenseStorage] ✅ License migrated successfully")
+                return data
+            
+            # Signature invalid and not migratable → tampered
+            self.clear()
+            return None
         except:
             return None
     
@@ -510,10 +524,16 @@ class LicenseClient:
                 sys.path.insert(0, security_dir)
             
             # Load encrypted API keys from _keys.dat first
-            from _encrypted_api_keys import set_runtime_keys
+            try:
+                from security._encrypted_api_keys import set_runtime_keys
+            except ImportError:
+                from _encrypted_api_keys import set_runtime_keys
             set_runtime_keys()
             
-            from firebase_rest_client import FirebaseRESTClient, SecureFirebaseConfig
+            try:
+                from security.firebase_rest_client import FirebaseRESTClient, SecureFirebaseConfig
+            except ImportError:
+                from firebase_rest_client import FirebaseRESTClient, SecureFirebaseConfig
             self._rest_client = FirebaseRESTClient()
             self._use_rest = True
             self._which_db = "rest_api"
@@ -581,9 +601,15 @@ class LicenseClient:
         try:
             import sys
             sys.path.insert(0, str(Path(__file__).parent))
-            from _encrypted_api_keys import set_runtime_keys
+            try:
+                from security._encrypted_api_keys import set_runtime_keys
+            except ImportError:
+                from _encrypted_api_keys import set_runtime_keys
             set_runtime_keys()
-            from firebase_rest_client import FirebaseRESTClient
+            try:
+                from security.firebase_rest_client import FirebaseRESTClient
+            except ImportError:
+                from firebase_rest_client import FirebaseRESTClient
             self._rest_client = FirebaseRESTClient()
             self._use_rest = True
             return self._activate_with_rest(license_key)

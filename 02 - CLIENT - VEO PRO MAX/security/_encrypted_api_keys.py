@@ -35,7 +35,10 @@ _KEYS_INITIALIZED = False
 
 def _get_encryption_key():
     """Get hardware-bound encryption key (always HWID-bound)."""
-    from firebase_rest_client import _HardwareBinder
+    try:
+        from security.firebase_rest_client import _HardwareBinder
+    except ImportError:
+        from firebase_rest_client import _HardwareBinder
     return _HardwareBinder.get_machine_key()
 
 
@@ -46,7 +49,10 @@ def set_runtime_keys():
     1. _encrypted_keys.py (embedded in code — always available)
     2. _keys.dat (legacy external file — optional fallback)
     """
-    from firebase_rest_client import SecureFirebaseConfig
+    try:
+        from security.firebase_rest_client import SecureFirebaseConfig
+    except ImportError:
+        from firebase_rest_client import SecureFirebaseConfig
     global _KEYS_INITIALIZED
 
     if _KEYS_INITIALIZED:
@@ -57,12 +63,18 @@ def set_runtime_keys():
 
     # Priority 1: Embedded keys in _encrypted_keys.py
     try:
-        from _encrypted_keys import PRIMARY_KEY_ENCRYPTED, BACKUP_KEY_ENCRYPTED
+        from security._encrypted_keys import PRIMARY_KEY_ENCRYPTED, BACKUP_KEY_ENCRYPTED
+    except ImportError:
+        try:
+            from _encrypted_keys import PRIMARY_KEY_ENCRYPTED, BACKUP_KEY_ENCRYPTED
+        except ImportError:
+            PRIMARY_KEY_ENCRYPTED = None
+            BACKUP_KEY_ENCRYPTED = None
+    
+    if PRIMARY_KEY_ENCRYPTED and BACKUP_KEY_ENCRYPTED:
         SecureFirebaseConfig.set_encrypted_keys(PRIMARY_KEY_ENCRYPTED, BACKUP_KEY_ENCRYPTED)
         _KEYS_INITIALIZED = True
         return True
-    except ImportError:
-        pass
 
     # Priority 2: External file _keys.dat (legacy)
     if _KEYS_FILE.exists():
@@ -84,7 +96,10 @@ def set_runtime_keys():
 
 def get_key_mode():
     """Get current key mode."""
-    from firebase_rest_client import SecureFirebaseConfig
+    try:
+        from security.firebase_rest_client import SecureFirebaseConfig
+    except ImportError:
+        from firebase_rest_client import SecureFirebaseConfig
     return SecureFirebaseConfig.get_key_mode()
 
 

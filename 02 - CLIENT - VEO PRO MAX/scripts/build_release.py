@@ -304,6 +304,24 @@ def main():
     print("\n📦 Copying release files...")
     copy_release_files()
 
+    # Step 5.5: Obfuscate and deploy extension
+    print("\n🔒 Obfuscating and deploying extension...")
+    try:
+        from obfuscate_extension import process_extension
+        ext_output = OUTPUT_DIR / "extension"
+        if process_extension(ext_output):
+            print(f"  ✅ Extension deployed to: {ext_output}")
+        else:
+            print("  ⚠️ Extension deployment skipped (source not found)")
+    except ImportError:
+        # Fallback: try running as subprocess
+        import subprocess
+        ext_script = SCRIPT_DIR / "obfuscate_extension.py"
+        if ext_script.exists():
+            subprocess.run([sys.executable, str(ext_script)], cwd=str(PROJECT_ROOT))
+        else:
+            print("  ⚠️ obfuscate_extension.py not found")
+
     # Step 6: Update version.json with build info
     version_file = OUTPUT_DIR / "version.json"
     if version_file.exists():
