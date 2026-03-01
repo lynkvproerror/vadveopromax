@@ -116,6 +116,7 @@ class LicenseInfo:
     expires: Optional[datetime] = None
     machine_id: Optional[str] = None
     error: Optional[str] = None
+    limits_override: Optional[dict] = None  # _lim from Firebase
 
 
 @dataclass
@@ -678,7 +679,7 @@ class LicenseClient:
                 expires = datetime.now() + timedelta(days=90)
             
             # Save locally (AES-256 encrypted + HMAC signed)
-            self.storage.save({
+            save_data = {
                 'key': license_key,
                 'tier': tier_code,
                 'role': role_code,
@@ -688,7 +689,12 @@ class LicenseClient:
                 '_last_known_time': datetime.now().isoformat(),
                 '_validation_source': status,
                 'client_name': client_name,
-            })
+            }
+            # Cache _lim (Level 1 security)
+            server_lim = data.get('_lim')
+            if server_lim:
+                save_data['_lim'] = server_lim
+            self.storage.save(save_data)
             self._invalidate_validate_cache()  # Force fresh validate()
             
             tier = self._tier_from_code(tier_code)
@@ -699,7 +705,8 @@ class LicenseClient:
                 tier=tier,
                 role=role,
                 expires=expires,
-                machine_id=self.machine_id
+                machine_id=self.machine_id,
+                limits_override=server_lim
             )
             
         except ConnectionError as e:
@@ -837,7 +844,8 @@ class LicenseClient:
             tier=tier,
             role=role,  # 🆕
             expires=self._safe_parse_dt(cached.get('expires', '2000-01-01')),
-            machine_id=self.machine_id
+            machine_id=self.machine_id,
+            limits_override=cached.get('_lim')
         )
     
     def _validate_with_rest(self, license_key: str) -> LicenseInfo:
@@ -877,6 +885,10 @@ class LicenseClient:
         # Sync tier/role from server → cache
         cached['tier'] = data.get('_t') or data.get('tier') or cached.get('tier')
         cached['role'] = data.get('_role') or data.get('role') or cached.get('role')
+        # Cache _lim (Level 1 security)
+        server_lim = data.get('_lim')
+        if server_lim:
+            cached['_lim'] = server_lim
         
         # 🔒 LT ROLLING: client controls expiry, NOT server
         tier_code = cached.get('tier', '')
@@ -915,7 +927,8 @@ class LicenseClient:
             tier=tier,
             role=role,
             expires=expires,
-            machine_id=self.machine_id
+            machine_id=self.machine_id,
+            limits_override=server_lim
         )
     
     def is_licensed(self) -> bool:

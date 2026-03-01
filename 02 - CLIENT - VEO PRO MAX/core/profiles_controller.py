@@ -366,11 +366,11 @@ class ProfilesController:
             # Access singleton if available (set during app init)
             ctrl = getattr(self, '_app_controller', None)
             if ctrl and hasattr(ctrl, '_permissions'):
-                max_cookies = ctrl._permissions.limits.max_cookies
+                max_accounts = ctrl._permissions.limits.max_accounts
                 current_count = len(self._profiles)
-                if max_cookies > 0 and current_count >= max_cookies:
+                if max_accounts > 0 and current_count >= max_accounts:
                     log.warning(
-                        f"[G6] Account limit reached: {current_count}/{max_cookies}. "
+                        f"[G6] Account limit reached: {current_count}/{max_accounts}. "
                         f"Upgrade license to add more. Rejected: {email}"
                     )
                     return False

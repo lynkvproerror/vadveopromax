@@ -52,10 +52,11 @@ class Feature(str, Enum):
 @dataclass
 class RoleLimits:
     """Limits for a role."""
-    max_cookies: int = 1
+    max_accounts: int = 1
     max_foremen: int = 2          # Max concurrent foremen (submit workers)
+    max_workers_per_account: int = 20  # Max workers per account
     max_prompts_per_batch: int = 10
-    max_outputs_per_prompt: int = 2
+    max_outputs_per_prompt: int = 4
     daily_generation_limit: int = 100
     features: Set[Feature] = field(default_factory=set)
 
@@ -72,10 +73,11 @@ class PermissionsSystem:
     # Role → Limits mapping (per docs)
     ROLE_LIMITS: Dict[Role, RoleLimits] = {
         Role.TRIAL: RoleLimits(
-            max_cookies=1,
+            max_accounts=1,
             max_foremen=2,          # Trial: max 2 concurrent foremen
+            max_workers_per_account=8,
             max_prompts_per_batch=10,
-            max_outputs_per_prompt=2,
+            max_outputs_per_prompt=4,
             daily_generation_limit=100,
             features={
                 Feature.TEXT_TO_VIDEO,
@@ -95,8 +97,9 @@ class PermissionsSystem:
             },
         ),
         Role.PREMIUM: RoleLimits(
-            max_cookies=-1,      # Unlimited
+            max_accounts=-1,      # Unlimited
             max_foremen=-1,      # Unlimited
+            max_workers_per_account=20,
             max_prompts_per_batch=-1,  # Unlimited
             max_outputs_per_prompt=4,
             daily_generation_limit=-1,  # Unlimited
@@ -118,8 +121,9 @@ class PermissionsSystem:
             },
         ),
         Role.TESTER: RoleLimits(
-            max_cookies=-1,      # Unlimited
+            max_accounts=-1,      # Unlimited
             max_foremen=-1,      # Unlimited
+            max_workers_per_account=20,
             max_prompts_per_batch=-1,  # Unlimited
             max_outputs_per_prompt=4,
             daily_generation_limit=-1,  # Unlimited
@@ -184,7 +188,7 @@ class PermissionsSystem:
         """Check if a limit is exceeded.
         
         Args:
-            limit_name: Name of the limit (e.g., 'max_cookies')
+            limit_name: Name of the limit (e.g., 'max_accounts')
             current_value: Current usage value
         
         Returns:
@@ -233,9 +237,55 @@ class PermissionsSystem:
         """Get all limits as dict."""
         limits = self.limits
         return {
-            "max_cookies": limits.max_cookies,
+            "max_accounts": limits.max_accounts,
             "max_foremen": limits.max_foremen,
+            "max_workers_per_account": limits.max_workers_per_account,
             "max_prompts_per_batch": limits.max_prompts_per_batch,
             "max_outputs_per_prompt": limits.max_outputs_per_prompt,
             "daily_generation_limit": limits.daily_generation_limit,
         }
+    
+    def apply_server_limits(self, lim: dict):
+        """Override hardcoded limits with server values from _lim field.
+        
+        Args:
+            lim: dict with short keys {ac, fm, wk, op, dg}
+        """
+        if not lim or not isinstance(lim, dict):
+            return
+        role_lim = self.limits
+        if "ac" in lim:
+            role_lim.max_accounts = int(lim["ac"])
+        if "fm" in lim:
+            role_lim.max_foremen = int(lim["fm"])
+        if "wk" in lim:
+            role_lim.max_workers_per_account = int(lim["wk"])
+        if "op" in lim:
+            role_lim.max_outputs_per_prompt = int(lim["op"])
+        if "dg" in lim:
+            role_lim.daily_generation_limit = int(lim["dg"])
+        # Store for integrity verification
+        self._server_lim = dict(lim)
+    
+    def verify_limits_integrity(self) -> bool:
+        """Level 3: Verify RAM limits match signed cache.
+        
+        Returns True if OK, False if tampered.
+        """
+        lim = getattr(self, '_server_lim', None)
+        if not lim:
+            return True  # No server limits applied
+        ram = self.limits
+        return (
+            ram.max_accounts == int(lim.get("ac", ram.max_accounts))
+            and ram.max_foremen == int(lim.get("fm", ram.max_foremen))
+            and ram.max_workers_per_account == int(lim.get("wk", ram.max_workers_per_account))
+            and ram.max_outputs_per_prompt == int(lim.get("op", ram.max_outputs_per_prompt))
+            and ram.daily_generation_limit == int(lim.get("dg", ram.daily_generation_limit))
+        )
+    
+    def reset_limits_from_cache(self):
+        """Reset RAM limits from cached server values (after tamper detection)."""
+        lim = getattr(self, '_server_lim', None)
+        if lim:
+            self.apply_server_limits(lim)

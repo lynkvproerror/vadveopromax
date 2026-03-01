@@ -221,6 +221,10 @@ class LicenseController:
                 if info.tier:
                     self._permissions.set_role_from_tier(info.tier)
                 
+                # Apply dynamic limits from Firebase _lim
+                if hasattr(info, 'limits_override') and info.limits_override:
+                    self._permissions.apply_server_limits(info.limits_override)
+                
                 emit_event(EventType.LICENSE_VALIDATED, {"key": license_key[:8] + "..."})
                 self._notify_license_changed()
                 

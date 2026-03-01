@@ -303,7 +303,7 @@ XCD_VARIATIONS_WAIT_TIMEOUT = 20  # seconds
 class AppConstants:
     """Application-wide constants."""
     APP_NAME = "VEO Pro Max"
-    APP_VERSION = "2.1.0"
+    APP_VERSION = "2.2.0"
     
     # Auto-update (GitHub public repo)
     GITHUB_REPO = "lynkvproerror/vadveopromax"

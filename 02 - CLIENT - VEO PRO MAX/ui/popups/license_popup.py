@@ -87,6 +87,23 @@ class LicenseRequiredDialog(QDialog):
         self._active_tier = self._get_active_tier()  # Current active tier code
         self._is_first_buy = self._check_first_buy()  # Check purchase history
         
+        # Dynamic trial days from tier template
+        self._trial_days = 3  # fallback
+        try:
+            rest = self._get_rest_client()
+            if rest and hasattr(rest, 'read_tier_defaults'):
+                defaults = rest.read_tier_defaults()
+                trial_tmpl = defaults.get('TRIAL', {})
+                if trial_tmpl.get('days', 0) > 0:
+                    self._trial_days = trial_tmpl['days']
+        except Exception:
+            pass
+        # Override FREE card desc with actual trial days
+        for td in TIER_DEFS:
+            if td['key'] == 'FREE':
+                td['desc'] = f"{self._trial_days} ngày dùng thử"
+                break
+        
         self.setWindowTitle("VEO Pro Max — License")
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setMinimumSize(700, 580)
@@ -364,8 +381,10 @@ class LicenseRequiredDialog(QDialog):
         
         clayout.addWidget(req_frame)
         
-        # ── Contact info ──
-        contact = QLabel("📞 Liên hệ mua license: Zalo 0865 819 458 hoặc 0865 679 288")
+        # ── Contact info (from secure provider) ──
+        from config.contact_provider import get_contact_info
+        _ci = get_contact_info()
+        contact = QLabel(f"📞 Liên hệ mua license: Zalo {_ci.get('zalo', 'N/A')} hoặc {_ci.get('phone', 'N/A')}")
         contact.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
         contact.setAlignment(Qt.AlignCenter)
         clayout.addWidget(contact)
@@ -831,12 +850,18 @@ class LicenseRequiredDialog(QDialog):
                     'expires': expires,
                     'machine_id': mid,
                     'last_verified': datetime.now().isoformat(),
+                    '_lim': trial.get('_lim'),  # Dynamic limits from server
                 }
                 lc.storage.save(trial_data)
                 if hasattr(lc, '_invalidate_validate_cache'):
                     lc._invalidate_validate_cache()
                 self.controller._update_permissions()
                 self.controller._license_valid = True
+                
+                # Apply trial dynamic limits
+                trial_lim = trial.get('_lim')
+                if trial_lim and hasattr(self.controller, '_permissions'):
+                    self.controller._permissions.apply_server_limits(trial_lim)
             
             self._status_label.setText("✅ Đã kích hoạt 3 ngày dùng thử!")
             self._status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 11px;")

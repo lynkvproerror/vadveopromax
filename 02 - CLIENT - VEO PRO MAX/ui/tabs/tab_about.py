@@ -137,11 +137,15 @@ class TabAbout(QWidget):
         """Create external links section."""
         section, layout = self._create_section("🔗 LINKS")
         
+        from config.contact_provider import get_contact_info
+        _ci = get_contact_info()
+
         links = [
             ("🌐 Website", "https://veoauto.com"),
             ("📖 Documentation", "https://docs.veoauto.com"),
             ("💬 Support", "https://support.veoauto.com"),
-            ("📧 Contact", "support@veoauto.com"),
+            (f"📞 Hotline", _ci.get("phone", "N/A")),
+            (f"💬 Zalo", _ci.get("zalo", "N/A")),
         ]
         
         for icon_label, url in links:

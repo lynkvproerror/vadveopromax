@@ -120,6 +120,7 @@ class TabLicense(QWidget):
         limit_defs = [
             ("accounts", t("license.limits.accounts")),
             ("threads", t("license.limits.threads")),
+            ("workers", "Max Workers/Acc"),
             ("daily", t("license.limits.daily")),
             ("batch", t("license.limits.batch")),
         ]
@@ -210,11 +211,23 @@ class TabLicense(QWidget):
         # Check first-buy eligibility (matches popup logic)
         self._is_first_buy = self._check_first_buy()
         
+        # Get dynamic trial days from tier template
+        _tdl = 3  # fallback
+        try:
+            from security._encrypted_api_keys import set_runtime_keys
+            set_runtime_keys()
+            from security.firebase_rest_client import FirebaseRESTClient
+            _rest = FirebaseRESTClient()
+            _defs = _rest.read_tier_defaults()
+            _tdl = _defs.get('TRIAL', {}).get('days', 3) or 3
+        except Exception:
+            pass
+        
         # (tier_key, name, price, features, color)
         # Luồng = số tác vụ xử lý đồng thời (tránh dùng từ 'Workers' trên UI)
         tiers = [
             ("FREE", t("license.tiers.free"), t("license.free"), [
-                t("license.features.trial_days"),
+                t("license.features.trial_days").format(days=_tdl),
                 t("license.features.one_account"),
                 t("license.features.two_threads"),
                 t("license.features.gen_per_day"),
@@ -534,8 +547,9 @@ class TabLicense(QWidget):
                 # 3.6d: Limits
                 def fmt(v):
                     return "∞" if v < 0 else str(v)
-                self._limit_labels.get("accounts", QLabel()).setText(fmt(lim.max_cookies))
+                self._limit_labels.get("accounts", QLabel()).setText(fmt(lim.max_accounts))
                 self._limit_labels.get("threads", QLabel()).setText(fmt(lim.max_foremen))
+                self._limit_labels.get("workers", QLabel()).setText(fmt(lim.max_workers_per_account))
                 self._limit_labels.get("daily", QLabel()).setText(fmt(lim.daily_generation_limit))
                 self._limit_labels.get("batch", QLabel()).setText(fmt(lim.max_prompts_per_batch))
                 
@@ -568,7 +582,7 @@ class TabLicense(QWidget):
                     tier_code = ls.get('tier', '') if ls else ''
                     if tier_code == 'LT':
                         # Lifetime: no countdown
-                        self._set_banner("♾️ Vĩnh Viễn — Lifetime License", Theme.GREEN)
+                        self._set_banner(f"♾️ {t('license.lifetime_banner')}", Theme.GREEN)
                         self._countdown_timer.stop()
                     else:
                         self._update_countdown()  # Initial update
@@ -578,7 +592,7 @@ class TabLicense(QWidget):
                         self._update_trial_countdown()  # Initial update
                         self._countdown_timer.start()
                     else:
-                        self._set_banner("⏰ TRIAL MODE — Limited Features", Theme.YELLOW)
+                        self._set_banner(f"⏰ {t('license.trial_banner_limited')}", Theme.YELLOW)
             
             if lc:
                 # 3.6c: Usage stats
@@ -624,7 +638,7 @@ class TabLicense(QWidget):
         total_secs = int(remaining.total_seconds())
         
         if total_secs <= 0:
-            self._set_banner("❌ License đã hết hạn!", Theme.RED)
+            self._set_banner(f"❌ {t('license.expired_msg')}", Theme.RED)
             self._countdown_timer.stop()
             return
         
@@ -641,7 +655,7 @@ class TabLicense(QWidget):
         
         exp_str = self._expires_dt.strftime('%Y-%m-%d %H:%M')
         self._set_banner(
-            f"💎 {tier_name} — Còn lại: {days}d {hours:02d}:{mins:02d}:{secs:02d} (hết hạn: {exp_str})",
+            f"💎 {tier_name} — {t('license.remaining_time')}: {days}d {hours:02d}:{mins:02d}:{secs:02d} ({t('license.expires_on')}: {exp_str})",
             Theme.GREEN
         )
     
@@ -656,7 +670,7 @@ class TabLicense(QWidget):
         total_secs = int(remaining.total_seconds())
         
         if total_secs <= 0:
-            self._set_banner("❌ Trial đã hết hạn!", Theme.RED)
+            self._set_banner(f"❌ {t('license.trial_expired_banner')}", Theme.RED)
             self._countdown_timer.stop()
             return
         
@@ -667,7 +681,7 @@ class TabLicense(QWidget):
         
         exp_str = self._expires_dt.strftime('%Y-%m-%d %H:%M')
         self._set_banner(
-            f"⏰ Trial — Còn lại {days}d {hours:02d}:{mins:02d}:{secs:02d} (hết hạn: {exp_str})",
+            f"⏰ Trial — {t('license.remaining_time')} {days}d {hours:02d}:{mins:02d}:{secs:02d} ({t('license.expires_on')}: {exp_str})",
             Theme.YELLOW
         )
     # ── Actions ──────────────────────────────────────────────────

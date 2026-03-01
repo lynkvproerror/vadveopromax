@@ -327,7 +327,8 @@ class SplashScreen(QWidget):
         ver_font = QFont("Segoe UI", 9)
         painter.setFont(ver_font)
         painter.setPen(QColor(Theme.OVERLAY0))
-        painter.drawText(0, H - 35, W - 30, 20, Qt.AlignRight, "v2.0.0")
+        from config.constants import AppConstants
+        painter.drawText(0, H - 35, W - 30, 20, Qt.AlignRight, f"v{AppConstants.APP_VERSION}")
         
         # ── 9. Border ──
         painter.setClipping(False)

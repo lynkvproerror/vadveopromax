@@ -93,7 +93,7 @@ class SettingsBrowserControlsMixin:
             email_item = self.profiles_table.item(row, 2)
             if not email_item or email not in email_item.text():
                 continue
-            actions_widget = self.profiles_table.cellWidget(row, 9)
+            actions_widget = self.profiles_table.cellWidget(row, 8)
             if not actions_widget:
                 break
             toggle_btn = actions_widget.findChild(QPushButton, f"toggle_vis_{email}")
@@ -255,14 +255,6 @@ class SettingsBrowserControlsMixin:
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
-        # Keep browser open checkbox
-        keep_open_cb = QCheckBox("🔓 Keep browser open after login (for debugging)")
-        keep_open_cb.setChecked(False)
-        keep_open_cb.setToolTip(
-            "When checked, the browser will NOT auto-close after login.\n"
-            "Use this to manually inspect the browser session."
-        )
-        layout.addWidget(keep_open_cb)
 
         # Buttons
         buttons = QDialogButtonBox(
@@ -278,7 +270,6 @@ class SettingsBrowserControlsMixin:
 
         email = email_input.text().strip()
         password = password_input.text()
-        keep_browser_open = keep_open_cb.isChecked()
 
         if not email or not password:
             show_warning(self, "Error", "Please enter both email and password.")
@@ -304,7 +295,6 @@ class SettingsBrowserControlsMixin:
                     password=password,
                     timeout_seconds=120,
                     headless=headless,
-                    keep_browser_open=keep_browser_open
                 )
 
                 from PySide6.QtCore import QMetaObject, Qt
@@ -383,49 +373,6 @@ class SettingsBrowserControlsMixin:
         thread = threading.Thread(target=fetch_browser, daemon=True)
         thread.start()
 
-    def _on_restart_browser(self, email: str):
-        """Kill and relaunch Chrome browser for this account."""
-        import threading
-
-        if not show_confirm(self, "Restart Browser",
-                f"Kill and relaunch Chrome for:\n{email}\n\nContinue?", danger=True):
-            return
-
-        print(f"[Settings] 🔁 Restarting browser for: {email}")
-        self._update_row_status(email, "⏳ Restarting...", "...")
-        self.setEnabled(False)
-
-        def _do_restart():
-            ok = False
-            if self.controller:
-                ok = self.controller.restart_browser_for(email)
-
-            from PySide6.QtCore import QMetaObject, Qt, Q_ARG
-            QMetaObject.invokeMethod(
-                self, "_on_browser_restarted",
-                Qt.ConnectionType.QueuedConnection,
-                Q_ARG(str, email),
-                Q_ARG(str, "ok" if ok else "fail"),
-            )
-
-        thread = threading.Thread(target=_do_restart, daemon=True)
-        thread.start()
-
-    @Slot(str, str)
-    def _on_browser_restarted(self, email: str, result: str):
-        """Called when browser restart completes (from background thread)."""
-        self.setEnabled(True)
-        self._refresh_profiles_table()
-        if result == "ok":
-            show_info(
-                self, "Restart Browser",
-                f"✅ Browser restarted for {email}"
-            )
-        else:
-            show_warning(
-                self, "Restart Browser",
-                f"❌ Failed to restart browser for {email}"
-            )
 
     def _on_reload_extension(self, email: str):
         """Hot-reload the Chrome extension for this account."""
@@ -618,28 +565,27 @@ class SettingsBrowserControlsMixin:
             email: Account email
             value: New max_workers value (0-20, capped at 8 for Trial)
         """
-        # Trial guard: max 8 workers
+        # Workers cap: enforce max_workers_per_account from dynamic limits
         try:
             if self.controller and hasattr(self.controller, '_permissions'):
-                from services.permissions import Role
-                role = self.controller._permissions.role
-                if role == Role.TRIAL and value > 8:
-                    # Reset spinbox to 8
+                max_wk = self.controller._permissions.limits.max_workers_per_account
+                if max_wk > 0 and value > max_wk:
+                    # Reset spinbox to limit
                     for row in range(self.profiles_table.rowCount()):
                         email_item = self.profiles_table.item(row, 2)
                         if email_item and email in email_item.text():
                             spin = self.profiles_table.cellWidget(row, 6)
                             if spin:
                                 spin.blockSignals(True)
-                                spin.setValue(8)
+                                spin.setValue(max_wk)
                                 spin.blockSignals(False)
                             break
                     show_warning(
-                        self, "🔒 Trial Limit",
-                        "Gói Trial giới hạn tối đa 8 workers.\n\n"
-                        "Nâng cấp lên Premium để sử dụng tối đa 20 workers."
+                        self, "🔒 Workers Limit",
+                        f"License giới hạn tối đa {max_wk} workers/account.\n\n"
+                        "Nâng cấp gói để tăng giới hạn."
                     )
-                    value = 8
+                    value = max_wk
         except Exception:
             pass
 

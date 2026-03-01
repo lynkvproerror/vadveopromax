@@ -45,13 +45,23 @@ class SettingsSectionsMixin:
             combo.setCurrentText("9:16 (Portrait)" if "PORTRAIT" in _ar.upper() else "16:9 (Landscape)")
         self.setting_combos["Aspect Ratio"] = combo
 
-        # --- Shared: Outputs per Prompt ---
-        out_options = ["1", "2", "3", "4"]
+        # --- Shared: Outputs per Prompt (dynamic from server) ---
+        _max_op = 4  # Default max
+        try:
+            if hasattr(self, 'controller') and self.controller and hasattr(self.controller, '_permissions'):
+                server_op = self.controller._permissions.limits.max_outputs_per_prompt
+                if server_op > 0:
+                    _max_op = max(1, min(server_op, 4))  # Anti-patch: clamp to 1-4 (Google API max)
+        except Exception:
+            pass
+        out_options = [str(i) for i in range(1, _max_op + 1)]
         combo = self._create_setting_row(layout, t("settings.defaults_sub.outputs_per_prompt"), out_options)
         if _s:
-            _cnt = str(getattr(_s, 'default_output_count', 4))
+            _cnt = str(getattr(_s, 'default_output_count', _max_op))
             if _cnt in out_options:
                 combo.setCurrentText(_cnt)
+            else:
+                combo.setCurrentText(str(_max_op))  # Fallback to max allowed
         self.setting_combos["Outputs per Prompt"] = combo
 
         # ─── 🎬 Video Defaults ───
@@ -337,37 +347,7 @@ class SettingsSectionsMixin:
         }
 
         # Note: Max Concurrent Workers removed — now per-account via Chrome Profiles
-
-        # Retry on Error (default for new accounts)
-        retry_row = QHBoxLayout()
-        retry_label = QLabel(t("settings.retry_on_error"))
-        retry_label.setFixedWidth(150)
-        retry_label.setStyleSheet(f"color: {Theme.TEXT};")
-        retry_row.addWidget(retry_label)
-
-        self.retry_count = QSpinBox()
-        self.retry_count.setRange(0, 5)
-        self.retry_count.setValue(saved.get('retry_count', 3))
-        self.retry_count.setFixedWidth(100)
-        retry_row.addWidget(self.retry_count)
-        retry_row.addStretch()
-        layout.addLayout(retry_row)
-
-        # Request Timeout
-        timeout_row = QHBoxLayout()
-        timeout_label = QLabel(t("settings.request_timeout"))
-        timeout_label.setFixedWidth(150)
-        timeout_label.setStyleSheet(f"color: {Theme.TEXT};")
-        timeout_row.addWidget(timeout_label)
-
-        self.request_timeout = QSpinBox()
-        self.request_timeout.setRange(30, 300)
-        self.request_timeout.setValue(saved.get('request_timeout', 120))
-        self.request_timeout.setFixedWidth(100)
-        self.request_timeout.setSuffix("s")
-        timeout_row.addWidget(self.request_timeout)
-        timeout_row.addStretch()
-        layout.addLayout(timeout_row)
+        # Note: Retry on Error + Request Timeout removed — engine handles internally
 
         # === Anti-Detect Spam — bold + emoji ===
         self.anti_detect_switch = self._create_enable_row(
@@ -388,8 +368,6 @@ class SettingsSectionsMixin:
         self.anti_detect_delay_max.setVisible(False)
 
         # Auto-save on change (C1 fix)
-        self.retry_count.valueChanged.connect(self._save_worker_settings)
-        self.request_timeout.valueChanged.connect(self._save_worker_settings)
         self.anti_detect_switch.toggled_signal.connect(self._on_anti_detect_toggled)
         self.anti_detect_delay_min.valueChanged.connect(self._save_worker_settings)
         self.anti_detect_delay_max.valueChanged.connect(self._save_worker_settings)
@@ -447,8 +425,6 @@ class SettingsSectionsMixin:
             from config.settings import get_settings, save_settings
             import logging
             settings = get_settings()
-            settings.retry_count = self.retry_count.value()
-            settings.request_timeout = self.request_timeout.value()
             settings.anti_detect_enabled = self.anti_detect_switch.isToggled()
             settings.anti_detect_delay_min = self.anti_detect_delay_min.value()
             settings.anti_detect_delay_max = self.anti_detect_delay_max.value()

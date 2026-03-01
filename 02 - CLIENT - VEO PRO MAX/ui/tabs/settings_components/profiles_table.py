@@ -26,31 +26,32 @@ class SettingsProfilesMixin:
     handlers defined in SettingsBrowserControlsMixin:
     _on_toggle_account, _on_slots_changed, _on_save_password,
     _on_refresh_session, _on_toggle_browser_visibility,
-    _on_restart_browser, _on_reload_extension, _on_delete_profile,
+    _on_reload_extension, _on_delete_profile,
     _on_add_profile_browser
     """
 
     def _create_profiles_section(self) -> QWidget:
         """Create Chrome Profiles section - per TAB_07_SETTINGS.md spec.
 
-        9 columns: ✓, #, Email, Plan, Credits, Status, Total Output, Ext, Retry, Actions
+        9 columns: ✓, #, Email, Plan, Credits, Status, Total Output, Ext, Actions
         """
         from ui.tabs.tab_settings import ToggleSwitch
 
         section, layout = self._create_section(t("profiles.section_title"))
 
-        # Email privacy state
-        self._emails_hidden = False
+        # Email privacy state — load from saved settings
+        from config.settings import get_settings
+        self._emails_hidden = get_settings().hide_emails
 
-        # Create QTableWidget with 10 columns
+        # Create QTableWidget with 9 columns
         self.profiles_table = QTableWidget()
-        self.profiles_table.setColumnCount(10)
+        self.profiles_table.setColumnCount(9)
         self.profiles_table.setHorizontalHeaderLabels([
             t("profiles.columns.toggle"), t("profiles.columns.num"),
             t("profiles.columns.email"), t("profiles.columns.plan"),
             t("profiles.columns.credits"), t("profiles.columns.status"),
             t("profiles.columns.output"), t("profiles.columns.ext"),
-            t("profiles.columns.retry"), t("profiles.columns.actions")
+            t("profiles.columns.actions")
         ])
 
         # Set column widths per docs spec
@@ -63,8 +64,7 @@ class SettingsProfilesMixin:
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Status
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Total Output
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Ext
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Retry
-        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Actions
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Actions
 
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
@@ -73,8 +73,7 @@ class SettingsProfilesMixin:
         self.profiles_table.setColumnWidth(5, 110)  # Status
         self.profiles_table.setColumnWidth(6, 95)   # Total Output - SpinBox 0-20
         self.profiles_table.setColumnWidth(7, 50)   # Ext - emoji status
-        self.profiles_table.setColumnWidth(8, 50)   # Retry - number
-        self.profiles_table.setColumnWidth(9, 290)  # Actions - 6 buttons
+        self.profiles_table.setColumnWidth(8, 250)  # Actions - 4 buttons
 
         self.profiles_table.setMinimumHeight(120)
         self.profiles_table.setStyleSheet(f"""
@@ -138,9 +137,9 @@ class SettingsProfilesMixin:
         btn_layout.addStretch()
 
         # Email hide/show toggle button
-        self._email_toggle_btn = QPushButton("👁️ Ẩn Email")
+        self._email_toggle_btn = QPushButton("🙈 Hiện Email" if self._emails_hidden else "👁️ Ẩn Email")
         self._email_toggle_btn.setFixedHeight(32)
-        self._email_toggle_btn.setToolTip("Ẩn/hiện email trong bảng")
+        self._email_toggle_btn.setToolTip("Nhấn để hiện email" if self._emails_hidden else "Ẩn/hiện email trong bảng")
         self._email_toggle_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE2};
@@ -283,13 +282,24 @@ class SettingsProfilesMixin:
 
             # Total Output SpinBox (col 6) — per-account concurrent worker limit
             slots_spin = QSpinBox()
-            slots_spin.setRange(0, 20)
-            slots_spin.setValue(acc.get('max_workers', acc.get('max_slots', 20)))
+            # Dynamic max from server (default=20, only server can raise above 20)
+            _max_wk = 20
+            try:
+                if self.controller and hasattr(self.controller, '_permissions'):
+                    server_wk = self.controller._permissions.limits.max_workers_per_account
+                    if server_wk < 0:
+                        _max_wk = 20   # -1 unlimited → cap at 20 (server must set explicit value to go higher)
+                    else:
+                        _max_wk = max(1, server_wk)  # Anti-patch: never allow 0 or negative max
+            except Exception:
+                pass
+            slots_spin.setRange(0, _max_wk)  # min=0 (OFF), max=server-driven
+            slots_spin.setValue(min(acc.get('max_workers', acc.get('max_slots', 20)), _max_wk))
             slots_spin.setToolTip(
-                "Số output/prompt xử lý đồng thời cho tài khoản này\n"
-                "• 0 = TẮT (tài khoản không xử lý)\n"
-                "• 1 output/prompt = 1 video một lúc\n"
-                "• 20 output/prompt = tối đa song song"
+                f"Số output/prompt xử lý đồng thời cho tài khoản này\n"
+                f"• 0 = TẮT (tài khoản không xử lý)\n"
+                f"• 1 output/prompt = 1 video một lúc\n"
+                f"• {_max_wk} output/prompt = tối đa song song"
             )
             slots_spin.setFixedWidth(72)
             # Explicit style: ensure number is visible on dark table background
@@ -355,15 +365,7 @@ class SettingsProfilesMixin:
             ext_item.setToolTip(ext_tip)
             self.profiles_table.setItem(actual_row, 7, ext_item)
 
-            # Retry count (col 8) — shows retry_count from settings
-            retry_count = acc.get('retry_count', 3)
-            retry_item = QTableWidgetItem(str(retry_count))
-            retry_item.setFlags(retry_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            retry_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            retry_item.setToolTip("Max retries on failure (0 = no retries, task fails immediately)")
-            self.profiles_table.setItem(actual_row, 8, retry_item)
-
-            # Actions buttons (col 9)
+            # Actions buttons (col 8)
             actions_widget = QWidget()
             actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
@@ -428,10 +430,6 @@ class SettingsProfilesMixin:
             toggle_btn.clicked.connect(lambda checked, e=email: self._on_toggle_browser_visibility(e))
             actions_layout.addWidget(toggle_btn)
 
-            # Restart Browser button
-            restart_btn = _action_btn("🔁", "Restart Browser (Kill + Relaunch)", "#FF6B00")
-            restart_btn.clicked.connect(lambda checked, e=email: self._on_restart_browser(e))
-            actions_layout.addWidget(restart_btn)
 
             # Reload Extension button
             ext_btn = _action_btn("🧩", "Reload Extension (hot-reload from disk)", "#9B59B6")
@@ -443,7 +441,7 @@ class SettingsProfilesMixin:
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
 
-            self.profiles_table.setCellWidget(actual_row, 9, actions_widget)
+            self.profiles_table.setCellWidget(actual_row, 8, actions_widget)
 
             actual_row += 1
 
@@ -493,6 +491,14 @@ class SettingsProfilesMixin:
     def _toggle_email_visibility(self):
         """Toggle email display between real and masked (***) in the table."""
         self._emails_hidden = not self._emails_hidden
+
+        # Persist to settings
+        try:
+            from config.settings import get_settings, save_settings
+            get_settings().hide_emails = self._emails_hidden
+            save_settings()
+        except Exception:
+            pass
 
         # Update button text
         self._email_toggle_btn.setText("🙈 Hiện Email" if self._emails_hidden else "👁️ Ẩn Email")
@@ -550,13 +556,10 @@ class SettingsProfilesMixin:
             if not email_item:
                 continue
 
-            # Extract raw email from display text (may have 🔑 or 🔓 prefix)
-            email_text = email_item.text().strip()
-            # Remove credential indicator prefix if present
-            for prefix in ("🔑 ", "🔓 "):
-                if email_text.startswith(prefix):
-                    email_text = email_text[len(prefix):].strip()
-                    break
+            # Get real email from UserRole (not display text, which may be masked)
+            email_text = email_item.data(Qt.ItemDataRole.UserRole)
+            if not email_text:
+                continue
 
             ext_connected = False
             ext_has_headers = False

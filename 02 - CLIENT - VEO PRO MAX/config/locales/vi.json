@@ -1,6 +1,19 @@
 {
     "app": {
         "title": "VEO Pro Max",
+        "welcome": "Chào mừng {name}",
+        "welcome_default": "Chào mừng bạn",
+        "contact_support": "Liên hệ hỗ trợ",
+        "greetings": [
+            "Chúc bạn một ngày tốt lành!",
+            "Chúc bạn tài lộc dồi dào!",
+            "Chúc bạn sức khoẻ dẻo dai!",
+            "Chúc bạn tràn đầy năng lượng!",
+            "Chúc bạn thành công rực rỡ!",
+            "Chúc bạn may mắn và hanh thông!",
+            "Chúc bạn vui vẻ và hạnh phúc!",
+            "Chúc bạn sáng tạo bất tận!"
+        ],
         "tabs": {
             "t2v": "Văn bản → Video",
             "i2v": "Ảnh → Video",
@@ -114,9 +127,23 @@
         "select": "Chọn",
         "upgrade": "🔥 Nâng cấp",
         "buy_more": "🛒 Mua thêm",
-        "first_buy_badge": "� Ưu đãi lần đầu!",
+        "first_buy_badge": "🎁 Ưu đãi lần đầu!",
+        "lifetime_label": "Vĩnh Viễn",
+        "remaining_time": "Còn lại",
+        "expired_msg": "License đã hết hạn!",
+        "trial_remaining": "Trial — Còn lại {days} ngày",
+        "trial_expired_msg": "Trial đã hết hạn",
+        "revoked_msg": "License đã bị thu hồi hoặc xoá",
+        "revoked_title": "License bị thu hồi",
+        "revoked_body": "Vui lòng liên hệ admin hoặc nhập key mới.\nApp sẽ đóng nếu không kích hoạt lại.",
+        "enter_new_key": "Nhập Key Mới",
+        "exit_app": "Thoát App",
+        "expires_on": "Hết hạn",
+        "trial_banner_limited": "TRIAL MODE — Tính năng giới hạn",
+        "lifetime_banner": "Vĩnh Viễn — Lifetime License",
+        "trial_expired_banner": "Trial đã hết hạn!",
         "limits": {
-            "accounts": "Tài khoản (max_cookies)",
+            "accounts": "Tài khoản (max_accounts)",
             "threads": "Luồng (toàn cục)",
             "daily": "Tạo/ngày",
             "batch": "Prompts/Lần"
@@ -130,7 +157,7 @@
             "lifetime": "Vĩnh viễn"
         },
         "features": {
-            "trial_days": "⏳ 3 ngày dùng thử",
+            "trial_days": "⏳ {days} ngày dùng thử",
             "one_account": "👤 1 Account duy nhất",
             "two_threads": "⚡ 2 Luồng",
             "gen_per_day": "📊 100 gen/ngày",
@@ -241,7 +268,8 @@
         "queue": "Hàng đợi",
         "memory": "Bộ nhớ",
         "cpu": "CPU",
-        "network": "Mạng"
+        "network": "Mạng",
+        "offline": "Ngoại tuyến"
     },
     "profiles": {
         "section_title": "🌐 Chrome Profiles (Quản lý tài khoản)",

@@ -68,8 +68,8 @@ class Permissions:
     # Feature Limits
     # =========================
     
-    def get_max_cookies(self) -> int:
-        """Max browser cookies allowed"""
+    def get_max_accounts(self) -> int:
+        """Max accounts allowed"""
         role = self._get_role()
         if role == UserRole.TRIAL:
             return 1

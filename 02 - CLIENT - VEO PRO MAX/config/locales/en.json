@@ -1,6 +1,19 @@
 {
     "app": {
         "title": "VEO Pro Max",
+        "welcome": "Welcome {name}",
+        "welcome_default": "Welcome",
+        "contact_support": "Contact Support",
+        "greetings": [
+            "Have a nice day!",
+            "Wishing you great prosperity!",
+            "Stay healthy and strong!",
+            "Full of energy today!",
+            "Wishing you brilliant success!",
+            "Good luck and smooth sailing!",
+            "Be happy and joyful!",
+            "Stay endlessly creative!"
+        ],
         "tabs": {
             "t2v": "Text to Video",
             "i2v": "Image to Video",
@@ -115,8 +128,22 @@
         "upgrade": "🔥 Upgrade",
         "buy_more": "🛒 Buy More",
         "first_buy_badge": "🎁 First Purchase Offer!",
+        "lifetime_label": "Lifetime",
+        "remaining_time": "Remaining",
+        "expired_msg": "License expired!",
+        "trial_remaining": "Trial — {days} days left",
+        "trial_expired_msg": "Trial has expired",
+        "revoked_msg": "License has been revoked or deleted",
+        "revoked_title": "License Revoked",
+        "revoked_body": "Please contact admin or enter a new key.\nApp will close if not reactivated.",
+        "enter_new_key": "Enter New Key",
+        "exit_app": "Exit App",
+        "expires_on": "Expires",
+        "trial_banner_limited": "TRIAL MODE — Limited Features",
+        "lifetime_banner": "Lifetime — Lifetime License",
+        "trial_expired_banner": "Trial expired!",
         "limits": {
-            "accounts": "Accounts (max_cookies)",
+            "accounts": "Accounts (max_accounts)",
             "threads": "Threads (global)",
             "daily": "Daily Generations",
             "batch": "Prompts/Batch"
@@ -130,7 +157,7 @@
             "lifetime": "Lifetime"
         },
         "features": {
-            "trial_days": "⏳ 3-day trial",
+            "trial_days": "⏳ {days}-day trial",
             "one_account": "👤 1 Account only",
             "two_threads": "⚡ 2 Threads",
             "gen_per_day": "📊 100 gen/day",
@@ -241,7 +268,8 @@
         "queue": "Queue",
         "memory": "Memory",
         "cpu": "CPU",
-        "network": "Network"
+        "network": "Network",
+        "offline": "Offline"
     },
     "profiles": {
         "section_title": "🌐 Chrome Profiles (Account Manager)",

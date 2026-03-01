@@ -1886,7 +1886,7 @@ class AppController:
         MultiAccountManager.add_account() accepts AccountSession and
         wraps it in AccountManager internally (per architecture §6.1).
         """
-        if not self._permissions.check_limit("max_cookies", len(self._multi_account._accounts)):
+        if not self._permissions.check_limit("max_accounts", len(self._multi_account._accounts)):
             return False
         
         # Correct: pass AccountSession, not AccountManager
@@ -1987,17 +1987,17 @@ class AppController:
         profiles = self._profiles_controller.get_all_profiles()
         profile_emails = {p['email'] for p in profiles}
         
-        # G6: License gate — cap number of enabled accounts by max_cookies
-        max_cookies = self._permissions.limits.max_cookies
-        if max_cookies > 0:
+        # G6: License gate — cap number of enabled accounts by max_accounts
+        max_accounts = self._permissions.limits.max_accounts
+        if max_accounts > 0:
             enabled_profiles = [p for p in profiles if p.get('is_enabled', True)]
-            if len(enabled_profiles) > max_cookies:
+            if len(enabled_profiles) > max_accounts:
                 log.info(
                     f"[G6] Account limit: {len(enabled_profiles)} enabled, "
-                    f"max={max_cookies} — capping"
+                    f"max={max_accounts} — capping"
                 )
                 # Keep first N enabled, disable rest (in-memory only)
-                for p in enabled_profiles[max_cookies:]:
+                for p in enabled_profiles[max_accounts:]:
                     p['is_enabled'] = False
         
         for p in profiles:
@@ -3205,6 +3205,31 @@ class AppController:
                         log.info("[License] Role override: TESTER (from Firebase _role)")
                 except Exception:
                     pass
+                
+                # 4.4: Apply dynamic limits from Firebase _lim field
+                if hasattr(info, 'limits_override') and info.limits_override:
+                    self._permissions.apply_server_limits(info.limits_override)
+                    log.info(f"[License] Dynamic limits applied: {info.limits_override}")
+                else:
+                    # Fallback: read tier template from _config/tier_defaults
+                    try:
+                        rest_client = getattr(self._license_client, '_rest_client', None)
+                        if rest_client and hasattr(rest_client, 'read_tier_defaults'):
+                            tier_defaults = rest_client.read_tier_defaults()
+                            role_name = self._permissions.role.name  # TRIAL, PREMIUM, TESTER
+                            tmpl = tier_defaults.get(role_name, {})
+                            if tmpl:
+                                lim = {k: v for k, v in tmpl.items() if k in ('ac', 'fm', 'wk', 'op', 'dg')}
+                                if lim:
+                                    self._permissions.apply_server_limits(lim)
+                                    log.info(f"[License] Tier template applied ({role_name}): {lim}")
+                    except Exception as e:
+                        log.debug(f"[License] Tier template fallback skipped: {e}")
+                
+                # 4.5: Periodic integrity check (Level 3 — anti Cheat Engine)
+                if not self._permissions.verify_limits_integrity():
+                    log.critical("[License] ⛔ Limits integrity violation — RAM tampered! Resetting.")
+                    self._permissions.reset_limits_from_cache()
             else:
                 # G0: Trial expired or license invalid → block generation
                 self._license_valid = False
@@ -3215,6 +3240,31 @@ class AppController:
             self._license_valid = False
             self._permissions.set_role(Role.TRIAL)
             log.warning(f"[License] Validation error — treating as invalid: {e}")
+        
+        # 4.6: Schedule periodic integrity check (every 5 min after startup)
+        if not getattr(self, '_integrity_timer_started', False):
+            self._integrity_timer_started = True
+            try:
+                from PySide6.QtCore import QTimer
+                self._integrity_timer = QTimer()
+                self._integrity_timer.setInterval(5 * 60 * 1000)  # 5 minutes
+                self._integrity_timer.timeout.connect(self._periodic_integrity_check)
+                # Start after 30s delay (let app fully init)
+                QTimer.singleShot(30_000, self._integrity_timer.start)
+                log.info("[License] Integrity timer scheduled (30s delay → every 5min)")
+            except Exception:
+                pass
+    
+    def _periodic_integrity_check(self):
+        """Periodic RAM integrity check — detect Cheat Engine / memory patches."""
+        try:
+            if not self._permissions.verify_limits_integrity():
+                log.critical("[License] ⛔ Periodic integrity check FAILED — RAM tampered!")
+                self._permissions.reset_limits_from_cache()
+                # Re-validate from server
+                self._update_permissions()
+        except Exception as e:
+            log.warning(f"[License] Integrity check error: {e}")
     
     def activate_license(self, license_key: str) -> Dict:
         """Activate a license key.

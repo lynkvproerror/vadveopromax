@@ -14,7 +14,10 @@ from PySide6.QtWidgets import (
     QTabWidget, QLabel, QFrame, QStatusBar, QSizePolicy
 )
 from PySide6.QtCore import Qt, Slot, Signal, QTimer
-from PySide6.QtGui import QFont, QShortcut, QKeySequence
+from PySide6.QtGui import (
+    QFont, QShortcut, QKeySequence, QIcon, QPixmap,
+    QPainter, QPainterPath, QBrush, QColor
+)
 
 # Add project root to path if needed
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -125,10 +128,21 @@ class MainWindow(QMainWindow):
                 self._auto_updater.start_periodic_check()
             except Exception as e:
                 log.debug(f"Auto-updater init failed: {e}")
+        
+        # 🔒 Min client version check (3s delay to let UI load)
+        QTimer.singleShot(3000, self._check_min_version)
     
     def _setup_window(self):
         """Configure window properties."""
-        self.setWindowTitle(f"{Theme.TAB_ICONS['T2V']} VEO Pro Max")
+        # Window title: all header info in title bar text
+        self._update_window_title()
+        
+        # Set window icon from LOGO 3.png (rounded)
+        logo_path = Path(__file__).parent / "img" / "LOGO 3.png"
+        if logo_path.exists():
+            icon_pixmap = self._make_rounded_pixmap(str(logo_path), 64)
+            if icon_pixmap:
+                self.setWindowIcon(QIcon(icon_pixmap))
         
         # Window size
         self.resize(Theme.WINDOW_DEFAULT_WIDTH, Theme.WINDOW_DEFAULT_HEIGHT)
@@ -144,6 +158,8 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        
+
         
         # Tab widget
         self.tabview = QTabWidget()
@@ -199,6 +215,9 @@ class MainWindow(QMainWindow):
         
         # Wire tester mode from license (if controller available)
         self._sync_tester_mode()
+        
+        # Update window title with subscriber name
+        self._update_window_title()
     
     def _create_status_bar(self):
         """Create status bar at bottom."""
@@ -490,6 +509,12 @@ class MainWindow(QMainWindow):
         for tab_key, tab in self.tab_instances.items():
             if hasattr(tab, 'retranslate_ui'):
                 tab.retranslate_ui()
+        
+        # 3. Refresh window title with new language
+        self._update_window_title()
+        
+        # 4. Refresh license status bar text
+        self._update_license_widget()
     
     @Slot(dict)
     def _update_queue_status(self, status: dict):
@@ -543,7 +568,7 @@ class MainWindow(QMainWindow):
                     # Lifetime: no countdown, just show ♾️
                     label = self._status_widgets.get("license")
                     if label:
-                        label.setText("🔑 ♾️ Vĩnh Viễn")
+                        label.setText(f"🔑 ♾️ {t('license.lifetime_label')}")
                         label.setStyleSheet(f"color: {Theme.GREEN}; margin-right: 8px; font-weight: bold;")
                     self._license_countdown_timer.stop()
                 else:
@@ -556,20 +581,23 @@ class MainWindow(QMainWindow):
                 self._license_countdown_timer.stop()
             elif ls.get("is_trial"):
                 self._was_licensed = True
-                self.update_license_status(f"Trial — Còn lại {days} ngày")
+                self.update_license_status(t("license.trial_remaining").replace("{days}", str(days)))
                 self._license_countdown_timer.stop()
             elif ls.get("trial_expired"):
                 self.update_license_status("Trial Expired")
                 self._license_countdown_timer.stop()
                 if self._was_licensed:
-                    self._on_license_revoked("Trial đã hết hạn")
+                    self._on_license_revoked(t("license.trial_expired_msg"))
             else:
                 self.update_license_status("Unlicensed")
                 self._license_countdown_timer.stop()
                 if self._was_licensed:
-                    self._on_license_revoked("License đã bị thu hồi hoặc xoá")
+                    self._on_license_revoked(t("license.revoked_msg"))
         except Exception:
             pass
+        
+        # Refresh window title (subscriber name may have loaded)
+        self._update_window_title()
     
     def _on_license_revoked(self, reason: str):
         """Show blocking dialog when license is revoked mid-session."""
@@ -578,16 +606,15 @@ class MainWindow(QMainWindow):
         
         from PySide6.QtWidgets import QMessageBox
         msg = QMessageBox(self)
-        msg.setWindowTitle("⛔ License Revoked")
+        msg.setWindowTitle(f"⛔ {t('license.revoked_title')}")
         msg.setText(
             f"🚫 {reason}\n\n"
-            f"Vui lòng liên hệ admin hoặc nhập key mới.\n"
-            f"App sẽ đóng nếu không kích hoạt lại."
+            f"{t('license.revoked_body')}"
         )
         msg.setIcon(QMessageBox.Critical)
         
-        activate_btn = msg.addButton("🔑 Nhập Key Mới", QMessageBox.AcceptRole)
-        exit_btn = msg.addButton("❌ Thoát App", QMessageBox.RejectRole)
+        activate_btn = msg.addButton(f"🔑 {t('license.enter_new_key')}", QMessageBox.AcceptRole)
+        exit_btn = msg.addButton(f"❌ {t('license.exit_app')}", QMessageBox.RejectRole)
         
         msg.exec()
         
@@ -615,7 +642,7 @@ class MainWindow(QMainWindow):
             return
         
         if total_secs <= 0:
-            label.setText("🔑 ❌ License đã hết hạn!")
+            label.setText(f"🔑 ❌ {t('license.expired_msg')}")
             label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px; font-weight: bold;")
             self._license_countdown_timer.stop()
             return
@@ -625,7 +652,7 @@ class MainWindow(QMainWindow):
         mins = (total_secs % 3600) // 60
         secs = total_secs % 60
         
-        exp_vn = self._license_expires_dt.strftime("%d/%m/%Y")
+        exp_date = self._license_expires_dt.strftime("%d/%m/%Y")
         tier = self._license_tier_name
         
         # Countdown text
@@ -634,7 +661,7 @@ class MainWindow(QMainWindow):
         else:
             countdown = f"{hours:02d}:{mins:02d}:{secs:02d}"
         
-        text = f"🔑 {tier} — Còn lại {countdown} (Hết hạn {exp_vn})"
+        text = f"🔑 {tier} — {t('license.remaining_time')} {countdown} ({t('license.expires_on')} {exp_date})"
         label.setText(text)
         
         # Color based on urgency
@@ -751,15 +778,67 @@ class MainWindow(QMainWindow):
     
     @staticmethod
     def _get_version() -> str:
-        """Read version from pyproject.toml."""
+        """Get app version from AppConstants (canonical source, same as auto-updater)."""
         try:
-            import tomllib
-            toml_path = Path(__file__).parent.parent / "pyproject.toml"
-            with open(toml_path, "rb") as f:
-                data = tomllib.load(f)
-            return data.get("project", {}).get("version", "?.?.?")
+            from config.constants import AppConstants
+            return AppConstants.APP_VERSION
         except Exception:
             return "?.?.?"
+    
+    def _check_min_version(self):
+        """Check if app version meets server-configured minimum.
+        
+        Fetches min_client_version from Firebase _config/client_settings.
+        If current version < minimum → show blocking popup + force quit.
+        """
+        def _ver_tuple(v: str):
+            """Parse version string to comparable tuple."""
+            try:
+                return tuple(int(x) for x in str(v).split('.')[:3])
+            except (ValueError, AttributeError):
+                return (0, 0, 0)
+        
+        try:
+            from security.firebase_rest_client import FirebaseRESTClient
+            from config.logger import log
+            client = FirebaseRESTClient()
+            min_ver = str(client.get_config_value("min_client_version", "1.0.0"))
+            current = self._get_version()
+            
+            if _ver_tuple(current) < _ver_tuple(min_ver):
+                log.warning(f"[VersionCheck] App {current} < min {min_ver} — blocking!")
+                self._show_version_block(current, min_ver)
+            else:
+                log.debug(f"[VersionCheck] OK: {current} >= {min_ver}")
+        except Exception as e:
+            from config.logger import log
+            log.debug(f"Min version check failed: {e}")
+    
+    def _show_version_block(self, current: str, minimum: str):
+        """Show blocking dialog when app version is below minimum."""
+        from PySide6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle("⚠️ Cập nhật bắt buộc")
+        msg.setText(
+            f"<b>Phiên bản hiện tại ({current}) đã quá cũ!</b><br><br>"
+            f"Phiên bản tối thiểu yêu cầu: <b>{minimum}</b><br><br>"
+            f"Vui lòng cập nhật VEO Pro Max để tiếp tục sử dụng."
+        )
+        update_btn = msg.addButton("🔄 Cập nhật ngay", QMessageBox.AcceptRole)
+        quit_btn = msg.addButton("❌ Thoát", QMessageBox.RejectRole)
+        msg.exec()
+        
+        if msg.clickedButton() == update_btn:
+            if self._auto_updater:
+                self._auto_updater.check_now()
+            else:
+                import webbrowser
+                webbrowser.open("https://github.com/lynkv/veo-pro-max/releases")
+        
+        # Force quit — version is too old
+        from PySide6.QtWidgets import QApplication
+        QApplication.quit()
     
     def set_status(self, message: str):
         """Update status bar message (no-op, status_label removed)."""
@@ -815,6 +894,72 @@ class MainWindow(QMainWindow):
                 self._toast_manager.set_tester_mode(is_tester)
         except Exception:
             pass  # Default: User mode (tester toasts hidden)
+    
+    # ── Window Title & Icon ────────────────────────────────────────
+    
+    @staticmethod
+    def _make_rounded_pixmap(image_path: str, size: int) -> 'QPixmap':
+        """Load an image and clip it to a circle (rounded)."""
+        try:
+            source = QPixmap(image_path)
+            if source.isNull():
+                return None
+            # Scale to square
+            source = source.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            # Center crop to exact size
+            if source.width() > size or source.height() > size:
+                x = (source.width() - size) // 2
+                y = (source.height() - size) // 2
+                source = source.copy(x, y, size, size)
+            # Circle mask
+            rounded = QPixmap(size, size)
+            rounded.fill(QColor(0, 0, 0, 0))
+            painter = QPainter(rounded)
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            path = QPainterPath()
+            path.addEllipse(0, 0, size, size)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, source)
+            painter.end()
+            return rounded
+        except Exception:
+            return None
+    
+    def _update_window_title(self):
+        """Build and set the window title bar text with all header info."""
+        import random
+        from config.contact_provider import get_contact_info
+
+        # Get subscriber name
+        client_name = ""
+        try:
+            if self.controller and hasattr(self.controller, '_license_client'):
+                lc = self.controller._license_client
+                if hasattr(lc, 'get_client_name'):
+                    client_name = lc.get_client_name() or ""
+        except Exception:
+            pass
+        
+        if client_name:
+            welcome = t("app.welcome").replace("{name}", client_name)
+        else:
+            welcome = t("app.welcome_default")
+        
+        # Pick random greeting
+        greetings = t("app.greetings")
+        greeting = random.choice(greetings) if isinstance(greetings, list) and greetings else ""
+        
+        # Get contact info from secure provider
+        contact = get_contact_info()
+        phone = contact.get("phone", "N/A")
+        zalo = contact.get("zalo", "N/A")
+        
+        parts = [f"VEO PRO MAX  -  {welcome}"]
+        if greeting:
+            parts[0] += f", {greeting}"
+        parts.append(f"{t('app.contact_support')}:  \u260E: {phone}  |  Zalo: {zalo}")
+        
+        self.setWindowTitle("  -  ".join(parts))
     
     # ── Session Persistence ─────────────────────────────────────
     

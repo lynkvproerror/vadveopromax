@@ -102,6 +102,7 @@ class AppSettings:
     ui_language: str = "Tiếng Việt"           # "English" | "Tiếng Việt"
     developer_mode: bool = False
     show_json_preview: bool = False
+    hide_emails: bool = False            # Email masking in profiles table
     
     # === NOTIFICATIONS ===
     notify_toast_enabled: bool = True        # In-app toast on group complete

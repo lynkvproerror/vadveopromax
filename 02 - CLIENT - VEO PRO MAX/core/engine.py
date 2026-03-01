@@ -2743,12 +2743,7 @@ class Engine:
                         max_retries = max(base_retries, 15)  # Chain: up to 15
                     else:
                         max_retries = max(base_retries, 10)  # Normal: up to 10
-                    timeout = account.request_timeout
-                    # T2I/I2I is synchronous — server generates images before
-                    # responding (~37s per HAR). Ensure enough time.
-                    wt_upper = task.workflow_type.upper() if task.workflow_type else ""
-                    if wt_upper in ("T2I", "I2I"):
-                        timeout = max(timeout, 120)
+                    timeout = 120  # Fixed: 120s for all workflow types
                     result = None
                     
                     # ★ Pre-warm: detect idle and trigger soft recovery BEFORE first attempt

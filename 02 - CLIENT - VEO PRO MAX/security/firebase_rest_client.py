@@ -424,7 +424,10 @@ class FirebaseRESTClient:
         
         if machine_id:
             # Deterministic: same MID always goes to same server
-            hash_val = int(machine_id[-2:], 16) if len(machine_id) >= 2 else 0
+            try:
+                hash_val = int(machine_id[-2:], 16) if len(machine_id) >= 2 else 0
+            except ValueError:
+                hash_val = sum(ord(c) for c in machine_id) % 256
             use_primary = (hash_val % 100) < weight
         else:
             use_primary = weight >= 50
@@ -692,7 +695,15 @@ class FirebaseRESTClient:
     
     # ── HMAC Token Anti-DDoS ──────────────────────────────────
     
-    _HMAC_SECRET = b'VEO_PRO_MAX_2026_HMAC_KEY_v1'
+    @staticmethod
+    def _derive_hmac_key(machine_id: str) -> bytes:
+        """Derive HMAC key from machine ID — unique per machine, not hardcoded."""
+        import hmac as _hmac, hashlib
+        return _hmac.new(
+            b"veo_rest_derive_2026",
+            (machine_id + "||REST_HMAC").encode(),
+            hashlib.sha256
+        ).digest()
     
     def _generate_request_token(self, machine_id: str) -> str:
         """
@@ -703,7 +714,8 @@ class FirebaseRESTClient:
         import hmac as _hmac, hashlib, time as _time
         ts_bucket = str(int(_time.time()) // 300)  # 5-min bucket
         msg = f"{machine_id}{ts_bucket}".encode()
-        sig = _hmac.new(self._HMAC_SECRET, msg, hashlib.sha256).hexdigest()[:32]
+        key = self._derive_hmac_key(machine_id)
+        sig = _hmac.new(key, msg, hashlib.sha256).hexdigest()[:32]
         return f"{ts_bucket}:{sig}"
     
     @classmethod
@@ -725,9 +737,10 @@ class FirebaseRESTClient:
             if age_buckets < 0 or age_buckets > (max_age_minutes // 5):
                 return False
             
-            # Recompute HMAC
+            # Recompute HMAC with derived key
             msg = f"{machine_id}{ts_bucket}".encode()
-            expected = _hmac.new(cls._HMAC_SECRET, msg, hashlib.sha256).hexdigest()[:32]
+            key = cls._derive_hmac_key(machine_id)
+            expected = _hmac.new(key, msg, hashlib.sha256).hexdigest()[:32]
             return _hmac.compare_digest(sig, expected)
         except Exception:
             return False
@@ -1109,7 +1122,18 @@ class FirebaseRESTClient:
             "exists": True, "status": status, "expires_at": expires_at,
             "daily_count": data.get("daily_count", 0),
             "daily_date": data.get("daily_date", ""),
+            "_lim": data.get("_lim"),  # Trial dynamic limits
         }
+    
+    def read_tier_defaults(self) -> dict:
+        """
+        Read tier defaults from _config/tier_defaults.
+        Used as fallback when individual _lim is not set.
+        """
+        data = self._read_doc("_config", "tier_defaults", "tier_defaults")
+        if not data:
+            return {}
+        return data
     
     def sync_daily_usage(self, machine_id: str, daily_count: int, daily_date: str) -> bool:
         """

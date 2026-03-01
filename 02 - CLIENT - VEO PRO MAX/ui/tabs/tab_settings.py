@@ -91,7 +91,7 @@ class TabSettings(
     ⚠️ MRO Cross-dependencies between mixins:
     - SettingsProfilesMixin (UI builder) calls handlers from SettingsBrowserControlsMixin:
       _on_toggle_account, _on_slots_changed, _on_save_password, _on_refresh_session,
-      _on_toggle_browser_visibility, _on_restart_browser, _on_reload_extension,
+      _on_toggle_browser_visibility, _on_reload_extension,
       _on_delete_profile, _on_add_profile_browser
     - All mixins call _create_section() and _create_enable_row() from TabSettings base.
     - All mixins reference self.controller and self.profiles_controller from __init__.
@@ -490,6 +490,10 @@ class TabSettings(
                 s.smart_hide_enabled = self.smart_hide_switch.isToggled()
             if hasattr(self, 'hide_all_switch'):
                 s.hide_all_browsers = self.hide_all_switch.isToggled()
+            
+            # Hide emails state
+            if hasattr(self, '_emails_hidden'):
+                s.hide_emails = self._emails_hidden
 
             # ── Pipeline Optimization ──
             if hasattr(self, 'burst_switch'):
@@ -569,8 +573,10 @@ class TabSettings(
                 self.extract_menu.setCurrentText("750ms (recommended)")
 
             # ── Worker Settings ──
-            self.retry_count.setValue(3)
-            self.request_timeout.setValue(120)
+            if hasattr(self, 'retry_count'):
+                self.retry_count.setValue(3)
+            if hasattr(self, 'request_timeout'):
+                self.request_timeout.setValue(120)
 
             # ── Anti-Detect Spam ──
             self.anti_detect_switch.setToggled(True)
@@ -704,9 +710,9 @@ class TabSettings(
                     self.extract_menu.setCurrentIndex(i)
                     break
         # Worker settings
-        if "retry_count" in settings:
+        if "retry_count" in settings and hasattr(self, 'retry_count'):
             self.retry_count.setValue(int(settings["retry_count"]))
-        if "request_timeout" in settings:
+        if "request_timeout" in settings and hasattr(self, 'request_timeout'):
             self.request_timeout.setValue(int(settings["request_timeout"]))
         # Anti-Detect Spam
         if "anti_detect_enabled" in settings:
@@ -804,8 +810,8 @@ class TabSettings(
             "enhance_auto_continuation": self._enhance_auto_toggle.isToggled() if hasattr(self, '_enhance_auto_toggle') else False,
             "language": self.lang_menu.currentText(),
             # Worker Settings
-            "retry_count": self.retry_count.value(),
-            "request_timeout": self.request_timeout.value(),
+            "retry_count": self.retry_count.value() if hasattr(self, 'retry_count') else 3,
+            "request_timeout": self.request_timeout.value() if hasattr(self, 'request_timeout') else 120,
             # Anti-Detect Spam
             "anti_detect_enabled": self.anti_detect_switch.isToggled(),
             "anti_detect_delay_min": self.anti_detect_delay_min.value(),
