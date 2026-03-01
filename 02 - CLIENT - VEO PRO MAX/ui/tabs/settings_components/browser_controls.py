@@ -191,6 +191,23 @@ class SettingsBrowserControlsMixin:
         import threading
         from PySide6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QLineEdit, QDialogButtonBox
 
+        # Trial guard: max 1 account
+        try:
+            if self.controller and hasattr(self.controller, '_permissions'):
+                from services.permissions import Role
+                role = self.controller._permissions.role
+                if role == Role.TRIAL:
+                    accounts = self.profiles_controller.get_all_profiles()
+                    if len(accounts) >= 1:
+                        show_warning(
+                            self, "🔒 Trial Limit",
+                            "Gói Trial chỉ cho phép 1 tài khoản.\n\n"
+                            "Nâng cấp lên Premium để thêm không giới hạn tài khoản."
+                        )
+                        return
+        except Exception:
+            pass
+
         # Import credentials manager
         try:
             from core.credentials_manager import get_credentials_manager
@@ -599,8 +616,33 @@ class SettingsBrowserControlsMixin:
 
         Args:
             email: Account email
-            value: New max_workers value (0-20)
+            value: New max_workers value (0-20, capped at 8 for Trial)
         """
+        # Trial guard: max 8 workers
+        try:
+            if self.controller and hasattr(self.controller, '_permissions'):
+                from services.permissions import Role
+                role = self.controller._permissions.role
+                if role == Role.TRIAL and value > 8:
+                    # Reset spinbox to 8
+                    for row in range(self.profiles_table.rowCount()):
+                        email_item = self.profiles_table.item(row, 2)
+                        if email_item and email in email_item.text():
+                            spin = self.profiles_table.cellWidget(row, 6)
+                            if spin:
+                                spin.blockSignals(True)
+                                spin.setValue(8)
+                                spin.blockSignals(False)
+                            break
+                    show_warning(
+                        self, "🔒 Trial Limit",
+                        "Gói Trial giới hạn tối đa 8 workers.\n\n"
+                        "Nâng cấp lên Premium để sử dụng tối đa 20 workers."
+                    )
+                    value = 8
+        except Exception:
+            pass
+
         # Persist to ChromeProfile
         if self.profiles_controller:
             self.profiles_controller.update_profile(email, max_workers=value)

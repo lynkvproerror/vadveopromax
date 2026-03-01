@@ -150,18 +150,25 @@ function connectWebSocket() {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       wsConnected = false;
       ws = null;
-      // Rotate to next port on disconnect
-      currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
+      // Only rotate port on clean close (server intentionally closed).
+      // Idle/network disconnects stay on same port — Python WS server
+      // only listens on port 8765, rotating to 8766/8767 causes error flood.
+      if (event.wasClean) {
+        currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
+      }
       const nextPort = WEBSOCKET_PORTS[currentPortIndex];
-      console.debug(`[VEO Bridge] WebSocket closed (port ${port}), trying port ${nextPort} in ${wsReconnectDelay / 1000}s...`);
+      console.debug(`[VEO Bridge] WebSocket closed (port ${port}, clean=${event.wasClean}), trying port ${nextPort} in ${wsReconnectDelay / 1000}s...`);
       setTimeout(connectWebSocket, wsReconnectDelay);
       // Exponential backoff: 3s → 6s → 12s → 24s → max 30s
-      // Reset backoff when we've cycled through all ports
-      if (currentPortIndex === 0) {
+      // Only increase backoff after cycling all ports on clean close
+      if (event.wasClean && currentPortIndex === 0) {
         wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
+      } else if (!event.wasClean) {
+        // Idle disconnect: use moderate backoff (3s → 6s → max 10s)
+        wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, 10000);
       }
     };
 

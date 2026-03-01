@@ -113,6 +113,9 @@ class TabSettings(
         
         # Tester-only sections (hidden for regular users)
         self._tester_sections: list = []
+        
+        # Premium-only sections (hidden for Trial tier)
+        self._premium_sections: list = []
 
         self._setup_ui()
         
@@ -159,23 +162,34 @@ class TabSettings(
         # Guard: prevent auto-save signals from writing to disk during init
         self._initializing = True
 
-        # Build all sections via mixins
-        # ── User sections (visible to everyone) ──
-        layout.addWidget(self._create_profiles_section())   # SettingsProfilesMixin
-        layout.addWidget(self._create_defaults_section())    # SettingsSectionsMixin
-        layout.addWidget(self._create_output_section())      # SettingsSectionsMixin
-        layout.addWidget(self._create_continuation_section())# SettingsSectionsMixin
-        layout.addWidget(self._create_notification_section())# SettingsSectionsMixin
-        layout.addWidget(self._create_post_queue_section())  # SettingsSectionsMixin
-        layout.addWidget(self._create_ui_section())          # SettingsSectionsMixin
+        # Build all sections via mixins — grouped by functional area
         
-        # ── Tester sections (hidden for regular users) ──
+        # ── 1. ACCOUNT SETUP ──
+        layout.addWidget(self._create_profiles_section())    # Chrome Profiles
+        
+        # ── 2. GENERATION CONFIG ──
+        layout.addWidget(self._create_defaults_section())    # Default Settings (All)
+        continuation_widget = self._create_continuation_section()
+        layout.addWidget(continuation_widget)                # Smooth Continuation (self-guarded for Trial)
+        
+        # ── 3. OUTPUT ──
+        layout.addWidget(self._create_output_section())      # Output Settings (All)
+        # Post-Queue Action: backend preserved, hidden from UI
+        self._post_queue_section = self._create_post_queue_section()
+        
+        # ── 4. BROWSER & SECURITY ──
+        layout.addWidget(self._create_browser_visibility_section())  # Smart Hide (All)
+        layout.addWidget(self._create_worker_section())              # Worker Settings + Anti-Detect (All)
+        
+        # ── 5. UX & APPEARANCE ──
+        layout.addWidget(self._create_notification_section())# Notifications (All)
+        layout.addWidget(self._create_ui_section())          # UI Theme (All)
+        
+        # ── 6. SYSTEM / DEV (Tester only) ──
         tester_widgets = [
-            self._create_worker_section(),                    # SettingsSectionsMixin
-            self._create_browser_visibility_section(),        # SettingsSectionsMixin
-            self._create_session_section(),                   # SettingsSectionsMixin
-            self._create_pipeline_section(),                  # SettingsPipelineEnhancerMixin
-            self._create_enhancer_section(),                  # SettingsPipelineEnhancerMixin
+            self._create_session_section(),                  # Session & Data
+            self._create_pipeline_section(),                 # Pipeline Optimization
+            self._create_enhancer_section(),                 # Image Enhancer
         ]
         for w in tester_widgets:
             layout.addWidget(w)
@@ -206,10 +220,13 @@ class TabSettings(
         return section, layout
     
     def _apply_audience_visibility(self):
-        """Show/hide tester-only sections based on license tier.
+        """Show/hide sections based on license tier.
         
-        User mode: Profiles, Defaults, Output, Continuation, Notification, Post-Queue, UI
-        Tester mode: + Worker, Browser Visibility, Session, Pipeline, Enhancer
+        Trial mode: Profiles, Defaults, Output, Notification, Post-Queue, UI,
+                    Browser Visibility, Worker (Anti Detect Spam)
+                    Continuation visible but self-guarded with popup
+        Premium mode: + Smooth Continuation (enabled)
+        Tester mode: + Session, Pipeline, Enhancer
         """
         is_tester = False
         try:
@@ -219,8 +236,41 @@ class TabSettings(
         except Exception:
             pass
         
+        # Tester sections: only for tester role
         for section in self._tester_sections:
             section.setVisible(is_tester)
+    
+    def refresh_role_state(self):
+        """Re-evaluate audience visibility and trial guards after license change.
+        
+        Called when license_activated signal fires (upgrade from Trial → Premium).
+        Re-enables toggles that were force-disabled at init for Trial users.
+        """
+        # Re-apply section visibility (show/hide tester sections)
+        self._apply_audience_visibility()
+        
+        try:
+            from services.permissions import PermissionsSystem, Role
+            perm = PermissionsSystem.instance()
+            if perm.role != Role.TRIAL:
+                from config.settings import get_settings
+                saved = get_settings()
+                
+                # Re-enable Anti-Detect Spam (was force-OFF for Trial)
+                if hasattr(self, 'anti_detect_switch'):
+                    self.anti_detect_switch.setToggled(
+                        getattr(saved, 'anti_detect_enabled', True)
+                    )
+                
+                # Re-enable Continuation toggle (was guarded by _is_trial_continuation)
+                if hasattr(self, '_is_trial_continuation'):
+                    self._is_trial_continuation = False
+                if hasattr(self, 'cont_switch'):
+                    self.cont_switch.setToggled(
+                        getattr(saved, 'continuation_enabled', True)
+                    )
+        except Exception:
+            pass
 
     def _create_enable_row(self, label: str, checked: bool = True,
                            bold: bool = False, color: str = None,

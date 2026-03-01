@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import AppSettings
 from config.theme import ThemeManager
-from services.license_client import LicenseClient, LicenseInfo
+from security.license_client import LicenseClient, LicenseInfo
 from services.permissions import PermissionsSystem, Role, Feature
 from core.event_manager import EventType, emit_event
 
@@ -153,7 +153,7 @@ class LicenseController:
     """Controller for license management.
     
     Manages:
-    - License validation
+    - License validation via security/license_client.py
     - Trial status
     - Feature permissions
     """
@@ -183,18 +183,19 @@ class LicenseController:
     
     def get_license_status(self) -> Dict:
         """Get current license status."""
-        info = self._license_client.license_info
-        trial = self._license_client.get_trial_status()
-        
-        return {
-            "is_licensed": self._license_client.is_licensed,
-            "is_trial": self._license_client.is_trial,
-            "license_key": info.license_key if info else None,
-            "tier": info.tier.value if info else None,
-            "days_remaining": info.days_remaining if info else trial.get("days_remaining", 0),
-            "email": info.email if info else None,
-            "trial_expired": trial.get("expired", False),
-        }
+        try:
+            info = self._license_client.validate()
+            from datetime import datetime
+            return {
+                "is_licensed": info.valid and info.tier and info.tier.value != "trial",
+                "is_trial": info.tier and info.tier.value == "trial" if info.valid else True,
+                "tier": info.tier.value if info.tier else None,
+                "days_remaining": (info.expires - datetime.now()).days if info.expires else 0,
+                "trial_expired": not info.valid and "expired" in (info.error or "").lower(),
+                "machine_id": self._license_client.get_display_machine_id(),
+            }
+        except Exception:
+            return {"is_licensed": False, "is_trial": True, "tier": None, "days_remaining": 0}
     
     def get_usage_stats(self) -> Dict:
         """Get usage statistics."""
@@ -205,33 +206,40 @@ class LicenseController:
             "total_downloads": usage.total_downloads,
         }
     
-    # === LICENSE VALIDATION ===
+    # === LICENSE ACTIVATION ===
     
-    def validate_license(self, license_key: str) -> Dict:
-        """Validate a license key.
+    def activate_license(self, license_key: str) -> Dict:
+        """Activate a license key.
         
-        Returns dict with success status and message.
+        Returns dict with success status, message, and tier info.
         """
-        success, message = self._license_client.validate_license(license_key)
-        
-        if success:
-            # Update permissions
-            info = self._license_client.license_info
-            if info:
-                from config.constants import LicenseTier
-                try:
-                    tier = LicenseTier(info.tier.value)
-                    self._permissions.set_role_from_tier(tier)
-                except ValueError:
-                    pass
+        try:
+            info = self._license_client.activate(license_key)
             
-            emit_event(EventType.LICENSE_VALIDATED, {"key": license_key})
-            self._notify_license_changed()
-        
-        return {
-            "success": success,
-            "message": message,
-        }
+            if info.valid:
+                # Update permissions from tier
+                if info.tier:
+                    self._permissions.set_role_from_tier(info.tier)
+                
+                emit_event(EventType.LICENSE_VALIDATED, {"key": license_key[:8] + "..."})
+                self._notify_license_changed()
+                
+                return {
+                    "success": True,
+                    "message": f"License activated: {info.tier.name if info.tier else 'Unknown'}",
+                    "tier": info.tier.value if info.tier else None,
+                    "role": info.role.value if info.role else "trial",
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": info.error or "Invalid license key",
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Activation failed: {str(e)}",
+            }
     
     def deactivate_license(self):
         """Deactivate current license."""
@@ -261,13 +269,17 @@ class LicenseController:
     
     def check_trial_warning(self):
         """Check if trial warning should be shown."""
-        trial = self._license_client.get_trial_status()
-        
-        if trial.get("is_trial"):
-            days = trial.get("days_remaining", 0)
-            if days <= 3 and self._on_trial_warning:
-                self._on_trial_warning(days)
-                emit_event(EventType.TRIAL_WARNING, {"days_remaining": days})
+        try:
+            info = self._license_client.validate()
+            if info.valid and info.tier and info.tier.value == "trial":
+                from datetime import datetime
+                if info.expires:
+                    days = (info.expires - datetime.now()).days
+                    if days <= 3 and self._on_trial_warning:
+                        self._on_trial_warning(days)
+                        emit_event(EventType.TRIAL_WARNING, {"days_remaining": days})
+        except Exception:
+            pass
     
     # === HELPERS ===
     
@@ -275,3 +287,4 @@ class LicenseController:
         """Notify UI of license change."""
         if self._on_license_changed:
             self._on_license_changed(self.get_license_status())
+

@@ -360,6 +360,23 @@ class ProfilesController:
             log.info(f"[ProfilesController] Profile already exists: {email}")
             return False
         
+        # G6: License gate — check max accounts limit
+        try:
+            from core.app_controller import AppController
+            # Access singleton if available (set during app init)
+            ctrl = getattr(self, '_app_controller', None)
+            if ctrl and hasattr(ctrl, '_permissions'):
+                max_cookies = ctrl._permissions.limits.max_cookies
+                current_count = len(self._profiles)
+                if max_cookies > 0 and current_count >= max_cookies:
+                    log.warning(
+                        f"[G6] Account limit reached: {current_count}/{max_cookies}. "
+                        f"Upgrade license to add more. Rejected: {email}"
+                    )
+                    return False
+        except Exception:
+            pass
+        
         profile = ChromeProfile(
             email=email,
             display_name=display_name or email.split("@")[0],

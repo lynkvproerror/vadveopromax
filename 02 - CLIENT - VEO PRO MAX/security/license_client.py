@@ -56,23 +56,24 @@ try:
 except ImportError:
     TRIAL_PROTECTION_AVAILABLE = False
 
-# Firebase (optional - for online validation)
+# Firebase REST Client (secure, no Admin SDK)
+# firebase_admin is intentionally NOT imported here — client uses REST API only
+
+# LicenseTier — single source: config.constants
+# Import from canonical location; fallback for standalone usage
 try:
-    import firebase_admin
-    from firebase_admin import credentials, firestore
-    FIREBASE_AVAILABLE = True
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent.parent))
+    from config.constants import LicenseTier
 except ImportError:
-    FIREBASE_AVAILABLE = False
-
-
-class LicenseTier(str, Enum):
-    """VND Pricing Model - License Tiers"""
-    TRIAL = "TRIA"           # 7 ngày - Miễn phí
-    ONE_MONTH = "1M"         # 30 ngày - 300,000đ
-    THREE_MONTHS = "3M"      # 90 ngày - 500,000đ
-    SIX_MONTHS = "6M"        # 180 ngày - 800,000đ
-    ONE_YEAR = "1Y"          # 365 ngày - 1,200,000đ
-    LIFETIME = "LT"          # Vĩnh viễn - 3,000,000đ
+    class LicenseTier(str, Enum):
+        """VND Pricing Model - License Tiers (fallback)"""
+        TRIAL = "TRIA"
+        ONE_MONTH = "1M"
+        THREE_MONTHS = "3M"
+        SIX_MONTHS = "6M"
+        ONE_YEAR = "1Y"
+        LIFETIME = "LT"
 
 
 from enum import IntEnum
@@ -113,6 +114,14 @@ class LicenseInfo:
     error: Optional[str] = None
 
 
+@dataclass
+class UsageStats:
+    """Usage statistics for license enforcement."""
+    total_generations: int = 0
+    today_generations: int = 0
+    total_downloads: int = 0
+    last_generation_at: Optional[datetime] = None
+    last_reset_date: Optional[str] = None  # YYYY-MM-DD
 class HardwareFingerprint:
     """
     Generate unique machine identifier from STABLE hardware sources.
@@ -221,13 +230,27 @@ class LicenseStorage:
     
     LICENSE_FILE = Path.home() / ".veoauto" / "license.dat"
     SALT = b"veo_license_salt_2026"  # Static salt (machine-bound key generated at runtime)
-    HMAC_SECRET = b"veo_hmac_secret_k3y_2026_pr0t3ct10n"  # HMAC secret
     APP_VERSION = "2.4.0"  # Include in signature to detect version mismatch
+    
+    @staticmethod
+    def _derive_hmac_key(machine_id: str) -> bytes:
+        """Derive HMAC key from machine ID — unique per machine, not hardcoded."""
+        import hmac as hmac_lib
+        return hmac_lib.new(
+            b"veo_lic_derive_2026",
+            (machine_id + "||HMAC_DERIVE").encode(),
+            hashlib.sha256
+        ).digest()
+    
     
     def __init__(self, machine_id: str):
         self.LICENSE_FILE.parent.mkdir(parents=True, exist_ok=True)
         self.machine_id = machine_id
+        self._hmac_key = self._derive_hmac_key(machine_id)
         self._fernet = self._create_fernet()
+        if not self._fernet:
+            import warnings
+            warnings.warn("[Security] cryptography package missing — license storage DISABLED", stacklevel=2)
         # Cache hardware components for signature
         self._hw_components = HardwareFingerprint.get_all_components()
     
@@ -266,6 +289,8 @@ class LicenseStorage:
         data['_nonce'] = nonce
         
         # Build signature payload with 12+ fields
+        # Calculate data length EXCLUDING signature meta-fields for consistency
+        data_for_len = {k: v for k, v in data.items() if k not in ('_sig', '_sig_version', '_nonce')}
         sig_parts = [
             # === CORE LICENSE DATA ===
             str(data.get('key', '')),
@@ -282,12 +307,12 @@ class LicenseStorage:
             self._hw_components.get('bios_serial', ''),
             
             # === ANTI-TAMPER ===
-            nonce,                    # Random per save
-            self.APP_VERSION,         # Detect version mismatch
-            str(len(str(data))),      # Data length check
+            nonce,                        # Random per save
+            self.APP_VERSION,             # Detect version mismatch
+            str(len(str(data_for_len))),  # Data length (excluding meta-fields)
             
             # === OBFUSCATION ===
-            "v3o_l1c_s1g",           # Static marker
+            "v3o_l1c_s1g",               # Static marker
         ]
         
         # Join with separator that's unlikely to appear in data
@@ -295,7 +320,7 @@ class LicenseStorage:
         
         # Generate HMAC-SHA256
         signature = hmac_lib.new(
-            self.HMAC_SECRET,
+            self._hmac_key,
             payload.encode(),
             hashlib.sha256
         ).hexdigest()
@@ -324,11 +349,10 @@ class LicenseStorage:
         data_str = json.dumps(license_data, default=str)
         
         if self._fernet:
-            # AES-256 encryption
             encrypted = self._fernet.encrypt(data_str.encode())
         else:
-            # Fallback: XOR encryption
-            encrypted = self._xor_encrypt(data_str.encode())
+            # No fallback — cryptography package REQUIRED
+            raise RuntimeError("Cannot save license: cryptography package not installed")
         
         self.LICENSE_FILE.write_bytes(encrypted)
     
@@ -341,20 +365,17 @@ class LicenseStorage:
             encrypted = self.LICENSE_FILE.read_bytes()
             
             if self._fernet:
-                # AES-256 decryption
                 decrypted = self._fernet.decrypt(encrypted)
             else:
-                # Fallback: XOR
-                decrypted = self._xor_encrypt(encrypted)
+                # No fallback — reject without cryptography
+                return None
             
             data = json.loads(decrypted.decode())
             
-            # 🔒 VERIFY SIGNATURE (CRITICAL!)
-            if data.get('_sig_version', 0) >= 2:
-                if not self._verify_signature(data):
-                    # Tampering detected! Clear cache and require re-validation
-                    self.clear()
-                    return None
+            # 🔒 ALWAYS VERIFY SIGNATURE (no version bypass!)
+            if not self._verify_signature(data):
+                self.clear()
+                return None
             
             return data
         except:
@@ -365,10 +386,7 @@ class LicenseStorage:
         if self.LICENSE_FILE.exists():
             self.LICENSE_FILE.unlink()
     
-    def _xor_encrypt(self, data: bytes) -> bytes:
-        """Fallback XOR encryption."""
-        key = self.machine_id.encode()[:16] + self.SALT[:16]
-        return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+    # XOR fallback REMOVED for security — cryptography package required
 
 
 class LicenseClient:
@@ -386,8 +404,8 @@ class LicenseClient:
     """
     
     COLLECTION = "_lic"
-    TRIAL_DAYS = 7
-    OFFLINE_GRACE_DAYS = 3  # 🔒 Reduced from 7 to 3 days
+    TRIAL_DAYS = 3
+    OFFLINE_GRACE_DAYS = 7  # 🔒 Offline grace period
     
     def __init__(self):
         self.machine_id = HardwareFingerprint.get_machine_id()
@@ -402,7 +420,29 @@ class LicenseClient:
         
         self._cached_license: Optional[dict] = None
         self._last_known_time: Optional[datetime] = None  # 🔒 Clock detection
+        self._validate_cache: Optional['LicenseInfo'] = None  # Validate result cache
+        self._validate_cache_time: Optional[datetime] = None   # Cache timestamp
+        self._VALIDATE_CACHE_TTL = 60  # seconds
+        self._usage = UsageStats()
+        self._usage_file = Path.home() / ".veoauto" / "usage.json"
+        self._load_usage()
         self._init_firebase()
+    
+    @staticmethod
+    def _safe_parse_dt(dt_str: str, default: str = '2000-01-01') -> 'datetime':
+        """Parse ISO datetime string → naive datetime (strips timezone if present).
+        
+        Prevents 'can't compare offset-naive and offset-aware' errors.
+        Server may store timezone-aware strings; client uses naive datetimes.
+        """
+        try:
+            raw = str(dt_str).replace('Z', '+00:00') if dt_str else default
+            dt = datetime.fromisoformat(raw)
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+            return dt
+        except Exception:
+            return datetime.fromisoformat(default)
     
     def _detect_clock_tampering(self, cached: dict) -> bool:
         """
@@ -415,7 +455,7 @@ class LicenseClient:
         last_validated_str = cached.get('last_validated')
         if last_validated_str:
             try:
-                last_validated = datetime.fromisoformat(str(last_validated_str))
+                last_validated = self._safe_parse_dt(last_validated_str)
                 if now < last_validated:
                     # Time went backwards! Clock tampering detected.
                     return True
@@ -426,7 +466,7 @@ class LicenseClient:
         activation_str = cached.get('activation_time')
         if activation_str:
             try:
-                activation = datetime.fromisoformat(str(activation_str))
+                activation = self._safe_parse_dt(activation_str)
                 if now < activation:
                     return True
             except:
@@ -436,7 +476,7 @@ class LicenseClient:
         last_known_str = cached.get('_last_known_time')
         if last_known_str:
             try:
-                last_known = datetime.fromisoformat(str(last_known_str))
+                last_known = self._safe_parse_dt(last_known_str)
                 # Allow 1 hour backwards (daylight saving, manual adjustment)
                 if now < last_known - timedelta(hours=1):
                     return True
@@ -455,58 +495,29 @@ class LicenseClient:
         """
         # === OPTION 1: REST Client (SECURE - No Admin SDK) ===
         try:
+            import sys
+            security_dir = str(Path(__file__).parent)
+            if security_dir not in sys.path:
+                sys.path.insert(0, security_dir)
+            
+            # Load encrypted API keys from _keys.dat first
+            from _encrypted_api_keys import set_runtime_keys
+            set_runtime_keys()
+            
             from firebase_rest_client import FirebaseRESTClient, SecureFirebaseConfig
             self._rest_client = FirebaseRESTClient()
             self._use_rest = True
             self._which_db = "rest_api"
             return
-        except ImportError:
+        except ImportError as e:
+            print(f"[LICENSE-DEBUG] REST client ImportError: {e}")
             self._use_rest = False
-        except Exception:
+        except Exception as e:
+            print(f"[LICENSE-DEBUG] REST client init failed: {type(e).__name__}: {e}")
             self._use_rest = False
         
-        # === OPTION 2: Admin SDK (Development Only) ===
-        # NOTE: This should be REMOVED in production builds!
-        if not FIREBASE_AVAILABLE:
-            return
-        
-        # Try using firebase_config for failover (if in admin folder)
-        try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).parent.parent / "admin"))
-            from firebase_config import get_failover_db
-            self.db, self._which_db = get_failover_db()
-            if self.db:
-                return
-        except ImportError:
-            pass
-        except Exception:
-            pass
-        
-        # Last resort: Find local credentials (DEVELOPMENT ONLY!)
-        cred_paths = [
-            os.environ.get('VEO_LICENSE_CONFIG'),
-            Path.home() / ".veoauto" / "firebase-credentials.json",
-        ]
-        
-        cred_path = None
-        for path in cred_paths:
-            if path and Path(path).exists():
-                cred_path = path
-                break
-        
-        if not cred_path:
-            return
-        
-        try:
-            if not firebase_admin._apps:
-                cred = credentials.Certificate(str(cred_path))
-                firebase_admin.initialize_app(cred)
-            
-            self.db = firestore.client()
-            self._which_db = "admin_sdk"
-        except:
-            pass
+        # No Admin SDK fallback — production client uses REST only
+        self._use_rest = False
     
     # =====================
     # PUBLIC API
@@ -520,12 +531,27 @@ class LicenseClient:
         """Get short display ID (for user to see)"""
         return self.display_id
     
+    def get_client_name(self) -> str:
+        """Get client name from cached license data (loaded from Firebase _cn field)."""
+        try:
+            cached = self.storage.load()
+            if cached:
+                return cached.get('client_name', '')
+        except Exception:
+            pass
+        return ""
+    
     def activate(self, license_key: str) -> LicenseInfo:
         """
         Activate a license key.
         
+        Flow:
+        1. Validate format locally
+        2. Validate via REST API (cross-check primary + backup Firebase)
+        3. Save locally on success
+        
         Args:
-            license_key: The license key (VEOAUTO-XXXX-XXXX-XXXX-XXXX)
+            license_key: The license key (XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX or TRIAL-XXXX-XXXX-XXXX)
             
         Returns:
             LicenseInfo with activation result
@@ -534,11 +560,107 @@ class LicenseClient:
         if not self._validate_key_format(license_key):
             return LicenseInfo(valid=False, error="Invalid key format")
         
-        # Try online activation
-        if self.db:
-            return self._activate_online(license_key)
-        else:
-            return LicenseInfo(valid=False, error="No internet connection")
+        # Handle TRIAL keys separately
+        if license_key.upper().startswith("TRIAL-"):
+            return self.activate_trial(license_key)
+        
+        # Try online activation via REST client
+        if hasattr(self, '_use_rest') and self._use_rest and hasattr(self, '_rest_client'):
+            return self._activate_with_rest(license_key)
+        
+        # Fallback: create REST client directly
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent))
+            from _encrypted_api_keys import set_runtime_keys
+            set_runtime_keys()
+            from firebase_rest_client import FirebaseRESTClient
+            self._rest_client = FirebaseRESTClient()
+            self._use_rest = True
+            return self._activate_with_rest(license_key)
+        except Exception as e:
+            return LicenseInfo(valid=False, error=f"Firebase connection unavailable: {str(e)[:40]}")
+    
+    def _activate_with_rest(self, license_key: str) -> LicenseInfo:
+        """
+        Activate license via REST API (no Admin SDK needed).
+        
+        Uses validate_with_crosscheck for dual-Firebase validation,
+        then saves locally on success.
+        """
+        try:
+            is_valid, status, data = self._rest_client.validate_with_crosscheck(
+                license_key,
+                self.machine_id
+            )
+            
+            if not is_valid:
+                error_messages = {
+                    "LICENSE_NOT_FOUND": "License key not found",
+                    "LICENSE_DELETED_STALE_BACKUP": "License key deleted from server",
+                    "MACHINE_MISMATCH": "License bound to different machine",
+                    "LICENSE_REVOKED": "License has been revoked",
+                    "CROSS_VALIDATION_FAILED": "Security validation failed",
+                    "LICENSE_EXPIRED": "License expired",
+                }
+                return LicenseInfo(
+                    valid=False,
+                    error=error_messages.get(status, f"Activation failed: {status}")
+                )
+            
+            # Extract license data (map both naming conventions)
+            tier_code = data.get('tier') or data.get('_t', 'TRIA')
+            role_code = data.get('role') or data.get('_role', 1)
+            expires_str = data.get('expires') or data.get('_exp', '2100-01-01')
+            client_name = data.get('client_name') or data.get('_cn', '')
+            
+            try:
+                if isinstance(expires_str, str):
+                    raw = expires_str.replace('Z', '+00:00')
+                    expires = datetime.fromisoformat(raw)
+                    # Convert to local naive datetime for consistent comparison
+                    if expires.tzinfo is not None:
+                        expires = expires.replace(tzinfo=None)
+                elif hasattr(expires_str, 'isoformat'):
+                    expires = expires_str if isinstance(expires_str, datetime) else datetime.now() + timedelta(days=365)
+                else:
+                    expires = datetime.now() + timedelta(days=365)
+            except Exception:
+                expires = datetime.now() + timedelta(days=365)
+            
+            # 🔒 LIFETIME ROLLING EXPIRY: use 90-day window instead of far-future
+            if tier_code == 'LT':
+                expires = datetime.now() + timedelta(days=90)
+            
+            # Save locally (AES-256 encrypted + HMAC signed)
+            self.storage.save({
+                'key': license_key,
+                'tier': tier_code,
+                'role': role_code,
+                'machine_id': self.machine_id,
+                'expires': expires.isoformat(),
+                'last_verified': datetime.now().isoformat(),
+                '_last_known_time': datetime.now().isoformat(),
+                '_validation_source': status,
+                'client_name': client_name,
+            })
+            self._invalidate_validate_cache()  # Force fresh validate()
+            
+            tier = self._tier_from_code(tier_code)
+            role = UserRole(role_code)
+            
+            return LicenseInfo(
+                valid=True,
+                tier=tier,
+                role=role,
+                expires=expires,
+                machine_id=self.machine_id
+            )
+            
+        except ConnectionError as e:
+            return LicenseInfo(valid=False, error=f"Network error: {str(e)[:40]}")
+        except Exception as e:
+            return LicenseInfo(valid=False, error=f"Activation failed: {str(e)}")
     
     def validate(self) -> LicenseInfo:
         """
@@ -546,11 +668,52 @@ class LicenseClient:
         Called on app startup and periodically.
         
         Uses cross-validation with dual-Firebase when REST client available.
+        Uses in-memory cache (60s TTL) to avoid repeated file I/O.
         """
+        # Check in-memory cache first (avoid repeated file I/O + crypto)
+        if (self._validate_cache is not None 
+            and self._validate_cache_time is not None
+            and (datetime.now() - self._validate_cache_time).total_seconds() < self._VALIDATE_CACHE_TTL):
+            return self._validate_cache
+        
+        result = self._validate_uncached()
+        self._validate_cache = result
+        self._validate_cache_time = datetime.now()
+        return result
+    
+    def _invalidate_validate_cache(self):
+        """Clear validate cache (call after activate/deactivate)."""
+        self._validate_cache = None
+        self._validate_cache_time = None
+    
+    def validate_online_now(self) -> 'LicenseInfo':
+        """
+        Force immediate online validation (bypass 5-min interval).
+        Use at app startup to ensure key still exists on server.
+        """
+        # Clear in-memory cache
+        self._invalidate_validate_cache()
+        
+        # Reset last_verified to force online check
+        cached = self.storage.load()
+        if cached:
+            cached['last_verified'] = '2000-01-01T00:00:00'  # Force expired
+            cached['_last_known_time'] = datetime.now().isoformat()  # Prevent false clock tampering
+            self.storage.save(cached)
+        
+        # Now validate() will trigger online check immediately
+        return self.validate()
+    
+    def _validate_uncached(self) -> LicenseInfo:
+        """Actual validation logic (no cache)."""
         # Load cached license
         cached = self.storage.load()
         
         if not cached:
+            return self._check_trial()
+        
+        # ✅ Trial cache: always re-query server for latest expires_at
+        if cached.get('_is_trial') or str(cached.get('key', '')).startswith('TRIAL-'):
             return self._check_trial()
         
         # 🔒 CLOCK TAMPERING CHECK (before anything else!)
@@ -562,34 +725,73 @@ class LicenseClient:
         if cached.get('machine_id') != self.machine_id:
             return LicenseInfo(valid=False, error="License bound to different machine")
         
-        # Check local expiry
-        expires = datetime.fromisoformat(cached.get('expires', '2000-01-01'))
-        if expires < datetime.now():
+        # Check local expiry (Tester role=2 bypasses expiry)
+        role_code = cached.get('role', 1)
+        expires = self._safe_parse_dt(cached.get('expires', '2000-01-01'))
+        if role_code != 2 and expires < datetime.now():
             return LicenseInfo(valid=False, error="License expired")
         
-        # Try online validation (but allow offline grace period)
-        last_check = datetime.fromisoformat(cached.get('last_verified', '2000-01-01'))
-        if datetime.now() - last_check > timedelta(days=self.OFFLINE_GRACE_DAYS):
-            # === USE REST CLIENT WITH CROSS-VALIDATION ===
-            if hasattr(self, '_use_rest') and self._use_rest and hasattr(self, '_rest_client'):
-                return self._validate_with_rest(cached.get('key'))
-            elif self.db:
-                return self._validate_online(cached.get('key'))
+        # 🔒 ONLINE-FIRST VALIDATION
+        # Try online every 5 min — if invalid, revoke + clear cache
+        # If offline (network error), just use local cache (expires naturally)
+        last_check = self._safe_parse_dt(cached.get('last_verified', '2000-01-01'))
+        since_last_check = (datetime.now() - last_check).total_seconds()
+        
+        ONLINE_CHECK_INTERVAL = 300  # 5 minutes
+        
+        if since_last_check > ONLINE_CHECK_INTERVAL:
+            online_result = None
+            _use = getattr(self, '_use_rest', False)
+            _has_rc = hasattr(self, '_rest_client') and self._rest_client is not None
+            _has_db = bool(self.db)
+            print(f"[LICENSE-DEBUG] _use_rest={_use}, _has_rest_client={_has_rc}, _has_db={_has_db}")
+            
+            if _use and _has_rc:
+                try:
+                    online_result = self._validate_with_rest(cached.get('key'))
+                    print(f"[LICENSE-DEBUG] REST result: valid={online_result.valid}, error={getattr(online_result, 'error', None)}")
+                except Exception as e:
+                    print(f"[LICENSE-DEBUG] REST exception: {type(e).__name__}: {e}")
+                    pass  # Network error → use cache
+            elif _has_db:
+                try:
+                    online_result = self._validate_online(cached.get('key'))
+                    print(f"[LICENSE-DEBUG] SDK result: valid={online_result.valid}")
+                except Exception as e:
+                    print(f"[LICENSE-DEBUG] SDK exception: {e}")
+                    pass
             else:
-                return LicenseInfo(valid=False, error="Online verification required")
+                print("[LICENSE-DEBUG] ⚠️ NO online check method available — using cache only!")
+            
+            if online_result is not None:
+                # If server says invalid → clear local cache!
+                if not online_result.valid:
+                    print(f"[LICENSE-DEBUG] ⛔ Clearing cache — server says invalid")
+                    self.storage.clear()
+                    self._invalidate_validate_cache()
+                return online_result
+        else:
+            print(f"[LICENSE-DEBUG] Online check skipped — last check {since_last_check:.0f}s ago (interval={ONLINE_CHECK_INTERVAL}s)")
         
         # 🔒 Update last known time (for next clock check)
         cached['_last_known_time'] = datetime.now().isoformat()
+        
+        # 🔒 LIFETIME ROLLING EXPIRY: auto-extend 90 days on each successful cache read
+        tier_code = cached.get('tier', '')
+        if tier_code == 'LT':
+            expires = datetime.now() + timedelta(days=90)
+            cached['expires'] = expires.isoformat()
+        
         self.storage.save(cached)
         
         # Valid from cache
-        tier = self._tier_from_code(cached.get('tier'))
+        tier = self._tier_from_code(tier_code)
         role = UserRole(cached.get('role', 1))  # 🆕 Default: PREMIUM
         return LicenseInfo(
             valid=True,
             tier=tier,
             role=role,  # 🆕
-            expires=expires,
+            expires=self._safe_parse_dt(cached.get('expires', '2000-01-01')),
             machine_id=self.machine_id
         )
     
@@ -597,11 +799,12 @@ class LicenseClient:
         """
         Validate using REST client with dual-Firebase cross-validation.
         
-        This is the SECURE method - no Admin SDK required!
+        Raises ConnectionError if network is down (for cache fallback).
         """
         if not hasattr(self, '_rest_client') or not self._rest_client:
-            return LicenseInfo(valid=False, error="REST client not available")
+            raise ConnectionError("REST client not available")
         
+        # Let ConnectionError propagate to caller for cache fallback
         is_valid, status, data = self._rest_client.validate_with_crosscheck(
             license_key, 
             self.machine_id
@@ -610,6 +813,7 @@ class LicenseClient:
         if not is_valid:
             error_messages = {
                 "LICENSE_NOT_FOUND": "License key not found",
+                "LICENSE_DELETED_STALE_BACKUP": "License key deleted from server",
                 "MACHINE_MISMATCH": "License bound to different machine",
                 "LICENSE_REVOKED": "License has been revoked",
                 "CROSS_VALIDATION_FAILED": "Security validation failed",
@@ -620,20 +824,42 @@ class LicenseClient:
                 error=error_messages.get(status, f"Validation failed: {status}")
             )
         
-        # Update cache with validated data
+        # Update cache with validated data (SYNC tier/role from server!)
         cached = self.storage.load() or {}
         cached['last_verified'] = datetime.now().isoformat()
         cached['_last_known_time'] = datetime.now().isoformat()
-        cached['_validation_source'] = status  # VALID_CROSS_VALIDATED or VALID_SINGLE_SOURCE
+        cached['_validation_source'] = status
+        # Sync tier/role from server → cache
+        cached['tier'] = data.get('_t') or data.get('tier') or cached.get('tier')
+        cached['role'] = data.get('_role') or data.get('role') or cached.get('role')
+        
+        # 🔒 LT ROLLING: client controls expiry, NOT server
+        tier_code = cached.get('tier', '')
+        if tier_code == 'LT':
+            # Always set 90 days from now (ignore server _exp)
+            cached['expires'] = (datetime.now() + timedelta(days=90)).isoformat()
+        else:
+            # Non-LT: sync expiry from server
+            server_exp = data.get('_exp') or data.get('expires')
+            if server_exp:
+                if hasattr(server_exp, 'isoformat'):
+                    cached['expires'] = server_exp.isoformat()
+                elif isinstance(server_exp, str):
+                    cached['expires'] = server_exp
         self.storage.save(cached)
         
-        tier = self._tier_from_code(data.get('tier'))
-        role = UserRole(data.get('role', 1))
-        expires_str = data.get('expires', '2100-01-01')
+        tier = self._tier_from_code(data.get('_t') or data.get('tier'))
+        role = UserRole(data.get('_role') or data.get('role', 1))
+        expires_str = data.get('expires') or data.get('_exp', '2100-01-01')
         
         try:
             if isinstance(expires_str, str):
-                expires = datetime.fromisoformat(expires_str.replace('Z', '+00:00').replace('+00:00', ''))
+                raw = expires_str.replace('Z', '+00:00')
+                expires = datetime.fromisoformat(raw)
+                if expires.tzinfo is not None:
+                    expires = expires.replace(tzinfo=None)
+            elif hasattr(expires_str, 'isoformat'):
+                expires = expires_str if isinstance(expires_str, datetime) else datetime.now() + timedelta(days=365)
             else:
                 expires = datetime.now() + timedelta(days=365)
         except:
@@ -657,8 +883,9 @@ class LicenseClient:
         return info.tier.name if info.tier else None
     
     def get_role(self) -> UserRole:
-        """Get current user role 🆕"""
-        return UserRole.TESTER  # Force TESTER for current account
+        """Get current user role from validated license"""
+        info = self.validate()
+        return info.role if info.valid else UserRole.TRIAL
     
     def can_see_dev_console(self) -> bool:
         """Check if user can see Dev Console 🆕"""
@@ -676,31 +903,53 @@ class LicenseClient:
         """Deactivate (clear) local license"""
         self.storage.clear()
         self._cached_license = None
+        self._invalidate_validate_cache()
     
     # =====================
     # INTERNAL METHODS
     # =====================
     
+    # ── Checksum salt (obfuscated, split) ──
+    _CK_P1 = b"V3O_PUB"
+    _CK_P2 = b"_CK_2026"
+    
+    @classmethod
+    def _get_checksum_salt(cls) -> bytes:
+        return cls._CK_P1 + cls._CK_P2
+    
+    @staticmethod
+    def _compute_public_checksum(core_hex: str) -> str:
+        """Compute 4-char hex checksum from core key hex (same as admin keygen)."""
+        payload = core_hex.upper().encode() + LicenseClient._get_checksum_salt()
+        return hashlib.sha256(payload).hexdigest()[:4].upper()
+    
     def _validate_key_format(self, key: str) -> bool:
         """
-        Validate key format locally.
+        Validate key format locally + checksum verification.
         
-        v2.0 format: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX (8 segments)
+        v2.5 format: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-CSUM (9 segments)
+        v2.0 format: XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX (8 segments, legacy)
         Trial format: TRIAL-XXXX-XXXX-XXXX (4 segments)
         """
         parts = key.upper().replace(" ", "").split("-")
         
-        # New obfuscated format: 8 segments of 4 hex chars
+        # New format with checksum: 9 segments of 4 hex chars
+        if len(parts) == 9:
+            # Check all parts are 4 hex chars
+            if not all(len(p) == 4 and all(c in '0123456789ABCDEF' for c in p) for p in parts):
+                return False
+            # Verify public checksum (9th segment)
+            core_hex = "".join(parts[:8])
+            expected = self._compute_public_checksum(core_hex)
+            return parts[8] == expected
+        
+        # Legacy format: 8 segments of 4 hex chars (backward compatible)
         if len(parts) == 8:
             return all(len(p) == 4 and all(c in '0123456789ABCDEF' for c in p) for p in parts)
         
-        # Trial format: TRIAL-XXXX-XXXX-XXXX
+        # Trial format: TRIAL-XXXX-XXXX-XXXX (hex check)
         if len(parts) == 4 and parts[0] == "TRIAL":
-            return all(len(p) == 4 for p in parts[1:])
-        
-        # Legacy format: VEOAUTO-XXXX-XXXX-XXXX-XXXX (5 segments)
-        if len(parts) == 5 and parts[0] == "VEOAUTO":
-            return True
+            return all(len(p) == 4 and all(c in '0123456789ABCDEF' for c in p) for p in parts[1:])
         
         return False
     
@@ -804,12 +1053,103 @@ class LicenseClient:
     
     def _check_trial(self) -> LicenseInfo:
         """
-        Check trial status - NO AUTOMATIC TRIAL!
+        Check trial status — SERVER-AUTHORITATIVE.
         
-        v2.0: Trial requires a TRIAL-XXXX key from admin.
-        Uses multi-layer protection from trial_protection.py.
+        Priority:
+        1. Query Firebase _trials/{MID} for server-side trial record
+        2. Falls back to local TrialMarkerManager ONLY if network unavailable
         """
-        # v2.0: Use new trial protection if available
+        # ── Step 1: Query Firebase (authoritative) ──
+        try:
+            rest_client = getattr(self, '_rest_client', None)
+            if rest_client and hasattr(rest_client, 'check_trial_status'):
+                server_trial = rest_client.check_trial_status(self.machine_id)
+                
+                if server_trial.get("exists"):
+                    status = server_trial.get("status", "unknown")
+                    
+                    if status == "revoked":
+                        # Admin revoked trial → block
+                        return LicenseInfo(
+                            valid=False,
+                            error="Trial đã bị thu hồi bởi admin"
+                        )
+                    
+                    if status == "upgraded":
+                        # Trial upgraded to paid → try auto-restore key
+                        restored = self._try_restore_by_mid()
+                        if restored:
+                            return restored
+                        return LicenseInfo(
+                            valid=False,
+                            error="Đã nâng cấp lên gói trả phí. Vui lòng nhập serial key."
+                        )
+                    
+                    if status == "expired":
+                        return LicenseInfo(
+                            valid=False,
+                            error=server_trial.get("error", "Trial đã hết hạn")
+                        )
+                    
+                    if status == "active":
+                        # Active trial — use server expiry time
+                        expires_str = server_trial.get("expires_at", "")
+                        if expires_str:
+                            try:
+                                expires = self._safe_parse_dt(expires_str)
+                                if datetime.now() > expires:
+                                    self.storage.clear()  # Clear stale trial cache
+                                    return LicenseInfo(
+                                        valid=False,
+                                        error="Bản dùng thử đã hết hạn"
+                                    )
+                                
+                                # ✅ Cache trial data to license.dat (sync server → local)
+                                self.storage.save({
+                                    'key': f'TRIAL-{self.machine_id[:12]}',
+                                    'tier': 'TRIA',
+                                    'role': 0,
+                                    'machine_id': self.machine_id,
+                                    'expires': expires_str,
+                                    'last_verified': datetime.now().isoformat(),
+                                    '_last_known_time': datetime.now().isoformat(),
+                                    '_is_trial': True,
+                                    '_validation_source': 'server_trial',
+                                })
+                                
+                                # Layer 3: Reconcile daily usage from server
+                                self.reconcile_usage_from_server(server_trial)
+                                
+                                return LicenseInfo(
+                                    valid=True,
+                                    tier=LicenseTier.TRIAL,
+                                    expires=expires,
+                                    machine_id=self.machine_id
+                                )
+                            except Exception:
+                                pass
+                        
+                        # Active but no expiry → valid
+                        return LicenseInfo(
+                            valid=True,
+                            tier=LicenseTier.TRIAL,
+                            machine_id=self.machine_id
+                        )
+                
+                # No trial on server → try auto-restore paid key
+                restored = self._try_restore_by_mid()
+                if restored:
+                    return restored
+                return LicenseInfo(
+                    valid=False,
+                    error="License key required. Contact admin for trial key."
+                )
+                
+        except Exception as e:
+            print(f"[LICENSE-DEBUG] Firebase trial check failed: {e}")
+            # Network error → fall through to local check
+        
+        # ── Step 2: Fallback to local TrialMarkerManager (offline only) ──
         if self.trial_manager:
             status = self.trial_manager.validate_trial()
             
@@ -819,18 +1159,68 @@ class LicenseClient:
                     tier=LicenseTier.TRIAL,
                     expires=status.expires
                 )
-            else:
-                # No trial or expired - REQUIRE LICENSE KEY
-                return LicenseInfo(
-                    valid=False,
-                    error=status.error or "License key required"
-                )
         
-        # Fallback: No trial protection module - REQUIRE LICENSE
+        # ── Step 3: Try auto-restore paid key by MID ──
+        restored = self._try_restore_by_mid()
+        if restored:
+            return restored
+        
         return LicenseInfo(
             valid=False,
             error="License key required. Contact admin for trial key."
         )
+    
+    def _try_restore_by_mid(self):
+        """
+        Try to auto-restore license from Firebase by Machine ID.
+        
+        Searches _lic collection for active key bound to this MID.
+        If found: restores local cache (license.dat) and returns valid LicenseInfo.
+        If not found: returns None.
+        """
+        try:
+            rest_client = getattr(self, '_rest_client', None)
+            if not rest_client or not hasattr(rest_client, 'query_license_by_mid'):
+                return None
+            
+            result = rest_client.query_license_by_mid(self.machine_id)
+            if not result.get("found"):
+                return None
+            
+            key = result.get("key", "")
+            tier_code = result.get("tier", "")
+            role = result.get("role", 1)
+            expires_str = result.get("expires", "")
+            
+            print(f"[LICENSE] Auto-restore: found key {key[:8]}... tier={tier_code}")
+            
+            # Restore local cache
+            try:
+                expires = datetime.fromisoformat(expires_str) if expires_str else datetime.now() + timedelta(days=30)
+            except Exception:
+                expires = datetime.now() + timedelta(days=30)
+            
+            cache_data = {
+                'key': key,
+                'tier': tier_code,
+                'role': role,
+                'expires': expires.isoformat(),
+                'machine_id': self.machine_id,
+                'last_verified': datetime.now().isoformat(),
+            }
+            self.storage.save(cache_data)
+            
+            tier = self._tier_from_code(tier_code)
+            return LicenseInfo(
+                valid=True,
+                tier=tier,
+                role=UserRole(role),
+                expires=expires,
+                machine_id=self.machine_id
+            )
+        except Exception as e:
+            print(f"[LICENSE-DEBUG] Auto-restore failed: {e}")
+            return None
     
     def activate_trial(self, trial_key: str) -> LicenseInfo:
         """
@@ -872,6 +1262,134 @@ class LicenseClient:
             if tier.value == code:
                 return tier
         return None
+    
+    # =====================
+    # USAGE TRACKING
+    # =====================
+    
+    @property
+    def usage(self) -> UsageStats:
+        """Get current usage stats."""
+        return self._usage
+    
+    def _load_usage(self):
+        """Load usage stats from file with HMAC verification."""
+        if not self._usage_file.exists():
+            return
+        try:
+            data = json.loads(self._usage_file.read_text())
+            
+            # Layer 1: Verify HMAC signature
+            stored_sig = data.get("_sig", "")
+            if stored_sig:
+                expected_sig = self._compute_usage_hmac(data)
+                if stored_sig != expected_sig:
+                    # TAMPER DETECTED — set count to daily limit
+                    print("[LICENSE] ⚠️ Usage file tampered — resetting to limit")
+                    self._usage = UsageStats()
+                    self._usage.today_generations = 100  # Assume max reached
+                    self._usage.last_reset_date = datetime.now().strftime("%Y-%m-%d")
+                    self._save_usage()
+                    return
+            
+            self._usage = UsageStats(
+                total_generations=data.get("total_generations", 0),
+                today_generations=data.get("today_generations", 0),
+                total_downloads=data.get("total_downloads", 0),
+                last_reset_date=data.get("last_reset_date"),
+            )
+            # Reset daily counter if new day
+            today = datetime.now().strftime("%Y-%m-%d")
+            if self._usage.last_reset_date != today:
+                self._usage.today_generations = 0
+                self._usage.last_reset_date = today
+                self._save_usage()  # Re-sign with new date
+        except Exception:
+            self._usage = UsageStats()
+    
+    def _compute_usage_hmac(self, data: dict) -> str:
+        """Compute HMAC for usage data (hardware-bound)."""
+        import hmac as _hmac, hashlib
+        # Key = SHA256(machine_id + salt)
+        key_material = (self.machine_id + "_USAGE_ANTI_TAMPER_v1").encode()
+        key = hashlib.sha256(key_material).digest()
+        
+        # Message = date + today_gen + total_gen + total_dl
+        msg = (
+            f"{data.get('last_reset_date', '')}"
+            f"|{data.get('today_generations', 0)}"
+            f"|{data.get('total_generations', 0)}"
+            f"|{data.get('total_downloads', 0)}"
+        ).encode()
+        
+        return _hmac.new(key, msg, hashlib.sha256).hexdigest()[:32]
+    
+    def _save_usage(self):
+        """Save usage stats to file with HMAC signature."""
+        data = {
+            "total_generations": self._usage.total_generations,
+            "today_generations": self._usage.today_generations,
+            "total_downloads": self._usage.total_downloads,
+            "last_reset_date": self._usage.last_reset_date,
+        }
+        # Layer 1: HMAC sign
+        data["_sig"] = self._compute_usage_hmac(data)
+        
+        self._usage_file.parent.mkdir(parents=True, exist_ok=True)
+        self._usage_file.write_text(json.dumps(data, indent=2))
+    
+    def _sync_usage_to_server(self):
+        """Layer 2: Sync daily count to Firebase (non-blocking, fire-and-forget)."""
+        try:
+            rest_client = getattr(self, '_rest_client', None)
+            if rest_client and hasattr(rest_client, 'sync_daily_usage'):
+                today = datetime.now().strftime("%Y-%m-%d")
+                ok = rest_client.sync_daily_usage(
+                    self.machine_id,
+                    self._usage.today_generations,
+                    today,
+                )
+                if ok:
+                    print(f"[LICENSE] 📤 Synced daily count to server: {self._usage.today_generations}")
+        except Exception:
+            pass  # Silent — network failures are OK
+    
+    def reconcile_usage_from_server(self, server_trial_data: dict):
+        """Layer 3: Startup reconciliation — max(local, server)."""
+        try:
+            server_count = int(server_trial_data.get("daily_count", 0))
+            server_date = server_trial_data.get("daily_date", "")
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            if server_date == today and server_count > self._usage.today_generations:
+                print(
+                    f"[LICENSE] 🔄 Server count higher: "
+                    f"{self._usage.today_generations} → {server_count}"
+                )
+                self._usage.today_generations = server_count
+                self._save_usage()
+        except Exception:
+            pass
+    
+    def log_generation(self):
+        """Log a generation event (on 720p download success).
+        
+        Anti-tamper: HMAC-signed local + server sync every 10 gen.
+        """
+        self._usage.total_generations += 1
+        self._usage.today_generations += 1
+        self._usage.last_generation_at = datetime.now()
+        self._usage.last_reset_date = datetime.now().strftime("%Y-%m-%d")
+        self._save_usage()
+        
+        # Layer 2: Server sync every 10 generations or at limit
+        if self._usage.today_generations % 10 == 0 or self._usage.today_generations >= 100:
+            self._sync_usage_to_server()
+    
+    def log_download(self):
+        """Log a download event (720p file saved)."""
+        self._usage.total_downloads += 1
+        self._save_usage()
 
 
 def main():

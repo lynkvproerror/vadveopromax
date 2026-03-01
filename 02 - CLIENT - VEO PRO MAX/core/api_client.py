@@ -395,8 +395,8 @@ class VEOApiClient:
                 }
                 # F2V: add start image
                 if wt == "F2V" and image_uris:
-                    req_item["startImageInput"] = {
-                        "image": {"mediaImageId": image_uris[0]}
+                    req_item["startImage"] = {
+                        "mediaId": image_uris[0]
                     }
                 requests_list.append(req_item)
             
@@ -422,11 +422,11 @@ class VEOApiClient:
                     "metadata": {"sceneId": str(_uuid.uuid4())},
                 }
                 if image_uris and len(image_uris) >= 2:
-                    req_item["startImageInput"] = {"image": {"mediaImageId": image_uris[0]}}
-                    req_item["endImageInput"] = {"image": {"mediaImageId": image_uris[1]}}
+                    req_item["startImage"] = {"mediaId": image_uris[0]}
+                    req_item["endImage"] = {"mediaId": image_uris[1]}
                     endpoint = "I2V_DUAL"
                 elif image_uris and len(image_uris) == 1:
-                    req_item["startImageInput"] = {"image": {"mediaImageId": image_uris[0]}}
+                    req_item["startImage"] = {"mediaId": image_uris[0]}
                     endpoint = "I2V_SINGLE"
                 else:
                     return "I2V_SINGLE", {}  # Error: no images

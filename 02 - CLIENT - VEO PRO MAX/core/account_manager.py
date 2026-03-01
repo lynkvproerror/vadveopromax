@@ -402,9 +402,23 @@ class AccountManager:
         Retries up to 3 times with progressive delay on timeout
         (CfT cold start or reCAPTCHA script loading may delay first attempts).
         
+        Circuit-breaker: After 2+ consecutive full-cycle failures,
+        applies escalating backoff (30s→60s→120s) to prevent infinite retry loops.
+        
         Returns:
             Fresh reCAPTCHA token, or None if extension not connected.
         """
+        # ── Circuit-breaker backoff ──
+        # After 2+ consecutive failures, sleep before allowing retry
+        consec = getattr(self, '_recaptcha_consecutive_failures', 0)
+        if consec >= 2:
+            backoff = min(30 * (2 ** (consec - 2)), 120)  # 30, 60, 120 cap
+            log.warning(
+                f"[{self.email}] ⏸️ reCAPTCHA circuit-breaker: {consec} consecutive "
+                f"failures → backing off {backoff}s before retry"
+            )
+            await asyncio.sleep(backoff)
+        
         if not self._extension_bridge:
             # Auto-recover Layer 1: find bridge from sibling accounts via parent manager
             if hasattr(self, '_parent_manager') and self._parent_manager:
@@ -421,6 +435,7 @@ class AccountManager:
                     log.info(f"[{self.email}] ✅ Auto-recovered extension bridge from engine")
             if not self._extension_bridge:
                 log.warning(f"[{self.email}] ⏳ Extension bridge not yet available — reCAPTCHA deferred")
+                self._recaptcha_consecutive_failures = consec + 1
                 return None
         if not self._extension_bridge.is_connected(self.email):
             # Graceful wait: extension may be reconnecting (browser restart, network blip)
@@ -434,6 +449,7 @@ class AccountManager:
                     f"[{self.email}] Extension still offline after 15s — "
                     f"reCAPTCHA deferred (bridge has {len(self._extension_bridge._connections)} conn(s))"
                 )
+                self._recaptcha_consecutive_failures = consec + 1
                 return None
         
         max_attempts = 3
@@ -443,6 +459,8 @@ class AccountManager:
                 if token:
                     self._token_cache.set(token)
                     self._session.update_recaptcha(token)
+                    # Reset circuit-breaker on success
+                    self._recaptcha_consecutive_failures = 0
                     log.info(f"[{self.email}] 🧩 reCAPTCHA refreshed via Extension bridge (attempt {attempt})")
                     return token
                 log.warning(f"[{self.email}] Extension bridge returned no reCAPTCHA token (attempt {attempt})")
@@ -455,6 +473,12 @@ class AccountManager:
                 log.info(f"[{self.email}] Retrying reCAPTCHA in {delay}s...")
                 await asyncio.sleep(delay)
         
+        # All attempts failed — increment circuit-breaker counter
+        self._recaptcha_consecutive_failures = consec + 1
+        log.warning(
+            f"[{self.email}] ❌ reCAPTCHA refresh failed all {max_attempts} attempts "
+            f"(consecutive failures: {consec + 1})"
+        )
         return None
     
     async def ensure_browser(self, headless: bool = True):

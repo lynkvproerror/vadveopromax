@@ -25,7 +25,6 @@ REQUIRED_PACKAGES = [
     ("playwright", "playwright"),
     ("aiohttp", "aiohttp"),
     ("requests", "requests"),
-    ("firebase-admin", "firebase_admin"),
     ("websocket-client", "websocket"),
 ]
 

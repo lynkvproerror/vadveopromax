@@ -1093,6 +1093,49 @@ class TabQueue(
                     if main_window and hasattr(main_window, 'show_toast'):
                         main_window.show_toast(check["summary"], "success", duration=3000)
             
+            # ── G0: Daily generation limit gate ──────────────────────
+            # Check BEFORE engine starts — block if limit exceeded.
+            # Only applies to TRIAL (PREMIUM/TESTER have limit = -1).
+            _ctrl = self.controller
+            _perm = getattr(_ctrl, '_permissions', None) if _ctrl else None
+            _lc = getattr(_ctrl, '_license_client', None) if _ctrl else None
+            
+            if _perm and _lc:
+                daily_limit = _perm.limits.daily_generation_limit
+                if daily_limit > 0:  # -1 = unlimited
+                    today_used = _lc.usage.today_generations
+                    if today_used >= daily_limit:
+                        # Show purchase popup — blocks until user acts
+                        from ui.popups.license_popup import LicenseRequiredDialog
+                        dlg = LicenseRequiredDialog(
+                            parent=self,
+                            controller=_ctrl,
+                            force_exit=False,
+                            license_error=(
+                                f"Daily limit reached ({today_used}/{daily_limit}). "
+                                "Upgrade to continue generating."
+                            ),
+                        )
+                        result = dlg.exec()
+                        
+                        if result != dlg.DialogCode.Accepted:
+                            # User closed without purchasing → force stop
+                            self._is_processing = False
+                            self._is_paused = False
+                            self._update_button_states()
+                            return  # Block engine start entirely
+                        else:
+                            # License activated → re-check limits
+                            _perm = getattr(_ctrl, '_permissions', None)
+                            new_limit = _perm.limits.daily_generation_limit if _perm else -1
+                            if new_limit > 0 and _lc.usage.today_generations >= new_limit:
+                                # Still exceeded (shouldn't happen after upgrade)
+                                self._is_processing = False
+                                self._is_paused = False
+                                self._update_button_states()
+                                return
+            # ── End G0 ───────────────────────────────────────────────
+            
             self.start_all.emit()
             # Note: start_all signal is connected to controller.start_processing() in app.py
             # — no direct call needed here

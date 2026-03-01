@@ -43,7 +43,7 @@ def main():
         ensure_critical_deps()
         
         # PySide6 imports
-        from PySide6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication, QDialog
         from PySide6.QtCore import Qt
         
         # App imports
@@ -99,17 +99,78 @@ def main():
         event_manager = get_event_manager()
         event_manager.start_processor()
         
-        # Start controller
+        # ── License validation BEFORE starting services ──
+        splash.set_status("Checking license...")
+        print("[LICENSE] Startup license validation...")
+        try:
+            # 🔒 Force IMMEDIATE online check at startup (bypass 5-min cache)
+            if hasattr(controller, '_license_client') and controller._license_client:
+                lc = controller._license_client
+                if hasattr(lc, 'validate_online_now'):
+                    splash.set_status("Verifying license online...")
+                    app.processEvents()
+                    print("[LICENSE] Calling validate_online_now()...")
+                    online_result = lc.validate_online_now()
+                    print(f"[LICENSE] Online result: valid={online_result.valid}, error={getattr(online_result, 'error', None)}")
+                    
+                    if not online_result.valid:
+                        # Key deleted/revoked on server → force invalid
+                        controller._license_valid = False
+                        print(f"[LICENSE] ⛔ Server says INVALID → blocking app")
+                    else:
+                        print(f"[LICENSE] ✅ Server confirmed valid")
+                else:
+                    print("[LICENSE] ⚠️ validate_online_now not found")
+            else:
+                print("[LICENSE] ⚠️ _license_client not available")
+            
+            controller._update_permissions()
+            role = controller._permissions.role.value.upper()
+            splash.set_status(f"License: {role}")
+            print(f"[LICENSE] Role={role}, _license_valid={controller._license_valid}")
+            
+            if role == "TRIAL":
+                splash.set_status("License: TRIAL — limited features")
+        except Exception as e:
+            print(f"[LICENSE] ❌ Exception: {e}")
+            controller._license_valid = False
+            splash.set_status("License: TRIAL (default)")
+        
+        # ── License popup gate: block if invalid BEFORE launching anything ──
+        if not controller._license_valid:
+            splash.close()
+            
+            from ui.popups.license_popup import LicenseRequiredDialog
+            
+            # Get the error message from the last validation
+            _license_error = ""
+            try:
+                info = controller._license_client.validate()
+                _license_error = getattr(info, 'error', '') or ''
+            except Exception:
+                pass
+            
+            # Loop: keep showing dialog until valid key or explicit exit
+            while not controller._license_valid:
+                dlg = LicenseRequiredDialog(
+                    parent=None,
+                    controller=controller,
+                    force_exit=True,
+                    license_error=_license_error,
+                )
+                dlg.exec()
+                # Re-validate after dialog closes
+                controller._update_permissions()
+        
+        # Start controller (launches browsers, services) — only after license OK
         splash.set_status("Starting services...")
         controller.start()
         
-        # Create main window (hidden for now, splash is visible)
+        # Create main window
         splash.set_status("Building interface...")
         window = MainWindow(controller=controller, settings=settings)
         
-        # ── Splash done: close as soon as UI is built ──
-        # Browsers will auto-launch in background via set_profiles_controller()
-        # No need to wait for browser launch — user sees app immediately
+        # ── Splash done ──
         splash.finish(window)
         
         # Run event loop

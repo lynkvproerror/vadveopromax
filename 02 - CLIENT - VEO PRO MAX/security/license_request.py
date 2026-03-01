@@ -17,10 +17,10 @@ from typing import Optional, Dict
 from enum import Enum
 from pathlib import Path
 
-# Firebase
+# Firebase REST Client (secure, no Admin SDK)
+# NOTE: License request submission uses REST API only
 try:
-    import firebase_admin
-    from firebase_admin import credentials, firestore
+    from firebase_rest_client import FirebaseRESTClient
     FIREBASE_AVAILABLE = True
 except ImportError:
     FIREBASE_AVAILABLE = False
@@ -140,27 +140,15 @@ class LicenseRequestClient:
         self._init_firebase()
     
     def _init_firebase(self):
-        """Initialize Firebase connection"""
+        """Initialize Firebase connection via REST API (no Admin SDK)."""
         if not FIREBASE_AVAILABLE:
             return
         
-        import os
-        cred_paths = [
-            os.environ.get('VEO_LICENSE_CONFIG'),
-            Path(__file__).parent / "00_ADMIN" / "veoauto-f54b5-firebase-adminsdk-fbsvc-4d5a91e325.json",
-            Path(__file__).parent.parent / "00_ADMIN" / "veoauto-f54b5-firebase-adminsdk-fbsvc-4d5a91e325.json",
-        ]
-        
-        for path in cred_paths:
-            if path and Path(path).exists():
-                try:
-                    if not firebase_admin._apps:
-                        cred = credentials.Certificate(str(path))
-                        firebase_admin.initialize_app(cred)
-                    self.db = firestore.client()
-                    break
-                except:
-                    pass
+        try:
+            self._rest_client = FirebaseRESTClient()
+            self.db = "rest"  # Flag that we have connection
+        except Exception:
+            pass
     
     def _get_document_id(self) -> str:
         """Get document ID (hash of machine_id for shorter URL)"""

@@ -238,12 +238,27 @@ class LicenseTier(str, Enum):
     All paid tiers map to PREMIUM role.
     TESTER role is assigned via Firebase _role field, not via tier.
     """
-    TRIAL = "trial"          # 7 days free
+    TRIAL = "TRIA"           # 3 days free (matches license_client.py)
     ONE_MONTH = "1M"         # 300,000 VND
     THREE_MONTHS = "3M"      # 500,000 VND
     SIX_MONTHS = "6M"        # 800,000 VND
     ONE_YEAR = "1Y"          # 1,200,000 VND
-    LIFETIME = "LIFE"        # 3,000,000 VND
+    LIFETIME = "LT"          # 3,000,000 VND
+
+
+# === SHARED TIER DISPLAY NAMES (single source of truth) ===
+TIER_DISPLAY_MAP = {
+    "TRIA": "Trial (3d)", "1M": "1 Tháng", "3M": "3 Tháng",
+    "6M": "6 Tháng", "1Y": "1 Năm", "LT": "Vĩnh viễn",
+}
+
+# === FIREBASE COLLECTION NAMES ===
+COL_LICENSES = "_lic"
+COL_TRIALS = "_trials"
+COL_UPGRADE_REQUESTS = "_upgrade_requests"
+COL_CUSTOMERS = "_customers"
+COL_MID_TO_KEY = "_mid_to_key"
+COL_CONFIG = "_config"
 
 
 # === WORKER STATES ===

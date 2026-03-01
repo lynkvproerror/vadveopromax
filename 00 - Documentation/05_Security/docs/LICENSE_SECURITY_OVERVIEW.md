@@ -128,6 +128,14 @@ F208-72DF-9B1D-4BF6-661F-3FEB-E3C5-0DA9
 - EXE hash verification
 - Tampering detection
 
+### Layer 5: Runtime License Gates (v2.1)
+- **G0**: Pre-start daily limit gate → blocks engine Start, shows purchase popup
+- **G1**: Global thread cap → blocks foreman spawn
+- **G2**: Per-task daily limit → rejects tasks via `fail_task()`
+- **G3**: Output count cap → clamps `output_count`
+- **G4**: Feature gate → blocks Continuation for TRIAL
+- See `LICENSE_TIERS_FEATURES.md` → "Runtime License Gates" for full details
+
 ---
 
 ## 🔧 Setup Instructions

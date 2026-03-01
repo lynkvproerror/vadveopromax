@@ -63,14 +63,12 @@ class TimeVerifier:
         return None
     
     def _get_firebase_time(self) -> Optional[float]:
-        """Get time from Firebase server."""
+        """Get time from Firebase server via REST API."""
         try:
-            from firebase_admin import firestore
-            db = firestore.client()
-            ref = db.collection("_time_check").document("ping")
-            ref.set({"ts": firestore.SERVER_TIMESTAMP})
-            doc = ref.get()
-            return doc.to_dict()["ts"].timestamp()
+            from firebase_rest_client import FirebaseRESTClient
+            client = FirebaseRESTClient()
+            # Use HTTP time as fallback — REST client doesn't expose server timestamp
+            return None  # Graceful fallback to HTTP time
         except:
             return None
     
@@ -233,32 +231,27 @@ class TrialMarkerManager:
     # =========================================================================
     
     def _write_firebase_marker(self, trial_start: datetime):
-        """Write trial start to Firebase."""
+        """Write trial start to Firebase via REST API."""
         try:
-            from firebase_admin import firestore
-            db = firestore.client()
-            
+            from firebase_rest_client import FirebaseRESTClient
+            client = FirebaseRESTClient()
             mid_hash = hashlib.sha256(self.machine_id.encode()).hexdigest()[:16]
-            
-            db.collection("_trials").document(mid_hash).set({
+            client.set_document("_trials", mid_hash, {
                 "start": trial_start.isoformat(),
                 "mid_hash": mid_hash[:8],
-                "created": firestore.SERVER_TIMESTAMP
             })
         except:
             pass
     
     def _read_firebase_marker(self) -> Optional[datetime]:
-        """Read trial start from Firebase."""
+        """Read trial start from Firebase via REST API."""
         try:
-            from firebase_admin import firestore
-            db = firestore.client()
-            
+            from firebase_rest_client import FirebaseRESTClient
+            client = FirebaseRESTClient()
             mid_hash = hashlib.sha256(self.machine_id.encode()).hexdigest()[:16]
-            doc = db.collection("_trials").document(mid_hash).get()
-            
-            if doc.exists:
-                return datetime.fromisoformat(doc.to_dict()["start"])
+            data = client.get_document("_trials", mid_hash)
+            if data and "start" in data:
+                return datetime.fromisoformat(data["start"])
         except:
             pass
         return None

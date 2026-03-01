@@ -89,15 +89,11 @@ class EditPromptPopup(BasePopup):
         self._main_layout.addWidget(self.footer)
     
     def _update_char_count(self):
-        """Update character count display."""
+        """Update character count display (info only, no limit)."""
         text = self.prompt_textbox.toPlainText()
         count = len(text)
-        
-        color = Theme.RED if count > self.MAX_CHARS else Theme.SUBTEXT0
-        self.char_count_label.setText(f"Character Count: {count}/{self.MAX_CHARS}")
-        self.char_count_label.setStyleSheet(f"color: {color}; font-size: 11px;")
-        
-        self.save_btn.setEnabled(count <= self.MAX_CHARS)
+        self.char_count_label.setText(f"Character Count: {count}")
+        self.char_count_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
     
     def _on_save(self):
         """Save prompt and close."""

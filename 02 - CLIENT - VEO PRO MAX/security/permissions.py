@@ -72,8 +72,8 @@ class Permissions:
             return 1
         return 999  # Unlimited for Premium/Tester
     
-    def get_max_threads(self) -> int:
-        """Max concurrent threads allowed"""
+    def get_max_foremen(self) -> int:
+        """Max concurrent foremen allowed"""
         role = self._get_role()
         if role == UserRole.TRIAL:
             return 2

@@ -53,10 +53,10 @@ class Feature(str, Enum):
 class RoleLimits:
     """Limits for a role."""
     max_cookies: int = 1
-    max_threads: int = 2
+    max_foremen: int = 2          # Max concurrent foremen (submit workers)
     max_prompts_per_batch: int = 10
     max_outputs_per_prompt: int = 2
-    daily_generation_limit: int = 20
+    daily_generation_limit: int = 100
     features: Set[Feature] = field(default_factory=set)
 
 
@@ -64,7 +64,7 @@ class PermissionsSystem:
     """Role-based feature gating.
     
     Roles (v2.2 — per LICENSE_TIERS_FEATURES.md):
-    - TRIAL (0): 1 cookie, 2 threads, 10 prompts
+    - TRIAL (0): 1 cookie, 2 foremen, 10 prompts
     - PREMIUM (1): Unlimited (all paid tiers)
     - TESTER (2): Unlimited + Dev Console + Beta
     """
@@ -73,10 +73,10 @@ class PermissionsSystem:
     ROLE_LIMITS: Dict[Role, RoleLimits] = {
         Role.TRIAL: RoleLimits(
             max_cookies=1,
-            max_threads=2,
+            max_foremen=2,          # Trial: max 2 concurrent foremen
             max_prompts_per_batch=10,
             max_outputs_per_prompt=2,
-            daily_generation_limit=20,
+            daily_generation_limit=100,
             features={
                 Feature.TEXT_TO_VIDEO,
                 Feature.IMAGE_TO_VIDEO,
@@ -85,11 +85,18 @@ class PermissionsSystem:
                 Feature.IMAGE_TO_IMAGE,
                 Feature.QUEUE_MANAGER,
                 Feature.AUTO_UPSCALE,
+                Feature.DOWNLOAD_4K,
+                Feature.BATCH_PROCESSING,
+                Feature.MULTI_ACCOUNT,
+                Feature.IMAGE_LIBRARY,
+                Feature.CUSTOM_OUTPUT,
+                Feature.ADVANCED_SETTINGS,
+                # NOT included: CONTINUATION, DEV_CONSOLE, BETA_FEATURES
             },
         ),
         Role.PREMIUM: RoleLimits(
             max_cookies=-1,      # Unlimited
-            max_threads=-1,      # Unlimited
+            max_foremen=-1,      # Unlimited
             max_prompts_per_batch=-1,  # Unlimited
             max_outputs_per_prompt=4,
             daily_generation_limit=-1,  # Unlimited
@@ -112,7 +119,7 @@ class PermissionsSystem:
         ),
         Role.TESTER: RoleLimits(
             max_cookies=-1,      # Unlimited
-            max_threads=-1,      # Unlimited
+            max_foremen=-1,      # Unlimited
             max_prompts_per_batch=-1,  # Unlimited
             max_outputs_per_prompt=4,
             daily_generation_limit=-1,  # Unlimited
@@ -120,7 +127,7 @@ class PermissionsSystem:
         ),
     }
     
-    def __init__(self, default_role: Role = Role.TESTER):
+    def __init__(self, default_role: Role = Role.TRIAL):
         self._current_role = default_role
         self._custom_features: Set[Feature] = set()
     
@@ -131,6 +138,18 @@ class PermissionsSystem:
     @property
     def limits(self) -> RoleLimits:
         return self.ROLE_LIMITS.get(self._current_role, self.ROLE_LIMITS[Role.TRIAL])
+    
+    def is_trial(self) -> bool:
+        """Check if current role is TRIAL."""
+        return self._current_role == Role.TRIAL
+    
+    def is_premium(self) -> bool:
+        """Check if current role is PREMIUM."""
+        return self._current_role == Role.PREMIUM
+    
+    def is_tester(self) -> bool:
+        """Check if current role is TESTER."""
+        return self._current_role == Role.TESTER
     
     def set_role(self, role: Role):
         """Set current role."""
@@ -215,7 +234,7 @@ class PermissionsSystem:
         limits = self.limits
         return {
             "max_cookies": limits.max_cookies,
-            "max_threads": limits.max_threads,
+            "max_foremen": limits.max_foremen,
             "max_prompts_per_batch": limits.max_prompts_per_batch,
             "max_outputs_per_prompt": limits.max_outputs_per_prompt,
             "daily_generation_limit": limits.daily_generation_limit,

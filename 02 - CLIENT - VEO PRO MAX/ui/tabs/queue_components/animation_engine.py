@@ -153,7 +153,14 @@ class QueueAnimationMixin:
         
         if has_pixmap and is_upscaling:
             # Upscale overlay: dark tint + progress % on existing thumbnail
-            self._apply_upscale_overlay(slot, upscale_status, progress)
+            # Compute upscale-specific progress instead of using stale task progress
+            if upscale_status == 'submitting':
+                upscale_pct = 60
+            elif upscale_status == 'polling':
+                upscale_pct = 75
+            else:
+                upscale_pct = progress  # fallback
+            self._apply_upscale_overlay(slot, upscale_status, upscale_pct)
             self._register_upscale_spinner(slot)
             return
         

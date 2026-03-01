@@ -66,8 +66,20 @@ class GenerationTabBase(QWidget):
     def __init__(self, parent: Optional[QWidget] = None, controller=None):
         super().__init__(parent)
         self.controller = controller
+        
         self._init_extra()
         self._setup_ui()
+    
+    @property
+    def _is_trial(self) -> bool:
+        """Live check — re-evaluates on every access so upgrade takes effect immediately."""
+        try:
+            if self.controller:
+                from services.permissions import Role
+                return self.controller._permissions.role == Role.TRIAL
+        except Exception:
+            pass
+        return False
     
     def _init_extra(self):
         """Hook for subclass-specific init (e.g. FrameMode enum)."""
@@ -263,9 +275,7 @@ class GenerationTabBase(QWidget):
         if self.IMAGE_MODE is not None:
             self.prompt_table.slot_image_changed.connect(self._on_slot_changed)
         if self.SHOW_CONTINUATION:
-            self.prompt_table.continuation_toggled.connect(
-                lambda idx, checked: self._update_chain_indicator(self.prompt_table.get_prompts())
-            )
+            self.prompt_table.continuation_toggled.connect(self._on_continuation_checkbox_toggled)
         layout.addWidget(self.prompt_table)
         
         return frame
@@ -362,11 +372,40 @@ class GenerationTabBase(QWidget):
     
     def _on_select_all_cont(self):
         """Select all prompts for continuation."""
+        # Trial guard: block continuation
+        if self._is_trial:
+            from ui.popups import show_warning
+            show_warning(
+                self, "🔒 Trial Limit",
+                "Continuation chỉ dành cho gói Premium.\n\n"
+                "Nâng cấp để sử dụng tính năng nối cảnh mượt."
+            )
+            return
         prompts = self.prompt_table.get_prompts()
         for i, _ in enumerate(prompts):
             if i > 0:
                 prompts[i].continuation_from = prompts[i - 1].index
         self.prompt_table.set_prompts(prompts)
+    
+    def _on_continuation_checkbox_toggled(self, idx: int, checked: bool):
+        """Handle individual continuation checkbox toggle."""
+        # Trial guard: block continuation
+        if self._is_trial and checked:
+            # Revert the checkbox
+            prompts = self.prompt_table.get_prompts()
+            for p in prompts:
+                if p.index == idx:
+                    p.continuation_from = None
+                    break
+            self.prompt_table.set_prompts(prompts)
+            from ui.popups import show_warning
+            show_warning(
+                self, "🔒 Trial Limit",
+                "Continuation chỉ dành cho gói Premium.\n\n"
+                "Nâng cấp để sử dụng tính năng nối cảnh mượt."
+            )
+            return
+        self._update_chain_indicator(self.prompt_table.get_prompts())
     
     def _on_select_none_cont(self):
         """Deselect all prompts from continuation."""
@@ -459,31 +498,16 @@ class GenerationTabBase(QWidget):
         if not prompts:
             return
         
-        # Check concurrency warnings (shared across all generation tabs)
-        if not GenerationTabBase._suppress_concurrency_warning and self.controller and hasattr(self.controller, 'get_concurrency_warnings'):
-            output_count = self.sidebar.get_values().get("output_count", 2)
-            warnings = self.controller.get_concurrency_warnings(output_per_prompt=output_count)
-            if warnings:
-                from ui.popups import show_confirm_with_checkbox
-                details = "\n".join(
-                    f"  • {email}: {workers} workers × {output_count} outputs = {load} calls (safe: ≤{safe})"
-                    for email, workers, load, safe in warnings
-                )
-                confirmed, dont_remind = show_confirm_with_checkbox(
-                    self,
-                    "⚠️ High Concurrency Risk",
-                    f"Some accounts exceed the safe concurrent API limit:\n\n"
-                    f"{details}\n\n"
-                    f"Higher values may cause 403 errors from Google.\n"
-                    f"Go to Settings tab to adjust workers.\n\n"
-                    f"Add to queue anyway?",
-                    checkbox_text="Don't remind again this session",
-                    danger=True,
-                )
-                if dont_remind:
-                    GenerationTabBase._suppress_concurrency_warning = True
-                if not confirmed:
-                    return
+        # Trial guard: max 10 prompts per batch
+        if self._is_trial and len(prompts) > 10:
+            from ui.popups import show_warning
+            show_warning(
+                self, "🔒 Trial Limit",
+                f"Gói Trial giới hạn tối đa 10 prompts mỗi lần.\n"
+                f"Hiện tại: {len(prompts)} prompts.\n\n"
+                "Nâng cấp lên Premium để thêm không giới hạn."
+            )
+            return
         
         settings = self.sidebar.get_values()
         settings = self._customize_settings(settings)

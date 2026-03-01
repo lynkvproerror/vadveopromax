@@ -34,7 +34,7 @@ from core.log_exporter import LogExporter
 from core.queue_dto import VideoSlotDTO, TaskDTO, GroupDTO
 
 # Services
-from services.license_client import LicenseClient
+from security.license_client import LicenseClient
 from services.permissions import PermissionsSystem, Role, Feature
 
 # Config
@@ -96,6 +96,7 @@ class AppController:
         # Services
         self._license_client = LicenseClient()
         self._permissions = PermissionsSystem()
+        self._license_valid = False  # G0: Must be validated before any generation
         
         # Engine — replaces manual threading.Thread worker management
         # Engine uses asyncio.TaskGroup for proper async worker coroutines
@@ -157,6 +158,7 @@ class AppController:
         # ProfilesController — shared singleton (also used by tab_settings)
         from core.profiles_controller import get_profiles_controller
         self._profiles_controller = get_profiles_controller()
+        self._profiles_controller._app_controller = self  # G6: backref for license check in add_profile
         
         # Extension bridge — WebSocket server for Chrome Extension tokens
         from core.extension_bridge import ExtensionBridge
@@ -940,8 +942,23 @@ class AppController:
                                 pid = data.get("pid")
                                 if pid:
                                     _os.kill(pid, 0)  # Signal 0 = check existence
-                                    log.info(f"[AppController] Chrome PID={pid} still alive — skip restart for {email}")
-                                    return
+                                    # PID alive — but is it actually chrome.exe?
+                                    is_chrome = False
+                                    try:
+                                        import subprocess as _sp
+                                        result = _sp.run(
+                                            ['tasklist', '/FI', f'PID eq {pid}', '/FO', 'CSV', '/NH'],
+                                            capture_output=True, text=True, timeout=3
+                                        )
+                                        is_chrome = 'chrome.exe' in result.stdout.lower()
+                                    except Exception:
+                                        is_chrome = True  # Can't verify — assume alive
+                                    
+                                    if is_chrome:
+                                        log.info(f"[AppController] Chrome PID={pid} still alive — skip restart for {email}")
+                                        return
+                                    else:
+                                        log.info(f"[AppController] PID={pid} alive but NOT chrome — proceeding with restart for {email}")
                             except (ProcessLookupError, PermissionError):
                                 pass  # Process dead — proceed with restart
                             except Exception:
@@ -1935,6 +1952,19 @@ class AppController:
         profiles = self._profiles_controller.get_all_profiles()
         profile_emails = {p['email'] for p in profiles}
         
+        # G6: License gate — cap number of enabled accounts by max_cookies
+        max_cookies = self._permissions.limits.max_cookies
+        if max_cookies > 0:
+            enabled_profiles = [p for p in profiles if p.get('is_enabled', True)]
+            if len(enabled_profiles) > max_cookies:
+                log.info(
+                    f"[G6] Account limit: {len(enabled_profiles)} enabled, "
+                    f"max={max_cookies} — capping"
+                )
+                # Keep first N enabled, disable rest (in-memory only)
+                for p in enabled_profiles[max_cookies:]:
+                    p['is_enabled'] = False
+        
         for p in profiles:
             email = p.get('email', '')
             is_ready = p.get('is_ready', False)
@@ -2184,6 +2214,12 @@ class AppController:
         
         Returns group_id.
         """
+        # G0: Block if license expired / invalid — INLINE CHECK (not just flag)
+        if not self._check_license_gate():
+            log.warning("[License] Generation blocked — license expired or invalid")
+            self._notify_status("License expired — please activate a license key")
+            return ""
+        
         # Apply batch size limit from role
         max_batch = self._permissions.limits.max_prompts_per_batch
         if max_batch > 0:
@@ -2603,27 +2639,6 @@ class AppController:
         log.info(f"[Fork] {task_id} → {new_id} with prompt: {new_prompt[:50]}...")
         return new_id
     
-    def activate_license(self, key: str) -> bool:
-        """Activate license key.
-        
-        Args:
-            key: License key string
-            
-        Returns:
-            True if activation successful
-        """
-        if not hasattr(self, '_license_client') or not self._license_client:
-            log.warning(f"[AppController] License client not initialized, key: {key[:8]}...")
-            return False
-        
-        result = self._license_client.activate(key)
-        if result and hasattr(result, 'success') and result.success:
-            self._update_permissions()
-            self._notify_status("License activated successfully")
-            return True
-        
-        self._notify_status("License activation failed")
-        return False
     def preflight_check(self) -> dict:
         """Pre-flight readiness check before starting engine.
         
@@ -3115,17 +3130,93 @@ class AppController:
     
     # === PERMISSIONS ===
     
+    def _check_license_gate(self) -> bool:
+        """
+        Inline license check for generation gate point.
+        
+        Security: Does NOT rely on cached _license_valid flag.
+        Calls validate() directly every time (60s TTL cache in LicenseClient).
+        """
+        try:
+            if not hasattr(self, '_license_client') or not self._license_client:
+                return False
+            info = self._license_client.validate()
+            if not info or not info.valid:
+                return False
+            # Cross-check: tier must exist (not just valid=True)
+            if not info.tier:
+                return False
+            return True
+        except Exception:
+            return False
+    
     def _update_permissions(self):
         """Update permissions from license."""
-        if self._license_client.is_licensed:
-            info = self._license_client.license_info
-            if info:
+        try:
+            info = self._license_client.validate()
+            if info.valid and info.tier:
+                self._license_valid = True
                 from config.constants import LicenseTier
                 try:
-                    tier = LicenseTier(info.tier.value)
-                    self._permissions.set_role_from_tier(tier)
-                except ValueError:
+                    self._permissions.set_role_from_tier(info.tier)
+                except (ValueError, AttributeError):
                     pass
+                
+                # 4.3: Override to TESTER if Firebase _role field says TESTER
+                try:
+                    from security.license_client import UserRole
+                    if hasattr(info, 'role') and info.role == UserRole.TESTER:
+                        self._permissions.set_role(Role.TESTER)
+                        log.info("[License] Role override: TESTER (from Firebase _role)")
+                except Exception:
+                    pass
+            else:
+                # G0: Trial expired or license invalid → block generation
+                self._license_valid = False
+                self._permissions.set_role(Role.TRIAL)
+                log.warning(f"[License] Invalid: {getattr(info, 'error', 'unknown')}")
+        except Exception as e:
+            # G0: Any validation error → assume invalid, block app
+            self._license_valid = False
+            self._permissions.set_role(Role.TRIAL)
+            log.warning(f"[License] Validation error — treating as invalid: {e}")
+    
+    def activate_license(self, license_key: str) -> Dict:
+        """Activate a license key.
+        
+        Called by TabLicense UI when user enters a key.
+        
+        Returns:
+            Dict with 'success', 'message', 'tier', 'role' keys.
+        """
+        try:
+            info = self._license_client.activate(license_key)
+            if info.valid:
+                # Update permissions from tier
+                self._license_valid = True
+                self._update_permissions()
+                log.info(f"[License] Activated: tier={info.tier.name if info.tier else '?'}, role={info.role.name if info.role else '?'}")
+                return {
+                    "success": True,
+                    "message": f"License activated: {info.tier.name if info.tier else 'Unknown'}",
+                    "tier": info.tier.value if info.tier else None,
+                    "role": info.role.value if info.role else "trial",
+                }
+            else:
+                log.warning(f"[License] Activation failed: {info.error}")
+                return {"success": False, "message": info.error or "Invalid license key"}
+        except Exception as e:
+            log.error(f"[License] Activation error: {e}")
+            return {"success": False, "message": f"Activation failed: {str(e)}"}
+    
+    def deactivate_license(self):
+        """Deactivate current license and revert to TRIAL."""
+        try:
+            self._license_client.deactivate()
+            self._permissions.set_role(Role.TRIAL)
+            log.info("[License] Deactivated → TRIAL")
+        except Exception as e:
+            log.error(f"[License] Deactivation error: {e}")
     
     def has_feature(self, feature: Feature) -> bool:
         """Check if feature is available."""
@@ -3154,20 +3245,34 @@ class AppController:
             **dispatcher_status,
         }
     
+    # Tier code → display name mapping
+    _TIER_DISPLAY_NAMES = {
+        'TRIA': 'Trial',
+        '1M': 'Premium',
+        '3M': 'Premium',
+        '6M': 'Premium',
+        '1Y': 'Premium',
+        'LT': 'Vĩnh Viễn',
+    }
+    
     def get_license_status(self) -> Dict:
         """Get license status for status bar display."""
         try:
-            info = self._license_client.license_info
-            trial = self._license_client.get_trial_status()
+            info = self._license_client.validate()
+            tier_code = info.tier.value if info.tier else None
+            tier_name = self._TIER_DISPLAY_NAMES.get(tier_code, tier_code) if tier_code else None
             return {
-                "is_licensed": self._license_client.is_licensed,
-                "is_trial": self._license_client.is_trial,
-                "trial_expired": trial.get("expired", False) and not self._license_client.is_licensed,
-                "tier": info.tier.value if info else None,
-                "days_remaining": trial.get("days_remaining", 0),
+                "is_licensed": info.valid and info.tier and info.tier.value != "trial",
+                "is_trial": info.tier and info.tier.value == "trial" if info.valid else True,
+                "trial_expired": not info.valid and info.error and "expired" in (info.error or "").lower(),
+                "tier": tier_code,
+                "tier_name": tier_name,
+                "days_remaining": (info.expires - __import__('datetime').datetime.now()).days if info.expires else 0,
+                "expires": info.expires.strftime('%Y-%m-%d') if info.expires else None,
+                "expires_dt": info.expires.isoformat() if info.expires else None,
             }
         except Exception:
-            return {"is_licensed": False, "is_trial": False, "trial_expired": False, "tier": None, "days_remaining": 0}
+            return {"is_licensed": False, "is_trial": True, "trial_expired": False, "tier": None, "tier_name": None, "days_remaining": 0, "expires": None, "expires_dt": None}
     
     def get_account_summary(self) -> Dict:
         """Get account summary for status bar display."""

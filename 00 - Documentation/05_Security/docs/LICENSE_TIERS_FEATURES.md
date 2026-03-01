@@ -1,7 +1,7 @@
 # 🎫 License Tiers & Features
 
-> **Version**: 2.0  
-> **Updated**: 2026-02-02  
+> **Version**: 2.1  
+> **Updated**: 2026-02-28  
 > **Source**: Synced with `01_UI_UX/TAB_08_LICENSE.md`
 
 ---
@@ -28,6 +28,7 @@
 | **Số Cookies** | 1 | Unlimited | Unlimited |
 | **Luồng đồng thời** | 2 | Unlimited | Unlimited |
 | **Prompts/Task** | 10 | Unlimited | Unlimited |
+| **Daily Generations** | 100 | Unlimited | Unlimited |
 | **Tất cả modes** | ✅ | ✅ | ✅ |
 | **Image/Video quality** | ✅ | ✅ | ✅ |
 | **Auto-download** | ✅ | ✅ | ✅ |
@@ -64,12 +65,14 @@ TRIAL_LIMITS = {
     "max_cookies": 1,            # Chỉ 1 tài khoản Google
     "max_concurrent_threads": 2,  # Tối đa 2 luồng tạo cùng lúc
     "max_prompts_per_task": 10,   # Tối đa 10 dòng prompt mỗi task
+    "daily_generation_limit": 100, # Tối đa 100 generation mỗi ngày
 }
 
 PREMIUM_LIMITS = {
     "max_cookies": -1,            # Unlimited
     "max_concurrent_threads": -1,  # Unlimited (theo capacity máy)
     "max_prompts_per_task": -1,    # Unlimited
+    "daily_generation_limit": -1,  # Unlimited
 }
 ```
 
@@ -166,6 +169,7 @@ Daily Reset → usage counters reset at midnight
 | `max_cookies` | 1 | Unlimited (∞) |
 | `parallel_workers` | 2 | Unlimited (∞) |
 | `max_prompts_per_task` | 10 | Unlimited (∞) |
+| `daily_generation_limit` | 100 | Unlimited (∞) |
 
 ### Implementation
 
@@ -251,6 +255,40 @@ if not quota["allowed"]:
 # Proceed with generation...
 tracker.record_usage("max_prompts_per_task")
 ```
+
+---
+
+## 🚦 Runtime License Gates (v2.1)
+
+> [!IMPORTANT]
+> License gates are enforced at multiple points in the pipeline to prevent bypass.
+> Gate G0 blocks at UI level (pre-start), Gates G1-G4 block inside the engine loop.
+
+| Gate | Where | What | Effect |
+|------|-------|------|--------|
+| **G0** | `tab_queue._on_toggle_engine()` | Daily generation limit | Blocks Start → shows `LicenseRequiredDialog` popup. Close = force stop. |
+| **G1** | `engine._spawn_account_supervisor()` | Global thread cap | Blocks new foreman spawn if `max_threads` exceeded |
+| **G2** | `engine._foreman_loop()` | Daily generation limit | Rejects individual tasks with `fail_task()` |
+| **G3** | `engine._foreman_loop()` | Output count cap | Clamps `output_count` to `max_outputs_per_prompt` |
+| **G4** | `engine._foreman_loop()` | Feature gate | Blocks Continuation for TRIAL |
+
+### G0 Flow (Pre-Start Gate)
+
+```
+User clicks Start All
+  → check daily_generation_limit > 0? (TRIAL only, PREMIUM = -1)
+    → today_generations >= limit?
+      → YES: show LicenseRequiredDialog
+        → User activates license: re-check, engine starts
+        → User closes popup: force _is_processing=False, return (engine does NOT start)
+      → NO: engine starts normally
+```
+
+**Files:**
+- Gate G0: `ui/tabs/tab_queue.py` → `_on_toggle_engine()`
+- Gates G1-G4: `core/engine.py` → `_spawn_account_supervisor()` / `_foreman_loop()`
+- Permissions: `services/permissions.py` → `PermissionsSystem.limits`
+- Usage tracking: `security/license_client.py` → `UsageStats.today_generations`
 
 ---
 

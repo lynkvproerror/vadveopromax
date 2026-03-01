@@ -157,21 +157,22 @@ class SettingsSectionsMixin:
         # Default output folder
         folder_layout = QHBoxLayout()
 
-        folder_label = QLabel("Default Output Folder:")
-        folder_label.setFixedWidth(150)
+        folder_label = QLabel("Thư mục lưu:")
+        folder_label.setFixedWidth(120)
         folder_label.setStyleSheet(f"color: {Theme.TEXT};")
         folder_layout.addWidget(folder_label)
 
         self.output_folder_entry = QLineEdit()
         self.output_folder_entry.setPlaceholderText("D:/Projects/VEO")
-        self.output_folder_entry.setMinimumWidth(300)
+        self.output_folder_entry.setMinimumWidth(200)
         if _s and getattr(_s, 'output_folder', ''):
             self.output_folder_entry.setText(_s.output_folder)
         folder_layout.addWidget(self.output_folder_entry)
 
-        browse_btn = QPushButton("📂")
-        browse_btn.setFixedSize(32, 32)
-        browse_btn.setStyleSheet(f"background-color: {Theme.SURFACE2};")
+        browse_btn = QPushButton("📁 Chọn")
+        browse_btn.setFixedSize(90, 35)
+        browse_btn.setToolTip("Chọn thư mục lưu video")
+        browse_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; font-weight: bold; font-size: 12px; border-radius: 4px;")
         browse_btn.clicked.connect(self._browse_output_folder)
         folder_layout.addWidget(browse_btn)
 
@@ -236,8 +237,8 @@ class SettingsSectionsMixin:
     # _create_browser_section — REMOVED (headless/persistent profile managed elsewhere)
 
     def _create_continuation_section(self) -> QWidget:
-        """Create Continuation Frame section."""
-        section, layout = self._create_section("🔗 Continuation Frame Extraction")
+        """Create Smooth Continuation section — toggle only, no sub-options."""
+        section, layout = self._create_section("🔗 Smooth Continuation")
 
         # Load saved values from AppSettings
         from config.settings import get_settings as _gs
@@ -245,36 +246,65 @@ class SettingsSectionsMixin:
         saved_enabled = getattr(_s, 'continuation_enabled', True)
         saved_ms = getattr(_s, 'extract_point_ms', 750)
 
-        # Enable toggle — loaded from saved
-        self.cont_switch = self._create_enable_row("Enable Continuation:", checked=saved_enabled)
+        # Check if Trial user — force OFF
+        is_trial = False
+        try:
+            if hasattr(self, 'controller') and self.controller and hasattr(self.controller, '_permissions'):
+                from services.permissions import Role
+                role = self.controller._permissions.role
+                is_trial = (role == Role.TRIAL)
+        except Exception:
+            pass
+
+        initial_checked = False if is_trial else saved_enabled
+
+        # Enable toggle — loaded from saved (forced OFF for Trial)
+        self.cont_switch = self._create_enable_row("Smooth Continuation:", checked=initial_checked)
         layout.addLayout(self.cont_switch._row_layout)
 
-        # Extract Point
-        extract_layout = QHBoxLayout()
-        extract_label = QLabel("Extract Point:")
-        extract_label.setFixedWidth(150)
-        extract_label.setStyleSheet(f"color: {Theme.TEXT};")
-        extract_layout.addWidget(extract_label)
+        # Description
+        desc = QLabel(
+            "ON = Cắt cảnh mượt hơn.\n"
+            "OFF = Mặc định."
+        )
+        desc.setWordWrap(True)
+        desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px;")
+        layout.addWidget(desc)
 
+        # Trial badge
+        if is_trial:
+            trial_badge = QLabel("🔒 Premium Only — Nâng cấp để sử dụng")
+            trial_badge.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px; margin-left: 16px;")
+            layout.addWidget(trial_badge)
+
+        # Hidden extract_menu — still needed for save/get_settings but not shown
         self.extract_menu = QComboBox()
         self.extract_menu.addItems(["500ms", "750ms (recommended)", "1000ms", "Custom"])
-        # Set from saved value
         _ms_map = {500: "500ms", 750: "750ms (recommended)", 1000: "1000ms"}
         self.extract_menu.setCurrentText(_ms_map.get(saved_ms, "750ms (recommended)"))
-        self.extract_menu.setFixedWidth(200)
-        extract_layout.addWidget(self.extract_menu)
+        self.extract_menu.setVisible(False)
 
-        suffix_label = QLabel("before video end")
-        suffix_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
-        extract_layout.addWidget(suffix_label)
-        extract_layout.addStretch()
-        layout.addLayout(extract_layout)
-
-        # Auto-save on change
-        self.cont_switch.toggled_signal.connect(self._save_continuation_settings)
-        self.extract_menu.currentTextChanged.connect(self._save_continuation_settings)
+        # Auto-save on change (with Trial guard)
+        self._is_trial_continuation = is_trial
+        self.cont_switch.toggled_signal.connect(self._on_continuation_toggled)
 
         return section
+
+    def _on_continuation_toggled(self, checked: bool):
+        """Handle continuation toggle — block for Trial users."""
+        if getattr(self, '_is_trial_continuation', False) and checked:
+            # Revert toggle to OFF
+            self.cont_switch.blockSignals(True)
+            self.cont_switch.setToggled(False)
+            self.cont_switch.blockSignals(False)
+            from ui.popups import show_warning
+            show_warning(
+                self, "🔒 Trial Limit",
+                "Smooth Continuation chỉ dành cho gói Premium.\n\n"
+                "Nâng cấp để sử dụng tính năng cắt cảnh mượt."
+            )
+            return
+        self._save_continuation_settings(checked)
 
     def _save_continuation_settings(self, *args):
         """Persist continuation settings to AppSettings."""
@@ -292,7 +322,7 @@ class SettingsSectionsMixin:
 
     def _create_worker_section(self) -> QWidget:
         """Create Worker Settings section per TAB_07_SETTINGS.md spec."""
-        section, layout = self._create_section("🎯 Worker Settings")
+        section, layout = self._create_section("🎯 Threads Setting")
 
         # Load saved values from AppSettings (not controller — may be None)
         from config.settings import get_settings as _gs
@@ -345,64 +375,57 @@ class SettingsSectionsMixin:
         )
         layout.addLayout(self.anti_detect_switch._row_layout)
 
-        # Collapsible container for delay settings
-        self.anti_detect_container = QWidget()
-        detect_layout = QVBoxLayout(self.anti_detect_container)
-        detect_layout.setContentsMargins(0, 0, 0, 0)
-
-        # Min Delay
-        min_delay_row = QHBoxLayout()
-        min_delay_label = QLabel("Min Delay (s):")
-        min_delay_label.setFixedWidth(150)
-        min_delay_label.setStyleSheet(f"color: {Theme.TEXT};")
-        min_delay_row.addWidget(min_delay_label)
-
+        # Hidden delay spinboxes — still needed for save/get_settings but not shown
         self.anti_detect_delay_min = QDoubleSpinBox()
         self.anti_detect_delay_min.setRange(0.5, 10.0)
-        self.anti_detect_delay_min.setSingleStep(0.1)
-        self.anti_detect_delay_min.setDecimals(1)
         self.anti_detect_delay_min.setValue(saved.get('anti_detect_delay_min', 3.0))
-        self.anti_detect_delay_min.setFixedWidth(100)
-        self.anti_detect_delay_min.setSuffix("s")
-        min_delay_row.addWidget(self.anti_detect_delay_min)
-        min_delay_row.addStretch()
-        detect_layout.addLayout(min_delay_row)
-
-        # Max Delay
-        max_delay_row = QHBoxLayout()
-        max_delay_label = QLabel("Max Delay (s):")
-        max_delay_label.setFixedWidth(150)
-        max_delay_label.setStyleSheet(f"color: {Theme.TEXT};")
-        max_delay_row.addWidget(max_delay_label)
+        self.anti_detect_delay_min.setVisible(False)
 
         self.anti_detect_delay_max = QDoubleSpinBox()
         self.anti_detect_delay_max.setRange(1.0, 30.0)
-        self.anti_detect_delay_max.setSingleStep(0.1)
-        self.anti_detect_delay_max.setDecimals(1)
         self.anti_detect_delay_max.setValue(saved.get('anti_detect_delay_max', 8.0))
-        self.anti_detect_delay_max.setFixedWidth(100)
-        self.anti_detect_delay_max.setSuffix("s")
-        max_delay_row.addWidget(self.anti_detect_delay_max)
-        max_delay_row.addStretch()
-        detect_layout.addLayout(max_delay_row)
-
-        layout.addWidget(self.anti_detect_container)
-
-        # Toggle visibility based on enable state
-        self.anti_detect_container.setVisible(self.anti_detect_switch.isToggled())
-        self.anti_detect_switch.toggled_signal.connect(self.anti_detect_container.setVisible)
+        self.anti_detect_delay_max.setVisible(False)
 
         # Auto-save on change (C1 fix)
         self.retry_count.valueChanged.connect(self._save_worker_settings)
         self.request_timeout.valueChanged.connect(self._save_worker_settings)
-        self.anti_detect_switch.toggled_signal.connect(self._save_worker_settings)
+        self.anti_detect_switch.toggled_signal.connect(self._on_anti_detect_toggled)
         self.anti_detect_delay_min.valueChanged.connect(self._save_worker_settings)
         self.anti_detect_delay_max.valueChanged.connect(self._save_worker_settings)
         # Cross-validation: min ≤ max (M2 fix)
         self.anti_detect_delay_min.valueChanged.connect(self._clamp_anti_detect_delays)
         self.anti_detect_delay_max.valueChanged.connect(self._clamp_anti_detect_delays)
 
+        # Trial guard: force OFF
+        try:
+            from services.permissions import PermissionsSystem, Role
+            perm = PermissionsSystem.instance()
+            if perm.role == Role.TRIAL:
+                self.anti_detect_switch.setToggled(False)
+        except Exception:
+            pass
+
         return section
+
+    def _on_anti_detect_toggled(self, checked: bool):
+        """Handle Anti-Detect toggle — Trial users get popup + revert."""
+        if checked:
+            try:
+                from services.permissions import PermissionsSystem, Role
+                perm = PermissionsSystem.instance()
+                if perm.role == Role.TRIAL:
+                    from ui.popups import show_warning
+                    show_warning(
+                        self,
+                        "🛡️ Tính năng Premium",
+                        "Anti-Detect Spam chỉ khả dụng cho gói Premium trở lên.\n\n"
+                        "Nâng cấp để bảo vệ tài khoản khỏi bị phát hiện spam!"
+                    )
+                    self.anti_detect_switch.setToggled(False)
+                    return
+            except Exception:
+                pass
+        self._save_worker_settings()
 
     def _clamp_anti_detect_delays(self, *args):
         """Ensure min_delay ≤ max_delay by auto-clamping."""
@@ -920,16 +943,6 @@ class SettingsSectionsMixin:
             "Smart-Hide Browser:", checked=saved
         )
         layout.addLayout(self.smart_hide_switch._row_layout)
-
-        # Description
-        desc = QLabel(
-            "ON = Ẩn browser sau launch & submit OK. "
-            "Hiện khi lỗi 403, tự ẩn lại sau 3 prompt thành công.\n"
-            "OFF = Tất cả browser luôn hiện."
-        )
-        desc.setWordWrap(True)
-        desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px;")
-        layout.addWidget(desc)
 
         # Auto-save on toggle change
         self.smart_hide_switch.toggled_signal.connect(self._save_browser_visibility_settings)

@@ -92,6 +92,20 @@ class MainWindow(QMainWindow):
         
         # Restore previous session
         self._restore_session()
+        
+        # License countdown timer (1s) for status bar
+        self._license_expires_dt = None  # cached expiry datetime
+        self._license_tier_name = ""     # cached tier name
+        self._was_licensed = False       # track revocation
+        self._license_countdown_timer = QTimer(self)
+        self._license_countdown_timer.setInterval(1000)
+        self._license_countdown_timer.timeout.connect(self._update_license_countdown)
+        
+        # 🔒 Periodic license recheck timer (5 min) — detect mid-session revocation
+        self._license_recheck_timer = QTimer(self)
+        self._license_recheck_timer.setInterval(5 * 60 * 1000)  # 5 minutes
+        self._license_recheck_timer.timeout.connect(self._update_license_widget)
+        self._license_recheck_timer.start()
     
     def _setup_window(self):
         """Configure window properties."""
@@ -189,7 +203,9 @@ class MainWindow(QMainWindow):
             ("network", "📶 --"),
             ("version", f"v{self._get_version()}"),
             ("accounts", "🔄 0/0"),
-            ("queue", "📋 0"),
+            ("workers", "⚙️ 0"),
+            ("queue", "📋 0/0"),
+            ("cpu", "💻 CPU --%"),
             ("memory", "💾 0 MB"),
         ]
         
@@ -258,6 +274,15 @@ class MainWindow(QMainWindow):
     @Slot()
     def _toggle_dev_console(self):
         """Toggle DevConsole tab visibility."""
+        # 3.4: Feature gate — only TESTER role can open DevConsole
+        if not self._dev_console_visible and self.controller:
+            try:
+                from services.permissions import Feature
+                if not self.controller._permissions.has_feature(Feature.DEV_CONSOLE):
+                    return  # Silently ignore for non-TESTER
+            except Exception:
+                pass
+        
         if self._dev_console_visible:
             # Find and remove dev console tab
             for i in range(self.tabview.count()):
@@ -343,6 +368,13 @@ class MainWindow(QMainWindow):
         # Settings Tab
         if 'settings' in self.tab_instances and hasattr(self.tab_instances['settings'], 'settings_changed'):
             self.tab_instances['settings'].settings_changed.connect(self._on_settings_changed)
+        
+        # License → Settings: refresh role-based UI after license activation
+        if 'license' in self.tab_instances and 'settings' in self.tab_instances:
+            license_tab = self.tab_instances['license']
+            settings_tab = self.tab_instances['settings']
+            if hasattr(license_tab, 'license_activated') and hasattr(settings_tab, 'refresh_role_state'):
+                license_tab.license_activated.connect(lambda key: settings_tab.refresh_role_state())
     
     @Slot(str, int)
     def _on_progress(self, task_id: str, progress: int, status_text: str = ""):
@@ -431,8 +463,9 @@ class MainWindow(QMainWindow):
     def _update_queue_status(self, status: dict):
         """Update status bar with queue info."""
         if "queue" in self._status_widgets:
+            completed = status.get("completed", 0)
             total = status.get("total", 0)
-            self._status_widgets["queue"].setText(f"📋 {total}")
+            self._status_widgets["queue"].setText(f"📋 {completed}/{total}")
     
     def update_account_status(self, active: int, total: int):
         """Update account status in status bar."""
@@ -445,7 +478,7 @@ class MainWindow(QMainWindow):
             self._status_widgets["license"].setText(f"🔑 {status}")
     
     def _update_license_widget(self):
-        """Read license status from controller and update widget."""
+        """Read license status from controller and cache expiry for countdown."""
         if not self.controller or not hasattr(self.controller, 'get_license_status'):
             return
         try:
@@ -454,22 +487,135 @@ class MainWindow(QMainWindow):
                 lc = self.controller._license_client
                 if hasattr(lc, 'can_see_dev_console') and lc.can_see_dev_console():
                     self.update_license_status("Tester")
+                    self._license_countdown_timer.stop()
                     return
             
             # Priority 2: Firebase-based license
             ls = self.controller.get_license_status()
-            if ls.get("is_licensed"):
-                tier = ls.get("tier", "PRO")
-                self.update_license_status(tier)
+            days = ls.get("days_remaining", 0)
+            self._license_tier_name = ls.get("tier_name") or ls.get("tier", "PRO")
+            expires_dt_str = ls.get("expires_dt")
+            
+            # Cache expiry datetime for countdown
+            if expires_dt_str:
+                try:
+                    from datetime import datetime
+                    self._license_expires_dt = datetime.fromisoformat(expires_dt_str)
+                except Exception:
+                    self._license_expires_dt = None
+            
+            if ls.get("is_licensed") and self._license_expires_dt:
+                self._was_licensed = True
+                tier_code = ls.get("tier", "")
+                if tier_code == "LT":
+                    # Lifetime: no countdown, just show ♾️
+                    label = self._status_widgets.get("license")
+                    if label:
+                        label.setText("🔑 ♾️ Vĩnh Viễn")
+                        label.setStyleSheet(f"color: {Theme.GREEN}; margin-right: 8px; font-weight: bold;")
+                    self._license_countdown_timer.stop()
+                else:
+                    # Normal tiers: start countdown timer
+                    self._license_countdown_timer.start()
+                    self._update_license_countdown()  # Immediate first update
+            elif ls.get("is_licensed"):
+                self._was_licensed = True
+                self.update_license_status(str(self._license_tier_name))
+                self._license_countdown_timer.stop()
             elif ls.get("is_trial"):
-                days = ls.get("days_remaining", 0)
-                self.update_license_status(f"Trial ({days}d)")
+                self._was_licensed = True
+                self.update_license_status(f"Trial — Còn lại {days} ngày")
+                self._license_countdown_timer.stop()
             elif ls.get("trial_expired"):
                 self.update_license_status("Trial Expired")
+                self._license_countdown_timer.stop()
+                if self._was_licensed:
+                    self._on_license_revoked("Trial đã hết hạn")
             else:
                 self.update_license_status("Unlicensed")
+                self._license_countdown_timer.stop()
+                if self._was_licensed:
+                    self._on_license_revoked("License đã bị thu hồi hoặc xoá")
         except Exception:
             pass
+    
+    def _on_license_revoked(self, reason: str):
+        """Show blocking dialog when license is revoked mid-session."""
+        self._was_licensed = False
+        self._license_countdown_timer.stop()
+        
+        from PySide6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle("⛔ License Revoked")
+        msg.setText(
+            f"🚫 {reason}\n\n"
+            f"Vui lòng liên hệ admin hoặc nhập key mới.\n"
+            f"App sẽ đóng nếu không kích hoạt lại."
+        )
+        msg.setIcon(QMessageBox.Critical)
+        
+        activate_btn = msg.addButton("🔑 Nhập Key Mới", QMessageBox.AcceptRole)
+        exit_btn = msg.addButton("❌ Thoát App", QMessageBox.RejectRole)
+        
+        msg.exec()
+        
+        if msg.clickedButton() == activate_btn:
+            # Open license tab for re-activation
+            tab_count = self.tab_widget.count()
+            self.tab_widget.setCurrentIndex(tab_count - 1)  # License = last tab
+        else:
+            # Exit app
+            from PySide6.QtWidgets import QApplication
+            QApplication.quit()
+    
+    def _update_license_countdown(self):
+        """Update license status bar with live countdown + color (called every 1s)."""
+        if not self._license_expires_dt:
+            return
+        
+        from datetime import datetime
+        now = datetime.now()
+        remaining = self._license_expires_dt - now
+        total_secs = int(remaining.total_seconds())
+        
+        label = self._status_widgets.get("license")
+        if not label:
+            return
+        
+        if total_secs <= 0:
+            label.setText("🔑 ❌ License đã hết hạn!")
+            label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px; font-weight: bold;")
+            self._license_countdown_timer.stop()
+            return
+        
+        days = total_secs // 86400
+        hours = (total_secs % 86400) // 3600
+        mins = (total_secs % 3600) // 60
+        secs = total_secs % 60
+        
+        exp_vn = self._license_expires_dt.strftime("%d/%m/%Y")
+        tier = self._license_tier_name
+        
+        # Countdown text
+        if days > 0:
+            countdown = f"{days}d {hours:02d}:{mins:02d}:{secs:02d}"
+        else:
+            countdown = f"{hours:02d}:{mins:02d}:{secs:02d}"
+        
+        text = f"🔑 {tier} — Còn lại {countdown} (Hết hạn {exp_vn})"
+        label.setText(text)
+        
+        # Color based on urgency
+        if days >= 7:
+            color = Theme.GREEN
+        elif days >= 3:
+            color = Theme.YELLOW
+        elif days >= 1:
+            color = Theme.PEACH
+        else:
+            color = Theme.RED
+        
+        label.setStyleSheet(f"color: {color}; margin-right: 8px;")
     
     def _poll_status_bar(self):
         """Poll live data for status bar widgets (called by QTimer every 5s)."""
@@ -479,7 +625,59 @@ class MainWindow(QMainWindow):
         # Accounts: ready / total
         try:
             acc = self.controller.get_account_summary()
-            self.update_account_status(acc["ready"], acc["total"])
+            total = acc["total"]
+            ready = acc["ready"]
+            if "accounts" in self._status_widgets:
+                self._status_widgets["accounts"].setText(f"🔄 {ready}/{total}")
+                if total == 0:
+                    color = Theme.SUBTEXT0
+                elif ready == 0:
+                    color = Theme.YELLOW  # Accounts added but not ready
+                else:
+                    color = Theme.GREEN
+                self._status_widgets["accounts"].setStyleSheet(f"color: {color}; margin-right: 8px;")
+        except Exception:
+            pass
+        
+        # Workers: active / max_foremen (from permissions)
+        try:
+            acc = self.controller.get_account_summary()
+            active = acc.get("active", 0)
+            # Get max from permissions so user sees configured limit
+            max_foremen = 0
+            try:
+                perm = getattr(self.controller, '_permissions', None)
+                if perm:
+                    max_foremen = perm.limits.max_foremen
+                    if max_foremen < 0:
+                        max_foremen = "∞"
+            except Exception:
+                pass
+            if "workers" in self._status_widgets:
+                self._status_widgets["workers"].setText(f"⚙️ {active}/{max_foremen}")
+                color = Theme.GREEN if active > 0 else Theme.SUBTEXT0
+                self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px;")
+        except Exception:
+            pass
+        
+        # Queue: completed / total prompts
+        try:
+            if hasattr(self.controller, 'get_queue_groups'):
+                groups = self.controller.get_queue_groups()
+                total_prompts = 0
+                completed_prompts = 0
+                for g in groups:
+                    for t in g.get('tasks', []):
+                        total_prompts += 1
+                        if t.get('status') == 'completed' or t.get('progress', 0) >= 100:
+                            completed_prompts += 1
+                if "queue" in self._status_widgets:
+                    self._status_widgets["queue"].setText(f"📋 {completed_prompts}/{total_prompts}")
+                    if total_prompts > 0:
+                        color = Theme.GREEN if completed_prompts == total_prompts else Theme.BLUE
+                    else:
+                        color = Theme.SUBTEXT0
+                    self._status_widgets["queue"].setStyleSheet(f"color: {color}; margin-right: 8px;")
         except Exception:
             pass
         
@@ -497,13 +695,25 @@ class MainWindow(QMainWindow):
         self._update_license_widget()
     
     def _update_memory(self):
-        """Update memory usage in status bar."""
+        """Update memory and CPU usage in status bar."""
         try:
             import psutil
             process = psutil.Process()
             mb = process.memory_info().rss / (1024 * 1024)
             if "memory" in self._status_widgets:
                 self._status_widgets["memory"].setText(f"💾 {mb:.0f} MB")
+            
+            # CPU usage (system-wide)
+            cpu_pct = psutil.cpu_percent(interval=None)  # non-blocking
+            if "cpu" in self._status_widgets:
+                self._status_widgets["cpu"].setText(f"💻 CPU {cpu_pct:.0f}%")
+                if cpu_pct > 80:
+                    color = Theme.RED
+                elif cpu_pct > 50:
+                    color = Theme.YELLOW
+                else:
+                    color = Theme.SUBTEXT0
+                self._status_widgets["cpu"].setStyleSheet(f"color: {color}; margin-right: 8px;")
         except Exception:
             pass
     

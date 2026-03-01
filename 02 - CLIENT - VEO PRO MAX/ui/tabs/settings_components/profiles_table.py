@@ -32,7 +32,7 @@ class SettingsProfilesMixin:
     def _create_profiles_section(self) -> QWidget:
         """Create Chrome Profiles section - per TAB_07_SETTINGS.md spec.
 
-        9 columns: ✓, #, Email, Plan, Credits, Status, Workers, Ext, Retry, Actions
+        9 columns: ✓, #, Email, Plan, Credits, Status, Total Output, Ext, Retry, Actions
         """
         from ui.tabs.tab_settings import ToggleSwitch
 
@@ -42,7 +42,7 @@ class SettingsProfilesMixin:
         self.profiles_table = QTableWidget()
         self.profiles_table.setColumnCount(10)
         self.profiles_table.setHorizontalHeaderLabels([
-            "✓", "#", "Email", "Plan", "Credits", "Status", "Workers", "Ext", "Retry", "Actions"
+            "✓", "#", "Email", "Plan", "Credits", "Status", "Total Output", "Ext", "Retry", "Actions"
         ])
 
         # Set column widths per docs spec
@@ -53,7 +53,7 @@ class SettingsProfilesMixin:
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)    # Plan
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Credits
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Status
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Workers
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Total Output
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Ext
         header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Retry
         header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Actions
@@ -63,7 +63,7 @@ class SettingsProfilesMixin:
         self.profiles_table.setColumnWidth(3, 80)   # Plan
         self.profiles_table.setColumnWidth(4, 80)   # Credits
         self.profiles_table.setColumnWidth(5, 110)  # Status
-        self.profiles_table.setColumnWidth(6, 75)   # Workers - SpinBox 0-20
+        self.profiles_table.setColumnWidth(6, 95)   # Total Output - SpinBox 0-20
         self.profiles_table.setColumnWidth(7, 50)   # Ext - emoji status
         self.profiles_table.setColumnWidth(8, 50)   # Retry - number
         self.profiles_table.setColumnWidth(9, 290)  # Actions - 6 buttons
@@ -250,15 +250,15 @@ class SettingsProfilesMixin:
             # Get email for action handlers
             email = acc.get('email', '')
 
-            # Workers SpinBox (col 6) — per-account concurrent worker limit
+            # Total Output SpinBox (col 6) — per-account concurrent worker limit
             slots_spin = QSpinBox()
             slots_spin.setRange(0, 20)
             slots_spin.setValue(acc.get('max_workers', acc.get('max_slots', 20)))
             slots_spin.setToolTip(
-                "Max concurrent workers for this account\n"
-                "• 0 = DISABLED (account will not be used)\n"
-                "• 1 worker = 1 video at a time\n"
-                "• 20 = maximum parallel generation"
+                "Số output/prompt xử lý đồng thời cho tài khoản này\n"
+                "• 0 = TẮT (tài khoản không xử lý)\n"
+                "• 1 output/prompt = 1 video một lúc\n"
+                "• 20 output/prompt = tối đa song song"
             )
             slots_spin.setFixedWidth(72)
             # Explicit style: ensure number is visible on dark table background

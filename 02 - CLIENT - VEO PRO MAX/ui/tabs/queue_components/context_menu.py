@@ -107,8 +107,8 @@ class QueueContextMenuMixin:
         
         # --- Data reuse actions ---
         menu.addSeparator()
-        menu.addAction("📋 Clone Prompt").triggered.connect(
-            lambda: self._on_clone_task(task_id)
+        menu.addAction("✏️ Edit Prompt").triggered.connect(
+            lambda: self._on_edit_prompt(task_id, task_data)
         )
         menu.addAction("💾 Export Task Config").triggered.connect(
             lambda: self._on_export_task_config(task_id)
@@ -197,16 +197,52 @@ class QueueContextMenuMixin:
             if mw and hasattr(mw, 'show_toast'):
                 mw.show_toast("⬇️ Re-downloading 720p videos...", "info")
     
-    def _on_clone_task(self, task_id):
-        """Clone a task — create a fresh copy with same input."""
-        if self.controller and hasattr(self.controller, 'clone_task'):
-            new_id = self.controller.clone_task(str(task_id))
-            if new_id:
-                self._refresh_queue_from_controller()
-                self._update_stats()
-                mw = self.window()
-                if mw and hasattr(mw, 'show_toast'):
-                    mw.show_toast("📋 Prompt cloned and queued", "success")
+    def _on_edit_prompt(self, task_id, task_data):
+        """Edit prompt — open EditPromptPopup, save back to dispatcher."""
+        prompt_text = task_data.get('prompt', '') if task_data else ''
+        task_status = task_data.get('status', '') if task_data else ''
+        
+        # Block edit while task is running
+        if task_status == 'running':
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast("⚠️ Cannot edit prompt while task is running", "warning")
+            return
+        
+        from ui.popups import EditPromptPopup
+        
+        def on_save(row_index, new_prompt):
+            if not new_prompt or not new_prompt.strip():
+                return
+            # Update prompt in dispatcher's Task object
+            if self.controller and hasattr(self.controller, 'dispatcher'):
+                disp = self.controller.dispatcher
+                # Access internal task dict
+                tasks = getattr(disp, '_tasks', None) or getattr(disp, 'tasks', {})
+                if not tasks:
+                    # Try TaskGroup approach
+                    for group in getattr(disp, '_task_groups', {}).values():
+                        for task in group.tasks:
+                            if str(task.id) == str(task_id):
+                                task.prompt = new_prompt.strip()
+                                break
+                else:
+                    task = tasks.get(str(task_id))
+                    if task:
+                        task.prompt = new_prompt.strip()
+            
+            self._refresh_queue_from_controller()
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast("✏️ Prompt updated", "success")
+        
+        popup = EditPromptPopup(
+            parent=self,
+            row_index=0,
+            prompt_text=prompt_text,
+            on_save=on_save,
+        )
+        popup.exec()
     
     def _on_export_task_config(self, task_id):
         """Export task configuration as JSON."""

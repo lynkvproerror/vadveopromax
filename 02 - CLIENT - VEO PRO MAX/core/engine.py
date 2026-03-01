@@ -287,11 +287,9 @@ class AccountSupervisor:
                 )
                 return
         
-        # Navigate to project page
-        project_id = account.project_id
-        if project_id:
-            log.info(f"[Supervisor:{email}] 📍 Navigating to project page...")
-            await self.engine._navigate_to_project_page(account, project_id)
+        # Project ready — tab stays on main flow page.
+        # submit_prompt uses executeScript with absolute API URLs,
+        # so page URL is irrelevant (reCAPTCHA + fetch work from any VEO page).
 
     async def _probe_submit(self) -> bool:
         """Probe: verify reCAPTCHA pipeline is functional before unblocking foremen.
@@ -1063,9 +1061,6 @@ class Engine:
         
         if project_id:
             account.set_project_id(project_id)
-            # Navigate if not already on this project page
-            if self._navigated_project.get(email) != project_id:
-                await self._navigate_to_project_page(account, project_id)
         else:
             log.warning(
                 f"⚠️ No projectId for {email} — generation requests may fail"
@@ -1108,188 +1103,12 @@ class Engine:
         except Exception as e:
             log.warning(f"[Foreman:{email}] checkAppAvailability failed: {e}")
 
-    # Track which project page each account is currently on
-    _navigated_project: dict = {}  # email → project_id
-
-    async def _navigate_to_project_page(self, account, project_id: str):
-        """Navigate the browser tab to the specific project page.
-
-        Skips if browser is already on the correct project page.
-        Detects locale prefix (e.g. /vi/) from the current browser URL
-        and includes it in the target URL.
-
-        HAR evidence: Real browsers navigate to /tools/flow/project/{id}
-        before submitting. This ensures:
-        1. flow.projectInitialData loads (4.2s server load)
-        2. auth/session recheck
-        3. reCAPTCHA context is tied to the correct project page
-        """
-        email = account.email
-
-        # Skip if already on this project page
-        if self._navigated_project.get(email) == project_id:
-            log.debug(f"[Foreman:{email}] Already on project page {project_id} — skipping navigation")
-            return
-
-        # Detect locale prefix from current browser URL
-        # e.g. labs.google/fx/vi/tools/flow → locale = "vi/"
-        locale_prefix = ""
-        bridge = getattr(account, 'extension_bridge', None)
-        if bridge and bridge.is_connected(email):
-            try:
-                import re
-                # Get current tab URL from the extension's tabState
-                conn = bridge._find_connection(email)
-                if conn and hasattr(conn, '_registered_email'):
-                    # Check cached tab URL from bridge
-                    for cid, c in bridge._connections.items():
-                        if getattr(c, '_registered_email', None) == email:
-                            tab_url = getattr(c, '_tab_url', '') or ''
-                            match = re.search(r'labs\.google/fx/([a-z]{2}(?:-[a-z]{2})?)/tools', tab_url)
-                            if match:
-                                locale_prefix = f"{match.group(1)}/"
-                                log.debug(f"[Foreman:{email}] Detected locale: {locale_prefix}")
-                            break
-            except Exception:
-                pass
-
-        # If we couldn't detect locale from bridge, try from profiles_controller
-        if not locale_prefix:
-            import re
-            pc = getattr(account, '_profiles_controller', None) or \
-                 getattr(self, '_profiles_controller', None)
-            if pc:
-                try:
-                    current_url = getattr(pc, '_last_url', {}).get(email, '')
-                    if current_url:
-                        match = re.search(r'labs\.google/fx/([a-z]{2}(?:-[a-z]{2})?)/tools', current_url)
-                        if match:
-                            locale_prefix = f"{match.group(1)}/"
-                except Exception:
-                    pass
-
-        # Fallback: use "vi/" as default locale (most common for this user)
-        if not locale_prefix:
-            locale_prefix = "vi/"
-            log.debug(f"[Foreman:{email}] Using default locale: {locale_prefix}")
-
-        project_url = f"https://labs.google/fx/{locale_prefix}tools/flow/project/{project_id}"
-
-        nav_success = False
-
-        if bridge and bridge.is_connected(email):
-            try:
-                log.info(f"[Foreman:{email}] 📍 Navigating to project page: {project_url}")
-                result = await bridge.navigate_to_url(email, project_url, timeout=35.0)
-                
-                # Level 1-2: Retry bridge navigation once on failure
-                if not result or not result.get('success'):
-                    error = result.get('error', 'unknown') if result else 'no_result'
-                    log.warning(
-                        f"[Foreman:{email}] ⚠️ Navigation failed ({error}) — retrying in 3s..."
-                    )
-                    await asyncio.sleep(3)
-                    result = await bridge.navigate_to_url(email, project_url, timeout=35.0)
-                
-                if result and result.get('success'):
-                    nav_success = True
-                else:
-                    error = result.get('error', 'unknown') if result else 'no_result'
-                    log.warning(
-                        f"[Foreman:{email}] ⚠️ Bridge navigation failed 2x ({error})"
-                    )
-                    
-                    # Level 3: JS fallback — window.location.href
-                    try:
-                        log.info(f"[Foreman:{email}] 📍 Trying JS fallback navigation...")
-                        await self._execute_js_on_account_async(
-                            account, f"window.location.href = '{project_url}'"
-                        )
-                        await asyncio.sleep(8)
-                        nav_success = True
-                        log.info(f"[Foreman:{email}] ✅ JS fallback navigation OK")
-                    except Exception as js_err:
-                        log.warning(f"[Foreman:{email}] JS fallback also failed: {js_err}")
-                    
-                    # Level 4: Browser restart + re-navigate
-                    if not nav_success:
-                        try:
-                            log.warning(
-                                f"[Foreman:{email}] 🔄 Escalating to browser restart "
-                                f"after 3 navigation failures..."
-                            )
-                            ok = await account.restart_browser()
-                            if ok:
-                                log.info(f"[Foreman:{email}] ✅ Browser restarted — re-navigating...")
-                                await asyncio.sleep(5)
-                                # Re-check bridge after restart
-                                if bridge and bridge.is_connected(email):
-                                    result = await bridge.navigate_to_url(
-                                        email, project_url, timeout=35.0
-                                    )
-                                    if result and result.get('success'):
-                                        nav_success = True
-                                        log.info(
-                                            f"[Foreman:{email}] ✅ Post-restart navigation OK"
-                                        )
-                            else:
-                                log.error(f"[Foreman:{email}] ❌ Browser restart failed")
-                        except Exception as restart_err:
-                            log.error(
-                                f"[Foreman:{email}] Browser restart escalation failed: {restart_err}"
-                            )
-                
-            except Exception as e:
-                log.warning(f"[Foreman:{email}] Project page navigation failed: {e}")
-        else:
-            # No extension: use execute_js directly
-            try:
-                log.info(f"[Foreman:{email}] 📍 Navigating via JS: {project_url}")
-                await self._execute_js_on_account_async(
-                    account, f"window.location.href = '{project_url}'"
-                )
-                await asyncio.sleep(8)
-                nav_success = True
-                log.info(f"[Foreman:{email}] ✅ Project page loaded (JS fallback)")
-            except Exception as e:
-                log.warning(f"[Foreman:{email}] Project page navigation failed (JS): {e}")
-
-        if nav_success:
-            self._navigated_project[email] = project_id
-            
-            # Wait for content script re-inject + reCAPTCHA widget init
-            import time as _time
-            wait_start = _time.monotonic()
-            max_wait = 15  # seconds
-            recaptcha_ready = False
-            
-            if bridge and bridge.is_connected(email):
-                for attempt in range(max_wait // 2):
-                    await asyncio.sleep(2)
-                    try:
-                        ready_result = await bridge.check_recaptcha_ready(email, timeout=5.0)
-                        if ready_result and ready_result.get('ready'):
-                            elapsed = _time.monotonic() - wait_start
-                            log.info(
-                                f"[Foreman:{email}] ✅ reCAPTCHA ready on project page "
-                                f"({elapsed:.1f}s after navigation)"
-                            )
-                            recaptcha_ready = True
-                            break
-                    except Exception:
-                        pass
-            
-            if not recaptcha_ready:
-                elapsed = _time.monotonic() - wait_start
-                log.warning(
-                    f"[Foreman:{email}] ⚠️ reCAPTCHA not ready after {elapsed:.1f}s "
-                    f"post-navigation — foreman will handle via pre-submit check"
-                )
-        else:
-            log.error(
-                f"[Foreman:{email}] ❌ All 4 navigation levels failed — "
-                f"account may not function correctly"
-            )
+    # NOTE: _navigate_to_project_page() removed — submit_prompt uses
+    # executeScript with absolute API URLs (project_id in payload body),
+    # so page URL is irrelevant. Tab stays on main flow page, avoiding:
+    # - 4-8s navigation blocking workers
+    # - Cache stale bugs (_navigated_project)
+    # - Race conditions between workers needing different projects
     
     CIRCUIT_TRIP_THRESHOLD = 5    # consecutive 403s to trip breaker
     CIRCUIT_MONITOR_INTERVAL = 10  # seconds between health checks
@@ -1469,6 +1288,10 @@ class Engine:
         breaker. If reconnected while open, transitions to half-open
         WITH exponential backoff — waits longer before probing as
         consecutive 403 count increases.
+        
+        Enhancement: When breaker trips due to 5+ consecutive 403s,
+        triggers browser restart (clear auth, keep profile) to recover
+        from reCAPTCHA failures.
         """
         import time
         log.info("[CircuitBreaker] Monitor started")
@@ -1481,11 +1304,44 @@ class Engine:
                     email = account.email
                     healthy = self._check_extension_health(account)
                     state = self._circuit_state.get(email, "closed")
+                    consecutive = self._circuit_consecutive_403.get(email, 0)
+                    
+                    # ★ Browser restart recovery: 5+ consecutive 403s → restart
+                    if state == "open" and consecutive >= self.CIRCUIT_TRIP_THRESHOLD:
+                        # Prevent re-trigger during restart
+                        if not getattr(self, '_circuit_restart_pending', {}).get(email):
+                            if not hasattr(self, '_circuit_restart_pending'):
+                                self._circuit_restart_pending = {}
+                            self._circuit_restart_pending[email] = True
+                            
+                            log.warning(
+                                f"🔄 [CircuitBreaker] {email}: {consecutive}× consecutive 403 "
+                                f"→ triggering browser restart (clear auth, keep profile)"
+                            )
+                            try:
+                                ok = await account.restart_browser()
+                                if ok:
+                                    log.info(
+                                        f"✅ [CircuitBreaker] {email}: browser restarted "
+                                        f"— resetting counter, closing breaker"
+                                    )
+                                    self._circuit_consecutive_403[email] = 0
+                                    self._close_circuit_breaker(email)
+                                else:
+                                    log.error(
+                                        f"❌ [CircuitBreaker] {email}: browser restart failed"
+                                    )
+                            except Exception as e:
+                                log.error(
+                                    f"❌ [CircuitBreaker] {email}: restart error: {e}"
+                                )
+                            finally:
+                                self._circuit_restart_pending[email] = False
+                            continue  # Skip normal health check for this account
                     
                     if healthy and state == "open":
                         # Exponential backoff: wait longer before probing
                         # as consecutive 403 count increases
-                        consecutive = self._circuit_consecutive_403.get(email, 0)
                         open_since = self._circuit_open_since.get(email, 0)
                         elapsed = time.time() - open_since if open_since else 999
                         
@@ -1618,10 +1474,11 @@ class Engine:
           Tier 1: simulate_activity every 25s (JS mouse/scroll — Chrome freeze prevention)
           Tier 2: API heartbeat every ~125s (auth/session + credits — trust building)
         """
-        KEEPALIVE_INTERVAL = 25  # seconds — under Chrome's 30-60s freeze threshold
-        HEARTBEAT_EVERY_N_CYCLES = 5  # API heartbeat every 5th cycle (5 × 25s = 125s ≈ 2min)
+        KEEPALIVE_INTERVAL_MIN = 18  # seconds — min cycle interval
+        KEEPALIVE_INTERVAL_MAX = 30  # seconds — max (under Chrome 60s freeze)
+        HEARTBEAT_EVERY_N_CYCLES = 5  # API heartbeat every 5th cycle
         
-        log.info("[TabKeepalive] App-level service started (2-tier: JS + API heartbeat)")
+        log.info("[TabKeepalive] App-level service started (2-tier: JS + API heartbeat, randomized)")
         
         # Small initial delay to let everything initialize
         await asyncio.sleep(5)
@@ -1659,7 +1516,10 @@ class Engine:
                     log.info("[TabKeepalive] Engine idle — resuming tab keepalive")
                     heartbeat_counter = 0  # Reset counter when resuming from yield
                 
-                # Tier 1: Ping all connected tabs (JS simulate_activity)
+                # Tier 1: Randomized simulate_activity per account
+                # Random 1-3 pings per account, 2-5s between pings
+                # Avoids deterministic pattern that Google can detect as automation
+                import random
                 pinged = 0
                 for account in self._account_manager._accounts:
                     if not account.is_enabled:
@@ -1671,14 +1531,21 @@ class Engine:
                     if not bridge or not bridge.is_connected(account.email):
                         continue
                     
-                    try:
-                        ok = await bridge.simulate_activity(
-                            account.email, timeout=3.0
-                        )
-                        if ok:
-                            pinged += 1
-                    except Exception:
-                        pass  # Best-effort
+                    activity_count = random.randint(1, 3)
+                    for i in range(activity_count):
+                        if stop_event.is_set() or not yield_event.is_set():
+                            break
+                        try:
+                            ok = await bridge.simulate_activity(
+                                account.email, timeout=3.0
+                            )
+                            if ok:
+                                pinged += 1
+                        except Exception:
+                            pass  # Best-effort
+                        # Random pause between activity calls (skip after last)
+                        if i < activity_count - 1:
+                            await asyncio.sleep(random.uniform(2.0, 5.0))
                 
                 # Track stats for DevConsole dashboard
                 self._keepalive_last_ping_count = pinged
@@ -1690,7 +1557,7 @@ class Engine:
                         f"Chrome freeze prevention OK"
                     )
                 
-                # ★ Fix 5 — Tier 2: API heartbeat every ~125s
+                # ★ Fix 5 — Tier 2: API heartbeat every ~N cycles
                 heartbeat_counter += 1
                 if heartbeat_counter >= HEARTBEAT_EVERY_N_CYCLES:
                     heartbeat_counter = 0
@@ -1704,8 +1571,9 @@ class Engine:
             except Exception as e:
                 log.debug(f"[TabKeepalive] Loop error: {e}")
             
-            # Sleep in small chunks to respond quickly to stop/yield changes
-            for _ in range(KEEPALIVE_INTERVAL):
+            # Randomized sleep interval (18-30s, under Chrome's freeze threshold)
+            cycle_interval = random.uniform(KEEPALIVE_INTERVAL_MIN, KEEPALIVE_INTERVAL_MAX)
+            for _ in range(int(cycle_interval)):
                 if stop_event.is_set() or not yield_event.is_set():
                     break
                 await asyncio.sleep(1.0)
@@ -2092,6 +1960,12 @@ class Engine:
         
         # Give workers a moment to finish current iteration
         await asyncio.sleep(0.5)
+        
+        # Reset worker tracking so G1 gate allows spawning on next Start
+        self._workers.clear()
+        self._active_account_emails.clear()
+        self._supervisors.clear()
+        log.info("Engine stopped — worker/foreman tracking reset")
     
     async def start(self):
         """Start the engine main loop.
@@ -2311,10 +2185,48 @@ class Engine:
         # Foreman count: ceil(max_workers / output_count), capped at 8
         import math
         typical_output = self._get_typical_output_count()
-        foreman_count = max(1, min(
+        raw_foreman_count = max(1, min(
             math.ceil(account.max_workers / typical_output),
             8,  # Cap: beyond 8, foremen just queue on rate lock
         ))
+        
+        # G1: License gate — GLOBAL cap by permissions.limits.max_foremen
+        # This caps total foremen across ALL accounts (not per-account)
+        # to prevent multi-account bypass of foremen limits.
+        foreman_count = raw_foreman_count
+        try:
+            ctrl = getattr(self, '_app_controller', None)
+            if ctrl and hasattr(ctrl, '_permissions'):
+                max_foremen = ctrl._permissions.limits.max_foremen
+                log.info(
+                    f"[G1:{account.email}] max_foremen={max_foremen}, "
+                    f"raw_foreman={raw_foreman_count}, existing={len(self._workers)}"
+                )
+                if max_foremen > 0:
+                    # Count active foremen (list cleared on engine stop)
+                    total_existing = len(self._workers)
+                    remaining_slots = max(0, max_foremen - total_existing)
+                    if remaining_slots == 0:
+                        log.warning(
+                            f"[G1:{account.email}] BLOCKED — global foreman limit "
+                            f"reached: {total_existing}/{max_foremen}"
+                        )
+                        return  # Don't spawn any foremen for this account
+                    if raw_foreman_count > remaining_slots:
+                        foreman_count = remaining_slots
+                        log.info(
+                            f"[G1:{account.email}] Global foreman cap: "
+                            f"{raw_foreman_count} → {foreman_count} "
+                            f"(existing={total_existing}, limit={max_foremen})"
+                        )
+            else:
+                log.warning(
+                    f"[G1:{account.email}] No permissions available — "
+                    f"ctrl={'set' if ctrl else 'None'}, "
+                    f"has_perm={hasattr(ctrl, '_permissions') if ctrl else 'N/A'}"
+                )
+        except Exception as e:
+            log.error(f"[G1:{account.email}] Permission check error: {e}")
         
         for i in range(foreman_count):
             foreman_worker = Worker(
@@ -2585,8 +2497,68 @@ class Engine:
                             pass
                         continue
                     
+                    # ═══ LICENSE GATES G2/G3/G4 ═══
+                    _ctrl = getattr(self, '_app_controller', None)
+                    _perm = getattr(_ctrl, '_permissions', None) if _ctrl else None
+                    _lc = getattr(_ctrl, '_license_client', None) if _ctrl else None
+                    
+                    # G2: Daily generation limit
+                    if _perm and _lc:
+                        try:
+                            daily_limit = _perm.limits.daily_generation_limit
+                            if daily_limit > 0:
+                                today = _lc.usage.today_generations
+                                if today >= daily_limit:
+                                    log.warning(
+                                        f"[G2:{fid}] Daily limit reached: "
+                                        f"{today}/{daily_limit} — rejecting task {task.id}"
+                                    )
+                                    self._dispatcher.fail_task(
+                                        task.id, 
+                                        f"Daily limit reached ({today}/{daily_limit}). Upgrade license."
+                                    )
+                                    account.release_workers(worker_count)
+                                    worker_count = 0
+                                    if self._on_task_failed:
+                                        self._on_task_failed(task, f"Daily limit ({today}/{daily_limit})")
+                                    await asyncio.sleep(5)  # Avoid rapid-fire rejections
+                                    continue
+                        except Exception:
+                            pass
+                    
+                    # G4: Feature gate (Continuation / Batch)
+                    if _perm:
+                        try:
+                            from services.permissions import Feature
+                            wf = getattr(task, 'workflow_type', None)
+                            # Block Continuation for TRIAL
+                            if wf and 'continuation' in str(wf).lower():
+                                if not _perm.has_feature(Feature.CONTINUATION):
+                                    log.warning(f"[G4:{fid}] Continuation blocked for TRIAL — task {task.id}")
+                                    self._dispatcher.fail_task(task.id, "Continuation requires Premium license")
+                                    account.release_workers(worker_count)
+                                    worker_count = 0
+                                    continue
+                        except Exception:
+                            pass
+                    
                     # Phase 2 admission: acquire extra workers for output_count > 1
                     output_count = getattr(task, 'output_count', 1) or 1
+                    
+                    # G3: Cap output_count by license limit
+                    if _perm:
+                        try:
+                            max_outputs = _perm.limits.max_outputs_per_prompt
+                            if max_outputs > 0 and output_count > max_outputs:
+                                log.info(
+                                    f"[G3:{fid}] output_count capped: "
+                                    f"{output_count} → {max_outputs} (license limit)"
+                                )
+                                output_count = max_outputs
+                                task.output_count = output_count
+                        except Exception:
+                            pass
+                    
                     # Edge case: if max_workers < output_count, clamp to max_workers
                     # Otherwise acquire_workers(output_count) would ALWAYS fail
                     if output_count > account.max_workers:
@@ -3812,7 +3784,7 @@ class Engine:
             from pathlib import Path as _Path
             thumb_dir = _Path(video_path).parent / "thumbnails"
             thumb_dir.mkdir(parents=True, exist_ok=True)
-            thumb_path = str(thumb_dir / f"thumb_{video_index:02d}.jpg")
+            thumb_path = str(thumb_dir / f"thumb_{task.id}_{video_index:02d}.jpg")
             
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
@@ -3901,6 +3873,17 @@ class Engine:
         # ── G8: Continuation frame (from video[0] only, 1 location) ──
         task.stage = TaskStage.DOWNLOADED_720
         self._sync_overall_upscale_status(task)
+        
+        # G5: License usage — count on successful 720p download (not submit)
+        try:
+            ctrl = getattr(self, '_app_controller', None)
+            if ctrl and hasattr(ctrl, '_license_client'):
+                ctrl._license_client.log_generation()
+                # Count downloads per actual video file, not per prompt
+                for _ in final_paths:
+                    ctrl._license_client.log_download()
+        except Exception:
+            pass
 
         continuation_frame_uri = None
         continuation_frame_local = None
@@ -3934,6 +3917,9 @@ class Engine:
             "account": task.assigned_account,
         }, source="engine")
         self._save_manifest(task)
+        
+        # G5: License usage tracking — moved to DOWNLOADED_720 checkpoint
+        # (counts actual completed downloads, not submit attempts)
 
     async def _resume_from_checkpoint(self, task: Task, account: AccountManager):
         """Resume task from saved checkpoint stage (skip completed phases).
@@ -4760,6 +4746,18 @@ class Engine:
                     )
                     
                     task.stage = TaskStage.DOWNLOADED_720  # ★ Checkpoint: 720p saved
+                    
+                    # G5: License usage — count on successful 720p download
+                    try:
+                        ctrl = getattr(self, '_app_controller', None)
+                        if ctrl and hasattr(ctrl, '_license_client'):
+                            ctrl._license_client.log_generation()
+                            # Count downloads per actual video file, not per prompt
+                            dl_count = sum(1 for p in local_720p if p)
+                            for _ in range(dl_count):
+                                ctrl._license_client.log_download()
+                    except Exception:
+                        pass
                     
                     # ★ Bug 4C: Handle failed downloads (toggle + max retry logic)
                     dl_success = sum(1 for p in local_720p if p)
