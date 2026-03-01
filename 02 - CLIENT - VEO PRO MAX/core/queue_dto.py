@@ -37,6 +37,7 @@ class VideoSlotDTO:
     thumbnail_path: str = ""
     task_id: str = ""
     target_quality: str = "1080p"
+    upscale_poll_count: int = 0
     
     def to_dict(self) -> dict:
         return asdict(self)

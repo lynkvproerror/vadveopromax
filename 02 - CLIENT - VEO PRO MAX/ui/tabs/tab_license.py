@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, Signal, QTimer
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 class TabLicense(QWidget):
@@ -40,8 +41,19 @@ class TabLicense(QWidget):
         self._banner_text = None  # Banner text label for refresh
         self._banner_frame = None # Banner frame for color change
         
-        self._setup_ui()
-        self._bind_real_data()
+        try:
+            self._setup_ui()
+            self._bind_real_data()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"TabLicense init failed: {e}", exc_info=True)
+            # Fallback: show error instead of black screen
+            if not self.layout():
+                from PySide6.QtWidgets import QVBoxLayout
+                QVBoxLayout(self)
+            err_label = QLabel(f"⚠️ License tab error: {e}")
+            err_label.setStyleSheet(f"color: {Theme.RED}; font-size: 14px; padding: 20px;")
+            self.layout().addWidget(err_label)
         
         # Auto-refresh every 60s (for stats/limits)
         self._refresh_timer = QTimer(self)
@@ -92,7 +104,7 @@ class TabLicense(QWidget):
         banner_layout = QHBoxLayout(self._banner_frame)
         banner_layout.setContentsMargins(16, 0, 16, 0)
         
-        self._banner_text = QLabel("⏰ TRIAL MODE")
+        self._banner_text = QLabel(t("license.banner.trial"))
         self._banner_text.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold; font-size: 14px;")
         banner_layout.addWidget(self._banner_text)
         banner_layout.addStretch()
@@ -106,10 +118,10 @@ class TabLicense(QWidget):
         info_layout.setSpacing(4)
         
         limit_defs = [
-            ("accounts", "Accounts (max_cookies)"),
-            ("threads", "Threads (global)"),
-            ("daily", "Daily Generations"),
-            ("batch", "Prompts/Batch"),
+            ("accounts", t("license.limits.accounts")),
+            ("threads", t("license.limits.threads")),
+            ("daily", t("license.limits.daily")),
+            ("batch", t("license.limits.batch")),
         ]
         
         for key, label in limit_defs:
@@ -128,7 +140,7 @@ class TabLicense(QWidget):
         
         # Machine ID row
         machine_row = QHBoxLayout()
-        machine_label = QLabel("Machine ID:")
+        machine_label = QLabel(t("license.machine_id"))
         machine_label.setFixedWidth(200)
         machine_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
         machine_row.addWidget(machine_label)
@@ -142,7 +154,7 @@ class TabLicense(QWidget):
         )
         machine_row.addWidget(self.machine_id_entry)
         
-        copy_btn = QPushButton("📋 Copy")
+        copy_btn = QPushButton(t("license.copy"))
         copy_btn.setFixedSize(100, 32)
         copy_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; font-size: 12px; font-weight: bold;")
         copy_btn.clicked.connect(self._on_copy_machine_id)
@@ -163,7 +175,7 @@ class TabLicense(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
         
-        title = QLabel("🔑 Activate License")
+        title = QLabel(t("license.activate_title"))
         title.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
         
@@ -171,11 +183,11 @@ class TabLicense(QWidget):
         input_layout = QHBoxLayout()
         
         self.key_entry = QLineEdit()
-        self.key_entry.setPlaceholderText("Enter your license key (XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX)")
+        self.key_entry.setPlaceholderText(t("license.activate_placeholder"))
         self.key_entry.setMinimumHeight(36)
         input_layout.addWidget(self.key_entry)
         
-        self._activate_btn = QPushButton("Activate")
+        self._activate_btn = QPushButton(t("license.activate"))
         self._activate_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
         self._activate_btn.clicked.connect(self._on_activate)
         input_layout.addWidget(self._activate_btn)
@@ -201,61 +213,61 @@ class TabLicense(QWidget):
         # (tier_key, name, price, features, color)
         # Luồng = số tác vụ xử lý đồng thời (tránh dùng từ 'Workers' trên UI)
         tiers = [
-            ("FREE", "🆓 Free", "Miễn phí", [
-                "⏳ 3 ngày dùng thử",
-                "👤 1 Account duy nhất",
-                "⚡ 2 Luồng",
-                "📊 100 gen/ngày",
-                "🖼️ 720p + 1080p Upscale",
-                "❌ Không có Continuation",
-                "❌ Không có Priority Support",
+            ("FREE", t("license.tiers.free"), t("license.free"), [
+                t("license.features.trial_days"),
+                t("license.features.one_account"),
+                t("license.features.two_threads"),
+                t("license.features.gen_per_day"),
+                t("license.features.upscale_720"),
+                t("license.features.no_continuation"),
+                t("license.features.no_priority"),
             ], Theme.SUBTEXT0),
-            ("1M", "1 Tháng", "300,000đ", [
-                "👥 Unlimited Accounts",
-                "⚡ Không giới hạn số luồng",
-                "📊 Unlimited gen/ngày",
-                "🔗 Smooth Continuation ✅",
-                "🛡️ Anti-Detect Spam",
-                "🌐 Smart Hide Browser",
-                "🖼️ Auto Upscale 1080p",
+            ("1M", t("license.tiers.1m"), "300,000đ", [
+                t("license.features.unlimited_accounts"),
+                t("license.features.unlimited_threads"),
+                t("license.features.unlimited_gen"),
+                t("license.features.continuation"),
+                t("license.features.anti_detect"),
+                t("license.features.smart_hide"),
+                t("license.features.auto_upscale"),
             ], Theme.PEACH),
-            ("3M", "3 Tháng", "500,000đ", [
-                "💰 Tiết kiệm 44%  ~167K/th",
-                "👥 Unlimited Accounts",
-                "⚡ Không giới hạn số luồng",
-                "📊 Unlimited gen/ngày",
-                "🔗 Smooth Continuation ✅",
-                "🛡️ Anti-Detect + Smart Hide",
-                "🖼️ Auto Upscale 1080p",
+            ("3M", t("license.tiers.3m"), "500,000đ", [
+                t("license.features.save_44"),
+                t("license.features.unlimited_accounts"),
+                t("license.features.unlimited_threads"),
+                t("license.features.unlimited_gen"),
+                t("license.features.continuation"),
+                t("license.features.anti_detect_hide"),
+                t("license.features.auto_upscale"),
             ], Theme.BLUE),
-            ("6M", "6 Tháng", "800,000đ", [
-                "💰 Tiết kiệm 56%  ~133K/th",
-                "👥 Unlimited Accounts",
-                "⚡ Không giới hạn số luồng",
-                "📊 Unlimited gen/ngày",
-                "🔗 Smooth Continuation ✅",
-                "🛡️ Anti-Detect + Smart Hide",
-                "⭐ Priority Support",
+            ("6M", t("license.tiers.6m"), "800,000đ", [
+                t("license.features.save_56"),
+                t("license.features.unlimited_accounts"),
+                t("license.features.unlimited_threads"),
+                t("license.features.unlimited_gen"),
+                t("license.features.continuation"),
+                t("license.features.anti_detect_hide"),
+                t("license.features.priority_support"),
             ], Theme.GREEN),
-            ("1Y", "1 Năm", "1,200,000đ", [
-                "💰 Tiết kiệm 67%  ~100K/th",
-                "👥 Unlimited Accounts",
-                "⚡ Không giới hạn số luồng",
-                "📊 Unlimited gen/ngày",
-                "🔗 Smooth Continuation ✅",
-                "🛡️ Full Security Suite",
-                "⭐ Priority Support",
-                "🏆 Best Value",
+            ("1Y", t("license.tiers.1y"), "1,200,000đ", [
+                t("license.features.save_67"),
+                t("license.features.unlimited_accounts"),
+                t("license.features.unlimited_threads"),
+                t("license.features.unlimited_gen"),
+                t("license.features.continuation"),
+                t("license.features.full_security"),
+                t("license.features.priority_support"),
+                t("license.features.best_value"),
             ], Theme.PURPLE),
-            ("LIFETIME", "Vĩnh viễn", "3,000,000đ", [
-                "🔥 BEST DEAL — Mua 1 lần",
-                "♾️ Không hết hạn",
-                "🔄 Lifetime Updates",
-                "👥 Unlimited Everything",
-                "🔗 Smooth Continuation ✅",
-                "🛡️ Full Security Suite",
-                "⭐ Priority Support VIP",
-                "🎁 Tất cả tính năng mới",
+            ("LIFETIME", t("license.tiers.lifetime"), "3,000,000đ", [
+                t("license.features.best_deal"),
+                t("license.features.no_expiry"),
+                t("license.features.lifetime_updates"),
+                t("license.features.unlimited_everything"),
+                t("license.features.continuation"),
+                t("license.features.full_security"),
+                t("license.features.priority_vip"),
+                t("license.features.all_new_features"),
             ], Theme.YELLOW),
         ]
         
@@ -298,7 +310,7 @@ class TabLicense(QWidget):
             discount_label.setAlignment(Qt.AlignCenter)
             header_layout.addWidget(discount_label)
             
-            orig_label = QLabel(f"<s>{price}</s>  🎁 Ưu đãi lần đầu!")
+            orig_label = QLabel(f"<s>{price}</s>  {t('license.first_buy_badge')}")
             orig_label.setStyleSheet(f"color: {Theme.CRUST}; font-size: 9px;")
             orig_label.setAlignment(Qt.AlignCenter)
             header_layout.addWidget(orig_label)
@@ -328,7 +340,7 @@ class TabLicense(QWidget):
             except Exception:
                 pass
             if is_trial:
-                status_btn = QPushButton("✅ Đang dùng thử")
+                status_btn = QPushButton(t("license.using_trial"))
                 status_btn.setStyleSheet(
                     f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
                     f"border-radius: 0px; font-weight: bold; font-size: 14px;"
@@ -340,19 +352,19 @@ class TabLicense(QWidget):
         elif tier_key != "FREE":
             if active_tier == "LIFETIME" and tier_key == "LIFETIME":
                 # Already Lifetime → nothing more to buy
-                select_btn = QPushButton("✅ Đang dùng")
+                select_btn = QPushButton(t("license.current_plan"))
                 select_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; border-radius: 0px; font-weight: bold; font-size: 14px;")
                 select_btn.setEnabled(False)
             elif active_tier:
                 # Has active license → can always buy more to stack time
                 # Lifetime: "Nâng cấp" (one-time), others: "Mua thêm" (stackable)
-                btn_text = "🔥 Nâng cấp" if tier_key == "LIFETIME" else "🛒 Mua thêm"
+                btn_text = t("license.upgrade") if tier_key == "LIFETIME" else t("license.buy_more")
                 select_btn = QPushButton(btn_text)
                 select_btn.setStyleSheet(f"background-color: {color}; color: {Theme.CRUST}; border-radius: 0px; font-weight: bold; font-size: 14px;")
                 select_btn.clicked.connect(lambda checked, k=tier_key: self._on_select_tier(k))
             else:
                 # No active license → normal select
-                select_btn = QPushButton("Chọn")
+                select_btn = QPushButton(t("license.select"))
                 select_btn.setStyleSheet(f"background-color: {color}; color: {Theme.CRUST}; border-radius: 0px; font-weight: bold; font-size: 14px;")
                 select_btn.clicked.connect(lambda checked, k=tier_key: self._on_select_tier(k))
             select_btn.setFixedHeight(60)
@@ -428,16 +440,16 @@ class TabLicense(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
         
-        title = QLabel("📊 Usage Statistics")
+        title = QLabel(t("license.usage_title"))
         title.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
         
         stats_layout = QGridLayout()
         stat_defs = [
-            ("total_gen", "Total Generations"),
-            ("today_gen", "Today's Generations"),
-            ("total_dl", "Total Downloads"),
-            ("role", "Current Role"),
+            ("total_gen", t("license.total_gen")),
+            ("today_gen", t("license.today_gen")),
+            ("total_dl", t("license.total_downloads")),
+            ("role", t("license.current_role")),
         ]
         
         for i, (key, label) in enumerate(stat_defs):
@@ -456,6 +468,29 @@ class TabLicense(QWidget):
         layout.addLayout(stats_layout)
         
         return section
+    
+    def retranslate_ui(self):
+        """Hot-reload: rebuild entire UI when language changes."""
+        # Remove old layout — Qt won't allow a new layout if old one exists
+        old_layout = self.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+            # Transfer old layout to temp widget → releases self for new layout
+            QWidget().setLayout(old_layout)
+        
+        # Reset tracked widgets
+        self._limit_labels = {}
+        self._stat_labels = {}
+        self._banner_text = None
+        self._banner_frame = None
+        
+        # Rebuild
+        self._setup_ui()
+        self._bind_real_data()
     
     # ── Data Binding ─────────────────────────────────────────────
     

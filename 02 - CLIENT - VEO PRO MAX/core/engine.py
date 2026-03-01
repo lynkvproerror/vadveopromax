@@ -2000,7 +2000,7 @@ class Engine:
         try:
             from config.settings import get_settings as _get_settings
             _s = _get_settings()
-            _headless = getattr(_s, 'smart_hide_enabled', True)
+            _headless = getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False)
             await self._account_manager.startup_browsers(headless=_headless)
         except Exception as e:
             log.error(f"Failed to start browsers: {e}")
@@ -2271,7 +2271,7 @@ class Engine:
                     if self._profiles_controller:
                         account.set_profiles_controller(self._profiles_controller)
                     from config.settings import get_settings as _get_settings
-                    _headless = getattr(_get_settings(), 'smart_hide_enabled', True)
+                    _headless = getattr(_get_settings(), 'smart_hide_enabled', True) or getattr(_get_settings(), 'hide_all_browsers', False)
                     await account.ensure_browser(headless=_headless)
                 except Exception as e:
                     log.warning(f"Hot-reload: browser start failed for {account.email}: {e}")
@@ -2619,7 +2619,7 @@ class Engine:
                     if not account._browser_session or not account._browser_session.is_ready:
                         try:
                             from config.settings import get_settings as _get_settings
-                            _headless = getattr(_get_settings(), 'smart_hide_enabled', True)
+                            _headless = getattr(_get_settings(), 'smart_hide_enabled', True) or getattr(_get_settings(), 'hide_all_browsers', False)
                             await account.ensure_browser(headless=_headless)
                         except Exception as e:
                             log.warning(f"Browser start failed for {account.email}: {e} (continuing without persistent browser)")
@@ -3205,7 +3205,7 @@ class Engine:
                             if _sh_remaining <= 0:
                                 # 3 successful prompts → re-hide browser
                                 from config.settings import get_settings as _get_sh_settings2
-                                if getattr(_get_sh_settings2(), 'smart_hide_enabled', True):
+                                if getattr(_get_sh_settings2(), 'smart_hide_enabled', True) or getattr(_get_sh_settings2(), 'hide_all_browsers', False):
                                     if self._profiles_controller:
                                         self._profiles_controller.hide_debug_browser(account.email)
                                         log.info(f"[SmartHide] {account.email}: browser re-hidden after 3 successful prompts")
@@ -6926,16 +6926,54 @@ class Engine:
                                         thumb_img.save(str(thumb_path), 'JPEG', quality=85)
                                     log.info(f"Thumbnail (image): {thumb_path.name}")
                                 else:
-                                    # Video: extract first frame using ffmpeg
-                                    import subprocess
-                                    subprocess.run(
-                                        ['ffmpeg', '-y', '-ss', '1', '-i', str(filepath),
-                                         '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
-                                         str(thumb_path)],
-                                        capture_output=True, timeout=10
-                                    )
-                                    if thumb_path.exists():
-                                        log.info(f"Thumbnail (video): {thumb_path.name}")
+                                    # Video: extract first frame using ffmpeg (with fallback)
+                                    import subprocess, shutil
+                                    ffmpeg_ok = False
+                                    
+                                    if shutil.which('ffmpeg'):
+                                        # Try at 1s first, then at 0s for short videos
+                                        for ss_val in ['1', '0']:
+                                            try:
+                                                result = subprocess.run(
+                                                    ['ffmpeg', '-y', '-ss', ss_val, '-i', str(filepath),
+                                                     '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                                                     str(thumb_path)],
+                                                    capture_output=True, timeout=10
+                                                )
+                                                if thumb_path.exists() and thumb_path.stat().st_size > 100:
+                                                    ffmpeg_ok = True
+                                                    log.info(f"Thumbnail (ffmpeg -ss {ss_val}): {thumb_path.name}")
+                                                    break
+                                            except Exception as ff_err:
+                                                log.debug(f"ffmpeg -ss {ss_val} failed: {ff_err}")
+                                    else:
+                                        log.warning(
+                                            f"ffmpeg not in PATH — trying PIL fallback for thumbnail"
+                                        )
+                                    
+                                    # PIL fallback: decode first frame from video container
+                                    if not ffmpeg_ok:
+                                        try:
+                                            import cv2
+                                            cap = cv2.VideoCapture(str(filepath))
+                                            ret, frame = cap.read()
+                                            cap.release()
+                                            if ret and frame is not None:
+                                                from PIL import Image
+                                                import numpy as np
+                                                img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                                                ratio = 80 / img.width
+                                                new_size = (80, max(1, int(img.height * ratio)))
+                                                thumb_img = img.resize(new_size, Image.LANCZOS)
+                                                thumb_img.save(str(thumb_path), 'JPEG', quality=85)
+                                                log.info(f"Thumbnail (cv2 fallback): {thumb_path.name}")
+                                        except ImportError:
+                                            log.warning(
+                                                f"Neither ffmpeg nor opencv-python available — "
+                                                f"cannot generate video thumbnail for {filepath.name}"
+                                            )
+                                        except Exception as cv_err:
+                                            log.warning(f"cv2 thumbnail fallback failed: {cv_err}")
                                 
                                 if thumb_path.exists():
                                     task.thumbnail_paths.append(str(thumb_path))
@@ -7016,14 +7054,41 @@ class Engine:
                         thumb_img = thumb_img.convert('RGB')
                     thumb_img.save(str(thumb_path), 'JPEG', quality=85)
             else:
-                # Video: extract first frame using ffmpeg
-                import subprocess
-                subprocess.run(
-                    ['ffmpeg', '-y', '-i', str(source),
-                     '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
-                     str(thumb_path)],
-                    capture_output=True, timeout=10,
-                )
+                # Video: extract first frame using ffmpeg (with fallback)
+                import subprocess, shutil
+                ffmpeg_ok = False
+                
+                if shutil.which('ffmpeg'):
+                    for ss_val in ['1', '0']:
+                        try:
+                            subprocess.run(
+                                ['ffmpeg', '-y', '-ss', ss_val, '-i', str(source),
+                                 '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                                 str(thumb_path)],
+                                capture_output=True, timeout=10,
+                            )
+                            if thumb_path.exists() and thumb_path.stat().st_size > 100:
+                                ffmpeg_ok = True
+                                break
+                        except Exception:
+                            pass
+                
+                # cv2 fallback if ffmpeg unavailable/failed
+                if not ffmpeg_ok:
+                    try:
+                        import cv2
+                        cap = cv2.VideoCapture(str(source))
+                        ret, frame = cap.read()
+                        cap.release()
+                        if ret and frame is not None:
+                            from PIL import Image
+                            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                            ratio = 80 / img.width
+                            new_size = (80, max(1, int(img.height * ratio)))
+                            thumb_img = img.resize(new_size, Image.LANCZOS)
+                            thumb_img.save(str(thumb_path), 'JPEG', quality=85)
+                    except (ImportError, Exception) as e:
+                        log.warning(f"[Thumbnail] Regen fallback failed: {e}")
             
             if thumb_path.exists():
                 vo.thumbnail_path = str(thumb_path)

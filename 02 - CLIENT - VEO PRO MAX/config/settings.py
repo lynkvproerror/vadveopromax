@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 7
+SETTINGS_VERSION = 9
 
 
 @dataclass
@@ -70,6 +70,7 @@ class AppSettings:
     
     # === BROWSER VISIBILITY ===
     smart_hide_enabled: bool = True             # ON = hide on success, show on 403 error; OFF = always visible
+    hide_all_browsers: bool = False              # ON = hide ALL browsers after startup; overrides smart_hide
     
     # === CONTINUATION ===
     continuation_enabled: bool = True
@@ -98,7 +99,7 @@ class AppSettings:
     enhance_auto_continuation: bool = False  # Toggle 3: Auto-enhance continuation frames (BETA)
     
     # === UI ===
-    ui_language: str = "English"             # "English" | "Tiếng Việt"
+    ui_language: str = "Tiếng Việt"           # "English" | "Tiếng Việt"
     developer_mode: bool = False
     show_json_preview: bool = False
     
@@ -110,6 +111,9 @@ class AppSettings:
     # === POST-QUEUE ACTION ===
     post_queue_action_enabled: bool = False  # Master toggle
     post_queue_action: str = "nothing"       # "nothing" | "shutdown" | "sleep"
+    
+    # === AUTO-UPDATE ===
+    auto_update_enabled: bool = True         # Check for updates on startup + every 30min
     
     # === PATHS ===
     profiles_folder: str = ""
@@ -177,7 +181,7 @@ class AppSettings:
                 'watchdog_timeout_min': 10,
                 'journal_save_interval_sec': 30,
                 'workload_priority': '720p_priority',
-                'ui_language': 'English',
+                'ui_language': 'Tiếng Việt',
             },
             # 2 → 3: Add auto-retry download settings
             2: lambda d: {**d,
@@ -204,6 +208,14 @@ class AppSettings:
                 'smart_recovery_enabled': True,
                 'credit_passive_interval': 5,
                 'credit_probe_after': 3,
+            },
+            # 7 → 8: Add hide_all_browsers
+            7: lambda d: {**d,
+                'hide_all_browsers': False,
+            },
+            # 8 → 9: Add auto_update_enabled
+            8: lambda d: {**d,
+                'auto_update_enabled': True,
             },
         }
         

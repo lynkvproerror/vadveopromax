@@ -1012,6 +1012,7 @@ class UpscaleQueue:
                 log.info(f"[UpscaleQueue] Upscale {video_label} submitted: op={op_name}")
                 if orig_idx < len(task.video_outputs):
                     task.video_outputs[orig_idx].upscale_status = "polling"
+                    task.video_outputs[orig_idx].upscale_poll_count = 0  # Reset for fresh poll
                 pending_ops.append((orig_idx, op_name, scene_id, media_id))
                 # Update progress per-video submit
                 submitted = len(pending_ops)
@@ -1134,6 +1135,9 @@ class UpscaleQueue:
             # Acquire burst-controlled poll slot
             await self._burst.acquire()
             try:
+                # Track poll attempts for progressive UI progress
+                if idx < len(task.video_outputs):
+                    task.video_outputs[idx].upscale_poll_count += 1
                 result = await self._poll_fn(
                     task, account, video_label, op_name, scene_id
                 )

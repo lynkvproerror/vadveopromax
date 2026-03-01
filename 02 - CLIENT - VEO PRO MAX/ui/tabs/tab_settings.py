@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 # ── Mixin imports ──
 from ui.tabs.settings_components import (
@@ -127,6 +128,36 @@ class TabSettings(
         self._ext_timer.timeout.connect(self._refresh_ext_column)
         self._ext_timer.start(5000)
 
+    def retranslate_ui(self):
+        """Hot-reload: rebuild entire Settings UI when language changes."""
+        # Save current settings to disk before rebuilding
+        try:
+            self._on_save()
+        except Exception:
+            pass
+        
+        # Reset mixin state
+        self.setting_combos = {}
+        self.output_toggles = {}
+        self._restore_sub_toggles = {}
+        self._tester_sections = []
+        self._premium_sections = []
+        
+        # Properly remove old layout — Qt won't allow a new layout if old one exists
+        old_layout = self.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+            # Transfer old layout to a temp widget → releases self for new layout
+            QWidget().setLayout(old_layout)
+        
+        # Rebuild (reads from get_settings() → restores all values)
+        self._setup_ui()
+        self._apply_audience_visibility()
+
     # ── Layout ──────────────────────────────────────────────
 
     def _setup_ui(self):
@@ -184,6 +215,7 @@ class TabSettings(
         # ── 5. UX & APPEARANCE ──
         layout.addWidget(self._create_notification_section())# Notifications (All)
         layout.addWidget(self._create_ui_section())          # UI Theme (All)
+        layout.addWidget(self._create_update_section())      # Auto-Update (All)
         
         # ── 6. SYSTEM / DEV (Tester only) ──
         tester_widgets = [
@@ -329,32 +361,32 @@ class TabSettings(
         layout.setContentsMargins(0, 16, 0, 0)
 
         # Save All button - explicitly force-saves all sections
-        save_btn = QPushButton("💾 Save All")
+        save_btn = QPushButton(t("settings_buttons.save_all"))
         save_btn.setToolTip("Force-save ALL settings to disk (individual settings also auto-save on change)")
         save_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; height: 36px;")
         save_btn.clicked.connect(self._on_save)
         layout.addWidget(save_btn)
 
         # Reset Defaults button
-        reset_btn = QPushButton("🔄 Reset Defaults")
+        reset_btn = QPushButton(t("settings_buttons.reset_defaults"))
         reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 36px;")
         reset_btn.clicked.connect(self._on_reset)
         layout.addWidget(reset_btn)
 
         # Export Config button - blue
-        export_btn = QPushButton("📤 Export Config")
+        export_btn = QPushButton(t("settings_buttons.export_config"))
         export_btn.setStyleSheet(f"background-color: {Theme.BLUE}; height: 36px;")
         export_btn.clicked.connect(self._on_export)
         layout.addWidget(export_btn)
 
         # Import Config button
-        import_btn = QPushButton("📥 Import Config")
+        import_btn = QPushButton(t("settings_buttons.import_config"))
         import_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 36px;")
         import_btn.clicked.connect(self._on_import)
         layout.addWidget(import_btn)
 
         # Reload App button — restart Python process
-        reload_btn = QPushButton("🔄 Reload App")
+        reload_btn = QPushButton(t("settings_buttons.reload_app"))
         reload_btn.setToolTip("Restart application (browsers keep running)")
         reload_btn.setStyleSheet(f"background-color: #FF6B00; color: {Theme.CRUST}; height: 36px; font-weight: bold;")
         reload_btn.clicked.connect(self._on_reload_app)
@@ -456,6 +488,8 @@ class TabSettings(
             # ── Browser Visibility ──
             if hasattr(self, 'smart_hide_switch'):
                 s.smart_hide_enabled = self.smart_hide_switch.isToggled()
+            if hasattr(self, 'hide_all_switch'):
+                s.hide_all_browsers = self.hide_all_switch.isToggled()
 
             # ── Pipeline Optimization ──
             if hasattr(self, 'burst_switch'):
@@ -576,6 +610,8 @@ class TabSettings(
             # ── Browser Visibility ──
             if hasattr(self, 'smart_hide_switch'):
                 self.smart_hide_switch.setToggled(True)
+            if hasattr(self, 'hide_all_switch'):
+                self.hide_all_switch.setToggled(False)
 
             # ── Pipeline Optimization ──
             if hasattr(self, 'burst_switch'):
@@ -705,6 +741,8 @@ class TabSettings(
         # Browser Visibility
         if "smart_hide_enabled" in settings and hasattr(self, 'smart_hide_switch'):
             self.smart_hide_switch.setToggled(bool(settings["smart_hide_enabled"]))
+        if "hide_all_browsers" in settings and hasattr(self, 'hide_all_switch'):
+            self.hide_all_switch.setToggled(bool(settings["hide_all_browsers"]))
         # Enhancer
         if "enhance_context_menu" in settings and hasattr(self, '_enhance_context_toggle'):
             self._enhance_context_toggle.setToggled(bool(settings["enhance_context_menu"]))
@@ -784,6 +822,7 @@ class TabSettings(
             "post_queue_action": self.post_queue_action_combo.currentText() if hasattr(self, 'post_queue_action_combo') else "nothing",
             # Browser Visibility
             "smart_hide_enabled": self.smart_hide_switch.isToggled() if hasattr(self, 'smart_hide_switch') else True,
+            "hide_all_browsers": self.hide_all_switch.isToggled() if hasattr(self, 'hide_all_switch') else False,
             # Pipeline Optimization
             "adaptive_burst_enabled": self.burst_switch.isToggled() if hasattr(self, 'burst_switch') else True,
             "burst_min_delay": self.burst_min.value() if hasattr(self, 'burst_min') else 2.0,

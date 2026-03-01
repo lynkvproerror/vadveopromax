@@ -75,6 +75,7 @@ class VideoOutputInfo:
     quality: str = "pending"             # "pending" | "720p" | "1080p" | "4K"
     upscale_status: str = ""             # "" | "success" | "failed" | "skipped"
     upscale_error: str = ""              # Error message if upscale failed
+    upscale_poll_count: int = 0          # Number of polling attempts (for progressive UI %)
     
     @property
     def best_file(self) -> str:

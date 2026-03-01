@@ -20,6 +20,7 @@ from PySide6.QtGui import QFont, QShortcut, QKeySequence
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.theme import Theme
+from config.i18n import t, set_language, get_signal as i18n_signal
 from ui.components.toast import ToastManager
 from core.notification_manager import NotificationManager
 
@@ -84,11 +85,18 @@ class MainWindow(QMainWindow):
         # Notification manager (sound playback)
         self._notification_manager = NotificationManager()
         
+        # Init i18n from saved settings
+        if settings:
+            set_language(getattr(settings, 'ui_language', 'Tiếng Việt'))
+        
         # Setup UI
         self._setup_window()
         self._create_widgets()
         self._bind_hotkeys()
         self._connect_controller()
+        
+        # Wire i18n hot-reload
+        i18n_signal().connect(self._on_language_changed)
         
         # Restore previous session
         self._restore_session()
@@ -106,6 +114,17 @@ class MainWindow(QMainWindow):
         self._license_recheck_timer.setInterval(5 * 60 * 1000)  # 5 minutes
         self._license_recheck_timer.timeout.connect(self._update_license_widget)
         self._license_recheck_timer.start()
+        
+        # 🔄 Auto-Update check (if enabled in settings)
+        self._auto_updater = None
+        if settings and getattr(settings, 'auto_update_enabled', True):
+            try:
+                from core.auto_updater import AutoUpdater
+                self._auto_updater = AutoUpdater(self)
+                self._auto_updater.update_available.connect(self._on_update_available)
+                self._auto_updater.start_periodic_check()
+            except Exception as e:
+                log.debug(f"Auto-updater init failed: {e}")
     
     def _setup_window(self):
         """Configure window properties."""
@@ -137,18 +156,18 @@ class MainWindow(QMainWindow):
         
         # Define tabs with their actual PySide6 classes
         self.tab_defs = [
-            ("Text to Video", "t2v", TabT2V),
-            ("Image to Video", "i2v", TabI2V),
-            ("Ingredients", "r2v", TabR2V),
-            ("Text to Image", "t2i", TabT2I),
-            ("Image to Image", "i2i", TabI2I),
-            ("Queue", "queue", TabQueue),
-            ("Settings", "settings", TabSettings),
-            ("License", "license", TabLicense),
+            ("app.tabs.t2v", "t2v", TabT2V),
+            ("app.tabs.i2v", "i2v", TabI2V),
+            ("app.tabs.r2v", "r2v", TabR2V),
+            ("app.tabs.t2i", "t2i", TabT2I),
+            ("app.tabs.i2i", "i2i", TabI2I),
+            ("app.tabs.queue", "queue", TabQueue),
+            ("app.tabs.settings", "settings", TabSettings),
+            ("app.tabs.license", "license", TabLicense),
         ]
         
         # Create actual migrated tabs
-        for tab_label, tab_key, tab_class in self.tab_defs:
+        for i18n_key, tab_key, tab_class in self.tab_defs:
             if tab_class:
                 # Use migrated PySide6 tab
                 tab_widget = tab_class(controller=self.controller)
@@ -156,13 +175,14 @@ class MainWindow(QMainWindow):
                 # Placeholder for tabs not yet migrated
                 tab_widget = QWidget()
                 tab_layout = QVBoxLayout(tab_widget)
-                placeholder = QLabel(f"🚧 {tab_label} Tab\n\nMigration in progress...")
+                placeholder = QLabel(f"🚧 {t(i18n_key)} Tab\n\nMigration in progress...")
                 placeholder.setAlignment(Qt.AlignCenter)
                 placeholder.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 16px;")
                 tab_layout.addWidget(placeholder)
             
-            # Add tab
+            # Add tab (use i18n key for label)
             icon = Theme.TAB_ICONS.get(tab_key.upper(), Theme.TAB_ICONS.get(tab_key.capitalize(), "📄"))
+            tab_label = t(i18n_key)  # Translate tab name
             self.tabview.addTab(tab_widget, f"{icon} {tab_label}")
             self.tab_instances[tab_key] = tab_widget
         
@@ -459,6 +479,18 @@ class MainWindow(QMainWindow):
         
         self.show_toast("Settings updated → all tabs synced", "success", audience="tester")
     
+    def _on_language_changed(self, lang_code: str):
+        """Hot-reload UI text when language changes (no restart needed)."""
+        # 1. Update tab names
+        for idx, (i18n_key, tab_key, _) in enumerate(self.tab_defs):
+            icon = Theme.TAB_ICONS.get(tab_key.upper(), Theme.TAB_ICONS.get(tab_key.capitalize(), "📄"))
+            self.tabview.setTabText(idx, f"{icon} {t(i18n_key)}")
+        
+        # 2. Notify tabs that have retranslate support
+        for tab_key, tab in self.tab_instances.items():
+            if hasattr(tab, 'retranslate_ui'):
+                tab.retranslate_ui()
+    
     @Slot(dict)
     def _update_queue_status(self, status: dict):
         """Update status bar with queue info."""
@@ -733,6 +765,17 @@ class MainWindow(QMainWindow):
         """Update status bar message (no-op, status_label removed)."""
         pass
     
+    def _on_update_available(self, info):
+        """Handle auto-update available notification (from startup check)."""
+        try:
+            from config.i18n import t
+            self.show_toast(
+                f"🆕 {t('settings.update_sub.new_version')}: v{info.version}",
+                "info", duration=8000
+            )
+        except Exception:
+            pass
+
     def show_toast(self, message: str, level: str = "info", duration: int = 4000,
                    audience: str = "user"):
         """Show a floating toast notification (thread-safe).

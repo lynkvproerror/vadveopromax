@@ -274,7 +274,7 @@ def _extract_via_temp_chrome() -> Optional[str]:
         # Fully hide Chrome window (including taskbar) via Win32 API
         from config.settings import get_settings as _get_settings
         _s = _get_settings()
-        if getattr(_s, 'smart_hide_enabled', True):
+        if getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False):
             _hide_process_windows(proc.pid)
         
         # Wait for CDP to be ready

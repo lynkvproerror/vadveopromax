@@ -32,6 +32,7 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 # Mixin imports
 from ui.tabs.queue_components.animation_engine import QueueAnimationMixin
@@ -132,6 +133,30 @@ class TabQueue(
         else:
             # Sample data only if no controller
             self._add_sample_items()
+    
+    def retranslate_ui(self):
+        """Hot-reload: update button labels when language changes.
+        
+        Does NOT rebuild queue view (preserves animations/thumbnails).
+        Only updates translatable UI text.
+        """
+        # Control bar buttons
+        if hasattr(self, 'toggle_btn'):
+            # Preserve current state text
+            if self._is_paused:
+                self.toggle_btn.setText(t("queue.resume"))
+            elif self._is_processing:
+                self.toggle_btn.setText(t("queue.pause"))
+            else:
+                self.toggle_btn.setText(t("queue.start_all"))
+        if hasattr(self, 'stop_btn'):
+            self.stop_btn.setText(t("queue.stop"))
+        if hasattr(self, 'retry_failed_btn'):
+            self.retry_failed_btn.setText(t("queue.retry_failed"))
+        if hasattr(self, 'reset_btn'):
+            self.reset_btn.setText(t("queue.reset_all"))
+        if hasattr(self, 'delete_all_btn'):
+            self.delete_all_btn.setText(t("queue.delete_all"))
     
     # ── Controller Callbacks ─────────────────────────────────────
     
@@ -442,13 +467,13 @@ class TabQueue(
         layout.setSpacing(8)
         
         # Toggle button — Start / Pause / Resume (state-driven)
-        self.toggle_btn = QPushButton("▶ Start All")
+        self.toggle_btn = QPushButton(t("queue.start_all"))
         self.toggle_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
         self.toggle_btn.clicked.connect(self._on_toggle_engine)
         layout.addWidget(self.toggle_btn)
         
         # Stop button — always separate
-        self.stop_btn = QPushButton("⏹ Stop")
+        self.stop_btn = QPushButton(t("queue.stop"))
         self.stop_btn.setStyleSheet(f"background-color: {Theme.RED};")
         self.stop_btn.setToolTip("Stop all processing immediately")
         self.stop_btn.clicked.connect(self._on_stop_all)
@@ -472,21 +497,21 @@ class TabQueue(
         layout.addStretch()
         
         # Retry Failed button
-        self.retry_failed_btn = QPushButton("↻ Retry Failed")
+        self.retry_failed_btn = QPushButton(t("queue.retry_failed"))
         self.retry_failed_btn.setStyleSheet(f"background-color: {Theme.PEACH};")
         self.retry_failed_btn.setToolTip("Retry all failed prompts")
         self.retry_failed_btn.clicked.connect(self._on_retry_failed)
         layout.addWidget(self.retry_failed_btn)
         
         # Reset All
-        self.reset_btn = QPushButton("⟲ Reset All")
+        self.reset_btn = QPushButton(t("queue.reset_all"))
         self.reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.YELLOW};")
         self.reset_btn.setToolTip("Clear entire queue and start fresh")
         self.reset_btn.clicked.connect(self._on_reset_all)
         layout.addWidget(self.reset_btn)
         
         # Delete All
-        self.delete_all_btn = QPushButton("🗑 Delete All")
+        self.delete_all_btn = QPushButton(t("queue.delete_all"))
         self.delete_all_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.RED};")
         self.delete_all_btn.setToolTip("Delete all groups and tasks from queue")
         self.delete_all_btn.clicked.connect(self._on_delete_all)
@@ -1059,7 +1084,7 @@ class TabQueue(
                     main_window = self.window()
                     if main_window and hasattr(main_window, 'show_toast'):
                         main_window.show_toast(
-                            "⚠️ Không có task nào sẵn sàng. Hãy thêm prompt trước khi bấm Start.",
+                            t("queue.no_tasks_ready"),
                             "warning", duration=4000
                         )
                     return  # Nothing to process
@@ -1173,15 +1198,15 @@ class TabQueue(
     def _update_button_states(self):
         """Update toggle button appearance based on engine state."""
         if not self._is_processing:
-            self.toggle_btn.setText("▶ Start All")
+            self.toggle_btn.setText(t("queue.start_all"))
             self.toggle_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
             self.stop_btn.setEnabled(False)
         elif self._is_paused:
-            self.toggle_btn.setText("▶ Resume")
+            self.toggle_btn.setText(t("queue.resume"))
             self.toggle_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
             self.stop_btn.setEnabled(True)
         else:
-            self.toggle_btn.setText("⏸ Pause")
+            self.toggle_btn.setText(t("queue.pause"))
             self.toggle_btn.setStyleSheet(f"background-color: {Theme.YELLOW};")
             self.stop_btn.setEnabled(True)
     

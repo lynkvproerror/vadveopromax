@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 class SettingsSectionsMixin:
@@ -25,7 +26,7 @@ class SettingsSectionsMixin:
 
     def _create_defaults_section(self) -> QWidget:
         """Create Default Settings section — split into Video + Image sub-sections."""
-        section, layout = self._create_section("⚙️ Default Settings")
+        section, layout = self._create_section(t("settings.sections.defaults"))
 
         # Load saved values from AppSettings
         try:
@@ -38,7 +39,7 @@ class SettingsSectionsMixin:
 
         # --- Shared: Aspect Ratio ---
         ar_options = ["16:9 (Landscape)", "9:16 (Portrait)"]
-        combo = self._create_setting_row(layout, "Aspect Ratio", ar_options)
+        combo = self._create_setting_row(layout, t("settings.defaults_sub.aspect_ratio"), ar_options)
         if _s:
             _ar = getattr(_s, 'default_aspect_ratio', 'LANDSCAPE')
             combo.setCurrentText("9:16 (Portrait)" if "PORTRAIT" in _ar.upper() else "16:9 (Landscape)")
@@ -46,7 +47,7 @@ class SettingsSectionsMixin:
 
         # --- Shared: Outputs per Prompt ---
         out_options = ["1", "2", "3", "4"]
-        combo = self._create_setting_row(layout, "Outputs per Prompt", out_options)
+        combo = self._create_setting_row(layout, t("settings.defaults_sub.outputs_per_prompt"), out_options)
         if _s:
             _cnt = str(getattr(_s, 'default_output_count', 4))
             if _cnt in out_options:
@@ -54,7 +55,7 @@ class SettingsSectionsMixin:
         self.setting_combos["Outputs per Prompt"] = combo
 
         # ─── 🎬 Video Defaults ───
-        vid_label = QLabel("🎬 Video Defaults")
+        vid_label = QLabel(t("settings.defaults_sub.video"))
         vid_label.setStyleSheet(f"color: {Theme.BLUE}; font-weight: bold; padding-top: 8px;")
         layout.addWidget(vid_label)
 
@@ -66,7 +67,7 @@ class SettingsSectionsMixin:
             "Veo 2 - Fast",
             "Veo 2 - Quality",
         ]
-        combo = self._create_setting_row(layout, "AI Model", model_options)
+        combo = self._create_setting_row(layout, t("settings.defaults_sub.ai_model"), model_options)
         if _s:
             _m = getattr(_s, 'default_model', 'Veo 3.1 - Fast')
             idx = combo.findText(_m)
@@ -76,7 +77,7 @@ class SettingsSectionsMixin:
 
         # Video: Download Quality
         vq_options = ["720p", "1080p", "4K"]
-        combo = self._create_setting_row(layout, "Download Quality", vq_options)
+        combo = self._create_setting_row(layout, t("settings.defaults_sub.download_quality"), vq_options)
         if _s:
             _vq = getattr(_s, 'default_download_quality', '1080p')
             if _vq in vq_options:
@@ -84,7 +85,7 @@ class SettingsSectionsMixin:
         self.setting_combos["Download Quality"] = combo
 
         # ─── 🖼️ Image Defaults ───
-        img_label = QLabel("🖼️ Image Defaults")
+        img_label = QLabel(t("settings.defaults_sub.image"))
         img_label.setStyleSheet(f"color: {Theme.PURPLE}; font-weight: bold; padding-top: 8px;")
         layout.addWidget(img_label)
 
@@ -94,7 +95,7 @@ class SettingsSectionsMixin:
             "🔥 Nano Banana",
             "Imagen 4",
         ]
-        combo = self._create_setting_row(layout, "Image AI Model", img_model_options)
+        combo = self._create_setting_row(layout, t("settings.defaults_sub.image_model"), img_model_options)
         if _s:
             _im = getattr(_s, 'default_image_model', '🔥 Nano Banana Pro')
             idx = combo.findText(_im)
@@ -104,7 +105,7 @@ class SettingsSectionsMixin:
 
         # Image: Download Quality
         iq_options = ["1k", "2k", "4k"]
-        combo = self._create_setting_row(layout, "Image Quality", iq_options)
+        combo = self._create_setting_row(layout, t("settings.defaults_sub.image_quality"), iq_options)
         if _s:
             _iq = getattr(_s, 'default_image_quality', '1k')
             if _iq in iq_options:
@@ -145,7 +146,7 @@ class SettingsSectionsMixin:
 
     def _create_output_section(self) -> QWidget:
         """Create Output Settings section — folder + filename toggles."""
-        section, layout = self._create_section("📁 Output Settings")
+        section, layout = self._create_section(t("settings.sections.output"))
 
         # Load saved values
         try:
@@ -185,14 +186,14 @@ class SettingsSectionsMixin:
         _ps = getattr(_s, 'pause_on_error', True) if _s else True
 
         toggles = [
-            ("Include timestamp in filename", _ts),
-            ("Include quality in filename", _qs),
-            ("Auto-start queue when adding", _as),
-            ("Pause on error", _ps),
+            (t("settings.output_toggles.include_timestamp"), _ts),
+            (t("settings.output_toggles.include_quality"), _qs),
+            (t("settings.output_toggles.auto_start_queue"), _as),
+            (t("settings.output_toggles.pause_on_error"), _ps),
         ]
 
         # Filename & behavior options — grouped under sub-label
-        opts_label = QLabel("📋 Filename Options")
+        opts_label = QLabel(t("settings.output_toggles.filename_options"))
         opts_label.setStyleSheet(f"color: {Theme.BLUE}; font-weight: bold; padding-top: 6px;")
         layout.addWidget(opts_label)
 
@@ -238,7 +239,7 @@ class SettingsSectionsMixin:
 
     def _create_continuation_section(self) -> QWidget:
         """Create Smooth Continuation section — toggle only, no sub-options."""
-        section, layout = self._create_section("🔗 Smooth Continuation")
+        section, layout = self._create_section(t("settings.sections.continuation"))
 
         # Load saved values from AppSettings
         from config.settings import get_settings as _gs
@@ -322,7 +323,7 @@ class SettingsSectionsMixin:
 
     def _create_worker_section(self) -> QWidget:
         """Create Worker Settings section per TAB_07_SETTINGS.md spec."""
-        section, layout = self._create_section("🎯 Threads Setting")
+        section, layout = self._create_section(t("settings.sections.worker"))
 
         # Load saved values from AppSettings (not controller — may be None)
         from config.settings import get_settings as _gs
@@ -339,7 +340,7 @@ class SettingsSectionsMixin:
 
         # Retry on Error (default for new accounts)
         retry_row = QHBoxLayout()
-        retry_label = QLabel("Retry on Error:")
+        retry_label = QLabel(t("settings.retry_on_error"))
         retry_label.setFixedWidth(150)
         retry_label.setStyleSheet(f"color: {Theme.TEXT};")
         retry_row.addWidget(retry_label)
@@ -354,7 +355,7 @@ class SettingsSectionsMixin:
 
         # Request Timeout
         timeout_row = QHBoxLayout()
-        timeout_label = QLabel("Request Timeout (s):")
+        timeout_label = QLabel(t("settings.request_timeout"))
         timeout_label.setFixedWidth(150)
         timeout_label.setStyleSheet(f"color: {Theme.TEXT};")
         timeout_row.addWidget(timeout_label)
@@ -457,7 +458,7 @@ class SettingsSectionsMixin:
 
     def _create_session_section(self) -> QWidget:
         """Create Session & Data Management section."""
-        section, layout = self._create_section("💾 Session & Data")
+        section, layout = self._create_section(t("settings.sections.session"))
 
         # Load saved values from AppSettings (not controller — may be None)
         from config.settings import get_settings as _gs
@@ -640,7 +641,7 @@ class SettingsSectionsMixin:
 
     def _create_notification_section(self) -> QWidget:
         """Create Notifications section — toast + sound settings."""
-        section, layout = self._create_section("🔔 Notifications")
+        section, layout = self._create_section(t("settings.sections.notification"))
 
         from config.settings import get_settings
         settings = get_settings()
@@ -648,7 +649,7 @@ class SettingsSectionsMixin:
         # Row 1: In-App Toast toggle
         toast_row = QHBoxLayout()
 
-        toast_label = QLabel("In-App Toast:")
+        toast_label = QLabel(t("settings.notification_sub.in_app_toast"))
         toast_label.setFixedWidth(150)
         toast_label.setStyleSheet(f"color: {Theme.TEXT};")
         toast_row.addWidget(toast_label)
@@ -662,7 +663,7 @@ class SettingsSectionsMixin:
         # Row 2: Sound Notification toggle + sound selector + preview
         sound_row = QHBoxLayout()
 
-        sound_label = QLabel("Sound Notification:")
+        sound_label = QLabel(t("settings.notification_sub.sound_notification"))
         sound_label.setFixedWidth(150)
         sound_label.setStyleSheet(f"color: {Theme.TEXT};")
         sound_row.addWidget(sound_label)
@@ -677,7 +678,7 @@ class SettingsSectionsMixin:
         sound_row.addWidget(sep)
 
         # Sound selector dropdown
-        sound_select_label = QLabel("Sound:")
+        sound_select_label = QLabel(t("settings.notification_sub.sound"))
         sound_select_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
         sound_row.addWidget(sound_select_label)
 
@@ -686,6 +687,7 @@ class SettingsSectionsMixin:
         self._builtin_sound_names = list(BUILTIN_SOUNDS.keys())
         self.sound_file_combo.addItems(self._builtin_sound_names + ["Custom..."])
         self.sound_file_combo.setFixedWidth(140)
+        self.sound_file_combo.setFixedHeight(30)
 
         # Set current selection from settings
         current_sound = settings.notify_sound_file
@@ -704,15 +706,16 @@ class SettingsSectionsMixin:
         sound_row.addWidget(self.sound_file_combo)
 
         # Preview button
-        preview_btn = QPushButton("🔊 Preview")
-        preview_btn.setFixedWidth(90)
+        preview_btn = QPushButton(t("settings.notification_sub.preview"))
+        preview_btn.setFixedSize(120, 30)
         preview_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE1};
                 color: {Theme.TEXT};
                 border: 1px solid {Theme.BORDER};
                 border-radius: 4px;
-                padding: 4px 8px;
+                padding: 4px 12px;
+                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: {Theme.SURFACE2};
@@ -809,7 +812,7 @@ class SettingsSectionsMixin:
 
     def _create_ui_section(self) -> QWidget:
         """Create UI section — Language selector."""
-        section, layout = self._create_section("🎨 UI")
+        section, layout = self._create_section(t("settings.sections.ui"))
 
         # Load saved language
         from config.settings import get_settings as _gs
@@ -819,7 +822,7 @@ class SettingsSectionsMixin:
         row_layout = QHBoxLayout()
 
         # Language
-        lang_label = QLabel("🌐 Language:")
+        lang_label = QLabel(t("settings.language"))
         lang_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         row_layout.addWidget(lang_label)
 
@@ -836,23 +839,252 @@ class SettingsSectionsMixin:
         return section
 
     def _save_ui_settings(self, *args):
-        """Persist UI settings (language) to AppSettings."""
+        """Persist UI settings (language) to AppSettings + hot-reload."""
         if getattr(self, '_initializing', False):
             return
         try:
             from config.settings import get_settings, save_settings
+            from config.i18n import set_language
             import logging
             settings = get_settings()
-            settings.ui_language = self.lang_menu.currentText()
+            lang_display = self.lang_menu.currentText()
+            settings.ui_language = lang_display
             save_settings()
+            # Hot-reload: switch language immediately (emits language_changed signal)
+            set_language(lang_display)
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save UI settings: {e}')
+
+    # ── Auto-Update Section ────────────────────────────────────────
+
+    def _create_update_section(self) -> QWidget:
+        """Create Auto-Update section — version check + download + apply."""
+        section, layout = self._create_section(t("settings.sections.update"))
+
+        from config.settings import get_settings
+        from config.constants import AppConstants
+        settings = get_settings()
+
+        # Row 1: Auto-update toggle
+        toggle_row = QHBoxLayout()
+        toggle_label = QLabel(t("settings.update_sub.auto_check"))
+        toggle_label.setFixedWidth(200)
+        toggle_label.setStyleSheet(f"color: {Theme.TEXT};")
+        toggle_row.addWidget(toggle_label)
+
+        from ui.tabs.tab_settings import ToggleSwitch
+        self.auto_update_toggle = ToggleSwitch(
+            checked=getattr(settings, 'auto_update_enabled', True)
+        )
+        toggle_row.addWidget(self.auto_update_toggle)
+        toggle_row.addStretch()
+        layout.addLayout(toggle_row)
+
+        # Row 2: Current version + status
+        version_row = QHBoxLayout()
+
+        version_label = QLabel(
+            f"{t('settings.update_sub.current_version')}: v{AppConstants.APP_VERSION}"
+        )
+        version_label.setStyleSheet(
+            f"color: {Theme.TEXT}; font-weight: bold; font-size: 13px;"
+        )
+        version_row.addWidget(version_label)
+
+        self._update_status_label = QLabel(t("settings.update_sub.up_to_date"))
+        self._update_status_label.setStyleSheet(
+            f"color: {Theme.GREEN}; font-size: 12px; margin-left: 12px;"
+        )
+        version_row.addWidget(self._update_status_label)
+        version_row.addStretch()
+        layout.addLayout(version_row)
+
+        # Row 3: Check Now + Update Now buttons
+        btn_row = QHBoxLayout()
+
+        self._check_update_btn = QPushButton(t("settings.update_sub.check_now"))
+        self._check_update_btn.setFixedSize(160, 34)
+        self._check_update_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.SURFACE2};
+            }}
+        """)
+        self._check_update_btn.clicked.connect(self._on_check_update)
+        btn_row.addWidget(self._check_update_btn)
+
+        self._update_now_btn = QPushButton(t("settings.update_sub.update_now"))
+        self._update_now_btn.setFixedSize(260, 34)
+        self._update_now_btn.setVisible(False)  # Hidden until update found
+        self._update_now_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.BLUE};
+                color: #ffffff;
+                border: none;
+                border-radius: 6px;
+                padding: 4px 14px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.LAVENDER};
+            }}
+        """)
+        self._update_now_btn.clicked.connect(self._on_update_now)
+        btn_row.addWidget(self._update_now_btn)
+
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        # Changelog area (hidden until update found)
+        self._changelog_label = QLabel("")
+        self._changelog_label.setWordWrap(True)
+        self._changelog_label.setVisible(False)
+        self._changelog_label.setStyleSheet(
+            f"color: {Theme.SUBTEXT0}; font-size: 11px; "
+            f"margin: 4px 0 0 4px; padding: 6px; "
+            f"background: {Theme.SURFACE0}; border-radius: 4px;"
+        )
+        layout.addWidget(self._changelog_label)
+
+        # Auto-save toggle
+        self.auto_update_toggle.toggled_signal.connect(self._save_update_settings)
+
+        # Store updater reference (initialized lazily)
+        self._updater = None
+
+        return section
+
+    def _get_updater(self):
+        """Get or create AutoUpdater instance."""
+        if self._updater is None:
+            from core.auto_updater import AutoUpdater
+            self._updater = AutoUpdater(self)
+            self._updater.update_available.connect(self._on_update_available)
+            self._updater.download_progress.connect(self._on_download_progress)
+            self._updater.download_complete.connect(self._on_download_complete)
+            self._updater.download_error.connect(self._on_download_error)
+            self._updater.update_applied.connect(self._on_update_applied)
+        return self._updater
+
+    def _save_update_settings(self, *args):
+        """Persist auto-update toggle."""
+        if getattr(self, '_initializing', False):
+            return
+        from config.settings import get_settings, save_settings
+        settings = get_settings()
+        settings.auto_update_enabled = self.auto_update_toggle.isToggled()
+        save_settings()
+
+    def _on_check_update(self):
+        """Manual check for updates."""
+        self._check_update_btn.setEnabled(False)
+        self._check_update_btn.setText(t("settings.update_sub.checking"))
+        self._update_status_label.setText("⏳ " + t("settings.update_sub.checking"))
+        self._update_status_label.setStyleSheet(
+            f"color: {Theme.YELLOW}; font-size: 12px; margin-left: 12px;"
+        )
+        updater = self._get_updater()
+        updater.check_now()
+
+        # Reset button after 10s timeout
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(10_000, self._reset_check_btn)
+
+    def _reset_check_btn(self):
+        """Reset check button state."""
+        self._check_update_btn.setEnabled(True)
+        self._check_update_btn.setText(t("settings.update_sub.check_now"))
+
+    def _on_update_available(self, info):
+        """Handle update available signal."""
+        self._reset_check_btn()
+        self._update_status_label.setText(
+            f"🆕 v{info.version} {t('settings.update_sub.available')}"
+        )
+        self._update_status_label.setStyleSheet(
+            f"color: {Theme.PEACH}; font-size: 12px; font-weight: bold; margin-left: 12px;"
+        )
+        self._update_now_btn.setVisible(True)
+        self._update_now_btn.setText(
+            f"⬇️ {t('settings.update_sub.update_now')} (v{info.version})"
+        )
+
+        # Show changelog
+        if info.changelog:
+            self._changelog_label.setText(f"📝 {info.changelog}")
+            self._changelog_label.setVisible(True)
+
+        # Also show toast on main window
+        try:
+            main_win = self.window()
+            if main_win and hasattr(main_win, 'show_toast'):
+                main_win.show_toast(
+                    f"🆕 {t('settings.update_sub.new_version')}: v{info.version}",
+                    "info", duration=8000
+                )
+        except Exception:
+            pass
+
+    def _on_update_now(self):
+        """Start downloading the update."""
+        self._update_now_btn.setEnabled(False)
+        self._update_now_btn.setText("⬇️ 0%...")
+        updater = self._get_updater()
+        updater.download_update()
+
+    def _on_download_progress(self, pct: int):
+        """Update download progress on button."""
+        self._update_now_btn.setText(f"⬇️ {pct}%...")
+
+    def _on_download_complete(self, zip_path: str):
+        """Download finished — apply update."""
+        self._update_now_btn.setText(f"📦 {t('settings.update_sub.installing')}")
+        self._update_status_label.setText(
+            f"📦 {t('settings.update_sub.installing')}"
+        )
+
+        # Show toast before restart
+        try:
+            main_win = self.window()
+            if main_win and hasattr(main_win, 'show_toast'):
+                main_win.show_toast(
+                    f"📦 {t('settings.update_sub.restarting')}",
+                    "success", duration=3000
+                )
+        except Exception:
+            pass
+
+        # Apply update (will restart app)
+        updater = self._get_updater()
+        updater.apply_update(zip_path)
+
+    def _on_download_error(self, error: str):
+        """Handle download error."""
+        self._update_now_btn.setEnabled(True)
+        self._update_now_btn.setText(t("settings.update_sub.update_now"))
+        self._update_status_label.setText(f"❌ {error[:50]}")
+        self._update_status_label.setStyleSheet(
+            f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"
+        )
+
+    def _on_update_applied(self):
+        """Update applied — app will restart."""
+        self._update_status_label.setText(
+            f"🔄 {t('settings.update_sub.restarting')}"
+        )
 
     # ── Post-Queue Action Section ──────────────────────────────────
 
     def _create_post_queue_section(self) -> QWidget:
         """Create Post-Queue Action section — auto shutdown/sleep after queue completes."""
-        section, layout = self._create_section("⚡ Post-Queue Action")
+        section, layout = self._create_section(t("settings.sections.post_queue"))
 
         from config.settings import get_settings
         settings = get_settings()
@@ -924,59 +1156,88 @@ class SettingsSectionsMixin:
     # ── Browser Visibility Section ─────────────────────────────────
 
     def _create_browser_visibility_section(self) -> QWidget:
-        """Create Browser Visibility section — single Smart-Hide toggle.
+        """Create Browser Visibility section — Smart-Hide + Hide All toggles.
 
-        ON = Hide browsers after launch & successful submit.
-             Show errored account's browser on 403 Phase 2 hard restart.
-             Re-hide after 3 consecutive successful prompts.
-        OFF = All browsers always visible.
+        Smart-Hide: Hide browsers after launch & successful submit.
+                    Show errored account's browser on 403 Phase 2 hard restart.
+                    Re-hide after 3 consecutive successful prompts.
+        Hide All:   Hide ALL browsers after startup. Only show when
+                    adding account or clicking show button in Actions.
+                    Mutually exclusive with Smart-Hide.
         """
-        section, layout = self._create_section("🌐 Browser Visibility")
+        section, layout = self._create_section(t("settings.sections.browser"))
 
-        # Load saved value
+        # Load saved values
         from config.settings import get_settings
         s = get_settings()
-        saved = getattr(s, 'smart_hide_enabled', True)
+        saved_smart_hide = getattr(s, 'smart_hide_enabled', True)
+        saved_hide_all = getattr(s, 'hide_all_browsers', False)
 
-        # Single Smart-Hide toggle
+        # Smart-Hide toggle
         self.smart_hide_switch = self._create_enable_row(
-            "Smart-Hide Browser:", checked=saved
+            t("settings.browser_sub.smart_hide"), checked=saved_smart_hide
         )
         layout.addLayout(self.smart_hide_switch._row_layout)
 
-        # Auto-save on toggle change
+        # Hide All Browsers toggle
+        self.hide_all_switch = self._create_enable_row(
+            t("settings.browser_sub.hide_all"), checked=saved_hide_all
+        )
+        layout.addLayout(self.hide_all_switch._row_layout)
+
+        # Auto-save on toggle change — with mutual exclusion
         self.smart_hide_switch.toggled_signal.connect(self._save_browser_visibility_settings)
+        self.hide_all_switch.toggled_signal.connect(self._save_browser_visibility_settings)
 
         return section
 
     def _save_browser_visibility_settings(self, *args):
-        """Persist Smart-Hide toggle to AppSettings immediately.
+        """Persist browser visibility toggles with mutual exclusion.
         
-        Hot-apply: when toggle changes, immediately hide/show
-        all running debug browsers without requiring app restart.
+        - Hide All ON → Smart-Hide OFF
+        - Smart-Hide ON → Hide All OFF
+        Hot-apply: immediately hide/show all running browsers.
         """
         if getattr(self, '_initializing', False):
             return
         from config.settings import get_settings, save_settings
         settings = get_settings()
         
-        # Detect toggle change for hot-apply
-        old_value = settings.smart_hide_enabled
-        new_value = self.smart_hide_switch.isToggled()
+        new_smart_hide = self.smart_hide_switch.isToggled()
+        new_hide_all = self.hide_all_switch.isToggled()
         
-        settings.smart_hide_enabled = new_value
+        old_smart_hide = settings.smart_hide_enabled
+        old_hide_all = getattr(settings, 'hide_all_browsers', False)
+        
+        # Mutual exclusion: if Hide All just turned ON, turn off Smart-Hide
+        if new_hide_all and not old_hide_all:
+            new_smart_hide = False
+            self.smart_hide_switch.blockSignals(True)
+            self.smart_hide_switch.setToggled(False)
+            self.smart_hide_switch.blockSignals(False)
+        # If Smart-Hide just turned ON, turn off Hide All
+        elif new_smart_hide and not old_smart_hide:
+            new_hide_all = False
+            self.hide_all_switch.blockSignals(True)
+            self.hide_all_switch.setToggled(False)
+            self.hide_all_switch.blockSignals(False)
+        
+        settings.smart_hide_enabled = new_smart_hide
+        settings.hide_all_browsers = new_hide_all
         save_settings()
         
         # Hot-apply: hide or show all running debug browsers
-        if old_value != new_value and self.controller:
+        if self.controller:
             pc = getattr(self.controller, '_profiles_controller', None)
             if pc and hasattr(pc, '_debug_browsers'):
                 for email in list(pc._debug_browsers.keys()):
                     try:
-                        if new_value:
+                        if new_hide_all or new_smart_hide:
                             pc.hide_debug_browser(email)
-                        else:
+                        elif not old_smart_hide and not new_smart_hide and not new_hide_all:
+                            # Both off → show all
                             pc.show_debug_browser(email)
                     except Exception:
                         pass
+
 

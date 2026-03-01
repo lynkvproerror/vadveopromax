@@ -51,10 +51,14 @@ except ImportError:
 
 # Trial protection module
 try:
-    from trial_protection import TrialMarkerManager, TrialStatus
+    from security.trial_protection import TrialMarkerManager, TrialStatus
     TRIAL_PROTECTION_AVAILABLE = True
 except ImportError:
-    TRIAL_PROTECTION_AVAILABLE = False
+    try:
+        from trial_protection import TrialMarkerManager, TrialStatus
+        TRIAL_PROTECTION_AVAILABLE = True
+    except ImportError:
+        TRIAL_PROTECTION_AVAILABLE = False
 
 # Firebase REST Client (secure, no Admin SDK)
 # firebase_admin is intentionally NOT imported here — client uses REST API only
@@ -230,7 +234,12 @@ class LicenseStorage:
     
     LICENSE_FILE = Path.home() / ".veoauto" / "license.dat"
     SALT = b"veo_license_salt_2026"  # Static salt (machine-bound key generated at runtime)
-    APP_VERSION = "2.4.0"  # Include in signature to detect version mismatch
+    # APP_VERSION: imported from canonical AppConstants to avoid mismatches
+    try:
+        from config.constants import AppConstants as _AC
+        APP_VERSION = _AC.APP_VERSION
+    except ImportError:
+        APP_VERSION = "1.0.0"  # Fallback — keep in sync with constants.py
     
     @staticmethod
     def _derive_hmac_key(machine_id: str) -> bytes:

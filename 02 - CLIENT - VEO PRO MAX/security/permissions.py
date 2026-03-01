@@ -14,7 +14,10 @@ Usage in VEO App:
         self.tab_bar.add_tab("Dev Console", dev_console_tab)
 """
 
-from license_client import LicenseClient, UserRole
+try:
+    from security.license_client import LicenseClient, UserRole
+except ImportError:
+    from license_client import LicenseClient, UserRole
 
 
 class Permissions:

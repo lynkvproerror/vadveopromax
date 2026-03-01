@@ -55,8 +55,7 @@ class _AES256Encryptor:
     def derive_key(password: bytes) -> bytes:
         """Derive AES-256 key from password using PBKDF2."""
         if not AES_AVAILABLE:
-            # Fallback to XOR if cryptography not available
-            return hashlib.sha256(password).digest()[:32]
+            raise RuntimeError("cryptography package required — install with: pip install cryptography")
         
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -71,9 +70,7 @@ class _AES256Encryptor:
     def encrypt(data: str, key: bytes) -> bytes:
         """Encrypt string with AES-256."""
         if not AES_AVAILABLE:
-            # Fallback XOR
-            return _AES256Encryptor._xor(data.encode(), key)
-        
+            raise RuntimeError("cryptography package required for encryption")
         derived_key = _AES256Encryptor.derive_key(key)
         f = Fernet(derived_key)
         return f.encrypt(data.encode())
@@ -82,20 +79,15 @@ class _AES256Encryptor:
     def decrypt(encrypted: bytes, key: bytes) -> str:
         """Decrypt with AES-256."""
         if not AES_AVAILABLE:
-            # Fallback XOR
-            return _AES256Encryptor._xor(encrypted, key).decode('utf-8')
-        
+            raise RuntimeError("cryptography package required for decryption")
         derived_key = _AES256Encryptor.derive_key(key)
         f = Fernet(derived_key)
         return f.decrypt(encrypted).decode('utf-8')
     
     @staticmethod
     def _xor(data: bytes, key: bytes) -> bytes:
-        """Fallback XOR encryption."""
-        result = bytearray(len(data))
-        for i in range(len(data)):
-            result[i] = data[i] ^ key[i % len(key)]
-        return bytes(result)
+        """DEPRECATED — XOR fallback removed for security. Kept for reference only."""
+        raise RuntimeError("XOR encryption disabled — use AES-256 instead")
 
 
 # ============================================================

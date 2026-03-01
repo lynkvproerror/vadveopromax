@@ -255,6 +255,15 @@ class AppController:
         # Check license
         self._update_permissions()
         
+        # Integrity check (compares critical file hashes — no-op in dev mode)
+        try:
+            from security.integrity_check import verify_startup_integrity
+            integrity = verify_startup_integrity()
+            if not integrity['skipped'] and not integrity['passed']:
+                log.critical(f"[Security] ❌ Integrity check FAILED: {integrity['failures']}")
+        except ImportError:
+            pass  # Module not available — dev environment
+        
         # Start TaskJournal (event subscriber + periodic save)
         self._task_journal.start(loop=self._loop)
         self._status_aggregator.start()
@@ -740,7 +749,7 @@ class AppController:
                             await asyncio.sleep(1)
                             from config.settings import get_settings as _get_settings
                             _s = _get_settings()
-                            if getattr(_s, 'smart_hide_enabled', True):
+                            if getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False):
                                 self._profiles_controller.hide_debug_browser(email)
                                 log.info(f"[AutoLaunch] ✅ {email} browser hidden")
                             else:
@@ -797,6 +806,22 @@ class AppController:
                         log.info(f"[AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for {len(connected)} emails")
                 
                 self._push_browser_status()
+                
+                # ★ Final re-hide sweep: after ALL setup steps complete,
+                # re-hide any Chrome windows that appeared during extension
+                # install, reCAPTCHA warmup, or late renderer spawns.
+                from config.settings import get_settings as _get_launch_s
+                _ls = _get_launch_s()
+                if getattr(_ls, 'hide_all_browsers', False) or getattr(_ls, 'smart_hide_enabled', True):
+                    pc = self._profiles_controller if hasattr(self, '_profiles_controller') else None
+                    if pc and hasattr(pc, '_debug_browsers'):
+                        for _email in list(pc._debug_browsers.keys()):
+                            try:
+                                pc.hide_debug_browser(_email)
+                            except Exception:
+                                pass
+                        log.info(f"[AutoLaunch] 🔇 Final re-hide sweep: {len(pc._debug_browsers)} browser(s)")
+                
                 log.info("[AutoLaunch] ✅ Background browser launch complete")
                 self._notify_status("🌐 Browsers launched — waiting for extension connection...")
                     
@@ -3363,6 +3388,7 @@ class AppController:
                                 thumbnail_path=vo.thumbnail_path,
                                 task_id=t.id,
                                 target_quality=getattr(t, 'download_quality', '1080p'),
+                                upscale_poll_count=getattr(vo, 'upscale_poll_count', 0),
                             )
                             for vo in (t.video_outputs if hasattr(t, 'video_outputs') else [])
                         ],

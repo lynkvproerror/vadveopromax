@@ -1266,7 +1266,7 @@ class ProfilesController:
                     from config.settings import get_settings as _get_settings
                     
                     _s = _get_settings()
-                    _should_hide = getattr(_s, 'smart_hide_enabled', True)
+                    _should_hide = getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False)
                     
                     # Launch or reconnect to persistent Chrome
                     chrome_info = launch_or_reconnect(
@@ -1560,6 +1560,23 @@ class ProfilesController:
                             entry["captured_headers"] = captured_headers
                             entry["cdp_port"] = cdp_port
                             entry["chrome_pid"] = chrome_pid
+                        
+                        # ★ Post-setup re-hide: Chrome spawns new renderer processes
+                        # during page navigation (step 4-5) — their HWNDs aren't
+                        # captured by the initial hide at launch. Re-scan and hide.
+                        if _should_hide:
+                            import time as _rehide_time
+                            _rehide_time.sleep(1)  # Brief wait for renderers to settle
+                            browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                            _win32_hide_hwnds(browser_hwnds)
+                            # Update stored HWNDs
+                            entry_ref = self._debug_browsers.get(email)
+                            if entry_ref:
+                                entry_ref["hwnds"] = browser_hwnds
+                            log.info(
+                                f"[ProfilesController] 🔇 Post-setup re-hide: "
+                                f"{len(browser_hwnds)} HWND(s) hidden for {email}"
+                            )
                         
                         # Command loop
                         running = True

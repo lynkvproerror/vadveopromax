@@ -305,6 +305,10 @@ class AppConstants:
     APP_NAME = "VEO Pro Max"
     APP_VERSION = "1.0.0"
     
+    # Auto-update (GitHub public repo)
+    GITHUB_REPO = "lynkvproerror/vadveopromax"
+    VERSION_CHECK_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json"
+    
     # Queue limits
     MAX_QUEUE_SIZE = 1000
     MAX_PARALLEL_ACCOUNTS = 10
