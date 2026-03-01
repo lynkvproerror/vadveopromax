@@ -27,7 +27,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 EXTENSION_SRC = PROJECT_ROOT / "extension"
-DEFAULT_OUTPUT = PROJECT_ROOT.parent / "03 - Final App Client" / "extension"
+DEFAULT_OUTPUT = PROJECT_ROOT.parent / "03 - Final App Client" / "main.dist" / "extension"
 
 
 def minify_js(source: str) -> str:

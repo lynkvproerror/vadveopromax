@@ -153,11 +153,15 @@ class QueueAnimationMixin:
         
         if has_pixmap and is_upscaling:
             # Upscale overlay: dark tint + progress % on existing thumbnail
-            # Compute upscale-specific progress instead of using stale task progress
+            # Compute upscale-specific progress from poll count (progressive)
+            poll_count = vi.get('upscale_poll_count', 0) if vi else 0
             if upscale_status == 'submitting':
                 upscale_pct = 60
             elif upscale_status == 'polling':
-                upscale_pct = 75
+                # Progressive: 65% base + up to 30% based on poll count
+                # Each poll typically ~15s, most upscales done in 3-8 polls
+                # 1→65, 2→70, 3→75, 5→82, 8→88, 12→92, 20→95 (caps at 95)
+                upscale_pct = min(95, 65 + int(30 * (1 - 1 / (1 + poll_count * 0.3))))
             else:
                 upscale_pct = progress  # fallback
             self._apply_upscale_overlay(slot, upscale_status, upscale_pct)

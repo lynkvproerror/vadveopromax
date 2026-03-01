@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, Signal
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 from ui.components.drop_widgets import FolderDropLineEdit
 
 
@@ -74,7 +75,7 @@ class SidebarBase(QWidget):
     def _create_widgets(self):
         """Create common sidebar widgets."""
         # === PROJECT NAME ===
-        self._create_section_label("📁 Project Name")
+        self._create_section_label(t("sidebar.project_name"))
         
         self.project_name = QLineEdit()
         self.project_name.setPlaceholderText("T2V-Project-01")
@@ -82,14 +83,14 @@ class SidebarBase(QWidget):
         self._layout.addWidget(self.project_name)
         
         # === OUTPUT FOLDER ===
-        self._create_section_label("📂 Output Folder")
+        self._create_section_label(t("sidebar.output_folder"))
         
         self.output_folder = FolderDropLineEdit()
         self.output_folder.setPlaceholderText("D:/Projects/VEO (or drag folder here)")
         self.output_folder.setMinimumHeight(32)
         self._layout.addWidget(self.output_folder)
         
-        self.browse_btn = QPushButton("📂 Browse")
+        self.browse_btn = QPushButton(t("sidebar.browse"))
         self.browse_btn.setMinimumHeight(28)
         self.browse_btn.setProperty("variant", "secondary")
         self.browse_btn.clicked.connect(self._browse_folder)
@@ -106,7 +107,7 @@ class SidebarBase(QWidget):
             pass
         
         # === ASPECT RATIO ===
-        self._create_section_label("📐 Aspect Ratio")
+        self._create_section_label(t("sidebar.aspect_ratio"))
         
         self.aspect_ratio = QComboBox()
         self.aspect_ratio.addItems(["16:9 (Landscape)", "9:16 (Portrait)"])
@@ -132,12 +133,12 @@ class SidebarBase(QWidget):
         self._layout.addWidget(separator)
         
         # Queue status
-        self.queue_status = QLabel("📊 Queue: 0 pending")
+        self.queue_status = QLabel(t("sidebar.queue_status").replace("{count}", "0"))
         self.queue_status.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 4px 0;")
         self._layout.addWidget(self.queue_status)
         
         # Add to queue button
-        self.add_queue_btn = QPushButton("📋 Add to Queue")
+        self.add_queue_btn = QPushButton(t("sidebar.add_to_queue"))
         self.add_queue_btn.setMinimumHeight(36)
         self.add_queue_btn.setStyleSheet(f"""
             QPushButton {{
@@ -167,7 +168,7 @@ class SidebarBase(QWidget):
     
     def set_queue_count(self, count: int):
         """Update queue status display."""
-        self.queue_status.setText(f"📊 Queue: {count} pending")
+        self.queue_status.setText(t("sidebar.queue_status").replace("{count}", str(count)))
     
     def get_project_name(self) -> str:
         """Get current project name."""
@@ -244,7 +245,7 @@ class VideoSidebar(SidebarBase):
             pass
         
         # === OUTPUTS PER PROMPT ===
-        self._create_section_label("🎬 Outputs/Prompt")
+        self._create_section_label(t("sidebar.outputs_per_prompt"))
         
         self.outputs_per_prompt = QComboBox()
         self.outputs_per_prompt.addItems(["1 video", "2 videos", "3 videos", "4 videos"])
@@ -254,7 +255,7 @@ class VideoSidebar(SidebarBase):
         self._layout.addWidget(self.outputs_per_prompt)
         
         # === AI MODEL ===
-        self._create_section_label("🤖 AI Model")
+        self._create_section_label(t("sidebar.ai_model"))
         
         self.model = QComboBox()
         self.model.addItems([
@@ -273,7 +274,7 @@ class VideoSidebar(SidebarBase):
         self._layout.addWidget(self.model)
         
         # === DOWNLOAD QUALITY ===
-        self._create_section_label("📹 Download Quality")
+        self._create_section_label(t("sidebar.download_quality_video"))
         
         self.download_quality = QComboBox()
         self.download_quality.addItems(["720p", "1080p", "4K"])
@@ -285,7 +286,7 @@ class VideoSidebar(SidebarBase):
         
         # === IMAGE LIBRARY BUTTON ===
         if self._show_image_library:
-            self.image_library_btn = QPushButton("📂 Image Library")
+            self.image_library_btn = QPushButton(t("sidebar.image_library"))
             self.image_library_btn.setMinimumHeight(32)
             self.image_library_btn.setProperty("variant", "secondary")
             self.image_library_btn.clicked.connect(self._on_open_image_library)
@@ -412,7 +413,7 @@ class ImageSidebar(SidebarBase):
             pass
         
         # === OUTPUTS PER PROMPT ===
-        self._create_section_label("🎯 Outputs/Prompt")
+        self._create_section_label(t("sidebar.outputs_per_prompt"))
         
         self.outputs_per_prompt = QComboBox()
         self.outputs_per_prompt.addItems(["1 image", "2 images", "3 images", "4 images"])
@@ -422,7 +423,7 @@ class ImageSidebar(SidebarBase):
         self._layout.addWidget(self.outputs_per_prompt)
         
         # === AI MODEL ===
-        self._create_section_label("🤖 AI Model")
+        self._create_section_label(t("sidebar.ai_model"))
         
         self.model = QComboBox()
         self.model.addItems([
@@ -443,7 +444,7 @@ class ImageSidebar(SidebarBase):
         # 1k = direct download (no upscale needed)
         # 2k = UPSAMPLE_IMAGE_RESOLUTION_2K
         # 4k = UPSAMPLE_IMAGE_RESOLUTION_4K
-        self._create_section_label("🖼️ Download Quality")
+        self._create_section_label(t("sidebar.download_quality_image"))
         
         self.download_quality = QComboBox()
         self.download_quality.addItems(["1k", "2k", "4k"])
@@ -455,7 +456,7 @@ class ImageSidebar(SidebarBase):
         
         # === IMAGE LIBRARY BUTTON ===
         if self._show_image_library:
-            self.image_library_btn = QPushButton("📂 Image Library")
+            self.image_library_btn = QPushButton(t("sidebar.image_library"))
             self.image_library_btn.setMinimumHeight(32)
             self.image_library_btn.setProperty("variant", "secondary")
             self.image_library_btn.clicked.connect(self._on_open_image_library)

@@ -19,6 +19,7 @@ from PySide6.QtCore import Qt, Signal
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 from ui.components.prompt_table import PromptTable, PromptRow, PromptStatus, ImageMode
 from ui.components.drop_widgets import TextFileDropEdit
 from ui.components.continuation_toggle import ContinuationHeader
@@ -54,8 +55,8 @@ class GenerationTabBase(QWidget):
     TAB_LABEL = ""
     MODE_HEADER_TITLE = ""
     MODE_HEADER_COLOR = Theme.BLUE
-    PROMPT_INPUT_TITLE = "📝 PROMPT INPUT"
-    INPUT_PLACEHOLDER = "Enter prompts here, one per line..."
+    PROMPT_INPUT_TITLE = ""  # Overridden by t() at runtime
+    INPUT_PLACEHOLDER = ""   # Overridden by t() at runtime
     CONTROLLER_METHOD = ""
     SHOW_CONTINUATION = True
     SHOW_IMAGE_LIBRARY = False
@@ -98,6 +99,28 @@ class GenerationTabBase(QWidget):
         
         workspace = self._create_workspace()
         layout.addWidget(workspace, stretch=1)
+    
+    def retranslate_ui(self):
+        """Hot-reload: rebuild UI when language changes (preserves state)."""
+        # Save current state
+        saved_state = self.save_state()
+        
+        # Properly remove old layout — Qt won't allow a new layout if old one exists
+        old_layout = self.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+            # Transfer old layout to a temp widget → releases self for new layout
+            QWidget().setLayout(old_layout)
+        
+        # Rebuild UI with new language
+        self._setup_ui()
+        
+        # Restore state
+        self.restore_state(saved_state)
     
     def _create_sidebar_widget(self):
         """Create the sidebar widget. Override for custom sidebar type.
@@ -186,7 +209,7 @@ class GenerationTabBase(QWidget):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 12, 0)
         
-        title = QLabel(self.PROMPT_INPUT_TITLE)
+        title = QLabel(t("generation.prompt_input"))
         title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
         header_layout.addWidget(title)
         header_layout.addStretch()
@@ -204,12 +227,12 @@ class GenerationTabBase(QWidget):
         btn_layout = QHBoxLayout(btn_frame)
         btn_layout.setContentsMargins(8, 4, 8, 0)
         
-        self.import_btn = QPushButton("📥 Import File")
+        self.import_btn = QPushButton(t("generation.import_file"))
         self.import_btn.setProperty("variant", "secondary")
         self.import_btn.clicked.connect(self._on_import_txt)
         btn_layout.addWidget(self.import_btn)
         
-        self.clear_btn = QPushButton("🗑️ Clear")
+        self.clear_btn = QPushButton(t("generation.clear"))
         self.clear_btn.setProperty("variant", "secondary")
         self.clear_btn.clicked.connect(self._on_clear)
         btn_layout.addWidget(self.clear_btn)
@@ -239,7 +262,7 @@ class GenerationTabBase(QWidget):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 12, 0)
         
-        self.parsed_title = QLabel("📊 PARSED PROMPTS (0)")
+        self.parsed_title = QLabel(f"{t('generation.parsed_prompts')} (0)")
         self.parsed_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
         header_layout.addWidget(self.parsed_title)
         
@@ -325,7 +348,7 @@ class GenerationTabBase(QWidget):
     
     def _update_parsed_count(self, count: int):
         """Update parsed prompts count label."""
-        self.parsed_title.setText(f"📊 PARSED PROMPTS ({count})")
+        self.parsed_title.setText(f"{t('generation.parsed_prompts')} ({count})")
     
     def _update_chain_indicator(self, prompts):
         """Update chain grouping indicator."""

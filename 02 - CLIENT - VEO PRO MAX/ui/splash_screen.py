@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, Signal,
 from PySide6.QtGui import QPixmap, QPainter, QLinearGradient, QColor, QFont, QPainterPath, QPen
 
 from config.theme import Theme
+from config.i18n import t
 
 
 class SplashScreen(QWidget):
@@ -56,7 +57,7 @@ class SplashScreen(QWidget):
         self._progress = 0.0          # Display value (current position)
         self._target_progress = None  # None = auto-advance mode, float = explicit target
         self._auto_cap = 95.0         # Auto-advance stops here
-        self._status_text = "Starting VEO Pro Max..."
+        self._status_text = t("splash.starting")
         self._fade_out_running = False
         self._finish_pending = False
         self._finish_window = None
@@ -170,7 +171,7 @@ class SplashScreen(QWidget):
         
         # Set target to 100 — the timer will smoothly animate there
         self._target_progress = 100.0
-        self._status_text = "Ready!"
+        self._status_text = t("splash.ready")
         
         # Poll until progress reaches 100, then delay + fade
         self._finish_check_timer = QTimer(self)
@@ -277,7 +278,7 @@ class SplashScreen(QWidget):
         painter.setFont(subtitle_font)
         painter.setPen(QColor(Theme.SUBTEXT1))
         subtitle_y = title_y + 48
-        painter.drawText(0, subtitle_y, W, 24, Qt.AlignCenter, "AI Video Generation Suite")
+        painter.drawText(0, subtitle_y, W, 24, Qt.AlignCenter, t("splash.subtitle"))
         
         # ── 5. Progress bar ──
         bar_y = subtitle_y + 50

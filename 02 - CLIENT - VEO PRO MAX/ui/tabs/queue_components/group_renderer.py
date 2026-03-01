@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QWidget, QFrame, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
 )
 from ui.popups import show_confirm
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QCursor
 from PySide6.QtCore import Qt
 
 import sys
@@ -330,6 +330,7 @@ class QueueGroupMixin:
         progress = td.get('progress', 0)
         thumbnails = td.get('thumbnails', [])
         video_outputs = td.get('video_outputs', [])
+        output_files = td.get('output_files', [])
         status = td.get('status', '')
         
         for i, slot in enumerate(widget.thumb_slots):
@@ -408,6 +409,18 @@ class QueueGroupMixin:
                             }}
                         """)
                         self._unregister_shimmer_slot(slot)
+                    
+                    # ── Wire click-to-play + right-click context menu ──
+                    best_file = (vi.get('best_file', '') if vi else '') or (
+                        output_files[i] if i < len(output_files) else ''
+                    )
+                    if best_file and self._cached_file_exists(best_file):
+                        slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                        slot.mousePressEvent = lambda e, p=best_file: (
+                            self._open_video(p) if e.button() == Qt.MouseButton.LeftButton else None
+                        )
+                    if vi:
+                        self._attach_slot_context_menu(slot, vi)
                 except RuntimeError:
                     continue
         else:

@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 class SettingsProfilesMixin:
@@ -36,13 +37,20 @@ class SettingsProfilesMixin:
         """
         from ui.tabs.tab_settings import ToggleSwitch
 
-        section, layout = self._create_section("🌐 Chrome Profiles (Account Manager)")
+        section, layout = self._create_section(t("profiles.section_title"))
+
+        # Email privacy state
+        self._emails_hidden = False
 
         # Create QTableWidget with 10 columns
         self.profiles_table = QTableWidget()
         self.profiles_table.setColumnCount(10)
         self.profiles_table.setHorizontalHeaderLabels([
-            "✓", "#", "Email", "Plan", "Credits", "Status", "Total Output", "Ext", "Retry", "Actions"
+            t("profiles.columns.toggle"), t("profiles.columns.num"),
+            t("profiles.columns.email"), t("profiles.columns.plan"),
+            t("profiles.columns.credits"), t("profiles.columns.status"),
+            t("profiles.columns.output"), t("profiles.columns.ext"),
+            t("profiles.columns.retry"), t("profiles.columns.actions")
         ])
 
         # Set column widths per docs spec
@@ -106,7 +114,7 @@ class SettingsProfilesMixin:
         btn_layout.setSpacing(8)
 
         # Browser login - full session with real-time subscription
-        browser_btn = QPushButton("🌐 Add Profile (Browser Login)")
+        browser_btn = QPushButton(t("profiles.add_profile"))
         browser_btn.setToolTip("Login in browser. Plan/Credits available immediately.")
         browser_btn.setFixedHeight(32)
         browser_btn.setStyleSheet(f"""
@@ -128,6 +136,27 @@ class SettingsProfilesMixin:
         btn_layout.addWidget(browser_btn)
 
         btn_layout.addStretch()
+
+        # Email hide/show toggle button
+        self._email_toggle_btn = QPushButton("👁️ Ẩn Email")
+        self._email_toggle_btn.setFixedHeight(32)
+        self._email_toggle_btn.setToolTip("Ẩn/hiện email trong bảng")
+        self._email_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE2};
+                color: {Theme.TEXT};
+                font-size: 12px;
+                border: 1px solid {Theme.BORDER};
+                border-radius: 6px;
+                padding: 4px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.SURFACE1};
+                border: 1px solid rgba(255,255,255,0.3);
+            }}
+        """)
+        self._email_toggle_btn.clicked.connect(self._toggle_email_visibility)
+        btn_layout.addWidget(self._email_toggle_btn)
         layout.addLayout(btn_layout)
 
         return section
@@ -184,7 +213,7 @@ class SettingsProfilesMixin:
 
         # If no profiles exist, show empty state message
         if not accounts:
-            placeholder = QTableWidgetItem("No profiles added. Click '🌐 Add Account' to add.")
+            placeholder = QTableWidgetItem(t("profiles.empty_state"))
             self.profiles_table.insertRow(0)
             self.profiles_table.setSpan(0, 0, 1, 10)  # 10 columns
             self.profiles_table.setItem(0, 0, placeholder)
@@ -222,8 +251,10 @@ class SettingsProfilesMixin:
             except Exception:
                 cred_icon = ""
                 cred_tip = ""
-            email_item = QTableWidgetItem(f"{cred_icon} {email_text}")
+            display_email = self._mask_email(email_text) if self._emails_hidden else email_text
+            email_item = QTableWidgetItem(f"{cred_icon} {display_email}")
             email_item.setToolTip(cred_tip)
+            email_item.setData(Qt.ItemDataRole.UserRole, email_text)  # Store real email
             email_item.setFlags(email_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.profiles_table.setItem(actual_row, 2, email_item)
 
@@ -446,6 +477,52 @@ class SettingsProfilesMixin:
 
     # _create_profile_row — REMOVED (dead code from pre-componentization)
     # _create_accounts_section — REMOVED (replaced by Chrome Profiles table)
+
+    @staticmethod
+    def _mask_email(email: str) -> str:
+        """Mask email for privacy: user@domain.com → u***@domain.com"""
+        if "@" not in email:
+            return "***"
+        local, domain = email.split("@", 1)
+        if len(local) <= 1:
+            masked_local = "*"
+        else:
+            masked_local = local[0] + "***"
+        return f"{masked_local}@{domain}"
+
+    def _toggle_email_visibility(self):
+        """Toggle email display between real and masked (***) in the table."""
+        self._emails_hidden = not self._emails_hidden
+
+        # Update button text
+        self._email_toggle_btn.setText("🙈 Hiện Email" if self._emails_hidden else "👁️ Ẩn Email")
+        self._email_toggle_btn.setToolTip(
+            "Nhấn để hiện email" if self._emails_hidden else "Nhấn để ẩn email"
+        )
+
+        # Update all email cells (col 2) — block signals to avoid side effects
+        self.profiles_table.blockSignals(True)
+        try:
+            for row in range(self.profiles_table.rowCount()):
+                email_item = self.profiles_table.item(row, 2)
+                if not email_item:
+                    continue
+                real_email = email_item.data(Qt.ItemDataRole.UserRole)
+                if not real_email:
+                    continue  # placeholder row
+
+                # Extract credential icon prefix
+                current = email_item.text().strip()
+                cred_icon = ""
+                for prefix in ("🔑 ", "🔓 "):
+                    if current.startswith(prefix):
+                        cred_icon = prefix.rstrip() 
+                        break
+
+                display = self._mask_email(real_email) if self._emails_hidden else real_email
+                email_item.setText(f"{cred_icon} {display}" if cred_icon else display)
+        finally:
+            self.profiles_table.blockSignals(False)
 
     def _refresh_ext_column(self):
         """Lightweight periodic refresh of Extension status column (col 7) only.

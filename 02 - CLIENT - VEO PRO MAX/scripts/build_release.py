@@ -308,7 +308,7 @@ def main():
     print("\n🔒 Obfuscating and deploying extension...")
     try:
         from obfuscate_extension import process_extension
-        ext_output = OUTPUT_DIR / "extension"
+        ext_output = OUTPUT_DIR / "main.dist" / "extension"
         if process_extension(ext_output):
             print(f"  ✅ Extension deployed to: {ext_output}")
         else:
