@@ -1095,7 +1095,7 @@ class FirebaseRESTClient:
             return {"exists": True, "status": "revoked", "error": "Trial đã bị admin thu hồi"}
         
         if status == "upgraded":
-            return {"exists": True, "status": "expired", "error": "Đã nâng cấp lên gói trả phí"}
+            return {"exists": True, "status": "upgraded", "message": "Đã nâng cấp lên gói trả phí"}
         
         if expires_at:
             try:

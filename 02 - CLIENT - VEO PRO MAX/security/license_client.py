@@ -1119,13 +1119,17 @@ class LicenseClient:
                         )
                     
                     if status == "upgraded":
-                        # Trial upgraded to paid → try auto-restore key
+                        # Trial upgraded to paid → try auto-restore key from _mid_to_key
                         restored = self._try_restore_by_mid()
                         if restored:
                             return restored
+                        # Auto-restore failed (no _mid_to_key entry)
+                        # → Let the user enter key manually via activation dialog
+                        # Do NOT block with hard error — user may have a valid _lic key
                         return LicenseInfo(
                             valid=False,
-                            error="Đã nâng cấp lên gói trả phí. Vui lòng nhập serial key."
+                            tier="TRIAL",
+                            error="ENTER_KEY"
                         )
                     
                     if status == "expired":
