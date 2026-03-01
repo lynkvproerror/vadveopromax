@@ -61,7 +61,16 @@ def _is_package_installed(import_name: str) -> bool:
 
 
 def _install_pip_package(pip_name: str) -> bool:
-    """Install a pip package silently. Returns True on success."""
+    """Install a pip package silently. Returns True on success.
+    
+    NOTE: Skipped in compiled (Nuitka/frozen) mode — all packages
+    are already bundled in the standalone binary.
+    """
+    # In compiled mode, pip install doesn't work (self-execution error)
+    if getattr(sys, 'frozen', False) or '__compiled__' in dir():
+        log.debug(f"  ⏭️ {pip_name}: skipped (compiled mode)")
+        return False
+    
     try:
         log.info(f"Installing {pip_name}...")
         result = subprocess.run(

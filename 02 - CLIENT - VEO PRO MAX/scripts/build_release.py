@@ -166,6 +166,16 @@ def run_nuitka_build():
         "--nofollow-import-to=PIL",
         "--nofollow-import-to=sklearn",
 
+        # Exclude unused packages (installed in env but not used by app)
+        "--nofollow-import-to=customtkinter",
+        "--nofollow-import-to=tkinter",
+        "--nofollow-import-to=bcrypt",
+        "--nofollow-import-to=zstandard",
+        "--nofollow-import-to=firebase_admin",
+        "--nofollow-import-to=google.cloud",
+        "--nofollow-import-to=google.auth",
+        "--nofollow-import-to=grpc",
+
         # Include packages that may not be auto-detected
         "--include-package=security",
         "--include-package=config",
