@@ -224,10 +224,13 @@ def run_nuitka_build(onefile: bool = False):
         str(MAIN_PY),
     ]
 
-    # Icon (conditional)
+    # Icon (conditional — copy to safe path to avoid Nuitka # parsing bug)
     icon_path = PROJECT_ROOT / "assets" / "icon.ico"
     if icon_path.exists():
-        cmd.insert(-1, f"--windows-icon-from-ico={icon_path}")
+        safe_icon = Path.home() / ".veoauto" / "icon.ico"
+        safe_icon.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(icon_path, safe_icon)
+        cmd.insert(-1, f"--windows-icon-from-ico={safe_icon}")
 
     # Filter empty strings
     cmd = [c for c in cmd if c]
@@ -248,74 +251,68 @@ def run_nuitka_build(onefile: bool = False):
 
 def organize_dist_folder():
     """
-    Post-build cleanup: move all DLLs, .pyd files, and library folders
-    into a clean _internal/ subfolder.
+    Post-build cleanup: hide runtime DLLs and library folders using
+    Windows hidden attribute so Explorer only shows the main exe
+    and user-facing data folders.
 
-    Result:
-        main.dist/
-          VEO_Pro_Max.exe      (clean root)
-          config/              (app data)
-          assets/              (app assets)
-          data/                (app data)
-          _internal/           (all runtime deps)
-            python313.dll
-            qt6core.dll
-            PySide6/
-            ...
+    NOTE: We do NOT move files — Nuitka requires DLLs at the same
+    level as the exe. Instead we set Windows 'hidden' attribute.
+
+    Visible in Explorer:
+        VEO_Pro_Max.exe
+        config/
+        assets/
+        extension/
+
+    Hidden (still loadable by exe):
+        python313.dll
+        qt6core.dll
+        PySide6/
+        aiohttp/
+        ...
     """
     dist_dir = OUTPUT_DIR / "main.dist"
     if not dist_dir.exists():
         print("  WARN main.dist not found, skipping cleanup")
         return
 
-    internal_dir = dist_dir / "_internal"
-    internal_dir.mkdir(exist_ok=True)
-
-    # Files/dirs to keep at root level (user-visible)
-    KEEP_AT_ROOT = {
+    # Items to keep VISIBLE (user-facing)
+    KEEP_VISIBLE = {
         "VEO_Pro_Max.exe",
-        "_internal",
         "config",
         "assets",
         "data",
         "extension",
-        "logs",
-        "sessions",
     }
 
-    moved_files = 0
-    moved_dirs = 0
+    hidden_count = 0
 
     for item in sorted(dist_dir.iterdir()):
-        if item.name in KEEP_AT_ROOT:
+        if item.name in KEEP_VISIBLE:
             continue
 
-        target = internal_dir / item.name
         try:
-            if item.is_dir():
-                if target.exists():
-                    shutil.rmtree(target)
-                shutil.move(str(item), str(target))
-                moved_dirs += 1
-            else:
-                if target.exists():
-                    target.unlink()
-                shutil.move(str(item), str(target))
-                moved_files += 1
+            # Set Windows hidden attribute via attrib command
+            subprocess.run(
+                ["attrib", "+H", "+S", str(item)],
+                capture_output=True, check=False
+            )
+            hidden_count += 1
         except Exception as e:
-            print(f"  WARN Could not move {item.name}: {e}")
+            print(f"  WARN Could not hide {item.name}: {e}")
 
-    print(f"  [ORGANIZED] {moved_files} files + {moved_dirs} folders -> _internal/")
+    print(f"  [HIDDEN] {hidden_count} items marked as hidden in Explorer")
 
-    # Print clean structure
-    print(f"\n  Clean structure:")
+    # Print what user will see
+    print(f"\n  User-visible in Explorer:")
     for item in sorted(dist_dir.iterdir()):
-        if item.is_dir():
-            children = sum(1 for _ in item.rglob("*"))
-            print(f"     [DIR] {item.name}/ ({children} items)")
-        else:
-            size_mb = item.stat().st_size / (1024 * 1024)
-            print(f"     [FILE] {item.name} ({size_mb:.1f} MB)")
+        if item.name in KEEP_VISIBLE:
+            if item.is_dir():
+                children = sum(1 for _ in item.rglob("*"))
+                print(f"     [DIR]  {item.name}/ ({children} items)")
+            else:
+                size_mb = item.stat().st_size / (1024 * 1024)
+                print(f"     [FILE] {item.name} ({size_mb:.1f} MB)")
 
 
 def copy_release_files():
