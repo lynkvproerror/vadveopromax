@@ -298,8 +298,10 @@ class LicenseStorage:
         data['_nonce'] = nonce
         
         # Build signature payload with 12+ fields
-        # Calculate data length EXCLUDING signature meta-fields for consistency
-        data_for_len = {k: v for k, v in data.items() if k not in ('_sig', '_sig_version', '_nonce')}
+        # Calculate data length EXCLUDING ALL signature meta-fields for consistency
+        # CRITICAL: This list MUST match between save() and load() verification!
+        _SIG_META = ('_sig', '_sig_version', '_nonce', '_app_version', '_last_known_time')
+        data_for_len = {k: v for k, v in data.items() if k not in _SIG_META}
         sig_parts = [
             # === CORE LICENSE DATA ===
             str(data.get('key', '')),
