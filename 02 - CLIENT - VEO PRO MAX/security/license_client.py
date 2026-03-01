@@ -512,40 +512,50 @@ class LicenseClient:
         """
         Initialize Firebase connection.
         
-        Priority:
-        1. REST Client (secure, no Admin SDK) - for production
-        2. Admin SDK (only if available) - for development
+        Uses absolute imports (security.xxx) which work in:
+        - Dev mode: when cwd is project root
+        - Compiled mode: Nuitka compiles security/ as a package
+        Fallback to bare imports for legacy compatibility.
         """
-        # === OPTION 1: REST Client (SECURE - No Admin SDK) ===
+        import logging
+        _flog = logging.getLogger("veo.license")
+        
+        # === Step 1: Load encrypted API keys ===
+        keys_loaded = False
         try:
-            import sys
-            security_dir = str(Path(__file__).parent)
-            if security_dir not in sys.path:
-                sys.path.insert(0, security_dir)
-            
-            # Load encrypted API keys from _keys.dat first
             try:
                 from security._encrypted_api_keys import set_runtime_keys
             except ImportError:
                 from _encrypted_api_keys import set_runtime_keys
-            set_runtime_keys()
-            
+            keys_loaded = set_runtime_keys()
+            _flog.info(f"[LICENSE] API keys loaded: {keys_loaded}")
+        except Exception as e:
+            _flog.error(f"[LICENSE] Failed to load API keys: {type(e).__name__}: {e}")
+        
+        if not keys_loaded:
+            _flog.warning("[LICENSE] ⚠️ No Firebase API keys available — license validation limited to cache")
+        
+        # === Step 2: Create REST client ===
+        try:
             try:
-                from security.firebase_rest_client import FirebaseRESTClient, SecureFirebaseConfig
+                from security.firebase_rest_client import FirebaseRESTClient
             except ImportError:
-                from firebase_rest_client import FirebaseRESTClient, SecureFirebaseConfig
+                from firebase_rest_client import FirebaseRESTClient
+            
             self._rest_client = FirebaseRESTClient()
             self._use_rest = True
             self._which_db = "rest_api"
+            _flog.info("[LICENSE] ✅ Firebase REST client initialized")
             return
         except ImportError as e:
-            print(f"[LICENSE-DEBUG] REST client ImportError: {e}")
+            _flog.error(f"[LICENSE] REST client import failed: {e}")
             self._use_rest = False
         except Exception as e:
-            print(f"[LICENSE-DEBUG] REST client init failed: {type(e).__name__}: {e}")
+            _flog.error(f"[LICENSE] REST client init failed: {type(e).__name__}: {e}")
             self._use_rest = False
         
-        # No Admin SDK fallback — production client uses REST only
+        # No connection available
+        _flog.warning("[LICENSE] ⚠️ Firebase not available — offline mode only")
         self._use_rest = False
     
     # =====================
@@ -599,8 +609,6 @@ class LicenseClient:
         
         # Fallback: create REST client directly
         try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).parent))
             try:
                 from security._encrypted_api_keys import set_runtime_keys
             except ImportError:

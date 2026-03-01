@@ -34,6 +34,21 @@ _terminal_handler.setFormatter(logging.Formatter(
 ))
 logging.getLogger().addHandler(_terminal_handler)
 
+# In compiled mode (Nuitka/frozen), console is disabled.
+# Add file handler to capture all logs for debugging.
+if getattr(sys, 'frozen', False) or '__compiled__' in dir():
+    _log_dir = Path.home() / ".veoauto"
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    _file_handler = logging.FileHandler(
+        _log_dir / "veo_debug.log", mode='w', encoding='utf-8'
+    )
+    _file_handler.setLevel(logging.DEBUG)
+    _file_handler.setFormatter(logging.Formatter(
+        "[%(levelname)-5s] %(asctime)s - %(name)s - %(message)s",
+        datefmt="%H:%M:%S",
+    ))
+    logging.getLogger().addHandler(_file_handler)
+
 
 def main():
     """Main entry point for VEO Pro Max application."""
