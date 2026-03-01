@@ -264,6 +264,16 @@ class AppController:
         except ImportError:
             pass  # Module not available — dev environment
         
+        # Anti-tamper runtime guards (6 layers: monkey-patch, extraction, process, proxy, VM, sandbox)
+        try:
+            from security.anti_tamper import register_critical_modules, run_all_guards
+            register_critical_modules()
+            guards = run_all_guards()
+            if not guards['passed']:
+                log.critical(f"[Security] ❌ Anti-tamper guards FAILED: {guards['failures']}")
+        except ImportError:
+            pass
+        
         # Start TaskJournal (event subscriber + periodic save)
         self._task_journal.start(loop=self._loop)
         self._status_aggregator.start()

@@ -1,0 +1,22 @@
+[package]
+name = "veo_security"
+version = "0.1.0"
+edition = "2021"
+description = "Native security module for VEO Pro Max — Anti-Debug, Integrity Check, HWID"
+
+[lib]
+name = "veo_security"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+sha2 = "0.10"
+hmac = "0.12"
+winapi = { version = "0.3", features = [
+    "processthreadsapi", "winnt", "debugapi", "handleapi",
+    "tlhelp32", "psapi", "memoryapi", "libloaderapi",
+    "securitybaseapi", "synchapi"
+] }
+
+[build-dependencies]
+chrono = "0.4"
