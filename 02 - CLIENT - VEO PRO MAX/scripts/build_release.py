@@ -1,28 +1,36 @@
 #!/usr/bin/env python3
 """
-VEO Pro Max — Build Release Script v1.0
+VEO Pro Max — Build Release Script v2.0
 ========================================
 
 Compiles the Python application (folder 02) into a standalone
-executable using Nuitka, then copies output to folder 03.
+executable using Nuitka, then organizes output to folder 03.
 
 Usage:
-    python scripts/build_release.py             # Full build
+    python scripts/build_release.py             # Full build (standalone)
+    python scripts/build_release.py --onefile   # Single exe (slower startup)
     python scripts/build_release.py --hash-only # Generate hashes only
     python scripts/build_release.py --check     # Check dependencies
 
 Requirements:
     pip install nuitka ordered-set zstandard
-    (Nuitka will auto-download a C compiler if needed — MinGW64)
 
-Output:
+Output (standalone mode):
     03 - Final App Client/
-    ├── VEO_Pro_Max.exe          # Compiled binary
-    ├── VEO_Pro_Max.dist/        # Dependencies
-    ├── version.json             # Updated with build info
-    ├── build_info.json          # SHA-256 hashes + metadata
-    ├── CHANGELOG.md
-    └── README.md
+    +-- VEO_Pro_Max.exe              # Main executable
+    +-- config/locales/              # Language files
+    +-- assets/                      # Icons, images
+    +-- data/                        # App data
+    +-- extension/                   # Chrome extension
+    +-- _internal/                   # All DLLs, .pyd, libs (clean!)
+    +-- version.json
+    +-- build_info.json
+
+Output (onefile mode):
+    03 - Final App Client/
+    +-- VEO_Pro_Max.exe              # Single self-extracting exe
+    +-- version.json
+    +-- build_info.json
 """
 
 import sys
@@ -40,6 +48,11 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent  # 02 - CLIENT - VEO PRO MAX
 OUTPUT_DIR = PROJECT_ROOT.parent / "03 - Final App Client"
 MAIN_PY = PROJECT_ROOT / "main.py"
+
+# Fix encoding for Vietnamese characters in constants
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 
 def check_dependencies() -> dict:
@@ -89,11 +102,7 @@ def check_dependencies() -> dict:
 
 
 def generate_hashes() -> dict:
-    """
-    Generate SHA-256 hashes for all critical security files.
-    Used to populate integrity_check.py CRITICAL_FILES dict in production.
-    """
-    security_dir = PROJECT_ROOT / "security"
+    """Generate SHA-256 hashes for all critical security files."""
     hashes = {}
 
     critical_files = [
@@ -115,9 +124,9 @@ def generate_hashes() -> dict:
                 for chunk in iter(lambda: f.read(8192), b''):
                     h.update(chunk)
             hashes[rel_path] = h.hexdigest()
-            print(f"  ✅ {rel_path}: {h.hexdigest()[:16]}...")
+            print(f"  OK {rel_path}: {h.hexdigest()[:16]}...")
         else:
-            print(f"  ⚠️ {rel_path}: NOT FOUND")
+            print(f"  WARN {rel_path}: NOT FOUND")
 
     return hashes
 
@@ -136,18 +145,18 @@ def generate_build_info(hashes: dict) -> dict:
     }
 
 
-def run_nuitka_build():
+def run_nuitka_build(onefile: bool = False):
     """Run Nuitka compilation."""
-    print("\n🔨 Starting Nuitka compilation...")
+    mode_str = "onefile" if onefile else "standalone"
+    print(f"\n[BUILD] Starting Nuitka compilation ({mode_str})...")
     print(f"   Entry point: {MAIN_PY}")
     print(f"   Output: {OUTPUT_DIR}")
 
-    # Nuitka command for PySide6 standalone app
     cmd = [
         sys.executable, "-m", "nuitka",
 
         # Output mode
-        "--standalone",
+        "--onefile" if onefile else "--standalone",
 
         # Auto-accept downloads (MinGW64, ccache)
         "--assume-yes-for-downloads",
@@ -197,7 +206,13 @@ def run_nuitka_build():
 
         # Windows options
         "--windows-console-mode=disable",
-        "--windows-icon-from-ico=assets/icon.ico" if (PROJECT_ROOT / "assets" / "icon.ico").exists() else "",
+
+        # Product info (shows in exe Properties > Details)
+        "--product-name=VEO Pro Max",
+        "--product-version=2.2.0",
+        "--company-name=VEO Studio",
+        "--file-description=VEO Pro Max - AI Video Generator",
+        "--copyright=Copyright 2026 VEO Studio",
 
         # Performance
         "--jobs=4",
@@ -209,47 +224,118 @@ def run_nuitka_build():
         str(MAIN_PY),
     ]
 
+    # Icon (conditional)
+    icon_path = PROJECT_ROOT / "assets" / "icon.ico"
+    if icon_path.exists():
+        cmd.insert(-1, f"--windows-icon-from-ico={icon_path}")
+
     # Filter empty strings
     cmd = [c for c in cmd if c]
 
     print(f"\n   Command: {' '.join(cmd[:5])}...")
 
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(PROJECT_ROOT),
-            check=True,
-            # Stream output live
-        )
-        print("\n✅ Nuitka compilation successful!")
+        subprocess.run(cmd, cwd=str(PROJECT_ROOT), check=True)
+        print("\n[OK] Nuitka compilation successful!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ Nuitka compilation FAILED (exit code {e.returncode})")
+        print(f"\n[FAIL] Nuitka compilation FAILED (exit code {e.returncode})")
         return False
     except FileNotFoundError:
-        print("\n❌ Nuitka not found. Install with: pip install nuitka")
+        print("\n[FAIL] Nuitka not found. Install with: pip install nuitka")
         return False
+
+
+def organize_dist_folder():
+    """
+    Post-build cleanup: move all DLLs, .pyd files, and library folders
+    into a clean _internal/ subfolder.
+
+    Result:
+        main.dist/
+          VEO_Pro_Max.exe      (clean root)
+          config/              (app data)
+          assets/              (app assets)
+          data/                (app data)
+          _internal/           (all runtime deps)
+            python313.dll
+            qt6core.dll
+            PySide6/
+            ...
+    """
+    dist_dir = OUTPUT_DIR / "main.dist"
+    if not dist_dir.exists():
+        print("  WARN main.dist not found, skipping cleanup")
+        return
+
+    internal_dir = dist_dir / "_internal"
+    internal_dir.mkdir(exist_ok=True)
+
+    # Files/dirs to keep at root level (user-visible)
+    KEEP_AT_ROOT = {
+        "VEO_Pro_Max.exe",
+        "_internal",
+        "config",
+        "assets",
+        "data",
+        "extension",
+        "logs",
+        "sessions",
+    }
+
+    moved_files = 0
+    moved_dirs = 0
+
+    for item in sorted(dist_dir.iterdir()):
+        if item.name in KEEP_AT_ROOT:
+            continue
+
+        target = internal_dir / item.name
+        try:
+            if item.is_dir():
+                if target.exists():
+                    shutil.rmtree(target)
+                shutil.move(str(item), str(target))
+                moved_dirs += 1
+            else:
+                if target.exists():
+                    target.unlink()
+                shutil.move(str(item), str(target))
+                moved_files += 1
+        except Exception as e:
+            print(f"  WARN Could not move {item.name}: {e}")
+
+    print(f"  [ORGANIZED] {moved_files} files + {moved_dirs} folders -> _internal/")
+
+    # Print clean structure
+    print(f"\n  Clean structure:")
+    for item in sorted(dist_dir.iterdir()):
+        if item.is_dir():
+            children = sum(1 for _ in item.rglob("*"))
+            print(f"     [DIR] {item.name}/ ({children} items)")
+        else:
+            size_mb = item.stat().st_size / (1024 * 1024)
+            print(f"     [FILE] {item.name} ({size_mb:.1f} MB)")
 
 
 def copy_release_files():
     """Copy release files to output directory."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    files_to_copy = [
-        ("version.json", "version.json"),
-        ("CHANGELOG.md", "CHANGELOG.md") if (OUTPUT_DIR / "CHANGELOG.md").exists() else None,
-        ("README.md", "README.md") if (OUTPUT_DIR / "README.md").exists() else None,
-    ]
+    files_to_copy = [("version.json", "version.json")]
 
-    for item in files_to_copy:
-        if item is None:
-            continue
-        src_name, dst_name = item
+    # Optional files
+    for name in ["CHANGELOG.md", "README.md"]:
+        src = PROJECT_ROOT / name
+        if src.exists():
+            files_to_copy.append((name, name))
+
+    for src_name, dst_name in files_to_copy:
         src = PROJECT_ROOT / src_name
         dst = OUTPUT_DIR / dst_name
         if src.exists():
             shutil.copy2(src, dst)
-            print(f"  📄 Copied {src_name} → {dst_name}")
+            print(f"  Copied {src_name} -> {dst_name}")
 
 
 def main():
@@ -257,35 +343,37 @@ def main():
     parser.add_argument("--check", action="store_true", help="Check dependencies only")
     parser.add_argument("--hash-only", action="store_true", help="Generate hashes only")
     parser.add_argument("--skip-compile", action="store_true", help="Skip Nuitka compilation")
+    parser.add_argument("--onefile", action="store_true", help="Build single exe (slower startup)")
+    parser.add_argument("--skip-organize", action="store_true", help="Skip post-build folder cleanup")
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  VEO Pro Max — Build Release Script v1.0")
+    print("  VEO Pro Max -- Build Release Script v2.0")
     print("=" * 60)
 
     # Step 1: Check deps
-    print("\n📋 Checking dependencies...")
+    print("\n[1] Checking dependencies...")
     deps = check_dependencies()
     all_ok = True
     for name, info in deps.items():
-        status = "✅" if info['ok'] else "❌"
+        status = "OK" if info['ok'] else "MISSING"
         version = info.get('version') or info.get('name') or 'missing'
         note = f" ({info['note']})" if 'note' in info else ""
-        print(f"  {status} {name}: {version}{note}")
-        if not info['ok'] and name != 'c_compiler':  # C compiler auto-downloads
+        print(f"  [{status}] {name}: {version}{note}")
+        if not info['ok'] and name != 'c_compiler':
             all_ok = False
 
     if args.check:
         sys.exit(0 if all_ok else 1)
 
     if not all_ok:
-        print("\n❌ Missing dependencies. Install with:")
+        print("\n[FAIL] Missing dependencies. Install with:")
         if not deps.get('nuitka', {}).get('ok'):
             print("   pip install nuitka ordered-set zstandard")
         sys.exit(1)
 
     # Step 2: Generate hashes
-    print("\n🔐 Generating file integrity hashes...")
+    print("\n[2] Generating file integrity hashes...")
     hashes = generate_hashes()
 
     # Step 3: Save build info
@@ -296,43 +384,48 @@ def main():
     build_info_path = OUTPUT_DIR / "build_info.json"
     with open(build_info_path, 'w') as f:
         json.dump(build_info, f, indent=2)
-    print(f"\n📄 Build info saved: {build_info_path}")
+    print(f"\n[3] Build info saved: {build_info_path}")
 
     if args.hash_only:
-        print("\n✅ Hash generation complete (--hash-only mode)")
+        print("\n[DONE] Hash generation complete (--hash-only mode)")
         sys.exit(0)
 
     # Step 4: Nuitka compilation
     if not args.skip_compile:
-        success = run_nuitka_build()
+        success = run_nuitka_build(onefile=args.onefile)
         if not success:
             sys.exit(1)
     else:
-        print("\n⏭️ Skipping Nuitka compilation (--skip-compile)")
+        print("\n[SKIP] Skipping Nuitka compilation (--skip-compile)")
 
     # Step 5: Copy release files
-    print("\n📦 Copying release files...")
+    print("\n[5] Copying release files...")
     copy_release_files()
 
     # Step 5.5: Obfuscate and deploy extension
-    print("\n🔒 Obfuscating and deploying extension...")
+    print("\n[5.5] Obfuscating and deploying extension...")
     try:
         from obfuscate_extension import process_extension
         ext_output = OUTPUT_DIR / "main.dist" / "extension"
         if process_extension(ext_output):
-            print(f"  ✅ Extension deployed to: {ext_output}")
+            print(f"  [OK] Extension deployed to: {ext_output}")
         else:
-            print("  ⚠️ Extension deployment skipped (source not found)")
+            print("  [SKIP] Extension deployment skipped (source not found)")
     except ImportError:
-        # Fallback: try running as subprocess
-        import subprocess
         ext_script = SCRIPT_DIR / "obfuscate_extension.py"
         if ext_script.exists():
             subprocess.run([sys.executable, str(ext_script)], cwd=str(PROJECT_ROOT))
         else:
-            print("  ⚠️ obfuscate_extension.py not found")
+            print("  [SKIP] obfuscate_extension.py not found")
 
-    # Step 6: Update version.json with build info
+    # Step 6: Organize dist folder (standalone only)
+    if not args.onefile and not args.skip_organize:
+        print("\n[6] Organizing build output...")
+        organize_dist_folder()
+    elif args.onefile:
+        print("\n[6] Onefile mode -- no cleanup needed")
+
+    # Step 7: Update version.json with build info
     version_file = OUTPUT_DIR / "version.json"
     if version_file.exists():
         with open(version_file) as f:
@@ -341,10 +434,10 @@ def main():
         version_data['build_time'] = build_info['build_time']
         with open(version_file, 'w') as f:
             json.dump(version_data, f, indent=2)
-        print(f"  📄 Updated version.json with build info")
+        print(f"  Updated version.json with build info")
 
     print("\n" + "=" * 60)
-    print(f"  ✅ BUILD COMPLETE — Output: {OUTPUT_DIR}")
+    print(f"  [DONE] BUILD COMPLETE -- Output: {OUTPUT_DIR}")
     print("=" * 60)
 
 
