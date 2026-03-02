@@ -1,8 +1,8 @@
 {
     "version": "2.2.1",
     "release_date": "2026-03-02",
-    "changelog": "� Admin: OS notification khi có request mới (auto-poll, configurable)\n� Admin: Close-to-tray + confirmation dialog\n🔧 Admin: Tier Template hiển thị đúng khi phê duyệt\n�️ Fix: Extension obfuscation v2.0 (string-aware comment removal)",
-    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.1/VEO_Pro_Max_v2.2.1.zip",
+    "changelog": "🔔 Admin: OS notification khi có request mới (auto-poll, configurable)\n🔒 Admin: Close-to-tray + confirmation dialog\n🔧 Admin: Tier Template hiển thị đúng khi phê duyệt\n🛡️ Fix: Extension obfuscation v2.0 (string-aware comment removal)",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/archive/refs/tags/v2.2.1.zip",
     "sha256": "",
     "min_version": "1.0.0",
     "force_update": false
