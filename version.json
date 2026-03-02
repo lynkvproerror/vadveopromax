@@ -1,11 +1,11 @@
 {
     "version": "2.2.1",
     "release_date": "2026-03-02",
-    "changelog": "🔔 Admin: OS notification khi có request mới (auto-poll, configurable)\n🔒 Admin: Close-to-tray + confirmation dialog\n🔧 Admin: Tier Template hiển thị đúng khi phê duyệt\n🛡️ Fix: Extension obfuscation v2.0 (string-aware comment removal)\n🔗 Fix: Auto-update download URL (no more 404)",
+    "changelog": "🔧 Fix: Extension hoạt động ổn định hơn sau khi build\n🔗 Fix: Cập nhật tự động hoạt động chính xác\n🔒 Tăng cường bảo mật ứng dụng",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.1/VEO_Pro_Max_v2.2.1.zip",
     "sha256": "",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1772447902,
-    "build_time": "2026-03-02T17:38:22.692823"
+    "build_number": 1772448877,
+    "build_time": "2026-03-02T17:54:37.948944"
 }
