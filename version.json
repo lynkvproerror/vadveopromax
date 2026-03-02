@@ -1,11 +1,11 @@
 {
-    "version": "2.2.1",
+    "version": "2.2.2",
     "release_date": "2026-03-02",
-    "changelog": "🔧 Fix: Extension hoạt động ổn định hơn sau khi build\n🔗 Fix: Cập nhật tự động hoạt động chính xác\n🔒 Tăng cường bảo mật ứng dụng",
-    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.1/VEO_Pro_Max_v2.2.1.zip",
+    "changelog": "🔧 Fix: Cập nhật tự động hoạt động chính xác\n🔧 Fix: Extension hoạt động ổn định hơn sau khi build\n🔒 Tăng cường bảo mật ứng dụng",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.2/VEO_Pro_Max_v2.2.2.zip",
     "sha256": "",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1772448877,
-    "build_time": "2026-03-02T17:54:37.948944"
+    "build_number": 1772449485,
+    "build_time": "2026-03-02T18:04:45.628458"
 }
