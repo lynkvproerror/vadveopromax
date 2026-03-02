@@ -9,3 +9,4 @@ nuitka-crash-report.xml
 # Logs and sessions (user-specific)
 main.dist/logs/
 main.dist/sessions/
+main.dist/assets/models/
