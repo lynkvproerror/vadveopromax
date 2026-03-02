@@ -1,8 +1,8 @@
 {
-    "version": "2.2.0",
+    "version": "2.2.1",
     "release_date": "2026-03-02",
-    "changelog": "🔐 HMAC derived key (machine-bound, no hardcoded secret)\n🛡️ Periodic integrity check (30s + every 5min)\n📊 Dynamic trial days from Tier Templates\n🔧 Fix: _pick_server crash on non-hex machine_id\n🔧 Fix: settings save error (retry_count)\n💾 Hide Email toggle persists across restarts\n🏷️ Renamed max_cookies → max_accounts\n🔄 Admin: trial delete/revoke dispatch by tab",
-    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.0/VEO_Pro_Max_v2.2.0.zip",
+    "changelog": "� Admin: OS notification khi có request mới (auto-poll, configurable)\n� Admin: Close-to-tray + confirmation dialog\n🔧 Admin: Tier Template hiển thị đúng khi phê duyệt\n�️ Fix: Extension obfuscation v2.0 (string-aware comment removal)",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.1/VEO_Pro_Max_v2.2.1.zip",
     "sha256": "",
     "min_version": "1.0.0",
     "force_update": false
