@@ -1,6 +1,6 @@
 {
   "build_time": "2026-03-02T05:19:35.692769",
-  "app_version": "2.2.0",
+  "app_version": "2.2.1",
   "python_version": "3.13.6",
   "platform": "win32",
   "critical_file_hashes": {
