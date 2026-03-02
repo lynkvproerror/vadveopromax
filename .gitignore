@@ -1,11 +1,11 @@
-# Exclude compiled binaries (too large for git, distributed via GitHub Releases)
-main.dist/
-main.build/
-*.dist/
-*.build/
-
 # Build artifacts
+main.build/
+*.build/
 nuitka-crash-report.xml
 
 # Zip files
 *.zip
+
+# Logs and sessions (user-specific)
+main.dist/logs/
+main.dist/sessions/
