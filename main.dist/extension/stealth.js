@@ -1,5 +1,4 @@
 /* VEO Pro Max Extension v2.2.2 - Protected */
-void function(){"use strict";
 Object.defineProperty(navigator, 'webdriver', {
 get: () => false,
 configurable: true,
@@ -28,4 +27,3 @@ return Promise.resolve({ state: Notification.permission });
 return originalQuery.call(window.navigator.permissions, parameters);
 };
 }
-}();
