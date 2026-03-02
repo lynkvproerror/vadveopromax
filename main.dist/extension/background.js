@@ -328,7 +328,305 @@ if (existingTabId) {
 wsSend({ action: 'register', email, tabId: existingTabId, version: EXT_VERSION });
 break;
 }
-const veoTabs = await chrome.tabs.query({ url: '*://labs.google }
+const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+if (veoTabs.length > 0) {
+let targetTab = veoTabs.find(t => !tabState[t.id]?.email) || veoTabs[0];
+const tabId = targetTab.id;
+if (!tabState[tabId]) {
+tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+}
+tabState[tabId].email = email;
+wsSend({ action: 'register', email, tabId, version: EXT_VERSION });
+} else {
+const allTabs = await chrome.tabs.query({ currentWindow: true });
+if (allTabs.length >= MAX_TABS) {
+wsSend({
+action: 'register',
+email,
+tabId: null,
+version: EXT_VERSION,
+error: `Tab limit reached (${MAX_TABS})`,
+});
+} else {
+const newTab = await chrome.tabs.create({
+url: VEO_URL,
+active: false,
+pinned: true,
+});
+tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+wsSend({ action: 'register', email, tabId: newTab.id, version: EXT_VERSION });
+try { chrome.tabs.update(newTab.id, { autoDiscardable: false }); } catch (_) { }
+startZombieTimer(newTab.id);
+}
+}
+break;
+}
+case 'reload_extension': {
+wsSend({
+action: 'extension_reloading',
+requestId: msg.requestId || '',
+});
+setTimeout(() => {
+chrome.runtime.reload();
+}, 500);
+break;
+}
+case 'check_recaptcha_ready': {
+const tabId = findTabForEmail(msg.email);
+if (!tabId) {
+wsSend({
+action: 'recaptcha_ready',
+requestId: msg.requestId,
+ready: false,
+details: { error: `No tab found for ${msg.email}` },
+});
+return;
+}
+try {
+const scriptPromise = chrome.scripting.executeScript({
+target: { tabId },
+world: 'MAIN',
+func: async () => {
+const hasGrecaptcha = typeof grecaptcha !== 'undefined';
+const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
+const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
+const pageLoaded = document.readyState === 'complete';
+const hasRecaptchaScript = !!document.querySelector('script[src*="recaptcha"]');
+if (!hasExecute) {
+return {
+ready: false,
+grecaptchaLoaded: hasGrecaptcha,
+enterpriseLoaded: hasEnterprise,
+executeAvailable: hasExecute,
+pageLoaded,
+hasRecaptchaScript,
+token: null,
+tokenLength: 0,
+};
+}
+let siteKey = null;
+for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+const m = s.src.match(/render=([^&]+)/);
+if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
+}
+if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
+for (const id in ___grecaptcha_cfg.clients) {
+const client = ___grecaptcha_cfg.clients[id];
+for (const key in client) {
+const obj = client[key];
+if (obj && typeof obj === 'object') {
+for (const k2 in obj) {
+const v = obj[k2];
+if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
+}
+}
+if (siteKey) break;
+}
+if (siteKey) break;
+}
+}
+if (!siteKey) {
+return {
+ready: false,
+grecaptchaLoaded: hasGrecaptcha,
+enterpriseLoaded: hasEnterprise,
+executeAvailable: hasExecute,
+pageLoaded,
+hasRecaptchaScript,
+token: null,
+tokenLength: 0,
+error: 'Could not extract site key',
+};
+}
+const trialAction = 'VIDEO_GENERATION';
+try {
+const token = await grecaptcha.enterprise.execute(siteKey, { action: trialAction });
+return {
+ready: !!(token && token.length >= 1500),
+grecaptchaLoaded: true,
+enterpriseLoaded: true,
+executeAvailable: true,
+pageLoaded: true,
+hasRecaptchaScript: true,
+token: (token && token.length >= 1500) ? token : null,
+tokenLength: token ? token.length : 0,
+trialAction,
+};
+} catch (err) {
+return {
+ready: false,
+grecaptchaLoaded: true,
+enterpriseLoaded: true,
+executeAvailable: true,
+pageLoaded: true,
+hasRecaptchaScript: true,
+token: null,
+tokenLength: 0,
+error: err.message,
+};
+}
+},
+args: [],
+});
+const timeoutPromise = new Promise((_, reject) =>
+setTimeout(() => reject(new Error('executeScript timeout (20s) — tab may be frozen')), 20000)
+);
+const results = await Promise.race([scriptPromise, timeoutPromise]);
+const details = results?.[0]?.result || {};
+wsSend({
+action: 'recaptcha_ready',
+requestId: msg.requestId,
+ready: details.ready || false,
+token: details.token || null,
+details,
+});
+} catch (e) {
+if (e.message.includes('timeout') || e.message.includes('frozen')) {
+await safeTabReload(tabId, 'recaptcha-check-timeout');
+}
+wsSend({
+action: 'recaptcha_ready',
+requestId: msg.requestId,
+ready: false,
+details: { error: e.message },
+});
+}
+break;
+}
+case 'submit_prompt': {
+const tabId = findTabForEmail(msg.email);
+if (!tabId) {
+wsSend({
+action: 'submit_prompt_result',
+requestId: msg.requestId,
+success: false,
+error: `No tab found for ${msg.email}`,
+});
+return;
+}
+const keepaliveTimer = setInterval(() => {
+chrome.runtime.getPlatformInfo(() => { });
+}, 25000);
+try {
+const ENDPOINTS = {
+T2V: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText',
+I2V_SINGLE: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage',
+I2V_DUAL: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage',
+R2V: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages',
+STATUS: 'https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus',
+UPSCALE_VIDEO: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo',
+UPLOAD: 'https://aisandbox-pa.googleapis.com/v1:uploadUserImage',
+UPSCALE_IMAGE: 'https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage',
+};
+let endpointUrl;
+if (msg.endpoint === 'T2I') {
+const projectId = msg.payload?.body?.clientContext?.projectId || '';
+if (!projectId) {
+wsSend({
+action: 'submit_prompt_result',
+requestId: msg.requestId,
+success: false,
+error: 'T2I requires projectId in clientContext',
+});
+return;
+}
+endpointUrl = `https://aisandbox-pa.googleapis.com/v1/projects/${projectId}/flowMedia:batchGenerateImages`;
+} else {
+endpointUrl = ENDPOINTS[msg.endpoint] || msg.endpointUrl;
+}
+if (!endpointUrl) {
+wsSend({
+action: 'submit_prompt_result',
+requestId: msg.requestId,
+success: false,
+error: `Unknown endpoint: ${msg.endpoint}`,
+});
+return;
+}
+const scriptPromise = chrome.scripting.executeScript({
+target: { tabId },
+world: 'MAIN',
+func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey) => {
+let siteKey = null;
+if (needsRecaptcha) {
+for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+const m = s.src.match(/render=([^&]+)/);
+if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
+}
+if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
+for (const id in ___grecaptcha_cfg.clients) {
+const client = ___grecaptcha_cfg.clients[id];
+for (const key in client) {
+const obj = client[key];
+if (obj && typeof obj === 'object') {
+for (const k2 in obj) {
+const v = obj[k2];
+if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
+}
+}
+if (siteKey) break;
+}
+if (siteKey) break;
+}
+}
+if (!siteKey) {
+return { success: false, error: 'Could not extract reCAPTCHA site key' };
+}
+}
+let recaptchaToken = null;
+if (needsRecaptcha) {
+try {
+const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
+const rcAction = imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
+const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
+const rcTimeout = new Promise((_, reject) =>
+setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
+);
+recaptchaToken = await Promise.race([rcPromise, rcTimeout]);
+if (!recaptchaToken || recaptchaToken.length < 1000) {
+return {
+success: false,
+error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1000)`,
+tokenLength: recaptchaToken ? recaptchaToken.length : 0,
+};
+}
+} catch (err) {
+return { success: false, error: `reCAPTCHA execute failed: ${err.message}` };
+}
+}
+const body = payload.body || {};
+if (needsRecaptcha && recaptchaToken) {
+const rcCtx = {
+token: recaptchaToken,
+applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+};
+if (!body.clientContext) body.clientContext = {};
+body.clientContext.recaptchaContext = rcCtx;
+if (Array.isArray(body.requests)) {
+for (const req of body.requests) {
+if (req.clientContext) {
+req.clientContext.recaptchaContext = rcCtx;
+}
+}
+}
+}
+let authHeaderValue = (cachedAccessToken && cachedAccessToken.startsWith('Bearer ')) ? cachedAccessToken : null;
+if (!authHeaderValue) {
+const nextDataEl = document.getElementById('__NEXT_DATA__');
+if (nextDataEl) {
+try {
+const data = JSON.parse(nextDataEl.textContent);
+const props = data?.props?.pageProps || {};
+const session = props.session || {};
+let token = session.access_token || session.accessToken;
+if (!token) {
+const user = props.user || {};
+token = user.accessToken;
+}
+if (token) {
+authHeaderValue = `Bearer ${token}`;
+}
+} catch (e) {  }
 }
 }
 const headers = { 'Content-Type': 'text/plain;charset=UTF-8' };

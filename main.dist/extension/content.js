@@ -396,13 +396,16 @@ const payload = ${JSON.stringify(payload)};
 const needsRecaptcha = ${JSON.stringify(needsRecaptcha)};
 const endpointKey = ${JSON.stringify(endpointKey)};
 try {
+// ── Step 1: reCAPTCHA token ──────────────────────────────
 let recaptchaToken = null;
 if (needsRecaptcha) {
 let siteKey = null;
+// Extract from script tags
 for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
 const m = s.src.match(/render=([^&]+)/);
 if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
 }
+// Fallback: from grecaptcha config
 if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
 for (const id in ___grecaptcha_cfg.clients) {
 const client = ___grecaptcha_cfg.clients[id];
@@ -426,12 +429,14 @@ success: false, error: 'Could not extract reCAPTCHA site key'
 return;
 }
 try {
+// HAR verified: T2I uses IMAGE_GENERATION, video endpoints use VIDEO_GENERATION
 const rcAction = (endpointKey === 'T2I') ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
 const recaptchaPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
 const recaptchaTimeout = new Promise((_, reject) =>
 setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
 );
 recaptchaToken = await Promise.race([recaptchaPromise, recaptchaTimeout]);
+// HAR verified: valid tokens are 1742-2169 chars
 if (!recaptchaToken || recaptchaToken.length < 1000) {
 window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
 success: false,
@@ -447,6 +452,7 @@ success: false, error: 'reCAPTCHA execute failed: ' + err.message
 return;
 }
 }
+// ── Step 2: Build body ───────────────────────────────────
 const body = payload.body || {};
 if (needsRecaptcha && recaptchaToken) {
 if (!body.clientContext) body.clientContext = {};
@@ -455,6 +461,7 @@ token: recaptchaToken,
 applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
 };
 }
+// ── Step 3: Access token ─────────────────────────────────
 let accessToken = null;
 const nextDataEl = document.getElementById('__NEXT_DATA__');
 if (nextDataEl) {
@@ -467,8 +474,9 @@ if (!accessToken) {
 const user = props.user || {};
 accessToken = user.accessToken;
 }
-} catch (e) {  }
+} catch (e) { /* ignore */ }
 }
+// ── Step 4: Fetch from page context ──────────────────────
 const headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
 if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
 const controller = new AbortController();
