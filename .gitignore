@@ -1,0 +1,11 @@
+# Exclude compiled binaries (too large for git, distributed via GitHub Releases)
+main.dist/
+main.build/
+*.dist/
+*.build/
+
+# Build artifacts
+nuitka-crash-report.xml
+
+# Zip files
+*.zip
