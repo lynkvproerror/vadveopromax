@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VEO Pro Max Bridge",
-  "version": "2.2.2",
+  "version": "2.2.4",
   "description": "Bridges VEO web tokens and headers to VEO Pro Max app via WebSocket",
   "permissions": [
     "webRequest",
