@@ -596,7 +596,7 @@ class VEOApiClient:
             "clientContext": self._build_client_context(
                 recaptcha_token="",
                 project_id=project_id,
-                paygate_tier="",  # HAR: no userPaygateTier for image upscale
+                paygate_tier=paygate_tier,  # HAR: userPaygateTier REQUIRED
                 include_recaptcha=False,
             ),
         }

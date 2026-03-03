@@ -2463,6 +2463,33 @@ class Engine:
                     continue
                 worker_count = 1
                 
+                # ★ T2I first-success gate: BEFORE picking any task
+                # Wait here (no pick-requeue noise) until first T2I succeeds
+                if hasattr(self, '_t2i_first_success'):
+                    _fs_ev = self._t2i_first_success.get(account.email)
+                    _fs_cnt = self._t2i_active_count.get(account.email, 0)
+                    if _fs_ev and not _fs_ev.is_set() and _fs_cnt >= 1:
+                        account.release_workers(worker_count)
+                        worker_count = 0
+                        try:
+                            await asyncio.wait_for(
+                                _fs_ev.wait(), timeout=10.0
+                            )
+                        except asyncio.TimeoutError:
+                            pass
+                        continue
+                
+                # ★ T2I pipeline window gate: BEFORE picking any task
+                # Wait here when window is full — no pick/requeue thrashing
+                if hasattr(self, '_t2i_active_count'):
+                    _pw_cnt = self._t2i_active_count.get(account.email, 0)
+                    _pw_max = getattr(self, '_t2i_pipeline_window', {}).get(account.email, 3)
+                    if _pw_cnt >= _pw_max:
+                        account.release_workers(worker_count)
+                        worker_count = 0
+                        await asyncio.sleep(3.0)
+                        continue
+                
                 # H4 fix: Check account cooldown BEFORE wasting reCAPTCHA tokens
                 if self.is_account_on_cooldown(account.email):
                     account.release_workers(worker_count)
@@ -2749,6 +2776,98 @@ class Engine:
                     # ★ Pre-warm: detect idle and trigger soft recovery BEFORE first attempt
                     # This prevents 403 cascade — cheaper than recovering after failure
                     await self._maybe_prewarm(account)
+                    
+                    # ═══ T2I/I2I FIRE-AND-FORGET DISPATCH ═══
+                    # T2I API is synchronous (~30-60s per submit).
+                    # Two gates before fire-and-forget:
+                    #   Gate 1: First-success — only 1 task until first HTTP 200
+                    #           (proves xcd/reCAPTCHA/auth working)
+                    #   Gate 2: Pipeline window — max 5 active tasks per account
+                    #           (3-stage overlap: submit + download + upscale)
+                    _wt_dispatch = (task.workflow_type or "").upper()
+                    if _wt_dispatch in ("T2I", "I2I"):
+                        # Initialize per-account gates (once)
+                        if not hasattr(self, '_t2i_first_success'):
+                            self._t2i_first_success = {}  # email → Event
+                        if not hasattr(self, '_t2i_active_count'):
+                            self._t2i_active_count = {}   # email → int
+                        if not hasattr(self, '_t2i_pipeline_semaphores'):
+                            self._t2i_pipeline_semaphores = {}
+                        if not hasattr(self, '_t2i_pipeline_window'):
+                            self._t2i_pipeline_window = {}  # email → int
+                        
+                        email = account.email
+                        if email not in self._t2i_first_success:
+                            self._t2i_first_success[email] = asyncio.Event()
+                        if email not in self._t2i_active_count:
+                            self._t2i_active_count[email] = 0
+                        
+                        # ★ Dynamic window based on download quality
+                        # 4K/2K: window=2 (1 submit + 1 upscale overlap)
+                        # 1K: window = max_workers / output_count (blast)
+                        if email not in self._t2i_pipeline_window:
+                            _dq = (getattr(task, 'download_quality', '1K') or '1K').upper()
+                            _oc = getattr(task, 'output_count', 4) or 4
+                            if _dq in ('4K', '2K'):
+                                self._t2i_pipeline_window[email] = 2
+                            else:
+                                self._t2i_pipeline_window[email] = max(
+                                    2, account.max_workers // _oc
+                                )
+                            log.info(
+                                f"[T2I-Window:{email}] Dynamic window = "
+                                f"{self._t2i_pipeline_window[email]} "
+                                f"(quality={_dq}, output_count={_oc}, "
+                                f"max_workers={account.max_workers})"
+                            )
+                        
+                        _win = self._t2i_pipeline_window[email]
+                        if email not in self._t2i_pipeline_semaphores:
+                            self._t2i_pipeline_semaphores[email] = asyncio.Semaphore(_win)
+                        
+                        first_success = self._t2i_first_success[email]
+                        pipeline_sem = self._t2i_pipeline_semaphores[email]
+                        
+                        # Gate 1 is now checked BEFORE task pick (L2465)
+                        # Gate 2 is now checked BEFORE task pick (L2482)
+                        # No pick-requeue loops — foremen await cleanly
+                        
+                        # Safety fallback: if somehow task slipped past pre-pick gate
+                        if self._t2i_active_count[email] >= _win:
+                            self._dispatcher.requeue_task(task)
+                            account.release_workers(worker_count)
+                            worker_count = 0
+                            await asyncio.sleep(3.0)
+                            continue
+                        
+                        # ★ Increment counter BEFORE dispatch (sync — no race)
+                        self._t2i_active_count[email] += 1
+                        
+                        log.info(
+                            f"[Foreman:{email}] Task {task.id}: "
+                            f"🔥 T2I fire-and-forget dispatch "
+                            f"({worker_count} workers, "
+                            f"active={self._t2i_active_count[email]}/{_win})"
+                        )
+                        self._dispatcher.update_progress(
+                            task.id, 10,
+                            f"⏳ Queued for submit"
+                        )
+                        t = asyncio.create_task(
+                            self._run_t2i_with_pipeline_window(
+                                task=task,
+                                account=account,
+                                worker_count=worker_count,
+                                supervisor=supervisor,
+                                max_retries=max_retries,
+                                timeout=timeout,
+                                pipeline_sem=pipeline_sem,
+                            )
+                        )
+                        active_pipelines.add(t)
+                        t.add_done_callback(active_pipelines.discard)
+                        worker_count = 0  # Ownership transferred to background
+                        continue  # ← Foreman immediately picks next task
                     
                     for attempt in range(max_retries + 1):
                         # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
@@ -3926,13 +4045,421 @@ class Engine:
         # (L2909-3011 handles GENERATED, DOWNLOADED_720, UPSCALING, UPSCALED)
         await self._poll_operation(task, account)
 
+    # ═══════════════════════════════════════════════════════════════
+    # T2I PIPELINE WINDOW WRAPPER
+    # ═══════════════════════════════════════════════════════════════
+    async def _run_t2i_with_pipeline_window(
+        self, task: Task, account: AccountManager,
+        worker_count: int, supervisor=None,
+        max_retries: int = 10, timeout: int = 120,
+        pipeline_sem: asyncio.Semaphore = None,
+    ):
+        """Gate T2I pipeline with window semaphore for accurate UI.
+        
+        Wraps the ENTIRE pipeline (submit+download+upscale) in a semaphore.
+        When task exits all 3 stages, semaphore releases → next task enters.
+        Window=5 allows 3-stage overlap: 1 submitting + 1-2 downloading + 1-2 upscaling.
+        """
+        try:
+            if pipeline_sem:
+                async with pipeline_sem:
+                    await self._run_t2i_submit_pipeline_bg(
+                        task, account, worker_count, supervisor,
+                        max_retries, timeout,
+                    )
+            else:
+                # Fallback: no window (legacy behavior)
+                await self._run_t2i_submit_pipeline_bg(
+                    task, account, worker_count, supervisor,
+                    max_retries, timeout,
+                )
+        finally:
+            # ★ Decrement active count — releases window slot
+            if hasattr(self, '_t2i_active_count'):
+                email = account.email
+                if email in self._t2i_active_count:
+                    self._t2i_active_count[email] = max(
+                        0, self._t2i_active_count[email] - 1
+                    )
+                    log.debug(
+                        f"[T2I-Window:{email}] Task {task.id} exited — "
+                        f"active={self._t2i_active_count[email]}/"
+                        f"{getattr(self, '_t2i_pipeline_window', {}).get(email, '?')}"
+                    )
+    
+    # ═══════════════════════════════════════════════════════════════
+    # T2I FIRE-AND-FORGET SUBMIT PIPELINE
+    # ═══════════════════════════════════════════════════════════════
+    async def _run_t2i_submit_pipeline_bg(
+        self, task: Task, account: AccountManager,
+        worker_count: int, supervisor=None,
+        max_retries: int = 10, timeout: int = 120,
+    ):
+        """Background T2I submit pipeline — decoupled from foreman.
+        
+        Encapsulates the ENTIRE T2I lifecycle:
+        1. Rate lock + burst delay (same anti-detect as foreman)
+        2. Submit via extension bridge (30-60s synchronous API)
+        3. Parse response → extract fife_urls + media_ids 
+        4. Download 1K images → complete task
+        5. Enqueue UpscaleQueue for 4K upscale (if needed)
+        
+        This runs as asyncio.create_task() — foreman is free immediately.
+        Mirrors how video uses _foreman_dispatch_workers.
+        """
+        import time
+        from core.remedy_registry import execute_recovery
+        
+        try:
+            _submit_output_uris = None
+            _submit_media_ids = None
+            
+            for attempt in range(max_retries + 1):
+                if self._stop_event.is_set():
+                    break
+                
+                # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
+                if attempt > 0:
+                    await self.wait_for_cooldown(account.email)
+                    await self._wait_for_circuit(account.email)
+                    await self.wait_for_cooldown(account.email)
+                    
+                    rc_ok = await self._wait_for_recaptcha_ready(
+                        account, max_wait=30.0
+                    )
+                    if not rc_ok:
+                        log.warning(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"reCAPTCHA NOT ready (attempt {attempt+1}) — requeuing"
+                        )
+                        self._dispatcher.requeue_task(task)
+                        account.release_workers(worker_count)
+                        worker_count = 0
+                        return
+                
+                # ═══ Sequential submit (under rate lock — matches video pipeline) ═══
+                # Background tasks queue on rate lock, process one at a time.
+                # Anti-detect spacing between submits (burst delay).
+                # Foreman is free (fire-and-forget) — only background tasks wait here.
+                async with self._account_rate_locks[account.email]:
+                    # Cooldown check inside rate lock
+                    if self.is_account_on_cooldown(account.email):
+                        log.info(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"cooldown inside rate lock — requeuing"
+                        )
+                        self._dispatcher.requeue_task(task)
+                        account.release_workers(worker_count)
+                        worker_count = 0
+                        return
+                    
+                    # Global cross-account submit gate
+                    async with self._global_submit_lock:
+                        now = time.time()
+                        elapsed = now - self._global_last_submit_ts
+                        gap = self._GLOBAL_MIN_SUBMIT_GAP
+                        if elapsed < gap:
+                            await asyncio.sleep(gap - elapsed)
+                        if self.is_account_on_cooldown(account.email):
+                            self._dispatcher.requeue_task(task)
+                            account.release_workers(worker_count)
+                            worker_count = 0
+                            return
+                        self._global_last_submit_ts = time.time()
+                    
+                    # Anti-detect burst delay
+                    _settings = self._settings
+                    if getattr(_settings, 'anti_detect_enabled', True) if _settings else True:
+                        _prog_15 = max(15, task.progress or 0) if attempt > 0 else 15
+                        self._dispatcher.update_progress(
+                            task.id, _prog_15,
+                            f"⏳ Waiting ({self._burst_controller.get_delay(account.email):.0f}s)"
+                        )
+                        log.info(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"adaptive delay → submit attempt {attempt+1}/{max_retries+1}"
+                        )
+                        await self._burst_controller.wait(account.email)
+                    
+                    # T2I submit (30-60s synchronous — under rate lock for sequential)
+                    try:
+                        # ── XCD pre-check (first attempt only) ──
+                        # Extension's webRequest only captures xcd when tab makes
+                        # requests. If tab is idle, xcd stays at 8 chars forever.
+                        # Fix: trigger lightweight_refresh → extension fires fetch()
+                        # → Chrome injects real x-client-data → webRequest captures it.
+                        _xcd_proven = getattr(self, '_t2i_xcd_proven', {}).get(account.email, False)
+                        if attempt == 0 and not _xcd_proven:
+                            from config.constants import MIN_VALID_XCD
+                            hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
+                            xcd_val = hdrs.get('x-client-data', '') or ''
+                            if len(xcd_val) < MIN_VALID_XCD:
+                                # Trigger header refresh to wake Chrome Variations
+                                ext_bridge = getattr(account, 'extension_bridge', None)
+                                if ext_bridge and ext_bridge.is_connected(account.email):
+                                    log.info(
+                                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                                        f"xcd={len(xcd_val)} chars — triggering header refresh"
+                                    )
+                                    try:
+                                        await ext_bridge.refresh_headers_lightweight(account.email, timeout=5.0)
+                                        await asyncio.sleep(2.0)  # wait for headers_update callback
+                                        # Also probe for x-browser-validation
+                                        await ext_bridge.probe_browser_headers(account.email, timeout=5.0)
+                                        await asyncio.sleep(1.0)
+                                    except Exception as _e:
+                                        log.debug(f"[T2I-BG:{account.email}] header refresh error: {_e}")
+                                
+                                # Poll for up to 10s after refresh
+                                for _xcd_wait in range(10):
+                                    hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
+                                    xcd_val = hdrs.get('x-client-data', '') or ''
+                                    if len(xcd_val) >= MIN_VALID_XCD:
+                                        log.info(
+                                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                                            f"xcd ready after refresh ({len(xcd_val)} chars)"
+                                        )
+                                        break
+                                    await asyncio.sleep(1.0)
+                                else:
+                                    hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
+                                    xcd_val = hdrs.get('x-client-data', '') or ''
+                                    if len(xcd_val) < MIN_VALID_XCD:
+                                        log.warning(
+                                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                                            f"x-client-data still {len(xcd_val)} chars after refresh+10s — skipping to retry"
+                                        )
+                                        continue  # retry with next attempt
+                        
+                        ext_bridge = getattr(account, 'extension_bridge', None)
+                        if not ext_bridge or not ext_bridge.is_connected(account.email):
+                            log.warning(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"extension not connected — retrying..."
+                            )
+                            continue
+                        
+                        _wt_sub = (task.workflow_type or "").upper()
+                        self._dispatcher.update_progress(
+                            task.id, 20,
+                            f"🔧 Preparing {_wt_sub} submit"
+                        )
+                        self._dispatcher.update_progress(
+                            task.id, 30,
+                            f"🎨 Submitting {_wt_sub}..."
+                        )
+                        
+                        endpoint_key, body = self._api_client.build_request_body(
+                            workflow_type=task.workflow_type,
+                            prompt=task.prompt or "",
+                            project_id=account.project_id or "",
+                            aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
+                            model=task.model or "imagen_3_5",
+                            output_count=task.output_count or 4,
+                            seed=task.seed,
+                            paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                            image_uris=task.image_uris,
+                        )
+                        
+                        log.info(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"📦 submitting {endpoint_key} ({task.output_count or 4} images)"
+                        )
+                        
+                        ext_result = await asyncio.wait_for(
+                            ext_bridge.submit_prompt(
+                                email=account.email,
+                                endpoint=endpoint_key,
+                                body=body,
+                                needs_recaptcha=True,
+                                timeout=timeout,
+                            ),
+                            timeout=timeout + 5,
+                        )
+                        
+                        # Parse response
+                        if ext_result and ext_result.get('success'):
+                            self._dispatcher.update_progress(
+                                task.id, 60,
+                                f"✅ {_wt_sub} response received"
+                            )
+                            self._dispatcher.update_progress(
+                                task.id, 70,
+                                f"📷 Parsing {task.output_count or 4} image(s)..."
+                            )
+                            data = ext_result.get('data', {})
+                            output_uris = []
+                            t2i_media_ids = []
+                            
+                            if 'media' in data:
+                                for item in data['media']:
+                                    gen_img = (item.get('image') or {}).get('generatedImage', {})
+                                    fife_url = gen_img.get('fifeUrl', '')
+                                    mid = item.get('mediaId', '') or item.get('name', '')
+                                    if fife_url:
+                                        output_uris.append(fife_url)
+                                        t2i_media_ids.append(mid)
+                                log.info(
+                                    f"[T2I-BG:{account.email}] "
+                                    f"[T2I-Parse] {len(output_uris)} image(s), "
+                                    f"mediaIds={[m[:20] for m in t2i_media_ids]}"
+                                )
+                            
+                            # Record success
+                            self._burst_controller.record_success(account.email)
+                            self.record_circuit_success(account.email)
+                            
+                            # ★ Signal first-success gate — unlocks all waiting foremen
+                            if hasattr(self, '_t2i_first_success'):
+                                ev = self._t2i_first_success.get(account.email)
+                                if ev and not ev.is_set():
+                                    ev.set()
+                                    log.info(
+                                        f"[T2I-BG:{account.email}] "
+                                        f"🎯 First T2I success — unlocking pipeline"
+                                    )
+                            # ★ Mark xcd as proven — skip pre-check for subsequent tasks
+                            if not hasattr(self, '_t2i_xcd_proven'):
+                                self._t2i_xcd_proven = {}
+                            self._t2i_xcd_proven[account.email] = True
+                            
+                            if output_uris:
+                                # Save results — download pipeline runs OUTSIDE rate lock
+                                _submit_output_uris = output_uris
+                                _submit_media_ids = t2i_media_ids
+                                break  # ← Exit retry loop + rate lock scope
+                            else:
+                                log.warning(
+                                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                                    f"0 output URIs in response"
+                                )
+                                self._dispatcher.complete_task(task.id, output_uris=[])
+                                return
+                        
+                        elif ext_result:
+                            error = ext_result.get('error', 'unknown')
+                            status_code = ext_result.get('status', 0)
+                            error_lower = (error or "").lower()
+                            
+                            log.warning(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"submit failed (attempt {attempt+1}): {error}"
+                            )
+                            
+                            if "403" in str(error) or "recaptcha" in error_lower:
+                                self._burst_controller.record_error(
+                                    account.email, status_code or 403
+                                )
+                                self.record_circuit_403(account.email)
+                                self.set_account_cooldown(
+                                    account.email, f"403/{error}"
+                                )
+                                
+                                ext_br = getattr(account, 'extension_bridge', None)
+                                recovery_ctx = {
+                                    "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
+                                }
+                                recovery_result = await execute_recovery(
+                                    account=account,
+                                    error_msg=error or "",
+                                    context=recovery_ctx,
+                                    ext_bridge=ext_br,
+                                    dispatcher=self._dispatcher,
+                                    credit_window=self._credit_window,
+                                    multi_account=self._account_manager,
+                                )
+                                
+                                if recovery_result.failover:
+                                    log.warning(
+                                        f"[T2I-BG:{account.email}] FAILOVER — requeuing"
+                                    )
+                                    self._dispatcher.requeue_task(task)
+                                    account.release_workers(worker_count)
+                                    worker_count = 0
+                                    return
+                                
+                                continue
+                            
+                            if attempt < max_retries:
+                                await asyncio.sleep(5)
+                                continue
+                        else:
+                            log.warning(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"no response from extension"
+                            )
+                            if attempt < max_retries:
+                                await asyncio.sleep(5)
+                                continue
+                    
+                    except asyncio.TimeoutError:
+                        log.warning(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"submit timeout (attempt {attempt+1})"
+                        )
+                        if attempt < max_retries:
+                            await asyncio.sleep(5)
+                            continue
+                    except Exception as e:
+                        log.error(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"submit error: {e}",
+                            exc_info=True,
+                        )
+                        if attempt < max_retries:
+                            await asyncio.sleep(5)
+                            continue
+            
+            # ═══ OUTSIDE rate lock: download + upscale pipeline ═══
+            # Rate lock is released — next T2I task starts burst delay now
+            if _submit_output_uris:
+                await self._run_t2i_pipeline_bg(
+                    task, account,
+                    _submit_output_uris, _submit_media_ids,
+                    worker_count,
+                )
+                worker_count = 0
+                return
+            
+            # All retries exhausted (no successful submit)
+            log.error(
+                f"[T2I-BG:{account.email}] Task {task.id}: "
+                f"all {max_retries+1} attempts exhausted — failing task"
+            )
+            self._dispatcher.fail_task(
+                task.id,
+                f"T2I submit failed after {max_retries+1} attempts"
+                )
+        
+        except Exception as e:
+            log.error(
+                f"[T2I-BG:{account.email}] Task {task.id}: "
+                f"pipeline error: {e}",
+                exc_info=True,
+            )
+            try:
+                self._dispatcher.fail_task(task.id, f"T2I pipeline error: {e}")
+            except Exception:
+                pass
+        
+        finally:
+            if worker_count > 0:
+                try:
+                    account.release_workers(worker_count)
+                except Exception:
+                    pass
 
     async def _run_t2i_pipeline_bg(
         self, task: Task, account: AccountManager,
         fife_urls: list, media_ids: list,
         worker_count: int,
     ):
-        """T2I pipeline: download 1K images → upscale to 4K → complete task.
+        """T2I pipeline: download 1K images → complete task → background upscale.
+        
+        Architecture (mirrors video pipeline):
+        1. Download 1K images → complete task (like video 720p download)
+        2. Release workers immediately (foreman unblocked)
+        3. Fire-and-forget background upscale (no rate lock, no global lock)
         
         Args:
             fife_urls: Remote FIFE URLs for generated images (1K resolution)
@@ -3950,7 +4477,6 @@ class Engine:
             )
             
             # Initialize video_outputs for T2I (mirrors video pipeline)
-            # Without this, thumbnail_path won't be stored on VideoOutputInfo
             if not task.video_outputs:
                 from core.dispatcher import VideoOutputInfo
                 for idx in range(total):
@@ -3989,7 +4515,7 @@ class Engine:
                 f"image(s) to 1K/"
             )
             
-            # === Stage 2: Upscale to 4K (if mediaIds available) ===
+            # === Stage 2: Check if upscale needed ===
             has_media_ids = any(mid for mid in media_ids)
             upscale_quality = getattr(task, 'download_quality', '1K') or '1K'
             should_upscale = (
@@ -4004,326 +4530,9 @@ class Engine:
                 f"media_ids={media_ids[:3]}"
             )
             
-            if should_upscale:
-                resolution_map = {
-                    '4K': 'UPSAMPLE_IMAGE_RESOLUTION_4K',
-                    '2K': 'UPSAMPLE_IMAGE_RESOLUTION_2K',
-                }
-                target_resolution = resolution_map.get(
-                    upscale_quality.upper(),
-                    'UPSAMPLE_IMAGE_RESOLUTION_4K'
-                )
-                
-                self._dispatcher.update_progress(
-                    task.id, 90,
-                    f"⬆️ Upscaling to {upscale_quality} ({total} images)"
-                )
-                
-                upscaled_paths = []
-                max_upscale_retries = 2  # P1 fix: retry up to 2 attempts
-                
-                for idx, (mid, local_1k) in enumerate(
-                    zip(media_ids, local_paths)
-                ):
-                    vo = task.video_outputs[idx] if idx < len(task.video_outputs) else None
-                    
-                    if not mid:
-                        log.warning(
-                            f"[T2I-Upscale] {idx+1}/{total}: no mediaId, "
-                            f"keeping 1K"
-                        )
-                        upscaled_paths.append(local_1k)
-                        if vo:
-                            vo.upscale_status = "skipped"
-                            vo.quality = "1K"
-                        continue
-                    
-                    # ── Retry loop for this image ──
-                    upscale_succeeded = False
-                    for attempt in range(max_upscale_retries):
-                        if self._stop_event.is_set():
-                            break
-                        
-                        try:
-                            log.info(
-                                f"[T2I-Upscale] {idx+1}/{total}: "
-                                f"upscaling mediaId={mid[:30]}... "
-                                f"→ {upscale_quality}"
-                                f"{f' (attempt {attempt+1})' if attempt > 0 else ''}"
-                            )
-                            
-                            # Mark as submitting (purple border)
-                            if vo:
-                                vo.upscale_status = "submitting"
-                            
-                            # P0 FIX: Event-based cooldown wait (replaces poll-based race condition)
-                            # Uses engine.wait_for_cooldown() which also keeps tab alive during wait
-                            if self.is_account_on_cooldown(account.email):
-                                log.info(
-                                    f"[T2I-Upscale] {idx+1}/{total}: "
-                                    f"account on cooldown, waiting..."
-                                )
-                                await self.wait_for_cooldown(account.email)
-                                if self._stop_event.is_set():
-                                    break
-                            
-                            # Rate-limit upscale requests
-                            if account.email not in self._account_rate_locks:
-                                self._account_rate_locks[account.email] = (
-                                    asyncio.Lock()
-                                )
-                            
-                            # Phase 6: Wait for supervisor clearance before submit
-                            supervisor = self._supervisors.get(account.email)
-                            if supervisor:
-                                await supervisor.wait_for_clearance()
-                                if supervisor.is_aborted:
-                                    log.warning(f"[T2I-Upscale] {idx+1}/{total}: supervisor aborted")
-                                    break
-                            
-                            async with self._account_rate_locks[account.email]:
-                                # P0 FIX: Re-check cooldown inside lock
-                                # (another task may have set cooldown while we waited for lock)
-                                if self.is_account_on_cooldown(account.email):
-                                    log.info(
-                                        f"[T2I-Upscale] {idx+1}/{total}: "
-                                        f"cooldown detected inside rate lock, waiting..."
-                                    )
-                                    await self.wait_for_cooldown(account.email)
-                                
-                                # ── RC2: Global cross-account submit gate ──
-                                async with self._global_submit_lock:
-                                    now = time.time()
-                                    elapsed = now - self._global_last_submit_ts
-                                    gap = self._GLOBAL_MIN_SUBMIT_GAP
-                                    if elapsed < gap:
-                                        wait_time = gap - elapsed
-                                        log.info(
-                                            f"[GlobalGate:{account.email}] Waiting {wait_time:.1f}s "
-                                            f"(global inter-submit spacing, upscale)"
-                                        )
-                                        await asyncio.sleep(wait_time)
-                                    self._global_last_submit_ts = time.time()
-                                
-                                # Anti-detect delay
-                                if (
-                                    getattr(self._settings, 'anti_detect_enabled', True)
-                                    if self._settings else True
-                                ):
-                                    await self._burst_controller.wait(account.email)
-                                
-                                # Submit via extension
-                                ext_bridge = getattr(
-                                    account, 'extension_bridge', None
-                                )
-                                if not ext_bridge or not ext_bridge.is_connected(
-                                    account.email
-                                ):
-                                    log.warning(
-                                        f"[T2I-Upscale] Extension not connected "
-                                        f"for {account.email}, keeping 1K"
-                                    )
-                                    upscaled_paths.append(local_1k)
-                                    if vo:
-                                        vo.upscale_status = "skipped"
-                                        vo.quality = "1K"
-                                    upscale_succeeded = True  # Skip retry
-                                    break
-                                
-                                upscale_body = (
-                                    self._api_client.build_upscale_image_body(
-                                        media_id=mid,
-                                        project_id=account.project_id or "",
-                                        target_resolution=target_resolution,
-                                        paygate_tier=(
-                                            account.paygate_tier
-                                            or "PAYGATE_TIER_TWO"
-                                        ),
-                                    )
-                                )
-                                
-                                timeout = getattr(
-                                    account, 'request_timeout', 120
-                                )
-                                ext_result = await asyncio.wait_for(
-                                    ext_bridge.submit_prompt(
-                                        email=account.email,
-                                        endpoint="UPSCALE_IMAGE",
-                                        body=upscale_body,
-                                        needs_recaptcha=True,
-                                        timeout=timeout,
-                                    ),
-                                    timeout=timeout + 5,
-                                )
-                            
-                            if ext_result and ext_result.get('success'):
-                                # P0 FIX: Record success to burst controller
-                                self._burst_controller.record_success(account.email)
-                                
-                                upscale_data = ext_result.get('data', {})
-                                encoded_image = upscale_data.get(
-                                    'encodedImage', ''
-                                )
-                                if encoded_image:
-                                    # Save upscaled image
-                                    from config.settings import get_settings
-                                    settings = get_settings()
-                                    output_folder = (
-                                        getattr(task, 'output_folder', '')
-                                        or settings.output_folder
-                                    )
-                                    project_name = (
-                                        getattr(task, 'project_name', '')
-                                        or "Untitled"
-                                    )
-                                    upscale_dir = (
-                                        Path(output_folder)
-                                        / project_name
-                                        / upscale_quality
-                                    )
-                                    upscale_dir.mkdir(
-                                        parents=True, exist_ok=True
-                                    )
-                                    
-                                    # Use same filename as 1K
-                                    upscale_path = (
-                                        upscale_dir
-                                        / Path(local_1k).name
-                                    )
-                                    img_bytes = base64.b64decode(
-                                        encoded_image
-                                    )
-                                    upscale_path.write_bytes(img_bytes)
-                                    
-                                    log.info(
-                                        f"[T2I-Upscale] {idx+1}/{total}: "
-                                        f"✅ {upscale_quality} saved "
-                                        f"({len(img_bytes)//1024}KB): "
-                                        f"{upscale_path.name}"
-                                    )
-                                    upscaled_paths.append(str(upscale_path))
-                                    # ✅ Update video_outputs — upscale success
-                                    if vo:
-                                        vo.file_upscaled = str(upscale_path)
-                                        vo.quality = upscale_quality
-                                        vo.upscale_status = "success"
-                                    upscale_succeeded = True
-                                    break  # Success — exit retry loop
-                                else:
-                                    log.warning(
-                                        f"[T2I-Upscale] {idx+1}/{total}: "
-                                        f"no encodedImage in response, "
-                                        f"keeping 1K"
-                                    )
-                                    upscaled_paths.append(local_1k)
-                                    if vo:
-                                        vo.upscale_status = "failed"
-                                        vo.upscale_error = "no encodedImage in response"
-                                        vo.quality = "1K"
-                                    upscale_succeeded = True  # Don't retry (server issue, not transient)
-                                    break
-                            else:
-                                # ── Submit failed — check error type ──
-                                error = (
-                                    ext_result.get('error', 'unknown')
-                                    if ext_result else 'no response'
-                                )
-                                error_lower = error.lower()
-                                status_code = (
-                                    ext_result.get('status', 0)
-                                    if ext_result else 0
-                                )
-                                is_403 = status_code == 403 or "403" in error_lower
-                                is_recaptcha = "recaptcha" in error_lower
-                                
-                                log.warning(
-                                    f"[T2I-Upscale] {idx+1}/{total}: "
-                                    f"failed (attempt {attempt+1}/{max_upscale_retries}): "
-                                    f"{error}"
-                                )
-                                
-                                # P0 FIX: Report 403/reCAPTCHA to supervisor
-                                if is_403 or is_recaptcha:
-                                    # Phase 6: Delegate to supervisor recovery
-                                    supervisor = self._supervisors.get(account.email)
-                                    if supervisor:
-                                        await supervisor.report_error(
-                                            "403",
-                                            f"T2I upscale 403 (img {idx+1}/{total}): {error}",
-                                        )
-                                        # Supervisor blocks → recovers → reopens gate
-                                        # wait_for_clearance at top of retry will block
-                                    else:
-                                        # Fallback: direct cooldown (no supervisor)
-                                        self.record_circuit_403(account.email)
-                                        self._burst_controller.record_error(
-                                            account.email, status_code or 403
-                                        )
-                                        if is_403:
-                                            self.set_account_cooldown(
-                                                account.email,
-                                                f"T2I upscale 403 (img {idx+1}/{total})"
-                                            )
-                                    
-                                    # P1 FIX: Recovery before retry
-                                    if attempt < max_upscale_retries - 1:
-                                        log.info(
-                                            f"[T2I-Upscale] {idx+1}/{total}: "
-                                            f"waiting recovery before retry..."
-                                        )
-                                        if not supervisor:
-                                            await self.wait_for_cooldown(account.email)
-                                        continue  # Retry
-                                
-                                # Non-403 error or last attempt
-                                if attempt >= max_upscale_retries - 1:
-                                    upscaled_paths.append(local_1k)
-                                    if vo:
-                                        vo.upscale_status = "failed"
-                                        vo.upscale_error = str(error)
-                                        vo.quality = "1K"
-                                    upscale_succeeded = True  # Mark as handled
-                        
-                        except asyncio.TimeoutError:
-                            log.warning(
-                                f"[T2I-Upscale] {idx+1}/{total}: timeout "
-                                f"(attempt {attempt+1}/{max_upscale_retries})"
-                            )
-                            if attempt >= max_upscale_retries - 1:
-                                upscaled_paths.append(local_1k)
-                                if vo:
-                                    vo.upscale_status = "failed"
-                                    vo.upscale_error = "timeout"
-                                    vo.quality = "1K"
-                                upscale_succeeded = True
-                        except Exception as e:
-                            log.warning(
-                                f"[T2I-Upscale] {idx+1}/{total}: "
-                                f"error ({e})"
-                                f"(attempt {attempt+1}/{max_upscale_retries})"
-                            )
-                            if attempt >= max_upscale_retries - 1:
-                                upscaled_paths.append(local_1k)
-                                if vo:
-                                    vo.upscale_status = "failed"
-                                    vo.upscale_error = str(e)
-                                    vo.quality = "1K"
-                                upscale_succeeded = True
-                    
-                    # Safety: if retry loop exhausted without appending
-                    if not upscale_succeeded:
-                        upscaled_paths.append(local_1k)
-                        if vo:
-                            vo.upscale_status = "failed"
-                            vo.upscale_error = "retry exhausted"
-                            vo.quality = "1K"
-                
-                # Use upscaled paths as final output
-                task.output_uris = upscaled_paths
-            else:
+            if not should_upscale:
                 # No upscale needed — 1K is final
                 task.output_uris = local_paths
-                # Update video_outputs quality to "1K"
                 for idx, vo in enumerate(task.video_outputs):
                     if vo.quality in ("pending", "720p"):
                         vo.quality = "1K"
@@ -4334,32 +4543,63 @@ class Engine:
                         f"download_quality={upscale_quality}, "
                         f"no upscale needed"
                     )
+                # Complete with 1K
+                self._dispatcher.update_progress(task.id, 100, "✅ Complete")
+                self._dispatcher.complete_task(
+                    task.id, output_uris=task.output_uris,
+                )
+                log.info(
+                    f"[T2I-Pipeline] Task {task.id}: ✅ DONE "
+                    f"({len(local_paths)} files, quality=1K)"
+                )
+                return
             
-            # === Stage 3: Complete task ===
-            # NOTE: dispatcher.complete_task() fires _on_task_completed internally
-            #       — do NOT call it again here or toast will fire twice
-            self._dispatcher.update_progress(task.id, 100, "✅ Complete")
-            self._dispatcher.complete_task(
-                task.id,
-                output_uris=task.output_uris,
+            # === Stage 2b: Complete task with 1K NOW (like video 720p) ===
+            # Workers released → foreman unblocked → can pick next task
+            task.output_uris = local_paths
+            self._dispatcher.update_progress(
+                task.id, 90,
+                f"⬆️ Upscaling to {upscale_quality} ({total} images)"
             )
-            
             log.info(
-                f"[T2I-Pipeline] Task {task.id}: ✅ DONE "
-                f"({len(task.output_uris)} files, "
-                f"quality={upscale_quality})"
+                f"[T2I-Pipeline] Task {task.id}: 1K download complete, "
+                f"enqueueing UpscaleQueue → {upscale_quality}"
             )
             
-            # P2 FIX: Log accurate quality breakdown
-            if should_upscale:
-                actual_4k = sum(1 for vo in task.video_outputs if vo.upscale_status == "success")
-                actual_1k = sum(1 for vo in task.video_outputs if vo.upscale_status in ("failed", "skipped"))
-                if actual_1k > 0:
-                    log.warning(
-                        f"[T2I-Pipeline] Task {task.id}: ⚠️ ACTUAL quality: "
-                        f"{actual_4k}/{total} upscaled to {upscale_quality}, "
-                        f"{actual_1k}/{total} kept at 1K"
+            # === Stage 3: Enqueue UpscaleQueue for image upscale ===
+            # Uses same infrastructure as video upscale (cooldown, reCAPTCHA, bridge)
+            from core.upscale_queue import UpscaleJob
+            upscale_queue = getattr(self, '_upscale_queue', None)
+            if upscale_queue:
+                upscale_job = UpscaleJob(
+                    task_id=task.id,
+                    account_email=account.email,
+                    media_ids=media_ids,
+                    output_uris=fife_urls,
+                    target_quality=upscale_quality,
+                    aspect_ratio=getattr(task, 'aspect_ratio', ''),
+                    job_type="image",
+                    local_paths=local_paths,
+                    upscale_quality=upscale_quality,
+                    original_account=account.email,
+                )
+                upscale_queue.enqueue(upscale_job)
+                log.info(
+                    f"[T2I-Pipeline] Task {task.id}: "
+                    f"enqueued {len(media_ids)} images to UpscaleQueue"
+                )
+            else:
+                # Fallback if upscale_queue not initialized
+                log.warning(
+                    f"[T2I-Pipeline] Task {task.id}: "
+                    f"UpscaleQueue not available, using legacy _t2i_upscale_bg"
+                )
+                asyncio.create_task(
+                    self._t2i_upscale_bg(
+                        task, account, media_ids, local_paths,
+                        upscale_quality, total,
                     )
+                )
         
         except asyncio.CancelledError:
             log.warning(
@@ -4380,6 +4620,376 @@ class Engine:
         finally:
             if worker_count > 0:
                 account.release_workers(worker_count)
+
+    async def _t2i_upscale_bg(
+        self, task: Task, account: AccountManager,
+        media_ids: list, local_paths: list,
+        upscale_quality: str, total: int,
+    ):
+        """Background T2I image upscale — fully decoupled from foreman.
+        
+        Architecture (mirrors video UpscaleQueue):
+        - No account_rate_locks (upsampleImage is a different API endpoint)
+        - No global_submit_lock (no cross-account contention needed)
+        - Per-account semaphore limits concurrent upscale requests to 2
+        - Each image upscale is fire-and-forget via asyncio.gather
+        
+        This eliminates the rate lock contention that previously caused
+        foreman to block while waiting for image upscales to complete.
+        """
+        from pathlib import Path
+        import base64
+        
+        resolution_map = {
+            '4K': 'UPSAMPLE_IMAGE_RESOLUTION_4K',
+            '2K': 'UPSAMPLE_IMAGE_RESOLUTION_2K',
+        }
+        target_resolution = resolution_map.get(
+            upscale_quality.upper(),
+            'UPSAMPLE_IMAGE_RESOLUTION_4K'
+        )
+        
+        # Per-account semaphore: limit concurrent upscale requests to 2
+        # (separate from foreman's rate locks — no contention)
+        if not hasattr(self, '_t2i_upscale_semaphores'):
+            self._t2i_upscale_semaphores = {}
+        if account.email not in self._t2i_upscale_semaphores:
+            self._t2i_upscale_semaphores[account.email] = asyncio.Semaphore(4)
+        sem = self._t2i_upscale_semaphores[account.email]
+        
+        max_upscale_retries = 3
+        
+        async def _upscale_one(idx: int, mid: str, local_1k: str):
+            """Upscale a single image with retry, protected by semaphore."""
+            vo = task.video_outputs[idx] if idx < len(task.video_outputs) else None
+            
+            if not mid:
+                log.warning(
+                    f"[T2I-Upscale] {idx+1}/{total}: no mediaId, keeping 1K"
+                )
+                if vo:
+                    vo.upscale_status = "skipped"
+                    vo.quality = "1K"
+                return local_1k
+            
+            for attempt in range(max_upscale_retries):
+                if self._stop_event.is_set():
+                    break
+                
+                try:
+                    async with sem:  # Limit concurrent upscale requests
+                        log.info(
+                            f"[T2I-Upscale] {idx+1}/{total}: "
+                            f"upscaling mediaId={mid[:30]}... → {upscale_quality}"
+                            f"{f' (attempt {attempt+1})' if attempt > 0 else ''}"
+                        )
+                        
+                        if vo:
+                            vo.upscale_status = "submitting"
+                        
+                        # Cooldown check (lightweight — no lock contention)
+                        if self.is_account_on_cooldown(account.email):
+                            log.info(
+                                f"[T2I-Upscale] {idx+1}/{total}: "
+                                f"account on cooldown, waiting..."
+                            )
+                            await self.wait_for_cooldown(account.email)
+                            if self._stop_event.is_set():
+                                break
+                        
+                        # Wait for extension bridge (may be reconnecting after app restart)
+                        ext_bridge = getattr(account, 'extension_bridge', None)
+                        if not ext_bridge or not ext_bridge.is_connected(account.email):
+                            # Auto-inject bridge from engine's global reference
+                            if not ext_bridge:
+                                global_bridge = getattr(self, '_extension_bridge', None)
+                                if global_bridge:
+                                    account.extension_bridge = global_bridge
+                                    ext_bridge = global_bridge
+                                    log.info(
+                                        f"[T2I-Upscale] {idx+1}/{total}: "
+                                        f"injected global extension bridge"
+                                    )
+                            
+                            # Wait up to 30s for bridge to reconnect
+                            if ext_bridge and not ext_bridge.is_connected(account.email):
+                                log.info(
+                                    f"[T2I-Upscale] {idx+1}/{total}: "
+                                    f"extension bridge not connected, waiting up to 30s..."
+                                )
+                                for _wait in range(15):
+                                    await asyncio.sleep(2.0)
+                                    if ext_bridge.is_connected(account.email):
+                                        log.info(
+                                            f"[T2I-Upscale] {idx+1}/{total}: "
+                                            f"extension bridge reconnected"
+                                        )
+                                        break
+                                else:
+                                    log.warning(
+                                        f"[T2I-Upscale] {idx+1}/{total}: "
+                                        f"extension bridge timeout, keeping 1K"
+                                    )
+                                    if vo:
+                                        vo.upscale_status = "skipped"
+                                        vo.quality = "1K"
+                                    return local_1k
+                            elif not ext_bridge:
+                                log.warning(
+                                    f"[T2I-Upscale] {idx+1}/{total}: "
+                                    f"no extension bridge available, keeping 1K"
+                                )
+                                if vo:
+                                    vo.upscale_status = "skipped"
+                                    vo.quality = "1K"
+                                return local_1k
+                        
+                        # Wait for reCAPTCHA readiness (prevents submit during page recovery)
+                        # Without this gate, upscale retries fire during soft recovery
+                        # → "Could not extract reCAPTCHA site key" → all attempts wasted
+                        try:
+                            if hasattr(ext_bridge, 'check_recaptcha_ready'):
+                                rc_ready = await asyncio.wait_for(
+                                    ext_bridge.check_recaptcha_ready(account.email),
+                                    timeout=10.0,
+                                )
+                                if not rc_ready:
+                                    log.info(
+                                        f"[T2I-Upscale] {idx+1}/{total}: "
+                                        f"reCAPTCHA not ready, waiting up to 30s..."
+                                    )
+                                    for _rc_wait in range(15):
+                                        await asyncio.sleep(2.0)
+                                        if self._stop_event.is_set():
+                                            break
+                                        try:
+                                            rc_ok = await asyncio.wait_for(
+                                                ext_bridge.check_recaptcha_ready(account.email),
+                                                timeout=5.0,
+                                            )
+                                            if rc_ok:
+                                                log.info(
+                                                    f"[T2I-Upscale] {idx+1}/{total}: "
+                                                    f"reCAPTCHA now ready"
+                                                )
+                                                break
+                                        except Exception:
+                                            pass
+                                    else:
+                                        log.warning(
+                                            f"[T2I-Upscale] {idx+1}/{total}: "
+                                            f"reCAPTCHA still not ready after 30s — "
+                                            f"attempting submit anyway"
+                                        )
+                        except asyncio.TimeoutError:
+                            log.warning(
+                                f"[T2I-Upscale] {idx+1}/{total}: "
+                                f"reCAPTCHA readiness check timed out, "
+                                f"waiting 10s for page recovery..."
+                            )
+                            await asyncio.sleep(10)
+                        except Exception as e:
+                            log.debug(
+                                f"[T2I-Upscale] {idx+1}/{total}: "
+                                f"reCAPTCHA check error: {e}"
+                            )
+                        
+                        upscale_body = self._api_client.build_upscale_image_body(
+                            media_id=mid,
+                            project_id=account.project_id or "",
+                            target_resolution=target_resolution,
+                            paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                        )
+                        
+                        timeout = getattr(account, 'request_timeout', 120)
+                        ext_result = await asyncio.wait_for(
+                            ext_bridge.submit_prompt(
+                                email=account.email,
+                                endpoint="UPSCALE_IMAGE",
+                                body=upscale_body,
+                                needs_recaptcha=True,
+                                timeout=timeout,
+                            ),
+                            timeout=timeout + 5,
+                        )
+                    
+                    if ext_result and ext_result.get('success'):
+                        self._burst_controller.record_success(account.email)
+                        
+                        upscale_data = ext_result.get('data', {})
+                        encoded_image = upscale_data.get('encodedImage', '')
+                        if encoded_image:
+                            # Save upscaled image
+                            from config.settings import get_settings
+                            settings = get_settings()
+                            output_folder = (
+                                getattr(task, 'output_folder', '')
+                                or settings.output_folder
+                            )
+                            project_name = (
+                                getattr(task, 'project_name', '') or "Untitled"
+                            )
+                            upscale_dir = (
+                                Path(output_folder) / project_name / upscale_quality
+                            )
+                            upscale_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            raw_name = Path(local_1k).name
+                            filename = raw_name.replace('_1K', f'_{upscale_quality}')
+                            upscale_path = upscale_dir / filename
+                            img_bytes = base64.b64decode(encoded_image)
+                            upscale_path.write_bytes(img_bytes)
+                            
+                            log.info(
+                                f"[T2I-Upscale] {idx+1}/{total}: "
+                                f"✅ {upscale_quality} saved "
+                                f"({len(img_bytes)//1024}KB): "
+                                f"{upscale_path.name}"
+                            )
+                            if vo:
+                                vo.file_upscaled = str(upscale_path)
+                                vo.quality = upscale_quality
+                                vo.upscale_status = "success"
+                            return str(upscale_path)
+                        else:
+                            log.warning(
+                                f"[T2I-Upscale] {idx+1}/{total}: "
+                                f"no encodedImage in response, keeping 1K"
+                            )
+                            if vo:
+                                vo.upscale_status = "failed"
+                                vo.upscale_error = "no encodedImage in response"
+                                vo.quality = "1K"
+                            return local_1k
+                    else:
+                        error = (
+                            ext_result.get('error', 'unknown')
+                            if ext_result else 'no response'
+                        )
+                        error_lower = error.lower()
+                        status_code = ext_result.get('status', 0) if ext_result else 0
+                        is_403 = status_code == 403 or "403" in error_lower
+                        
+                        log.warning(
+                            f"[T2I-Upscale] {idx+1}/{total}: "
+                            f"failed (attempt {attempt+1}/{max_upscale_retries}): "
+                            f"{error}"
+                        )
+                        
+                        if is_403:
+                            self._burst_controller.record_error(
+                                account.email, status_code or 403
+                            )
+                            self.set_account_cooldown(
+                                account.email,
+                                f"T2I upscale 403 (img {idx+1}/{total})"
+                            )
+                            if attempt < max_upscale_retries - 1:
+                                await self.wait_for_cooldown(account.email)
+                                continue
+                        
+                        if attempt >= max_upscale_retries - 1:
+                            if vo:
+                                vo.upscale_status = "failed"
+                                vo.upscale_error = str(error)
+                                vo.quality = "1K"
+                            return local_1k
+                        # Recovery delay before retry (reCAPTCHA key extraction may need time)
+                        log.info(
+                            f"[T2I-Upscale] {idx+1}/{total}: "
+                            f"waiting 10s before retry..."
+                        )
+                        await asyncio.sleep(10)
+                
+                except asyncio.TimeoutError:
+                    log.warning(
+                        f"[T2I-Upscale] {idx+1}/{total}: timeout "
+                        f"(attempt {attempt+1}/{max_upscale_retries})"
+                    )
+                    if attempt >= max_upscale_retries - 1:
+                        if vo:
+                            vo.upscale_status = "failed"
+                            vo.upscale_error = "timeout"
+                            vo.quality = "1K"
+                        return local_1k
+                    await asyncio.sleep(5)  # Brief delay before timeout retry
+                except Exception as e:
+                    log.warning(
+                        f"[T2I-Upscale] {idx+1}/{total}: "
+                        f"error ({e}) "
+                        f"(attempt {attempt+1}/{max_upscale_retries})"
+                    )
+                    if attempt >= max_upscale_retries - 1:
+                        if vo:
+                            vo.upscale_status = "failed"
+                            vo.upscale_error = str(e)
+                            vo.quality = "1K"
+                        return local_1k
+                    await asyncio.sleep(10)  # Recovery delay before retry
+            
+            # Safety fallback
+            if vo:
+                vo.upscale_status = "failed"
+                vo.upscale_error = "retry exhausted"
+                vo.quality = "1K"
+            return local_1k
+        
+        # === Launch all image upscales concurrently (limited by semaphore) ===
+        try:
+            upscale_tasks = [
+                _upscale_one(idx, mid, local_1k)
+                for idx, (mid, local_1k) in enumerate(zip(media_ids, local_paths))
+            ]
+            upscaled_paths = await asyncio.gather(*upscale_tasks)
+            
+            # Update task output_uris with upscaled paths
+            task.output_uris = list(upscaled_paths)
+            
+            # Log quality breakdown
+            actual_upscaled = sum(
+                1 for vo in task.video_outputs if vo.upscale_status == "success"
+            )
+            actual_1k = sum(
+                1 for vo in task.video_outputs
+                if vo.upscale_status in ("failed", "skipped")
+            )
+            
+            if actual_upscaled == total:
+                self._dispatcher.update_progress(
+                    task.id, 100,
+                    f"✅ {upscale_quality} ({total} images)"
+                )
+                log.info(
+                    f"[T2I-Upscale] Task {task.id}: ✅ ALL {total} images "
+                    f"upscaled to {upscale_quality}"
+                )
+            else:
+                self._dispatcher.update_progress(
+                    task.id, 100,
+                    f"⚠️ {actual_upscaled}/{total} → {upscale_quality}"
+                )
+                log.warning(
+                    f"[T2I-Upscale] Task {task.id}: ⚠️ PARTIAL: "
+                    f"{actual_upscaled}/{total} → {upscale_quality}, "
+                    f"{actual_1k}/{total} kept at 1K"
+                )
+            
+            # Trigger UI refresh for upscale completion
+            if self._on_task_completed:
+                try:
+                    self._on_task_completed(task)
+                except Exception:
+                    pass
+        
+        except asyncio.CancelledError:
+            log.warning(
+                f"[T2I-Upscale] Task {task.id} cancelled"
+            )
+        except Exception as e:
+            log.error(
+                f"[T2I-Upscale] Task {task.id} error: {e}",
+                exc_info=True,
+            )
     
     async def _poll_operation(self, task: Task, account: AccountManager):
         """Poll for async operation completion.

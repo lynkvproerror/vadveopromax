@@ -77,9 +77,9 @@ class TabLicense(QWidget):
         banner = self._create_trial_banner()
         layout.addWidget(banner)
         
-        # License activation
-        activation = self._create_activation_section()
-        layout.addWidget(activation)
+        # License activation (hidden for Lifetime users)
+        self._activation_widget = self._create_activation_section()
+        layout.addWidget(self._activation_widget)
         
         # Pricing tiers (stored for rebuild after activation)
         self._pricing_tiers_widget = self._create_pricing_tiers()
@@ -362,11 +362,32 @@ class TabLicense(QWidget):
                 status_btn.setFixedHeight(60)
                 status_btn.setContentsMargins(8, 0, 8, 0)
                 layout.addWidget(status_btn)
+            elif active_tier == "LIFETIME":
+                # Lifetime user: FREE tier is included
+                status_btn = QPushButton("✅ Đã bao gồm")
+                status_btn.setStyleSheet(
+                    f"background-color: {Theme.SURFACE1}; color: {Theme.SUBTEXT0}; "
+                    f"border-radius: 0px; font-weight: bold; font-size: 14px;"
+                )
+                status_btn.setEnabled(False)
+                status_btn.setFixedHeight(60)
+                status_btn.setContentsMargins(8, 0, 8, 0)
+                layout.addWidget(status_btn)
         elif tier_key != "FREE":
-            if active_tier == "LIFETIME" and tier_key == "LIFETIME":
-                # Already Lifetime → nothing more to buy
-                select_btn = QPushButton(t("license.current_plan"))
-                select_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; border-radius: 0px; font-weight: bold; font-size: 14px;")
+            if active_tier == "LIFETIME":
+                # Lifetime user: all tiers are included
+                if tier_key == "LIFETIME":
+                    select_btn = QPushButton("✅ " + t("license.current_plan"))
+                    select_btn.setStyleSheet(
+                        f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+                        f"border-radius: 0px; font-weight: bold; font-size: 14px;"
+                    )
+                else:
+                    select_btn = QPushButton("✅ Đã bao gồm")
+                    select_btn.setStyleSheet(
+                        f"background-color: {Theme.SURFACE1}; color: {Theme.SUBTEXT0}; "
+                        f"border-radius: 0px; font-weight: bold; font-size: 14px;"
+                    )
                 select_btn.setEnabled(False)
             elif active_tier:
                 # Has active license → can always buy more to stack time
@@ -400,13 +421,22 @@ class TabLicense(QWidget):
             self._refresh_data()
     
     def _get_active_tier(self) -> str:
-        """Get current active license tier code."""
+        """Get current active license tier code (mapped to pricing card keys)."""
         if not self.controller:
             return ""
         try:
             lc = self.controller._license_client
             if lc and lc._license_data:
-                return lc._license_data.get("tier", "")
+                raw_tier = lc._license_data.get("tier", "")
+                # Map stored tier codes → pricing card tier_keys
+                tier_map = {
+                    "LT": "LIFETIME",
+                    "1M": "1M",
+                    "3M": "3M",
+                    "6M": "6M",
+                    "1Y": "1Y",
+                }
+                return tier_map.get(raw_tier, raw_tier)
         except Exception:
             pass
         return ""
@@ -527,6 +557,14 @@ class TabLicense(QWidget):
         if not self.controller:
             return
         
+        # Hide activation section for Lifetime users
+        active_tier = self._get_active_tier()
+        try:
+            if hasattr(self, '_activation_widget'):
+                self._activation_widget.setVisible(active_tier != "LIFETIME")
+        except Exception:
+            pass
+        
         # Rebuild pricing cards (updates first-buy status + active tier buttons)
         try:
             parent_layout = self._pricing_tiers_widget.parentWidget().layout()
@@ -576,7 +614,7 @@ class TabLicense(QWidget):
                         self._expires_dt = None
                 
                 if role == Role.TESTER:
-                    self._set_banner("🧪 TESTER MODE", Theme.PURPLE)
+                    self._set_banner("🔑 ADMINISTRATOR", Theme.PURPLE)
                     self._countdown_timer.stop()
                 elif role == Role.PREMIUM:
                     tier_code = ls.get('tier', '') if ls else ''
@@ -603,7 +641,8 @@ class TabLicense(QWidget):
                 
                 # 3.6i: Role display
                 if perm:
-                    self._stat_labels.get("role", QLabel()).setText(perm.role.value.upper())
+                    _role_display = "ADMINISTRATOR" if perm.role == Role.TESTER else perm.role.value.upper()
+                    self._stat_labels.get("role", QLabel()).setText(_role_display)
                     
         except Exception:
             pass

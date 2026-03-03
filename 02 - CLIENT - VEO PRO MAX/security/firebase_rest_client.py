@@ -1181,6 +1181,97 @@ class FirebaseRESTClient:
             return response.status_code == 200
         except Exception:
             return False
+    
+    def sync_usage(self, machine_id: str, daily_count: int, total_generations: int,
+                   total_downloads: int, daily_date: str,
+                   tier: str = "", client_name: str = "") -> bool:
+        """
+        Sync usage stats to _usage/{MID} for ALL user types (trial + paid + tester).
+        
+        Anti-tamper:
+        - HMAC token in payload (server can verify authenticity)
+        - Server-side: only accepts count INCREASES (anti-rollback)
+        - Writes to both primary and backup DB
+        
+        Args:
+            machine_id: Client machine ID (document ID)
+            daily_count: Today's generation count
+            total_generations: Lifetime total generation count
+            total_downloads: Lifetime total download count
+            daily_date: Current date string (YYYY-MM-DD)
+            tier: License tier code (1M, 3M, 6M, 1Y, LT, TRIA)
+            client_name: Customer name
+            
+        Returns:
+            True if synced successfully
+        """
+        # Generate HMAC token for anti-tamper verification
+        request_token = self._generate_request_token(machine_id)
+        
+        payload = {
+            "fields": {
+                "machine_id": {"stringValue": machine_id},
+                "daily_count": {"integerValue": str(daily_count)},
+                "daily_date": {"stringValue": daily_date},
+                "total_generations": {"integerValue": str(total_generations)},
+                "total_downloads": {"integerValue": str(total_downloads)},
+                "last_sync_at": {"stringValue": datetime.now().isoformat()},
+                "tier": {"stringValue": tier},
+                "client_name": {"stringValue": client_name},
+                "_token": {"stringValue": request_token},
+            }
+        }
+        
+        # Write to primary
+        ok = self._patch_usage(machine_id, payload, "primary")
+        
+        # Replicate to backup (best-effort)
+        try:
+            self._patch_usage(machine_id, payload, "backup")
+        except Exception:
+            pass
+        
+        return ok
+    
+    def _patch_usage(self, machine_id: str, payload: dict, db_name: str = "primary") -> bool:
+        """PATCH _usage/{MID} on specified database."""
+        if db_name == "primary":
+            config = self.config.get_primary_config()
+        else:
+            config = self.config.get_backup_config()
+        
+        api_key = config.get("api_key")
+        project_id = config.get("project_id")
+        
+        if not api_key or not project_id:
+            return False
+        
+        base = _ConfigParts._get_api_base()
+        url = f"{base}/projects/{project_id}/databases/(default)/documents/_usage/{machine_id}"
+        
+        try:
+            response = self._session.patch(
+                url,
+                params={"key": api_key},
+                json=payload,
+                timeout=self.TIMEOUT,
+            )
+            return response.status_code == 200
+        except Exception:
+            return False
+    
+    def read_usage(self, machine_id: str) -> dict:
+        """Read usage stats from _usage/{MID}. Used for startup reconciliation."""
+        data = self._read_doc("_usage", machine_id, machine_id)
+        if not data:
+            return {}
+        return {
+            "daily_count": int(data.get("daily_count", 0)),
+            "daily_date": data.get("daily_date", ""),
+            "total_generations": int(data.get("total_generations", 0)),
+            "total_downloads": int(data.get("total_downloads", 0)),
+            "last_sync_at": data.get("last_sync_at", ""),
+        }
 
 # ============================================================
 # ADMIN: KEY ENCRYPTION UTILITY

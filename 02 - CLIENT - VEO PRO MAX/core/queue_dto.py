@@ -69,11 +69,16 @@ class TaskDTO:
     image_upload_status: str = ""
     download_quality: str = "720p"
     status_text: str = ""
+    started_at: Any = None   # datetime or ISO string
+    completed_at: Any = None # datetime or ISO string
     video_outputs: List[VideoSlotDTO] = field(default_factory=list)
     
     def to_dict(self) -> dict:
         d = asdict(self)
-        # video_outputs already converted by asdict recursively
+        # Serialize datetimes to ISO strings for JSON safety
+        for key in ('started_at', 'completed_at'):
+            if isinstance(d.get(key), datetime):
+                d[key] = d[key].isoformat()
         return d
 
 
@@ -93,6 +98,7 @@ class GroupDTO:
     aspect_ratio: str = ""
     output_count: int = 4
     created_at: Any = None  # datetime or str
+    elapsed_seconds: float = 0.0  # computed: total processing time for this group
     tasks: List[TaskDTO] = field(default_factory=list)
     
     def to_dict(self) -> dict:
@@ -110,6 +116,7 @@ class GroupDTO:
             "aspect_ratio": self.aspect_ratio,
             "output_count": self.output_count,
             "created_at": self.created_at,
+            "elapsed_seconds": self.elapsed_seconds,
             "tasks": [t.to_dict() for t in self.tasks],
         }
         return d

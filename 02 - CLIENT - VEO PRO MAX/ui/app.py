@@ -241,8 +241,8 @@ class MainWindow(QMainWindow):
         items = [
             ("network", "📶 --"),
             ("version", f"v{self._get_version()}"),
-            ("accounts", "🔄 0/0"),
-            ("workers", "⚙️ 0"),
+            ("accounts", "👤 0/0"),
+            ("workers", "👷 0"),
             ("queue", "📋 0/0"),
             ("cpu", "💻 CPU --%"),
             ("memory", "💾 0 MB"),
@@ -527,7 +527,7 @@ class MainWindow(QMainWindow):
     def update_account_status(self, active: int, total: int):
         """Update account status in status bar."""
         if "accounts" in self._status_widgets:
-            self._status_widgets["accounts"].setText(f"🔄 {active}/{total}")
+            self._status_widgets["accounts"].setText(f"👤 {active}/{total}")
     
     def update_license_status(self, status: str):
         """Update license status in status bar."""
@@ -543,7 +543,7 @@ class MainWindow(QMainWindow):
             if hasattr(self.controller, '_license_client'):
                 lc = self.controller._license_client
                 if hasattr(lc, 'can_see_dev_console') and lc.can_see_dev_console():
-                    self.update_license_status("Tester")
+                    self.update_license_status("Administrator")
                     self._license_countdown_timer.stop()
                     return
             
@@ -681,13 +681,43 @@ class MainWindow(QMainWindow):
         if not self.controller:
             return
         
+        # One-time safety: if runtime pool is empty but profiles exist, trigger sync
+        if not getattr(self, '_sync_triggered', False):
+            try:
+                acc = self.controller.get_account_summary()
+                if acc.get("total", 0) == 0:
+                    pc = getattr(self.controller, '_profiles_controller', None)
+                    if pc and hasattr(pc, 'get_all_profiles'):
+                        profiles = pc.get_all_profiles()
+                        if profiles:
+                            import logging
+                            logging.getLogger("veo.ui").info(
+                                f"[StatusBar] Runtime pool empty but {len(profiles)} profiles exist — triggering sync"
+                            )
+                            self.controller.sync_profiles_to_runtime()
+                self._sync_triggered = True
+            except Exception:
+                pass
+        
         # Accounts: ready / total
         try:
             acc = self.controller.get_account_summary()
             total = acc["total"]
             ready = acc["ready"]
+            
+            # Fallback: if runtime pool is empty, read from ProfilesController
+            if total == 0:
+                pc = getattr(self.controller, '_profiles_controller', None)
+                if pc and hasattr(pc, 'get_all_profiles'):
+                    try:
+                        profiles = pc.get_all_profiles()
+                        total = len(profiles)
+                        ready = sum(1 for p in profiles if p.get('is_ready', False))
+                    except Exception:
+                        pass
+            
             if "accounts" in self._status_widgets:
-                self._status_widgets["accounts"].setText(f"🔄 {ready}/{total}")
+                self._status_widgets["accounts"].setText(f"👤 {ready}/{total}")
                 if total == 0:
                     color = Theme.SUBTEXT0
                 elif ready == 0:
@@ -695,8 +725,9 @@ class MainWindow(QMainWindow):
                 else:
                     color = Theme.GREEN
                 self._status_widgets["accounts"].setStyleSheet(f"color: {color}; margin-right: 8px;")
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger("veo.ui").debug(f"[StatusBar] Accounts poll error: {e}")
         
         # Workers: active / max_foremen (from permissions)
         try:
@@ -713,11 +744,12 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             if "workers" in self._status_widgets:
-                self._status_widgets["workers"].setText(f"⚙️ {active}/{max_foremen}")
+                self._status_widgets["workers"].setText(f"👷 {active}/{max_foremen}")
                 color = Theme.GREEN if active > 0 else Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px;")
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger("veo.ui").debug(f"[StatusBar] Workers poll error: {e}")
         
         # Queue: completed / total prompts
         try:
@@ -800,7 +832,8 @@ class MainWindow(QMainWindow):
         
         try:
             from security.firebase_rest_client import FirebaseRESTClient
-            from config.logger import log
+            import logging
+            log = logging.getLogger('veo')
             client = FirebaseRESTClient()
             min_ver = str(client.get_config_value("min_client_version", "1.0.0"))
             current = self._get_version()
@@ -811,8 +844,8 @@ class MainWindow(QMainWindow):
             else:
                 log.debug(f"[VersionCheck] OK: {current} >= {min_ver}")
         except Exception as e:
-            from config.logger import log
-            log.debug(f"Min version check failed: {e}")
+            import logging
+            logging.getLogger('veo').debug(f"Min version check failed: {e}")
     
     def _show_version_block(self, current: str, minimum: str):
         """Show blocking dialog when app version is below minimum."""

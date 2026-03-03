@@ -232,7 +232,7 @@ class TabQueue(
                         widget.status_label.setText(f"♻️ RETRYING {retrying_count}/{total}")
                         widget.status_label.setStyleSheet(f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;")
                     else:
-                        widget.status_label.setText("✅ DONE")
+                        widget.status_label.setText("✅ COMPLETED")
                         widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
                     # Phase 2: Trigger completion glow
                     self._trigger_completion_glow(task_id)
@@ -603,6 +603,11 @@ class TabQueue(
         self.eta_label = QLabel("ETA: --:--")
         self.eta_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
         layout.addWidget(self.eta_label)
+        
+        self.total_time_label = QLabel("⏱ Total: --:--")
+        self.total_time_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        self.total_time_label.setToolTip("Total processing time across all groups")
+        layout.addWidget(self.total_time_label)
         
         return bar
     
@@ -977,6 +982,17 @@ class TabQueue(
         for tid in stale_tids:
             self._task_widgets.pop(tid, None)
             self._smooth_progress.pop(tid, None)
+        
+        # Update total elapsed time across all groups
+        total_elapsed = sum(g.get('elapsed_seconds', 0) for g in groups_data)
+        if total_elapsed > 0:
+            te = int(total_elapsed)
+            if te >= 3600:
+                self.total_time_label.setText(f"⏱ Total: {te // 3600}h {(te % 3600) // 60:02d}m")
+            else:
+                self.total_time_label.setText(f"⏱ Total: {te // 60:02d}:{te % 60:02d}")
+        else:
+            self.total_time_label.setText("⏱ Total: --:--")
     
     def _refresh_flat_items(self):
         """Fallback: refresh using flat item list (no groups)."""

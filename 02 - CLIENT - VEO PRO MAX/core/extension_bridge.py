@@ -361,7 +361,7 @@ class ExtensionBridge:
                     ping_interval=20,   # WebSocket-level ping every 20s
                     ping_timeout=10,    # Close if no pong within 10s
                     close_timeout=5,    # Clean close handshake timeout
-                    max_size=10 * 1024 * 1024,  # 10MB — upscale API returns ~1MB video data
+                    max_size=50 * 1024 * 1024,  # 50MB — 4K image upscale returns ~10-15MB base64
                 )
                 self._port = port
                 if port != self.FALLBACK_PORTS[0]:

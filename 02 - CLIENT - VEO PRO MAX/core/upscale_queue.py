@@ -178,13 +178,16 @@ class AdaptiveJobController:
 
 @dataclass
 class UpscaleJob:
-    """A pending upscale job, created when worker finishes 720p download."""
+    """A pending upscale job, created when worker finishes 720p/1K download."""
     task_id: str
     account_email: str
     media_ids: List[str]            # Base64 media IDs for upscale API
     output_uris: List[str]          # Original 720p fifeUrls (for logging)
     target_quality: str             # "1080p" or "4K"
     aspect_ratio: str
+    job_type: str = "video"         # "video" or "image"
+    local_paths: List[str] = field(default_factory=list)   # For image: 1K file paths
+    upscale_quality: str = "4K"     # Image upscale resolution key
     original_account: str = ""      # DD6: Who generated the video (for failover tracing)
     created_at: datetime = field(default_factory=datetime.now)
     retry_count: int = 0            # Job-level retry counter
@@ -293,6 +296,11 @@ class UpscaleQueue:
         # Per-account adaptive job concurrency (AIMD)
         self._job_controller = AdaptiveJobController()
         
+        # Per-account shared upscale API semaphore
+        # Serializes ALL upscale API calls across all jobs per account
+        # Prevents 429 cascade from concurrent upscale submissions
+        self._upscale_api_sems: Dict[str, asyncio.Semaphore] = {}
+        
         # Stats
         self._total_enqueued = 0
         self._total_completed = 0
@@ -305,6 +313,9 @@ class UpscaleQueue:
         # from submitting same media_id (happens during continuation when
         # multiple enqueue paths fire for same task)
         self._processing_ids: set = set()  # "task_id:media_id" strings
+        
+        # Counter for active image upscale jobs (bypass 720p_priority pause)
+        self._active_image_jobs: int = 0
     
     def start(self):
         """Mark queue as running."""
@@ -341,9 +352,10 @@ class UpscaleQueue:
             # Re-upscale: clear old dedup keys so job can be re-enqueued
             self._enqueued_ids -= set(dedup_keys)
         if all(k in self._enqueued_ids for k in dedup_keys) and dedup_keys:
+            _item_type = "images" if getattr(job, 'job_type', 'video') == 'image' else "videos"
             log.warning(
                 f"[UpscaleQueue] Skipped duplicate enqueue for task {job.task_id} "
-                f"({len(dedup_keys)} videos already queued)"
+                f"({len(dedup_keys)} {_item_type} already queued)"
             )
             return
         self._enqueued_ids.update(dedup_keys)
@@ -368,9 +380,10 @@ class UpscaleQueue:
             log.info(f"[UpscaleQueue] Started worker for {email}")
         
         source = "re-upscale" if force else "upscale"
+        _item_type = "images" if getattr(job, 'job_type', 'video') == 'image' else "videos"
         log.info(
             f"[UpscaleQueue] Enqueued {source} for task {job.task_id} "
-            f"({len(job.media_ids)} videos, {job.target_quality}) → {email}"
+            f"({len(job.media_ids)} {_item_type}, {job.target_quality}) → {email}"
         )
     
     def has_active_jobs(self, email: str) -> bool:
@@ -413,7 +426,18 @@ class UpscaleQueue:
                         log.info(f"[UpscaleQueue] {email}: ramp-up complete → normal concurrency")
                 
                 # Workload priority: pause if 720p_priority mode active
-                if self._should_wait():
+                # Skip pause when image upscale jobs are active or pending
+                _has_image_work = self._active_image_jobs > 0
+                if not _has_image_work:
+                    try:
+                        if not q.empty():
+                            _peek = q._queue[0]
+                            if getattr(_peek, 'job_type', 'video') == 'image':
+                                _has_image_work = True
+                    except Exception:
+                        pass
+                
+                if self._should_wait() and not _has_image_work:
                     if not _was_paused:
                         log.info(f"[UpscaleQueue] {email}: pausing — 720p_priority mode")
                         _was_paused = True
@@ -501,21 +525,21 @@ class UpscaleQueue:
         log.info(f"[UpscaleQueue] Worker {email} exiting")
     
     async def _process_job(self, job: UpscaleJob):
-        """Process a single upscale job with parallel polling.
+        """Process a single upscale job.
         
-        3-phase pipeline (submit-seq → poll-parallel → batch-download):
-        
-        Phase 1 — Sequential Submit (needs reCAPTCHA per video):
-          For each video: rate-lock → reCAPTCHA → submit → collect op_name
-          
-        Phase 2 — Parallel Poll (no reCAPTCHA needed):
-          All videos polled simultaneously via asyncio.gather
-          
-        Phase 3 — Batch Download:
-          Download all successfully upscaled videos
-        
-        Time savings: ~12min (sequential) → ~5min (parallel poll)
+        Dispatches to image or video processing based on job_type.
+        Image: synchronous (submit → decode → save)
+        Video: 3-phase pipeline (submit-seq → poll-parallel → batch-download)
         """
+        # Route image upscale to dedicated handler
+        if job.job_type == "image":
+            self._active_image_jobs += 1
+            try:
+                await self._process_image_upscale(job)
+            finally:
+                self._active_image_jobs = max(0, self._active_image_jobs - 1)
+            return
+        
         task = self._dispatcher.get_task(job.task_id)
         if not task:
             log.warning(f"[UpscaleQueue] Task {job.task_id} not found, skipping")
@@ -1336,6 +1360,277 @@ class UpscaleQueue:
             "parallel_polls": len(pending_ops),
         }, source="upscale_queue")
     
+    async def _process_image_upscale(self, job: UpscaleJob):
+        """Process image upscale job — synchronous API (no poll phase).
+        
+        For each image:
+        1. Submit upsampleImage API (synchronous — returns encodedImage inline)
+        2. Decode base64 → save to upscale_quality subfolder
+        
+        Uses same cooldown/reCAPTCHA/bridge infrastructure as video upscale.
+        """
+        import base64
+        from pathlib import Path
+        
+        task = self._dispatcher.get_task(job.task_id)
+        if not task:
+            log.warning(f"[UpscaleQ-Image] Task {job.task_id} not found")
+            self._total_failed += 1
+            return
+        
+        account = self._get_account(job.account_email)
+        if not account:
+            log.warning(f"[UpscaleQ-Image] Account {job.account_email} not found")
+            self._total_failed += 1
+            return
+        
+        # Auto-inject extension bridge
+        if not account.extension_bridge:
+            bridge = self._extension_bridge
+            if not bridge:
+                for acc in self._get_all_accounts():
+                    if acc.extension_bridge:
+                        bridge = acc.extension_bridge
+                        break
+            if bridge:
+                account.extension_bridge = bridge
+        
+        resolution_map = {
+            '4K': 'UPSAMPLE_IMAGE_RESOLUTION_4K',
+            '2K': 'UPSAMPLE_IMAGE_RESOLUTION_2K',
+        }
+        target_resolution = resolution_map.get(
+            job.upscale_quality.upper(),
+            'UPSAMPLE_IMAGE_RESOLUTION_4K'
+        )
+        
+        total = len(job.media_ids)
+        success_count = 0
+        max_retries = 3
+        # Shared per-account semaphore: 1 concurrent upscale API call
+        # Prevents 429 cascade (was: per-job Semaphore(4) → 12+ concurrent)
+        if job.account_email not in self._upscale_api_sems:
+            self._upscale_api_sems[job.account_email] = asyncio.Semaphore(1)
+        upscale_sem = self._upscale_api_sems[job.account_email]
+        
+        log.info(
+            f"[UpscaleQ-Image] Task {job.task_id}: "
+            f"{total} images → {job.upscale_quality}"
+        )
+        self._dispatcher.update_progress(
+            job.task_id, 92,
+            f"⬆️ Upscaling {total} image(s) to {job.upscale_quality}"
+        )
+        
+        async def _upscale_single(idx: int) -> bool:
+            """Upscale a single image with retry, protected by semaphore."""
+            mid = job.media_ids[idx] if idx < len(job.media_ids) else ""
+            local_1k = job.local_paths[idx] if idx < len(job.local_paths) else ""
+            vo = task.video_outputs[idx] if idx < len(task.video_outputs) else None
+            
+            if not mid:
+                log.warning(f"[UpscaleQ-Image] {idx+1}/{total}: no mediaId, skipping")
+                return False
+            
+            success = False
+            for attempt in range(max_retries):
+                if not self._running:
+                    break
+                
+                # Cooldown gate
+                if self._is_on_cooldown(job.account_email):
+                    log.info(
+                        f"[UpscaleQ-Image] {idx+1}/{total}: "
+                        f"cooldown, waiting..."
+                    )
+                    await self._wait_cooldown(job.account_email)
+                
+                # reCAPTCHA readiness gate
+                ext_bridge = getattr(account, 'extension_bridge', None)
+                if not ext_bridge or not ext_bridge.is_connected(account.email):
+                    log.warning(
+                        f"[UpscaleQ-Image] {idx+1}/{total}: "
+                        f"extension not connected, waiting 30s..."
+                    )
+                    for _w in range(15):
+                        await asyncio.sleep(2.0)
+                        ext_bridge = getattr(account, 'extension_bridge', None)
+                        if ext_bridge and ext_bridge.is_connected(account.email):
+                            break
+                    else:
+                        log.warning(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: "
+                            f"bridge timeout — skipping"
+                        )
+                        break
+                
+                try:
+                    log.info(
+                        f"[UpscaleQ-Image] {idx+1}/{total}: "
+                        f"upscaling mediaId={mid[:30]}... → {job.upscale_quality}"
+                        f"{f' (attempt {attempt+1})' if attempt > 0 else ''}"
+                    )
+                    
+                    if vo:
+                        vo.upscale_status = "submitting"
+                    
+                    upscale_body = self._api_client.build_upscale_image_body(
+                        media_id=mid,
+                        project_id=account.project_id or "",
+                        target_resolution=target_resolution,
+                        paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                    )
+                    
+                    ext_result = await asyncio.wait_for(
+                        ext_bridge.submit_prompt(
+                            email=account.email,
+                            endpoint="UPSCALE_IMAGE",
+                            body=upscale_body,
+                            needs_recaptcha=True,
+                            timeout=120,
+                        ),
+                        timeout=125,
+                    )
+                    
+                    if ext_result and ext_result.get('success'):
+                        data = ext_result.get('data', {})
+                        encoded_image = data.get('encodedImage', '')
+                        
+                        if encoded_image:
+                            # Save upscaled image
+                            output_folder = (
+                                getattr(task, 'output_folder', '') 
+                                or '.'
+                            )
+                            project_name = (
+                                getattr(task, 'project_name', '') or "Untitled"
+                            )
+                            upscale_dir = (
+                                Path(output_folder) / project_name / job.upscale_quality
+                            )
+                            upscale_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            # Replace _1K suffix with actual quality tag
+                            raw_name = Path(local_1k).name if local_1k else f"image_{idx+1}.png"
+                            filename = raw_name.replace('_1K', f'_{job.upscale_quality}')
+                            upscale_path = upscale_dir / filename
+                            img_bytes = base64.b64decode(encoded_image)
+                            upscale_path.write_bytes(img_bytes)
+                            
+                            log.info(
+                                f"[UpscaleQ-Image] {idx+1}/{total}: "
+                                f"✅ {job.upscale_quality} saved "
+                                f"({len(img_bytes)//1024}KB): "
+                                f"{upscale_path.name}"
+                            )
+                            if vo:
+                                vo.file_upscaled = str(upscale_path)
+                                vo.quality = job.upscale_quality
+                                vo.upscale_status = "success"
+                            success = True
+                            return True  # Success
+                        else:
+                            log.warning(
+                                f"[UpscaleQ-Image] {idx+1}/{total}: "
+                                f"no encodedImage in response"
+                            )
+                    else:
+                        error = (ext_result or {}).get('error', 'unknown')
+                        status_code = (ext_result or {}).get('status', 0)
+                        log.warning(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: "
+                            f"failed (attempt {attempt+1}/{max_retries}): {error}"
+                        )
+                        
+                        if status_code == 403 or "403" in str(error):
+                            # Do NOT call _set_cooldown() — same poisoning
+                            # issue as 429. Upscale errors must not block T2I.
+                            await asyncio.sleep(30)
+                        elif status_code == 429 or "429" in str(error) or "exhausted" in str(error).lower():
+                            # Exponential backoff for quota exhaustion
+                            # NOTE: Do NOT call _set_cooldown() here!
+                            # That sets ACCOUNT-LEVEL cooldown which blocks
+                            # ALL T2I submissions (not just upscale).
+                            # Use only local sleep for upscale-specific backoff.
+                            _backoff = min(30 * (2 ** attempt), 120)
+                            import random as _rng
+                            _jitter = _rng.uniform(0, _backoff * 0.3)
+                            log.info(
+                                f"[UpscaleQ-Image] {idx+1}/{total}: "
+                                f"429 backoff {_backoff+_jitter:.0f}s "
+                                f"(attempt {attempt+1}/{max_retries})"
+                            )
+                            await asyncio.sleep(_backoff + _jitter)
+                        else:
+                            await asyncio.sleep(10)
+                        continue
+                
+                except asyncio.TimeoutError:
+                    log.warning(
+                        f"[UpscaleQ-Image] {idx+1}/{total}: "
+                        f"timeout (attempt {attempt+1}/{max_retries})"
+                    )
+                    await asyncio.sleep(5)
+                    continue
+                except Exception as e:
+                    log.warning(
+                        f"[UpscaleQ-Image] {idx+1}/{total}: "
+                        f"error: {e} (attempt {attempt+1}/{max_retries})"
+                    )
+                    await asyncio.sleep(10)
+                    continue
+            
+            if not success and vo:
+                vo.upscale_status = "failed"
+                vo.quality = "1K"
+            return False
+        
+        # Launch all upscales concurrently (semaphore limits to 4)
+        # Anti-detect: stagger launch with random delays
+        import random
+        tasks_to_run = []
+        for idx in range(total):
+            async def _staggered_upscale(i=idx):
+                if i > 0:
+                    delay = random.uniform(2.0, 5.0)
+                    await asyncio.sleep(delay)
+                async with upscale_sem:
+                    return await _upscale_single(i)
+            tasks_to_run.append(_staggered_upscale())
+        
+        results = await asyncio.gather(*tasks_to_run, return_exceptions=True)
+        success_count = sum(1 for r in results if r is True)
+        
+        # Summary + update progress + complete task
+        if success_count > 0:
+            log.info(
+                f"[UpscaleQ-Image] Task {job.task_id}: "
+                f"✅ {success_count}/{total} → {job.upscale_quality}"
+            )
+            self._dispatcher.update_progress(
+                job.task_id, 100,
+                f"✅ {job.upscale_quality} complete ({success_count}/{total})"
+            )
+            self._dispatcher.complete_task(
+                job.task_id,
+                output_uris=task.output_uris if task else [],
+            )
+            self._total_completed += 1
+        else:
+            log.warning(
+                f"[UpscaleQ-Image] Task {job.task_id}: "
+                f"⚠️ 0/{total} upscaled"
+            )
+            self._dispatcher.update_progress(
+                job.task_id, 100,
+                f"⚠️ Upscale failed — 1K saved"
+            )
+            self._dispatcher.complete_task(
+                job.task_id,
+                output_uris=task.output_uris if task else [],
+            )
+            self._total_failed += 1
+
     def get_stats(self) -> dict:
         """Return queue stats for StatusAggregator."""
         pending = sum(q.qsize() for q in self._queues.values())

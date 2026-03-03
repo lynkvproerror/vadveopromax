@@ -83,16 +83,20 @@ class QueueGroupMixin:
         progress_label.setStyleSheet(f"color: {Theme.BLUE}; font-size: 11px; border: none;")
         h_layout.addWidget(progress_label)
         
-        mode_label = QLabel(f"{mode_icon} {group_data.get('mode', 'T2V')}")
-        mode_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
-        h_layout.addWidget(mode_label)
-        
-        model_raw = group_data.get('model', '')
-        model_short = model_raw.replace('veo_3_1_generate', 'Veo 3.1').replace('veo_3_0_generate', 'Veo 3.0').replace('_', ' ') if model_raw else ''
-        if model_short:
-            model_label = QLabel(model_short)
-            model_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
-            h_layout.addWidget(model_label)
+        # Elapsed timer — replaces mode/model labels
+        elapsed = group_data.get('elapsed_seconds', 0)
+        if elapsed > 0:
+            e_int = int(elapsed)
+            if e_int >= 3600:
+                timer_text = f"⏱ {e_int // 3600}h {(e_int % 3600) // 60:02d}m"
+            else:
+                timer_text = f"⏱ {e_int // 60:02d}:{e_int % 60:02d}"
+        else:
+            timer_text = "⏱ --:--"
+        timer_label = QLabel(timer_text)
+        timer_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
+        timer_label.setToolTip("Elapsed processing time for this group")
+        h_layout.addWidget(timer_label)
         
         # Header buttons
         for btn_text, btn_tip, btn_color, btn_connect in [
@@ -154,7 +158,8 @@ class QueueGroupMixin:
         self._group_widgets[gid] = {
             'container': container, 'header': header, 'content': content,
             'arrow': arrow, 'name_label': name_label,
-            'progress_label': progress_label, 'group_data': group_data,
+            'progress_label': progress_label, 'timer_label': timer_label,
+            'group_data': group_data,
         }
         
         def _header_click(event, _gid=gid):
@@ -178,6 +183,19 @@ class QueueGroupMixin:
         gw['progress_label'].setText(f"🔄 {completed}/{total} ({pct}%)")
         gw['name_label'].setText(f"📁 {group_data['name']}")
         gw['name_label'].setStyleSheet(self._name_label_style(pct))
+        
+        # Update elapsed timer
+        elapsed = group_data.get('elapsed_seconds', 0)
+        if elapsed > 0:
+            e_int = int(elapsed)
+            if e_int >= 3600:
+                timer_text = f"⏱ {e_int // 3600}h {(e_int % 3600) // 60:02d}m"
+            else:
+                timer_text = f"⏱ {e_int // 60:02d}:{e_int % 60:02d}"
+        else:
+            timer_text = "⏱ --:--"
+        if 'timer_label' in gw:
+            gw['timer_label'].setText(timer_text)
         
         status_color = Theme.BLUE if group_data['status'] == 'running' else (
             Theme.GREEN if group_data['status'] == 'completed' else Theme.SUBTEXT0
@@ -290,7 +308,7 @@ class QueueGroupMixin:
                     f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;"
                 )
             else:
-                widget.status_label.setText("✅ DONE")
+                widget.status_label.setText("✅ COMPLETED")
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;"
                 )
@@ -431,6 +449,23 @@ class QueueGroupMixin:
                         bc_name = video_outputs[i].get('border_color', '')
                         if bc_name:
                             slot._border_color_name = bc_name
+                    
+                    # Load thumbnail into slot if available but not yet loaded
+                    # This ensures _apply_thumb_effect can render upscale overlay
+                    has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
+                    if not has_pixmap:
+                        vi = video_outputs[i] if i < len(video_outputs) else None
+                        thumb_path = (vi.get('thumbnail_path', '') if vi else '') or (
+                            thumbnails[i] if i < len(thumbnails) else ''
+                        )
+                        if thumb_path:
+                            self._invalidate_file_cache(thumb_path)
+                            if self._cached_file_exists(thumb_path):
+                                pix = self._get_cached_pixmap(thumb_path, 40)
+                                if not pix.isNull():
+                                    slot.setPixmap(pix)
+                                    slot._original_pixmap = pix
+                    
                     self._apply_thumb_effect(slot, progress, status)
                 except RuntimeError:
                     continue

@@ -160,6 +160,23 @@ class QueueThumbnailMixin:
             self._register_shimmer_slot(slot)
             return slot
         
+        if status in ("failed", "cancelled"):
+            # Failed/cancelled — show clear indicator
+            indicator = '✕' if status == 'failed' else '—'
+            indicator_color = Theme.RED if status == 'failed' else Theme.SUBTEXT0
+            slot.setText(indicator)
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.SURFACE0};
+                    border: 2px solid {indicator_color};
+                    border-radius: 4px;
+                    color: {indicator_color};
+                    font-size: 14px;
+                    font-weight: bold;
+                }}
+            """)
+            return slot
+        
         # Default: pending/empty
         slot.setStyleSheet(f"""
             QLabel {{

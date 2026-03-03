@@ -875,7 +875,7 @@ async function handleAppMessage(msg) {
             const controller = new AbortController();
             // T2I is synchronous — server generates images before responding (~37s per HAR)
             // Video endpoints are async — return operation name immediately
-            const fetchTimeout = (endpointKey === 'T2I' || endpointKey === 'I2I') ? 90000 : 20000;
+            const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey) ? 90000 : 20000;
             const fetchTimer = setTimeout(() => controller.abort(), fetchTimeout);
             try {
               // Diagnostic: log what we're about to send
@@ -941,7 +941,7 @@ async function handleAppMessage(msg) {
         });
 
         // T2I/I2I: synchronous response (up to ~90s), video: async (quick)
-        const scriptTimeout = (msg.endpoint === 'T2I' || msg.endpoint === 'I2I') ? 120000 : 30000;
+        const scriptTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(msg.endpoint) ? 120000 : 30000;
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`submit_prompt timeout (${scriptTimeout / 1000}s)`)), scriptTimeout)
         );
@@ -962,7 +962,7 @@ async function handleAppMessage(msg) {
         let trimmedResult = { ...result };
         if (result.data) {
           const dataStr = JSON.stringify(result.data);
-          if (dataStr.length > 50000) { // >50KB = likely contains video data
+          if (dataStr.length > 50000 && msg.endpoint !== 'UPSCALE_IMAGE') { // >50KB = likely contains video data (skip trim for UPSCALE_IMAGE — encodedImage IS the result)
             console.log(
               `[VEO Bridge] ✂️ Trimming large response: ${(dataStr.length / 1024).toFixed(0)}KB → keeping metadata only`
             );

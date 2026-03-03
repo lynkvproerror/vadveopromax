@@ -172,6 +172,7 @@ class AutoUpdater(QObject):
     
     # Signals
     update_available = Signal(object)   # UpdateInfo
+    up_to_date = Signal()               # Already on latest version
     download_progress = Signal(int)     # 0-100
     download_complete = Signal(str)     # Path to ZIP
     download_error = Signal(str)
@@ -266,12 +267,29 @@ echo   VEO Pro Max - Updating...
 echo ===================================
 echo.
 
-:: Wait for the app to close
-timeout /t 3 /nobreak >nul
+:: Wait for the app to close (5s for Nuitka cleanup)
+timeout /t 5 /nobreak >nul
+
+:: Remove Hidden+System attributes on old files (xcopy can't overwrite them)
+echo Removing file protections...
+attrib -H -S /S /D "{app_dir}\\*" >nul 2>&1
 
 :: Copy new files (overwrite)
 echo Copying update files...
 xcopy /s /y /q "{source_dir}\\*" "{app_dir}\\" >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: xcopy failed, trying robocopy fallback...
+    robocopy "{source_dir}" "{app_dir}" /E /IS /IT /NFL /NDL /NJH /NJS >nul 2>&1
+)
+
+:: Re-hide runtime files (keep Explorer clean)
+echo Restoring file protections...
+for %%f in ("{app_dir}\\*.dll" "{app_dir}\\*.pyd") do (
+    attrib +H +S "%%f" >nul 2>&1
+)
+for /D %%d in ("{app_dir}\\PySide6" "{app_dir}\\certifi" "{app_dir}\\aiohttp" "{app_dir}\\playwright") do (
+    if exist "%%d" attrib +H +S "%%d" >nul 2>&1
+)
 
 :: Cleanup temp files
 echo Cleaning up...
@@ -318,6 +336,7 @@ start "" "{os.path.join(app_dir, exe_name)}"
             self.update_available.emit(info)
         else:
             log.debug(f"App is up to date (v{current})")
+            self.up_to_date.emit()
     
     def _on_check_error(self, error: str):
         """Silently log check errors (don't bother user)."""

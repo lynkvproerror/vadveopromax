@@ -52,6 +52,13 @@ if getattr(sys, 'frozen', False) or '__compiled__' in dir():
 
 def main():
     """Main entry point for VEO Pro Max application."""
+    # ── Single Instance Lock: block duplicate app windows ──
+    from core.single_instance import SingleInstanceLock, show_already_running_dialog
+    instance_lock = SingleInstanceLock()
+    if not instance_lock.acquire():
+        show_already_running_dialog()
+        sys.exit(0)
+    
     try:
         # ── Pre-UI: ensure PySide6 is installed (no splash yet) ──
         from core.dependency_checker import ensure_critical_deps
@@ -141,7 +148,8 @@ def main():
             
             controller._update_permissions()
             role = controller._permissions.role.value.upper()
-            splash.set_status(f"License: {role}")
+            role_display = "ADMINISTRATOR" if role == "TESTER" else role
+            splash.set_status(f"License: {role_display}")
             print(f"[LICENSE] Role={role}, _license_valid={controller._license_valid}")
             
             if role == "TRIAL":
@@ -206,6 +214,8 @@ def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    finally:
+        instance_lock.release()
 
 
 if __name__ == "__main__":

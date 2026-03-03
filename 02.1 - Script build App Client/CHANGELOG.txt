@@ -1,0 +1,5 @@
+🚀 Tối ưu tốc độ tạo ảnh T2I (pipeline thông minh hơn)
+🔧 Fix: Upscale không còn block việc tạo ảnh tiếp theo
+🔧 Fix: Giảm lỗi 429 khi upscale nhiều ảnh cùng lúc
+🎨 Cải thiện giao diện thanh trạng thái
+🔒 Tăng cường bảo mật ứng dụng

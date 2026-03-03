@@ -1401,37 +1401,111 @@ class LicenseClient:
         self._usage_file.write_text(json.dumps(data, indent=2))
     
     def _sync_usage_to_server(self):
-        """Layer 2: Sync daily count to Firebase (non-blocking, fire-and-forget)."""
+        """Layer 2: Sync usage to Firebase _usage/{MID} for ALL user types.
+        
+        Sends: daily_count, total_generations, total_downloads, tier, client_name.
+        Includes HMAC token for anti-tamper verification.
+        Falls back to legacy sync_daily_usage() for _trials/ backward compat.
+        """
         try:
             rest_client = getattr(self, '_rest_client', None)
-            if rest_client and hasattr(rest_client, 'sync_daily_usage'):
-                today = datetime.now().strftime("%Y-%m-%d")
-                ok = rest_client.sync_daily_usage(
+            if not rest_client:
+                return
+            
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # Get tier + client_name from cached license
+            tier = ""
+            client_name = ""
+            try:
+                cached = self.storage.load()
+                if cached:
+                    tier = cached.get('tier', '')
+                    client_name = cached.get('client_name', '')
+            except Exception:
+                pass
+            
+            # Primary: sync_usage() → _usage/{MID} (ALL users)
+            if hasattr(rest_client, 'sync_usage'):
+                ok = rest_client.sync_usage(
+                    self.machine_id,
+                    self._usage.today_generations,
+                    self._usage.total_generations,
+                    self._usage.total_downloads,
+                    today,
+                    tier=tier,
+                    client_name=client_name,
+                )
+                if ok:
+                    print(f"[LICENSE] 📤 Synced usage: daily={self._usage.today_generations}, total={self._usage.total_generations}")
+            
+            # Legacy fallback: sync_daily_usage() → _trials/{MID}
+            if hasattr(rest_client, 'sync_daily_usage'):
+                rest_client.sync_daily_usage(
                     self.machine_id,
                     self._usage.today_generations,
                     today,
                 )
-                if ok:
-                    print(f"[LICENSE] 📤 Synced daily count to server: {self._usage.today_generations}")
         except Exception:
             pass  # Silent — network failures are OK
     
-    def reconcile_usage_from_server(self, server_trial_data: dict):
-        """Layer 3: Startup reconciliation — max(local, server)."""
+    def reconcile_usage_from_server(self, server_trial_data: dict = None):
+        """Layer 3: Startup reconciliation — max(local, server).
+        
+        Sources (in priority order):
+        1. _usage/{MID} — universal (all users)
+        2. server_trial_data from _trials/{MID} — trial fallback
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # Source 1: Read from _usage/{MID} (universal collection)
         try:
-            server_count = int(server_trial_data.get("daily_count", 0))
-            server_date = server_trial_data.get("daily_date", "")
-            today = datetime.now().strftime("%Y-%m-%d")
-            
-            if server_date == today and server_count > self._usage.today_generations:
-                print(
-                    f"[LICENSE] 🔄 Server count higher: "
-                    f"{self._usage.today_generations} → {server_count}"
-                )
-                self._usage.today_generations = server_count
-                self._save_usage()
-        except Exception:
-            pass
+            rest_client = getattr(self, '_rest_client', None)
+            if rest_client and hasattr(rest_client, 'read_usage'):
+                usage_data = rest_client.read_usage(self.machine_id)
+                if usage_data:
+                    s_daily = usage_data.get("daily_count", 0)
+                    s_date = usage_data.get("daily_date", "")
+                    s_total = usage_data.get("total_generations", 0)
+                    s_downloads = usage_data.get("total_downloads", 0)
+                    
+                    updated = False
+                    
+                    # Daily: max(local, server) if same date
+                    if s_date == today and s_daily > self._usage.today_generations:
+                        print(f"[LICENSE] 🔄 Server daily higher: {self._usage.today_generations} → {s_daily}")
+                        self._usage.today_generations = s_daily
+                        updated = True
+                    
+                    # Total: always use max
+                    if s_total > self._usage.total_generations:
+                        print(f"[LICENSE] 🔄 Server total higher: {self._usage.total_generations} → {s_total}")
+                        self._usage.total_generations = s_total
+                        updated = True
+                    
+                    # Downloads: always use max
+                    if s_downloads > self._usage.total_downloads:
+                        self._usage.total_downloads = s_downloads
+                        updated = True
+                    
+                    if updated:
+                        self._save_usage()
+                    return  # Done — _usage/ is authoritative
+        except Exception as e:
+            print(f"[LICENSE] ⚠️ _usage reconcile failed: {e}")
+        
+        # Source 2: Fallback to _trials/ data (if provided)
+        if server_trial_data:
+            try:
+                server_count = int(server_trial_data.get("daily_count", 0))
+                server_date = server_trial_data.get("daily_date", "")
+                
+                if server_date == today and server_count > self._usage.today_generations:
+                    print(f"[LICENSE] 🔄 Trial server count higher: {self._usage.today_generations} → {server_count}")
+                    self._usage.today_generations = server_count
+                    self._save_usage()
+            except Exception:
+                pass
     
     def log_generation(self):
         """Log a generation event (on 720p download success).
@@ -1444,9 +1518,24 @@ class LicenseClient:
         self._usage.last_reset_date = datetime.now().strftime("%Y-%m-%d")
         self._save_usage()
         
-        # Layer 2: Server sync every 10 generations or at limit
-        if self._usage.today_generations % 10 == 0 or self._usage.today_generations >= 100:
+        # Layer 2: Server sync every 10 generations or at daily limit
+        daily_limit = self._get_daily_limit()
+        should_sync = (
+            self._usage.today_generations % 10 == 0
+            or (daily_limit > 0 and self._usage.today_generations >= daily_limit)
+        )
+        if should_sync:
             self._sync_usage_to_server()
+    
+    def _get_daily_limit(self) -> int:
+        """Get current daily generation limit from license/permissions."""
+        try:
+            info = self._validate_cache or self.validate()
+            if info and info.limits_override:
+                return int(info.limits_override.get('dg', 100))
+        except Exception:
+            pass
+        return 100  # Fallback default
     
     def log_download(self):
         """Log a download event (720p file saved)."""

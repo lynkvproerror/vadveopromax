@@ -57,7 +57,7 @@ class MultiAccountManager:
     @property
     def total_active(self) -> int:
         """Sum of active workers from all accounts."""
-        return sum(acc.active_workers for acc in self._accounts)
+        return sum(acc.active_slots for acc in self._accounts)
     
     @property
     def account_count(self) -> int:

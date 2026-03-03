@@ -943,6 +943,7 @@ class SettingsSectionsMixin:
             from core.auto_updater import AutoUpdater
             self._updater = AutoUpdater(self)
             self._updater.update_available.connect(self._on_update_available)
+            self._updater.up_to_date.connect(self._on_up_to_date)
             self._updater.download_progress.connect(self._on_download_progress)
             self._updater.download_complete.connect(self._on_download_complete)
             self._updater.download_error.connect(self._on_download_error)
@@ -977,6 +978,16 @@ class SettingsSectionsMixin:
         """Reset check button state."""
         self._check_update_btn.setEnabled(True)
         self._check_update_btn.setText(t("settings.update_sub.check_now"))
+
+    def _on_up_to_date(self):
+        """Handle 'already on latest version' signal."""
+        self._reset_check_btn()
+        self._update_status_label.setText(
+            f"✅ {t('settings.update_sub.up_to_date')}"
+        )
+        self._update_status_label.setStyleSheet(
+            f"color: {Theme.GREEN}; font-size: 12px; margin-left: 12px;"
+        )
 
     def _on_update_available(self, info):
         """Handle update available signal."""

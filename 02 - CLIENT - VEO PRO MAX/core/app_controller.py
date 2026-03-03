@@ -3396,6 +3396,20 @@ class AppController:
             total = len(visible_tasks)
             # Detect mode/model from first task
             first = visible_tasks[0] if visible_tasks else None
+            
+            # Compute group elapsed time from task timestamps
+            from datetime import datetime as _dt
+            _now = _dt.now()
+            task_starts = [t.started_at for t in visible_tasks if getattr(t, 'started_at', None)]
+            task_ends = [getattr(t, 'completed_at', None) or _now for t in visible_tasks 
+                        if getattr(t, 'started_at', None)]
+            if task_starts:
+                earliest = min(task_starts)
+                latest = max(task_ends) if task_ends else _now
+                _elapsed = (latest - earliest).total_seconds()
+            else:
+                _elapsed = 0.0
+            
             result.append(GroupDTO(
                 id=gid,
                 name=group.name,
@@ -3410,6 +3424,7 @@ class AppController:
                 aspect_ratio=(first.aspect_ratio if first else ""),
                 output_count=(first.output_count if first else 4),
                 created_at=group.created_at,
+                elapsed_seconds=_elapsed,
                 tasks=[
                     TaskDTO(
                         id=t.id,
@@ -3437,6 +3452,8 @@ class AppController:
                         image_upload_status=getattr(t, 'image_upload_status', ''),
                         download_quality=getattr(t, 'download_quality', '720p'),
                         status_text=getattr(t, 'status_text', ''),
+                        started_at=getattr(t, 'started_at', None),
+                        completed_at=getattr(t, 'completed_at', None),
                         video_outputs=[
                             VideoSlotDTO(
                                 index=vo.index,

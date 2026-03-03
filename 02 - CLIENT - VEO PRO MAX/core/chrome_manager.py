@@ -733,7 +733,12 @@ def launch_chrome(
     if _has_extension and not _is_branded:
         log.info(f"[ChromeManager] Extension loaded via --load-extension flag (CfT)")
     elif _has_extension and _is_branded and cdp_ready:
-        log.info(f"[ChromeManager] Branded Chrome — extension install deferred to ensure_all_extensions()")
+        log.info(f"[ChromeManager] Branded Chrome — installing extension NOW...")
+        try:
+            from core.extension_manager import install_if_needed
+            install_if_needed(port, str(_extension_dir))
+        except Exception as e:
+            log.warning(f"[ChromeManager] Instant extension install failed (will retry in ensure_all_extensions): {e}")
     elif not _has_extension:
         log.warning(f"[ChromeManager] No extension directory found — skipping install")
 

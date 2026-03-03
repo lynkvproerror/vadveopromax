@@ -224,11 +224,42 @@ class QueueAnimationMixin:
             """)
             return
         
+        # ── Per-video generation failure (quality == 'failed') ──
+        if quality == 'failed':
+            self._unregister_shimmer_slot(slot)
+            slot.setText('✕')
+            bc = self._slot_border(slot, Theme.RED)
+            slot.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {Theme.SURFACE0};
+                    border: 2px solid {bc};
+                    border-radius: 4px;
+                    color: {Theme.RED};
+                    font-size: 14px;
+                    font-weight: bold;
+                }}
+            """)
+            slot.setToolTip("Generation failed")
+            return
+        
         is_active = task_status in ('running', 'waiting_poll')
         
         if not is_active:
-            # Not generating — unregister shimmer, leave current style
+            # Task ended (failed/cancelled/completed) — clear stale progress display
             self._unregister_shimmer_slot(slot)
+            if task_status in ('failed', 'cancelled'):
+                slot.setText('✕' if task_status == 'failed' else '—')
+                bc = Theme.RED if task_status == 'failed' else Theme.SUBTEXT0
+                slot.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: {Theme.SURFACE0};
+                        border: 2px solid {bc};
+                        border-radius: 4px;
+                        color: {bc};
+                        font-size: 14px;
+                        font-weight: bold;
+                    }}
+                """)
             return
         
         # Update text

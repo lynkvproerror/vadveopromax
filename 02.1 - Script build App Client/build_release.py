@@ -7,10 +7,10 @@ Compiles the Python application (folder 02) into a standalone
 executable using Nuitka, then organizes output to folder 03.
 
 Usage:
-    python scripts/build_release.py             # Full build (standalone)
-    python scripts/build_release.py --onefile   # Single exe (slower startup)
-    python scripts/build_release.py --hash-only # Generate hashes only
-    python scripts/build_release.py --check     # Check dependencies
+    python build_release.py             # Full build (standalone)
+    python build_release.py --onefile   # Single exe (slower startup)
+    python build_release.py --hash-only # Generate hashes only
+    python build_release.py --check     # Check dependencies
 
 Requirements:
     pip install nuitka ordered-set zstandard
@@ -45,9 +45,13 @@ from datetime import datetime
 
 # Paths
 SCRIPT_DIR = Path(__file__).parent
-PROJECT_ROOT = SCRIPT_DIR.parent  # 02 - CLIENT - VEO PRO MAX
-OUTPUT_DIR = PROJECT_ROOT.parent / "03 - Final App Client"
+BASE_DIR = SCRIPT_DIR.parent  # #NEW VEO API
+PROJECT_ROOT = BASE_DIR / "02 - CLIENT - VEO PRO MAX"
+OUTPUT_DIR = BASE_DIR / "03 - Final App Client"
 MAIN_PY = PROJECT_ROOT / "main.py"
+
+# GitHub config (must match auto_updater.py)
+GITHUB_REPO = "lynkvproerror/vadveopromax"
 
 # Fix encoding for Vietnamese characters in constants
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
@@ -131,13 +135,20 @@ def generate_hashes() -> dict:
     return hashes
 
 
+def _read_app_version() -> str:
+    """Read APP_VERSION from constants.py without importing (avoids encoding issues)."""
+    import re
+    constants_file = PROJECT_ROOT / "config" / "constants.py"
+    text = constants_file.read_text(encoding='utf-8')
+    m = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
+    return m.group(1) if m else "0.0.0"
+
+
 def generate_build_info(hashes: dict) -> dict:
     """Generate build metadata."""
-    from config.constants import AppConstants
-
     return {
         "build_time": datetime.now().isoformat(),
-        "app_version": AppConstants.APP_VERSION,
+        "app_version": _read_app_version(),
         "python_version": sys.version.split()[0],
         "platform": sys.platform,
         "critical_file_hashes": hashes,
@@ -209,7 +220,7 @@ def run_nuitka_build(onefile: bool = False):
 
         # Product info (shows in exe Properties > Details)
         "--product-name=VEO Pro Max",
-        "--product-version=2.2.0",
+        f"--product-version={_read_app_version()}",
         "--company-name=VEO Studio",
         "--file-description=VEO Pro Max - AI Video Generator",
         "--copyright=Copyright 2026 VEO Studio",
@@ -316,23 +327,53 @@ def organize_dist_folder():
 
 
 def copy_release_files():
-    """Copy release files to output directory."""
+    """Copy optional release files (NOT version.json — that is auto-generated)."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    files_to_copy = [("version.json", "version.json")]
-
-    # Optional files
     for name in ["CHANGELOG.md", "README.md"]:
         src = PROJECT_ROOT / name
-        if src.exists():
-            files_to_copy.append((name, name))
-
-    for src_name, dst_name in files_to_copy:
-        src = PROJECT_ROOT / src_name
-        dst = OUTPUT_DIR / dst_name
+        dst = OUTPUT_DIR / name
         if src.exists():
             shutil.copy2(src, dst)
-            print(f"  Copied {src_name} -> {dst_name}")
+            print(f"  Copied {name}")
+
+
+def generate_version_json(build_info: dict, changelog: str = "") -> dict:
+    """Auto-generate version.json from APP_VERSION (single source of truth).
+
+    This ensures version.json on GitHub always matches the compiled APP_VERSION.
+    """
+    version = build_info["app_version"]
+    download_url = f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/VEO_Pro_Max_v{version}.zip"
+
+    # Read changelog from file if exists, otherwise use provided string
+    changelog_file = SCRIPT_DIR / "CHANGELOG.txt"
+    if changelog_file.exists():
+        changelog = changelog_file.read_text(encoding='utf-8').strip()
+    elif not changelog:
+        changelog = f"VEO Pro Max v{version}"
+
+    version_data = {
+        "version": version,
+        "release_date": datetime.now().strftime("%Y-%m-%d"),
+        "changelog": changelog,
+        "download_url": download_url,
+        "sha256": "",
+        "min_version": "1.0.0",
+        "force_update": False,
+        "build_number": build_info["build_number"],
+        "build_time": build_info["build_time"],
+    }
+
+    version_path = OUTPUT_DIR / "version.json"
+    with open(version_path, 'w', encoding='utf-8') as f:
+        json.dump(version_data, f, indent=4, ensure_ascii=False)
+
+    print(f"  version: {version}")
+    print(f"  download_url: {download_url}")
+    print(f"  changelog: {changelog[:80]}..." if len(changelog) > 80 else f"  changelog: {changelog}")
+
+    return version_data
 
 
 def main():
@@ -379,7 +420,7 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     build_info_path = OUTPUT_DIR / "build_info.json"
-    with open(build_info_path, 'w') as f:
+    with open(build_info_path, 'w', encoding='utf-8') as f:
         json.dump(build_info, f, indent=2)
     print(f"\n[3] Build info saved: {build_info_path}")
 
@@ -395,9 +436,12 @@ def main():
     else:
         print("\n[SKIP] Skipping Nuitka compilation (--skip-compile)")
 
-    # Step 5: Copy release files
+    # Step 5: Copy optional release files + generate version.json
     print("\n[5] Copying release files...")
     copy_release_files()
+
+    print("\n[5.1] Generating version.json (from APP_VERSION)...")
+    generate_version_json(build_info)
 
     # Step 5.5: Obfuscate and deploy extension
     print("\n[5.5] Obfuscating and deploying extension...")
@@ -421,17 +465,6 @@ def main():
         organize_dist_folder()
     elif args.onefile:
         print("\n[6] Onefile mode -- no cleanup needed")
-
-    # Step 7: Update version.json with build info
-    version_file = OUTPUT_DIR / "version.json"
-    if version_file.exists():
-        with open(version_file) as f:
-            version_data = json.load(f)
-        version_data['build_number'] = build_info['build_number']
-        version_data['build_time'] = build_info['build_time']
-        with open(version_file, 'w') as f:
-            json.dump(version_data, f, indent=2)
-        print(f"  Updated version.json with build info")
 
     print("\n" + "=" * 60)
     print(f"  [DONE] BUILD COMPLETE -- Output: {OUTPUT_DIR}")
