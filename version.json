@@ -1,11 +1,11 @@
 {
-    "version": "2.2.3",
+    "version": "2.2.4",
     "release_date": "2026-03-03",
-    "changelog": "🚀 Tối ưu tốc độ tạo ảnh T2I (pipeline thông minh hơn)\n🔧 Fix: Upscale không còn block việc tạo ảnh tiếp theo\n🔧 Fix: Giảm lỗi 429 khi upscale nhiều ảnh cùng lúc\n🎨 Cải thiện giao diện thanh trạng thái\n🔒 Tăng cường bảo mật ứng dụng",
-    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.3/VEO_Pro_Max_v2.2.3.zip",
+    "changelog": "🚀 Tối ưu tốc độ tạo ảnh T2I (pipeline thông minh hơn)\n🔧 Fix: Upscale không còn block việc tạo ảnh tiếp theo\n🔧 Fix: Giảm lỗi 429 khi upscale nhiều ảnh cùng lúc\n🔧 Fix: Extension kết nối ổn định hơn khi bị gián đoạn\n🔧 Fix: Extension tự cài khi thêm tài khoản mới\n🔧 Fix: Tự khôi phục kết nối Extension sau sự cố\n🔧 Fix: Trình duyệt không còn mở 2 lần khi khởi động\n🔒 Tăng cường: Bảo mật dữ liệu người dùng",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.2.4/VEO_Pro_Max_v2.2.4.zip",
     "sha256": "",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1772499633,
-    "build_time": "2026-03-03T08:00:33.166961"
+    "build_number": 1772539244,
+    "build_time": "2026-03-03T19:00:44.988713"
 }
