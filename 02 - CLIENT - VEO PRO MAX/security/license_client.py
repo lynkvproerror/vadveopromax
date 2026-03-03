@@ -882,9 +882,13 @@ class LicenseClient:
         cached['last_verified'] = datetime.now().isoformat()
         cached['_last_known_time'] = datetime.now().isoformat()
         cached['_validation_source'] = status
-        # Sync tier/role from server → cache
+        # Sync tier/role/name from server → cache
         cached['tier'] = data.get('_t') or data.get('tier') or cached.get('tier')
         cached['role'] = data.get('_role') or data.get('role') or cached.get('role')
+        # Sync client_name from server (so title bar shows subscriber name)
+        server_name = data.get('client_name') or data.get('_cn', '')
+        if server_name:
+            cached['client_name'] = server_name
         # Cache _lim (Level 1 security)
         server_lim = data.get('_lim')
         if server_lim:
