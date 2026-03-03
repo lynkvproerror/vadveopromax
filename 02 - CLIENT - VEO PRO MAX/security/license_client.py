@@ -1171,7 +1171,7 @@ class LicenseClient:
                                     )
                                 
                                 # ✅ Cache trial data to license.dat (sync server → local)
-                                self.storage.save({
+                                trial_cache = {
                                     'key': f'TRIAL-{self.machine_id[:12]}',
                                     'tier': 'TRIA',
                                     'role': 0,
@@ -1181,7 +1181,12 @@ class LicenseClient:
                                     '_last_known_time': datetime.now().isoformat(),
                                     '_is_trial': True,
                                     '_validation_source': 'server_trial',
-                                })
+                                }
+                                # Sync client_name from server trial record
+                                server_name = server_trial.get('client_name') or server_trial.get('_cn', '')
+                                if server_name:
+                                    trial_cache['client_name'] = server_name
+                                self.storage.save(trial_cache)
                                 
                                 # Layer 3: Reconcile daily usage from server
                                 self.reconcile_usage_from_server(server_trial)

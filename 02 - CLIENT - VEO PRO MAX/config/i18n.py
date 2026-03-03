@@ -62,13 +62,19 @@ class _I18nManager(QObject):
                 log.error(f"Failed to load locale {json_file}: {e}")
         self._rebuild_cache()
     
-    def _flatten(self, data: dict, prefix: str = "") -> Dict[str, str]:
-        """Flatten nested dict to dot-notation keys."""
+    def _flatten(self, data: dict, prefix: str = "") -> dict:
+        """Flatten nested dict to dot-notation keys.
+        
+        Preserves list values as-is (e.g., greetings array).
+        Converts other non-dict values to string.
+        """
         result = {}
         for key, value in data.items():
             full_key = f"{prefix}.{key}" if prefix else key
             if isinstance(value, dict):
                 result.update(self._flatten(value, full_key))
+            elif isinstance(value, list):
+                result[full_key] = value  # Preserve lists (e.g., greetings)
             else:
                 result[full_key] = str(value)
         return result
