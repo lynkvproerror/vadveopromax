@@ -634,7 +634,7 @@ if (authHeaderValue) {
 headers['Authorization'] = authHeaderValue;
 }
 const controller = new AbortController();
-const fetchTimeout = (endpointKey === 'T2I' || endpointKey === 'I2I') ? 90000 : 20000;
+const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey) ? 90000 : 20000;
 const fetchTimer = setTimeout(() => controller.abort(), fetchTimeout);
 try {
 const bodyStr = JSON.stringify(body);
@@ -687,7 +687,7 @@ tabState[tabId]?.accessToken || null,
 msg.endpoint || '',
 ],
 });
-const scriptTimeout = (msg.endpoint === 'T2I' || msg.endpoint === 'I2I') ? 120000 : 30000;
+const scriptTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(msg.endpoint) ? 120000 : 30000;
 const timeoutPromise = new Promise((_, reject) =>
 setTimeout(() => reject(new Error(`submit_prompt timeout (${scriptTimeout / 1000}s)`)), scriptTimeout)
 );
@@ -696,7 +696,7 @@ const result = results?.[0]?.result || {};
 let trimmedResult = { ...result };
 if (result.data) {
 const dataStr = JSON.stringify(result.data);
-if (dataStr.length > 50000) {
+if (dataStr.length > 50000 && msg.endpoint !== 'UPSCALE_IMAGE') {
 const strip = (obj) => {
 if (!obj || typeof obj !== 'object') return obj;
 if (Array.isArray(obj)) return obj.map(strip);
