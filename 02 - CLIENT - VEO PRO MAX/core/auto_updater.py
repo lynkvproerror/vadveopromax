@@ -177,6 +177,7 @@ class AutoUpdater(QObject):
     download_complete = Signal(str)     # Path to ZIP
     download_error = Signal(str)
     update_applied = Signal()           # Ready to restart
+    check_error = Signal(str)            # Version check error
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -256,59 +257,110 @@ class AutoUpdater(QObject):
             else:
                 source_dir = extract_dir
             
-            # Create updater batch script
-            batch_path = os.path.join(tempfile.gettempdir(), "veo_updater.bat")
+            # Create updater PowerShell script (handles special chars in paths)
+            ps1_path = os.path.join(tempfile.gettempdir(), "veo_updater.ps1")
             exe_name = os.path.basename(sys.executable)
+            exe_full = os.path.join(app_dir, exe_name)
+            pid = os.getpid()
+            log_path = os.path.join(tempfile.gettempdir(), "veo_update.log")
             
-            with open(batch_path, "w", encoding="utf-8") as f:
-                f.write(f"""@echo off
-echo ===================================
-echo   VEO Pro Max - Updating...
-echo ===================================
-echo.
+            # Use single-quoted strings in PS1 to avoid variable expansion issues
+            # PowerShell single-quotes treat everything literally (no escaping needed)
+            ps1_content = f"""
+$ErrorActionPreference = 'Continue'
+$logFile = '{log_path.replace(chr(39), chr(39)+chr(39))}'
 
-:: Wait for the app to close (5s for Nuitka cleanup)
-timeout /t 5 /nobreak >nul
+function Log($msg) {{
+    $ts = Get-Date -Format 'HH:mm:ss'
+    "$ts $msg" | Out-File -Append -FilePath $logFile -Encoding utf8
+    Write-Host $msg
+}}
 
-:: Remove Hidden+System attributes on old files (xcopy can't overwrite them)
-echo Removing file protections...
-attrib -H -S /S /D "{app_dir}\\*" >nul 2>&1
+Log '=== VEO Pro Max Updater ==='
+Log 'Waiting for app to exit...'
 
-:: Copy new files (overwrite)
-echo Copying update files...
-xcopy /s /y /q "{source_dir}\\*" "{app_dir}\\" >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: xcopy failed, trying robocopy fallback...
-    robocopy "{source_dir}" "{app_dir}" /E /IS /IT /NFL /NDL /NJH /NJS >nul 2>&1
-)
+# Wait for the running app process to exit (by PID, max 30s)
+try {{
+    $proc = Get-Process -Id {pid} -ErrorAction SilentlyContinue
+    if ($proc) {{
+        $proc.WaitForExit(30000) | Out-Null
+    }}
+}} catch {{}}
 
-:: Re-hide runtime files (keep Explorer clean)
-echo Restoring file protections...
-for %%f in ("{app_dir}\\*.dll" "{app_dir}\\*.pyd") do (
-    attrib +H +S "%%f" >nul 2>&1
-)
-for /D %%d in ("{app_dir}\\PySide6" "{app_dir}\\certifi" "{app_dir}\\aiohttp" "{app_dir}\\playwright") do (
-    if exist "%%d" attrib +H +S "%%d" >nul 2>&1
-)
+# Extra safety wait
+Start-Sleep -Seconds 2
 
-:: Cleanup temp files
-echo Cleaning up...
-rmdir /s /q "{extract_dir}" >nul 2>&1
-del /q "{zip_path}" >nul 2>&1
+$appDir   = '{app_dir.replace(chr(39), chr(39)+chr(39))}'
+$srcDir   = '{source_dir.replace(chr(39), chr(39)+chr(39))}'
+$exePath  = '{exe_full.replace(chr(39), chr(39)+chr(39))}'
+$zipPath  = '{zip_path.replace(chr(39), chr(39)+chr(39))}'
+$extrDir  = '{extract_dir.replace(chr(39), chr(39)+chr(39))}'
 
-:: Restart the app
-echo Starting VEO Pro Max...
-cd /d "{app_dir}"
-start "" "{os.path.join(app_dir, exe_name)}"
+# Remove Hidden+System attributes so we can overwrite
+Log 'Removing file protections...'
+Get-ChildItem -Path $appDir -Recurse -Force -ErrorAction SilentlyContinue |
+    ForEach-Object {{
+        try {{ $_.Attributes = 'Normal' }} catch {{}}
+    }}
 
-:: Self-delete this batch
-(goto) 2>nul & del "%~f0"
-""")
+# Copy new files over old ones
+Log "Copying files from $srcDir to $appDir ..."
+try {{
+    Copy-Item -Path (Join-Path $srcDir '*') -Destination $appDir -Recurse -Force -ErrorAction Stop
+    Log 'Copy completed successfully.'
+}} catch {{
+    Log "Copy-Item failed: $_"
+    # Fallback: robocopy
+    Log 'Trying robocopy fallback...'
+    & robocopy $srcDir $appDir /E /IS /IT /NFL /NDL /NJH /NJS 2>&1 | Out-Null
+    Log 'Robocopy fallback done.'
+}}
+
+# Re-hide runtime files (keep Explorer clean)
+Log 'Restoring file protections...'
+$hidePatterns = @('*.dll', '*.pyd')
+$hideDirs = @('PySide6', 'certifi', 'aiohttp', 'playwright', 'charset_normalizer',
+              'multidict', 'yarl', 'frozenlist', 'aiosignal', 'markupsafe')
+
+foreach ($pat in $hidePatterns) {{
+    Get-ChildItem -Path $appDir -Filter $pat -File -ErrorAction SilentlyContinue |
+        ForEach-Object {{
+            try {{ $_.Attributes = 'Hidden','System' }} catch {{}}
+        }}
+}}
+foreach ($d in $hideDirs) {{
+    $dp = Join-Path $appDir $d
+    if (Test-Path $dp) {{
+        try {{ (Get-Item $dp -Force).Attributes = 'Hidden','System' }} catch {{}}
+    }}
+}}
+
+# Cleanup temp files
+Log 'Cleaning up temp files...'
+Remove-Item -Path $extrDir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+
+# Restart the app
+Log "Starting: $exePath"
+Start-Process -FilePath $exePath -WorkingDirectory $appDir
+Log 'App restarted. Update complete!'
+
+# Self-delete
+Start-Sleep -Seconds 2
+Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+"""
             
-            # Launch updater batch and exit
-            log.info(f"Launching updater: {batch_path}")
+            with open(ps1_path, "w", encoding="utf-8") as f:
+                f.write(ps1_content)
+            
+            # Launch updater PowerShell script and exit
+            log.info(f"Launching updater: {ps1_path}")
             subprocess.Popen(
-                ["cmd", "/c", batch_path],
+                [
+                    "powershell", "-ExecutionPolicy", "Bypass",
+                    "-WindowStyle", "Hidden",
+                    "-File", ps1_path,
+                ],
                 creationflags=subprocess.CREATE_NO_WINDOW,
                 close_fds=True,
             )
@@ -339,8 +391,9 @@ start "" "{os.path.join(app_dir, exe_name)}"
             self.up_to_date.emit()
     
     def _on_check_error(self, error: str):
-        """Silently log check errors (don't bother user)."""
+        """Log check errors and notify UI."""
         log.debug(f"Update check error: {error}")
+        self.check_error.emit(error)
     
     def _on_download_complete(self, path: str):
         """Handle download completion."""

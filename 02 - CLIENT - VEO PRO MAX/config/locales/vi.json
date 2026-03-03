@@ -91,12 +91,12 @@
         "update_sub": {
             "auto_check": "Tự động kiểm tra cập nhật:",
             "current_version": "Phiên bản hiện tại",
-            "up_to_date": "✅ Đã cập nhật mới nhất",
+            "up_to_date": "Đã cập nhật mới nhất",
             "check_now": "🔍 Kiểm tra ngay",
             "checking": "Đang kiểm tra...",
             "available": "đã sẵn sàng!",
             "new_version": "Phiên bản mới",
-            "update_now": "⬇️ Cập nhật ngay",
+            "update_now": "Cập nhật ngay",
             "installing": "Đang cài đặt...",
             "restarting": "Đang khởi động lại...",
             "download_error": "Tải về thất bại"

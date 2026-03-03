@@ -327,13 +327,12 @@ class LicenseRequiredDialog(QDialog):
         tier_row.addWidget(tier_lbl)
         self._tier_combo = QComboBox()
         for td in TIER_DEFS:
-            if td["key"] != "FREE":
-                # Show first-buy price if eligible
-                if self._is_first_buy and td["key"] in TIER_FIRST_BUY:
-                    display_price = TIER_FIRST_BUY[td["key"]]["price"]
-                else:
-                    display_price = td["price"]
-                self._tier_combo.addItem(f"{td['name']} — {display_price}", td["key"])
+            # Show first-buy price if eligible (paid tiers only)
+            if td["key"] != "FREE" and self._is_first_buy and td["key"] in TIER_FIRST_BUY:
+                display_price = TIER_FIRST_BUY[td["key"]]["price"]
+            else:
+                display_price = td["price"]
+            self._tier_combo.addItem(f"{td['name']} — {display_price}", td["key"])
         self._tier_combo.setStyleSheet(f"background-color: {Theme.SURFACE2};")
         tier_row.addWidget(self._tier_combo)
         req_layout.addLayout(tier_row)
@@ -360,7 +359,7 @@ class LicenseRequiredDialog(QDialog):
         # Send button
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        send_btn = QPushButton("📤 Gửi yêu cầu nâng cấp")
+        send_btn = QPushButton("📤 Gửi yêu cầu")
         send_btn.setFixedHeight(34)
         send_btn.setFixedWidth(220)
         send_btn.setStyleSheet(
@@ -476,12 +475,10 @@ class LicenseRequiredDialog(QDialog):
         
         # Select / Buy more button
         if key == "FREE":
-            # ── Trial card: 3-state UI ──
+            # ── Trial card: status display + select button ──
             trial_state = self._get_trial_state()
-            # trial_state: "available" | "pending" | "approved" | "active" | "expired" | "revoked"
             
             if trial_state == "approved":
-                # State 3: Admin approved → show Active Now
                 status_lbl = QLabel("✅ Đã được phê duyệt!")
                 status_lbl.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold;")
                 status_lbl.setAlignment(Qt.AlignCenter)
@@ -496,7 +493,6 @@ class LicenseRequiredDialog(QDialog):
                 sel_btn.clicked.connect(self._on_activate_trial)
                 
             elif trial_state == "pending":
-                # State 2: Waiting for approval → poll
                 status_lbl = QLabel("⏳ Đang chờ admin duyệt...")
                 status_lbl.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 10px;")
                 status_lbl.setAlignment(Qt.AlignCenter)
@@ -510,12 +506,9 @@ class LicenseRequiredDialog(QDialog):
                     f"font-size: 11px; border-radius: 5px;"
                 )
                 sel_btn.setEnabled(False)
-                
-                # Start polling for approval (every 30s)
                 self._start_trial_polling()
                 
             elif trial_state in ("active", "expired", "revoked"):
-                # Already used/expired/revoked
                 state_msgs = {
                     "active": ("✅ Đang dùng thử", Theme.GREEN),
                     "expired": ("❌ Đã hết hạn", Theme.RED),
@@ -531,24 +524,14 @@ class LicenseRequiredDialog(QDialog):
                 sel_btn.setEnabled(False)
                 
             else:
-                # State 1: Available → show name input + submit
-                self._trial_name_input = QLineEdit()
-                self._trial_name_input.setPlaceholderText("Nhập họ tên đầy đủ...")
-                self._trial_name_input.setFixedHeight(26)
-                self._trial_name_input.setStyleSheet(
-                    f"background-color: {Theme.SURFACE0}; color: {Theme.TEXT}; "
-                    f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; "
-                    f"padding: 2px 6px; font-size: 10px;"
-                )
-                layout.addWidget(self._trial_name_input)
-                
-                sel_btn = QPushButton("📩 Gửi yêu cầu dùng thử")
+                # Available → "Chọn" button selects Free in combo
+                sel_btn = QPushButton("Chọn")
                 sel_btn.setFixedHeight(30)
                 sel_btn.setStyleSheet(
                     f"background-color: {color}; color: {Theme.CRUST}; "
                     f"font-size: 11px; font-weight: bold; border-radius: 5px;"
                 )
-                sel_btn.clicked.connect(self._on_submit_trial_request)
+                sel_btn.clicked.connect(lambda checked, k="FREE": self._select_tier(k))
             
             layout.addWidget(sel_btn)
         elif key != "FREE":
@@ -708,12 +691,22 @@ class LicenseRequiredDialog(QDialog):
             pass
     
     def _on_submit_trial_request(self):
-        """Submit trial request with full name → sends to _upgrade_requests."""
-        name = getattr(self, '_trial_name_input', None)
+        """Submit trial request with full name → sends to _upgrade_requests.
+        
+        Uses the shared _name_entry from the upgrade request form.
+        """
+        name = getattr(self, '_name_entry', None)
         if not name or not name.text().strip():
             self._status_label.setVisible(True)
-            self._status_label.setText("❌ Vui lòng nhập họ tên đầy đủ")
+            self._status_label.setText("❌ Vui lòng nhập họ tên ở mục 'Gửi yêu cầu nâng cấp' bên dưới")
             self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
+            # Highlight the name field
+            if name:
+                name.setFocus()
+                name.setStyleSheet(
+                    f"background-color: {Theme.SURFACE2}; padding: 4px 8px; "
+                    f"border: 2px solid {Theme.RED};"
+                )
             return
         
         full_name = name.text().strip()
@@ -753,8 +746,12 @@ class LicenseRequiredDialog(QDialog):
                 self._status_label.setText("✅ Đã gửi! Vui lòng chờ admin phê duyệt.")
                 self._status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 11px;")
                 
-                if hasattr(self, '_trial_name_input'):
-                    self._trial_name_input.setEnabled(False)
+                if hasattr(self, '_name_entry'):
+                    self._name_entry.setReadOnly(True)
+                    self._name_entry.setStyleSheet(
+                        f"background-color: {Theme.SURFACE1}; padding: 4px 8px; "
+                        f"color: {Theme.SUBTEXT0};"
+                    )
                 
                 self._start_trial_polling()
             else:
@@ -1092,7 +1089,7 @@ class LicenseRequiredDialog(QDialog):
             self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
     
     def _on_send_request(self):
-        """Send upgrade request to Firebase with anti-spam hardening."""
+        """Send request to Firebase — handles both FREE (trial) and paid tiers."""
         mid = self._mid_entry.text()
         tier_key = self._tier_combo.currentData() or "1M"
         name = self._name_entry.text().strip()
@@ -1104,6 +1101,11 @@ class LicenseRequiredDialog(QDialog):
             self._send_status.setText("⚠️ Vui lòng nhập họ tên")
             self._send_status.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
             self._name_entry.setFocus()
+            return
+        
+        # ── FREE tier → delegate to trial request logic ──
+        if tier_key == "FREE":
+            self._on_submit_trial_request()
             return
         
         # ── Guard 1: Validate MID from hardware ──

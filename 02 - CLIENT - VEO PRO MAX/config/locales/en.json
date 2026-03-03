@@ -91,12 +91,12 @@
         "update_sub": {
             "auto_check": "Auto-check for updates:",
             "current_version": "Current Version",
-            "up_to_date": "✅ Up to date",
+            "up_to_date": "Up to date",
             "check_now": "🔍 Check Now",
             "checking": "Checking...",
             "available": "available!",
             "new_version": "New version available",
-            "update_now": "⬇️ Update Now",
+            "update_now": "Update Now",
             "installing": "Installing...",
             "restarting": "Restarting app...",
             "download_error": "Download failed"

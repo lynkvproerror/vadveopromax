@@ -948,6 +948,7 @@ class SettingsSectionsMixin:
             self._updater.download_complete.connect(self._on_download_complete)
             self._updater.download_error.connect(self._on_download_error)
             self._updater.update_applied.connect(self._on_update_applied)
+            self._updater.check_error.connect(self._on_check_error_ui)
         return self._updater
 
     def _save_update_settings(self, *args):
@@ -973,6 +974,14 @@ class SettingsSectionsMixin:
         # Reset button after 10s timeout
         from PySide6.QtCore import QTimer
         QTimer.singleShot(10_000, self._reset_check_btn)
+
+    def _on_check_error_ui(self, error: str):
+        """Show check error in UI status label."""
+        self._reset_check_btn()
+        self._update_status_label.setText(f"❌ {error[:50]}")
+        self._update_status_label.setStyleSheet(
+            f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"
+        )
 
     def _reset_check_btn(self):
         """Reset check button state."""

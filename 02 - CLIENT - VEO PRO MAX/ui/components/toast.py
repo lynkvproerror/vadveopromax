@@ -182,12 +182,23 @@ class ToastManager:
         toast.destroyed.connect(lambda: self._remove_toast(toast))
     
     def _calculate_position(self, index: int, toast: ToastWidget) -> QPoint:
-        """Calculate toast position from bottom-right of parent window."""
+        """Calculate toast position from bottom-right of parent window.
+        
+        Uses cumulative height of all toasts below to prevent overlap
+        when toasts have different heights (e.g., multi-line messages).
+        """
         parent_geo = self._parent.geometry()
         
-        # Stack from bottom
+        # Sum heights of all toasts below this one
+        cumulative_h = 0
+        for i in range(index):
+            try:
+                cumulative_h += self._toasts[i].height() + self.TOAST_GAP
+            except (IndexError, RuntimeError):
+                cumulative_h += 48 + self.TOAST_GAP  # fallback
+        
         x = parent_geo.right() - toast.width() - self.MARGIN_RIGHT
-        y = parent_geo.bottom() - self.MARGIN_BOTTOM - (index + 1) * (toast.height() + self.TOAST_GAP)
+        y = parent_geo.bottom() - self.MARGIN_BOTTOM - cumulative_h - toast.height() - self.TOAST_GAP
         
         return QPoint(x, y)
     
