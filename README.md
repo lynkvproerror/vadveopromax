@@ -134,15 +134,5 @@ VEO Pro Max được xây dựng với giao diện dark theme hiện đại:
 
 ---
 
-## 📝 Changelog v2.2.0
-
-- 🔐 Tăng cường bảo mật (HMAC, integrity check)
-- 📊 Trial days động từ server
-- 💾 Lưu trạng thái "Ẩn Email" giữa các lần mở app
-- 🔧 Sửa lỗi lưu cài đặt
-- 🖼️ App icon mới
-- ⚡ Tối ưu hiệu năng
-
----
 
 *VEO Pro Max v2.2.0 — Tạo video AI hàng loạt, chuyên nghiệp, tự động hoàn toàn.* 🚀
