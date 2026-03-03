@@ -1784,26 +1784,49 @@ class ExtensionBridge:
                 for conn in dead:
                     log.info(f"[ExtensionBridge] 💀 Dead/zombie connection cleaned up")
                     await self._disconnect(conn, "heartbeat-dead")
+                
+                # Fix #1: Sweep stale pending requests (>60s)
+                # When extension is reinstalled, _pending_request_conns mapping
+                # may be missing → futures leak until timeout. This sweep catches them.
+                stale_reqs = [
+                    rid for rid, t in self._pending_request_times.items()
+                    if time.time() - t > 60
+                ]
+                if stale_reqs:
+                    for rid in stale_reqs:
+                        future = self._pending_requests.pop(rid, None)
+                        if future and not future.done():
+                            future.set_result({'error': 'Request expired (60s)', 'token': None})
+                        self._cleanup_request_timing(rid)
+                        self._pending_request_conns.pop(rid, None)
+                    log.warning(f"[ExtensionBridge] 🧹 Swept {len(stale_reqs)} stale pending request(s)")
             
                 # Extension-lost detection: if had connections before but now empty
                 active_count = len(self._connections)
                 if self._had_connections and active_count == 0:
                     if self._connections_lost_at == 0:
                         self._connections_lost_at = time.time()
-                    elif (
-                        not self._extension_lost_fired
-                        and (time.time() - self._connections_lost_at) > self._EXTENSION_LOST_TIMEOUT
-                    ):
-                        self._extension_lost_fired = True
-                        log.warning(
-                            f"[ExtensionBridge] 🚨 All connections lost for "
-                            f"{self._EXTENSION_LOST_TIMEOUT}s — triggering recovery"
+                    elif (time.time() - self._connections_lost_at) > self._EXTENSION_LOST_TIMEOUT:
+                        # Fix #3: Retry recovery every 120s instead of fire-once.
+                        # If first recovery fails, app would be stuck permanently.
+                        _RETRY_INTERVAL = 120  # seconds between retries
+                        _since_lost = time.time() - self._connections_lost_at
+                        _should_fire = (
+                            not self._extension_lost_fired  # First fire at 60s
+                            or (_since_lost - self._EXTENSION_LOST_TIMEOUT) % _RETRY_INTERVAL < 15  # Retry every 120s (15s window)
                         )
-                        if self.on_extension_lost:
-                            try:
-                                self.on_extension_lost()
-                            except Exception as e:
-                                log.error(f"[ExtensionBridge] on_extension_lost error: {e}")
+                        if _should_fire:
+                            self._extension_lost_fired = True
+                            _attempt = max(1, int((_since_lost - self._EXTENSION_LOST_TIMEOUT) / _RETRY_INTERVAL) + 1)
+                            log.warning(
+                                f"[ExtensionBridge] 🚨 All connections lost for "
+                                f"{_since_lost:.0f}s — triggering recovery (attempt #{_attempt})"
+                            )
+                            if self.on_extension_lost:
+                                try:
+                                    self.on_extension_lost()
+                                except Exception as e:
+                                    log.error(f"[ExtensionBridge] on_extension_lost error: {e}")
                 elif active_count > 0:
                     self._connections_lost_at = 0
                     if self._extension_lost_fired:

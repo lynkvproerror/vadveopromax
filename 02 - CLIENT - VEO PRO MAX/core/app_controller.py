@@ -722,6 +722,12 @@ class AppController:
            to the already-running debug browser (no new headless browser)
         5. Token + reCAPTCHA extracted from the shared browser page
         """
+        # Guard: prevent double launch (called from both start() and set_profiles_controller())
+        if getattr(self, '_browsers_launched', False):
+            log.debug("[AutoLaunch] Already launched — skipping duplicate call")
+            return
+        self._browsers_launched = True
+        
         import logging
         log = logging.getLogger(__name__)
         

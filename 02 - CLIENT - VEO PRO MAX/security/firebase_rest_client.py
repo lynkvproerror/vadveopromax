@@ -1005,18 +1005,50 @@ class FirebaseRESTClient:
         """
         Lookup active key for a Machine ID via _mid_to_key/{MID}.
         Load-balanced across primary/backup with auto-failover.
+        Decrypts _ek field (encrypted key) using machine_id.
+        Falls back to plaintext 'key' for backward compatibility.
         """
         data = self._read_doc("_mid_to_key", machine_id, machine_id)
-        if data and data.get("key"):
+        if not data:
+            return {"found": False}
+        
+        # Try encrypted key first (_ek), fallback to plaintext (key)
+        license_key = None
+        if data.get("_ek"):
+            license_key = self._decrypt_mid_key(data["_ek"], machine_id)
+        if not license_key or license_key == "****":
+            raw = data.get("key", "")
+            if raw and raw != "****":
+                license_key = raw
+        
+        if license_key:
             return {
                 "found": True,
-                "key": data.get("key", ""),
+                "key": license_key,
                 "tier": data.get("tier", ""),
                 "status": data.get("status", ""),
                 "expires": data.get("expires", ""),
                 "role": int(data.get("role", 1)),
             }
         return {"found": False}
+    
+    # ── MID-to-Key decryption (shared secret with admin) ──
+    _MID_KEY_SALT = b'VEO_MID_KEY_ENCRYPT_2026_v1'
+    
+    def _decrypt_mid_key(self, encrypted_b64: str, machine_id: str) -> str:
+        """Decrypt license key from _mid_to_key._ek field.
+        
+        Uses HMAC-SHA256(salt, machine_id) as XOR key stream.
+        Mirrors admin's _encrypt_mid_key().
+        """
+        try:
+            import hmac as _hmac, hashlib, base64
+            derived = _hmac.new(self._MID_KEY_SALT, machine_id.encode(), hashlib.sha256).digest()
+            encrypted = base64.b64decode(encrypted_b64)
+            decrypted = bytes(b ^ derived[i % len(derived)] for i, b in enumerate(encrypted))
+            return decrypted.decode('utf-8')
+        except Exception:
+            return ""
     
     def register_trial(self, machine_id: str, client_name: str = "") -> dict:
         """
@@ -1118,11 +1150,33 @@ class FirebaseRESTClient:
             except Exception:
                 pass
         
+        # Decrypt client_name: _ecn (encrypted) → fallback to plaintext
+        client_name = ""
+        if data.get("_ecn"):
+            client_name = self._decrypt_mid_key(data["_ecn"], machine_id)
+        if not client_name or client_name == "***":
+            raw_cn = data.get("client_name", "")
+            if raw_cn and raw_cn != "***":
+                client_name = raw_cn
+        
+        # Decrypt _lim: _elim (encrypted JSON) → fallback to plaintext _lim
+        trial_lim = None
+        if data.get("_elim"):
+            try:
+                import json as _json
+                decrypted_lim = self._decrypt_mid_key(data["_elim"], machine_id)
+                trial_lim = _json.loads(decrypted_lim)
+            except Exception:
+                trial_lim = data.get("_lim")
+        else:
+            trial_lim = data.get("_lim")
+        
         return {
             "exists": True, "status": status, "expires_at": expires_at,
             "daily_count": data.get("daily_count", 0),
             "daily_date": data.get("daily_date", ""),
-            "_lim": data.get("_lim"),  # Trial dynamic limits
+            "client_name": client_name,
+            "_lim": trial_lim,  # Trial dynamic limits
         }
     
     def read_tier_defaults(self) -> dict:

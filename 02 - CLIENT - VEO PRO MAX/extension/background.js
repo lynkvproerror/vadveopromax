@@ -94,6 +94,19 @@ async function safeTabReload(tabId, reason, bypassCache = false) {
 
 // ── WebSocket Connection ───────────────────────────────────────────────
 
+// Fix #2: MV3 keepalive — prevent Chrome from killing service worker during idle.
+// chrome.alarms fires even when SW is suspended, waking it up.
+// If WebSocket is dead after wake, reconnect immediately.
+chrome.alarms.create('ws_keepalive', { periodInMinutes: 0.4 }); // ~24s
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'ws_keepalive') {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.debug('[VEO Bridge] ⏰ Keepalive alarm — WebSocket not connected, reconnecting...');
+      connectWebSocket();
+    }
+  }
+});
+
 let wsReconnectDelay = RECONNECT_INTERVAL; // starts at 3s, grows with backoff
 
 function connectWebSocket() {
