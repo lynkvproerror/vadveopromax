@@ -41,6 +41,14 @@ return true;
 return false;
 }
 }
+chrome.alarms.create('ws_keepalive', { periodInMinutes: 0.4 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+if (alarm.name === 'ws_keepalive') {
+if (!ws || ws.readyState !== WebSocket.OPEN) {
+connectWebSocket();
+}
+}
+});
 let wsReconnectDelay = RECONNECT_INTERVAL;
 function connectWebSocket() {
 if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {

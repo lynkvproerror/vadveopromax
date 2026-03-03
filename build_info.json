@@ -1,11 +1,11 @@
 {
-  "build_time": "2026-03-03T08:00:33.166961",
-  "app_version": "2.2.3",
+  "build_time": "2026-03-03T19:00:44.988713",
+  "app_version": "2.2.4",
   "python_version": "3.13.6",
   "platform": "win32",
   "critical_file_hashes": {
-    "security/license_client.py": "76c31ed59d5037742476a4df08508e3b9013aa20757279ca1a7195e8fb90f8af",
-    "security/firebase_rest_client.py": "eba42dab344b4d8a00f46d904a4219b06fd3b10478200a7aa8427f0b84dd6f49",
+    "security/license_client.py": "27b37afdc88fb7ff84ec18187001478d7bc71d2e7c2236b779cd2d07580bb5f7",
+    "security/firebase_rest_client.py": "2aac8cc74dd1fbe15d74a3f0875608a815bdfc18de6cbc3e26e7b687ae299712",
     "security/trial_protection.py": "3d32d5735fcae1bfeabc08283ce916e3b724fef1d59dfb177cec218878e190c3",
     "security/_encrypted_keys.py": "74f46bb7433c0b9f6b7db855c8f74c38e8f663c870d60c48362c41502fe76d00",
     "security/_encrypted_api_keys.py": "10f1d885d3a26350f2c88f1b32820e716a37db83d65b7a0b89ec1b79b3829f03",
@@ -13,5 +13,5 @@
     "security/integrity_check.py": "9092cb3524f57155015074c9f8cbbd08b2fc88463da3f1739b53fc228aeecd29",
     "security/anti_tamper.py": "67d92b1ae5b39747285f608c463425154b6e4f419dd19f969356f255b25b5a1c"
   },
-  "build_number": 1772499633
+  "build_number": 1772539244
 }
