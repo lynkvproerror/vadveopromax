@@ -181,12 +181,23 @@ class ChromeProfile:
         if not self.subscription_fetched:
             return "⏳ Wait"
         
+        # Primary: check SKU
         tier_map = {
             "WS_ULTRA": "🚀 Ultra",
             "WS_PRO": "💎 Pro",
             "WS_FREEMIUM": "👤 Free",
         }
-        return tier_map.get(self.sku, "👤 Free")
+        result = tier_map.get(self.sku)
+        if result:
+            return result
+        
+        # Fallback: check paygate_tier when SKU is unknown/missing
+        paygate_map = {
+            "PAYGATE_TIER_TWO": "🚀 Ultra",
+            "PAYGATE_TIER_ONE": "💎 Pro",
+            "PAYGATE_TIER_NOT_PAID": "👤 Free",
+        }
+        return paygate_map.get(self.paygate_tier, "👤 Free")
     
     @property
     def credits_display(self) -> str:
@@ -293,6 +304,12 @@ class ProfilesController:
                 import shutil
                 shutil.copy2(old_path, self.storage_path)
                 log.info(f"[ProfilesController] Migrated profiles from {old_path} → {self.storage_path}")
+                # Remove old file to prevent ghost restoration of deleted profiles
+                try:
+                    old_path.unlink()
+                    log.info(f"[ProfilesController] 🗑️ Removed old migration source: {old_path}")
+                except Exception as e:
+                    log.warning(f"[ProfilesController] ⚠️ Could not remove old file: {e}")
         
         # Load existing profiles
         self.load_profiles()

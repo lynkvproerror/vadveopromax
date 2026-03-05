@@ -158,9 +158,9 @@
         },
         "features": {
             "trial_days": "⏳ {days} ngày dùng thử",
-            "one_account": "👤 1 Account duy nhất",
-            "two_threads": "⚡ 2 Luồng",
-            "gen_per_day": "📊 100 gen/ngày",
+            "one_account": "👤 {count} Account duy nhất",
+            "two_threads": "⚡ {count} Luồng",
+            "gen_per_day": "📊 {count} gen/ngày",
             "upscale_720": "🖼️ 720p + 1080p Upscale",
             "no_continuation": "❌ Không có Continuation",
             "no_priority": "❌ Không có Priority Support",

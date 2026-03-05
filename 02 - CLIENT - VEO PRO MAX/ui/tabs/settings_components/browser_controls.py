@@ -158,6 +158,22 @@ class SettingsBrowserControlsMixin:
         if self.controller and hasattr(self.controller, 'push_status_updates'):
             self.controller.push_session_data()
 
+    def _refresh_status_bar(self):
+        """Trigger immediate status bar refresh on the main window.
+        
+        Walks up the widget tree to find VEOProMaxApp and calls _poll_status_bar().
+        This ensures status bar reflects profile changes in realtime.
+        """
+        try:
+            widget = self
+            while widget is not None:
+                if hasattr(widget, '_poll_status_bar'):
+                    widget._poll_status_bar()
+                    return
+                widget = getattr(widget, 'parent', lambda: None)()
+        except Exception:
+            pass
+
     @Slot()
     def _on_debug_browser_failed(self):
         """Called when debug browser fails to open."""
@@ -177,6 +193,7 @@ class SettingsBrowserControlsMixin:
         """Called when login completes successfully."""
         self.setEnabled(True)  # Re-enable tab
         self._refresh_profiles_table()
+        self._refresh_status_bar()
         show_info(self, "Success", "✅ Profile added successfully!")
 
     @Slot()
@@ -337,6 +354,7 @@ class SettingsBrowserControlsMixin:
         """Called when browser login completes successfully."""
         self.setEnabled(True)
         self._refresh_profiles_table()
+        self._refresh_status_bar()
         self._push_dev_console_status()  # Refresh DevConsole panels
         show_info(
             self,
@@ -456,6 +474,7 @@ class SettingsBrowserControlsMixin:
 
         self.setEnabled(True)  # Re-enable tab
         self._refresh_profiles_table()
+        self._refresh_status_bar()
 
         success = result.get("success", False)
         reason = result.get("reason", "unknown")
@@ -637,8 +656,9 @@ class SettingsBrowserControlsMixin:
                 except Exception as e:
                     print(f"[Settings] ⚠️ remove_account: {e}")
 
-            # Step 3: Refresh UI immediately
+            # Step 3: Refresh UI immediately (table + status bar)
             self._refresh_profiles_table()
+            self._refresh_status_bar()
 
             # Step 4: Push updated data to Dev Console
             if self.controller:

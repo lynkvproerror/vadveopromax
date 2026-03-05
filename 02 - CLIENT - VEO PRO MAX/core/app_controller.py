@@ -2319,8 +2319,17 @@ class AppController:
             # Local paths must go to image_paths so Engine._resolve_image_paths() uploads them.
             if task.image_uris:
                 from pathlib import Path as _P
-                local = [u for u in task.image_uris if _P(u).exists()]
-                remote = [u for u in task.image_uris if not _P(u).exists()]
+                from urllib.parse import unquote as _unquote
+                local = []
+                remote = []
+                for u in task.image_uris:
+                    # Convert file:/// URI to local path
+                    if u.startswith('file:///'):
+                        u = _unquote(u[8:])
+                    if _P(u).exists():
+                        local.append(u)
+                    else:
+                        remote.append(u)
                 if local:
                     task.image_paths = local
                     task.image_uris = remote  # Only keep actual remote URIs/mediaIds
@@ -2489,18 +2498,35 @@ class AppController:
         """Resolve image tag names to file paths via ImageLibrary.
         
         Tags that cannot be resolved are skipped.
+        Handles file:/// URIs by converting to local paths.
         """
         if not tags:
             return []
         try:
             from services.image_library import get_image_library
+            from pathlib import Path as _P
+            from urllib.parse import unquote
             library = get_image_library()
             paths = []
             for tag in tags:
-                # If it already looks like a file path, keep it
+                # Strip file:/// URI prefix → convert to local path
+                if tag.startswith('file:///'):
+                    local_path = unquote(tag[8:])  # Remove 'file:///' and URL-decode
+                    if _P(local_path).exists():
+                        paths.append(local_path)
+                        log.info(f"  [TAG→PATH] [file:///...] → {local_path}")
+                        continue
+                    else:
+                        log.warning(f"  [TAG→PATH] file:/// URI not found on disk: {local_path}")
+                        continue
+                # If it already looks like a file path, validate it exists
                 if '/' in tag or '\\' in tag or '.' in tag and len(tag) > 5:
-                    paths.append(tag)
-                    continue
+                    clean = unquote(tag)
+                    if _P(clean).exists():
+                        paths.append(clean)
+                        continue
+                    # Path doesn't exist — fall through to library resolution
+                    log.debug(f"  [TAG→PATH] Path-like tag not found on disk: {clean}")
                 img = library.resolve_tag(tag)
                 if img and img.path:
                     paths.append(img.path)
@@ -2525,11 +2551,34 @@ class AppController:
         
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
+            resolved = []
+            # 1. Try image_tags → library resolution (from [tag] in prompt)
             if hasattr(p, 'image_tags') and p.image_tags:
-                # Resolve tags to actual file paths
                 resolved = self._resolve_tags_to_paths(list(p.image_tags))
-                if resolved:
-                    per_prompt_images[i] = resolved
+            # 2. Fallback: image_path from drag-drop slot (synced by get_prompts())
+            if not resolved and hasattr(p, 'image_path') and p.image_path:
+                from pathlib import Path as _P
+                if _P(p.image_path).exists():
+                    resolved = [p.image_path]
+                    log.info(f"  [I2V] Row {i}: using drag-drop image_path → {p.image_path}")
+            # 3. Fallback: start_frame / end_frame (I2V-specific fields)
+            if not resolved:
+                frames = []
+                for attr in ('start_frame', 'end_frame'):
+                    val = getattr(p, attr, None)
+                    if val:
+                        from pathlib import Path as _P
+                        if _P(val).exists():
+                            frames.append(val)
+                        else:
+                            # start_frame may be a tag name, try library
+                            tag_resolved = self._resolve_tags_to_paths([val])
+                            frames.extend(tag_resolved)
+                if frames:
+                    resolved = frames
+                    log.info(f"  [I2V] Row {i}: using start/end frames → {frames}")
+            if resolved:
+                per_prompt_images[i] = resolved
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
         
@@ -2561,10 +2610,18 @@ class AppController:
         continuation_map = {}
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
+            resolved = []
+            # 1. Try image_tags → library resolution (from [tag] in prompt)
             if hasattr(p, 'image_tags') and p.image_tags:
                 resolved = self._resolve_tags_to_paths(list(p.image_tags[:3]))  # Max 3
-                if resolved:
-                    per_prompt_images[i] = resolved
+            # 2. Fallback: image_path from drag-drop slot (synced by get_prompts())
+            if not resolved and hasattr(p, 'image_path') and p.image_path:
+                from pathlib import Path as _P
+                if _P(p.image_path).exists():
+                    resolved = [p.image_path]
+                    log.info(f"  [R2V] Row {i}: using drag-drop image_path → {p.image_path}")
+            if resolved:
+                per_prompt_images[i] = resolved
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
         
@@ -2600,9 +2657,16 @@ class AppController:
         prompt_texts = []
         for p in prompts:
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
+            resolved = []
             if hasattr(p, 'image_tags') and p.image_tags:
                 resolved = self._resolve_tags_to_paths(list(p.image_tags))
-                images.extend(resolved)
+            # Fallback: image_path from drag-drop slot
+            if not resolved and hasattr(p, 'image_path') and p.image_path:
+                from pathlib import Path as _P
+                if _P(p.image_path).exists():
+                    resolved = [p.image_path]
+                    log.info(f"  [I2I] using drag-drop image_path → {p.image_path}")
+            images.extend(resolved)
         
         return self.submit_prompts(
             prompts=prompt_texts,

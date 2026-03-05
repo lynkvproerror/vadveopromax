@@ -729,22 +729,20 @@ class MainWindow(QMainWindow):
             import logging
             logging.getLogger("veo.ui").debug(f"[StatusBar] Accounts poll error: {e}")
         
-        # Workers: active / max_foremen (from permissions)
+        # Workers: active / total_capacity (sum of max_workers across accounts)
         try:
             acc = self.controller.get_account_summary()
             active = acc.get("active", 0)
-            # Get max from permissions so user sees configured limit
-            max_foremen = 0
+            # Get total capacity from multi_account manager
+            total_capacity = 0
             try:
-                perm = getattr(self.controller, '_permissions', None)
-                if perm:
-                    max_foremen = perm.limits.max_foremen
-                    if max_foremen < 0:
-                        max_foremen = "∞"
+                ma = getattr(self.controller, '_multi_account', None)
+                if ma:
+                    total_capacity = ma.total_capacity
             except Exception:
                 pass
             if "workers" in self._status_widgets:
-                self._status_widgets["workers"].setText(f"👷 {active}/{max_foremen}")
+                self._status_widgets["workers"].setText(f"👷 {active}/{total_capacity}")
                 color = Theme.GREEN if active > 0 else Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px;")
         except Exception as e:

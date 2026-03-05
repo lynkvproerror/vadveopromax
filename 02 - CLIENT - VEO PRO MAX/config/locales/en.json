@@ -158,9 +158,9 @@
         },
         "features": {
             "trial_days": "⏳ {days}-day trial",
-            "one_account": "👤 1 Account only",
-            "two_threads": "⚡ 2 Threads",
-            "gen_per_day": "📊 100 gen/day",
+            "one_account": "👤 {count} Account only",
+            "two_threads": "⚡ {count} Threads",
+            "gen_per_day": "📊 {count} gen/day",
             "upscale_720": "🖼️ 720p + 1080p Upscale",
             "no_continuation": "❌ No Continuation",
             "no_priority": "❌ No Priority Support",

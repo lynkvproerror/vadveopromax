@@ -223,14 +223,27 @@ class TabLicense(QWidget):
         except Exception:
             pass
         
+        # Read TRIAL limits from permissions (server-synced values)
+        _trial_accounts = 1
+        _trial_threads = 2
+        _trial_daily = 100
+        try:
+            from services.permissions import PermissionsSystem, Role
+            trial_lim = PermissionsSystem.ROLE_LIMITS[Role.TRIAL]
+            _trial_accounts = trial_lim.max_accounts
+            _trial_threads = trial_lim.max_foremen
+            _trial_daily = trial_lim.daily_generation_limit
+        except Exception:
+            pass
+        
         # (tier_key, name, price, features, color)
         # Luồng = số tác vụ xử lý đồng thời (tránh dùng từ 'Workers' trên UI)
         tiers = [
             ("FREE", t("license.tiers.free"), t("license.free"), [
                 t("license.features.trial_days").format(days=_tdl),
-                t("license.features.one_account"),
-                t("license.features.two_threads"),
-                t("license.features.gen_per_day"),
+                t("license.features.one_account").format(count=_trial_accounts),
+                t("license.features.two_threads").format(count=_trial_threads),
+                t("license.features.gen_per_day").format(count=_trial_daily),
                 t("license.features.upscale_720"),
                 t("license.features.no_continuation"),
                 t("license.features.no_priority"),
@@ -587,7 +600,7 @@ class TabLicense(QWidget):
                     return "∞" if v < 0 else str(v)
                 self._limit_labels.get("accounts", QLabel()).setText(fmt(lim.max_accounts))
                 self._limit_labels.get("threads", QLabel()).setText(fmt(lim.max_foremen))
-                self._limit_labels.get("workers", QLabel()).setText(fmt(lim.max_outputs_per_prompt))
+                self._limit_labels.get("workers", QLabel()).setText(fmt(lim.max_workers_per_account))
                 self._limit_labels.get("daily", QLabel()).setText(fmt(lim.daily_generation_limit))
                 self._limit_labels.get("batch", QLabel()).setText(fmt(lim.max_prompts_per_batch))
                 
