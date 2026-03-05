@@ -261,6 +261,13 @@ class QueueGroupMixin:
             widget._task_status = new_status
             if hasattr(widget, 'status_label'):
                 self._update_status_label(widget, td)
+            
+            # 🔒 Rebuild thumb_slots if output_count changed
+            if hasattr(widget, 'thumb_slots') and hasattr(widget, 'thumb_container'):
+                new_count = td.get('output_count', len(widget.thumb_slots))
+                if new_count != len(widget.thumb_slots):
+                    self._rebuild_thumb_slots(widget, td, new_count)
+            
             if hasattr(widget, 'thumb_slots'):
                 self._update_thumb_slot_data(widget, td)
             
@@ -291,6 +298,54 @@ class QueueGroupMixin:
                 }}
                 QFrame#queueItemRow > * {{ border: none; }}
             """)
+        except RuntimeError:
+            pass
+    
+    def _rebuild_thumb_slots(self, widget: QFrame, td: dict, new_count: int):
+        """Rebuild thumb_slots when output_count changes (e.g. Group Setup)."""
+        try:
+            container = widget.thumb_container
+            layout = container.layout()
+            
+            # Unregister old shimmer/animation slots
+            for slot in widget.thumb_slots:
+                self._unregister_shimmer_slot(slot)
+            
+            # Clear existing slots
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            
+            # Create new slots
+            status = td.get('status', 'pending')
+            progress = td.get('progress', 0)
+            thumbnails = td.get('thumbnails', [])
+            output_files = td.get('output_files', [])
+            video_outputs = td.get('video_outputs', [])
+            
+            new_slots = []
+            for vi in range(new_count):
+                vi_info = video_outputs[vi] if vi < len(video_outputs) else None
+                video_path = None
+                if vi_info:
+                    video_path = vi_info.get('best_file') or (
+                        output_files[vi] if vi < len(output_files) else None
+                    )
+                else:
+                    video_path = output_files[vi] if vi < len(output_files) else None
+                
+                slot = self._create_thumb_slot(
+                    vi, status, progress,
+                    thumbnails[vi] if vi < len(thumbnails) else None,
+                    video_path,
+                    video_info=vi_info
+                )
+                layout.addWidget(slot)
+                new_slots.append(slot)
+            
+            widget.thumb_slots = new_slots
+            container.setFixedWidth(new_count * 44)
         except RuntimeError:
             pass
     

@@ -134,6 +134,40 @@ def get_local_extension_version() -> Optional[str]:
         return None
 
 
+def _get_installed_version_fast(port: int) -> Optional[str]:
+    """Read installed extension version via its service worker context.
+    
+    Uses CDP WebSocket to evaluate chrome.runtime.getManifest().version
+    in the extension's service worker — NO chrome://extensions tab needed.
+    
+    Returns:
+        Version string (e.g. '2.2.4') or None if cannot determine.
+    """
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/json", method="GET")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            targets = json.loads(resp.read())
+    except Exception:
+        return None
+    
+    for target in targets:
+        if not _is_our_extension(target):
+            continue
+        ws_url = target.get("webSocketDebuggerUrl")
+        if not ws_url:
+            continue
+        try:
+            result = _cdp_evaluate(ws_url, "chrome.runtime.getManifest().version", timeout=5.0)
+            version = result.get("result", {}).get("result", {}).get("value")
+            if version:
+                log.info(f"[ExtMgr] Installed extension version (fast): {version}")
+                return version
+        except Exception as e:
+            log.debug(f"[ExtMgr] Fast version check failed: {e}")
+    
+    return None
+
+
 # ── CDP Tab Management ──────────────────────────────────────────────────
 
 def _open_extensions_page(port: int) -> Optional[str]:
@@ -988,19 +1022,14 @@ def _install_extension_impl(port: int, extension_dir: str) -> bool:
             _hide_chrome_after_install(port)
 
 
-def uninstall_extension(port: int, ext_id: Optional[str] = None) -> bool:
+def uninstall_extension(port: int, ext_id: Optional[str] = None, _reuse_ws: Optional[str] = None) -> bool:
     """Uninstall extension from Chrome via CDP.
-    
-    Steps:
-    1. Get extension ID (if not provided)
-    2. Open chrome://extensions via CDP
-    3. Click Remove button on extension card via shadow DOM JS
-    4. Confirm removal dialog
-    5. Verify extension removed
     
     Args:
         port: Chrome CDP port
         ext_id: Extension ID to remove (auto-detected if None)
+        _reuse_ws: If provided, reuse this chrome://extensions ws_url
+                   (caller manages tab lifecycle)
     
     Returns:
         True if extension removed successfully
@@ -1014,15 +1043,18 @@ def uninstall_extension(port: int, ext_id: Optional[str] = None) -> bool:
         return True  # Nothing to uninstall = success
     
     log.info(f"[ExtMgr] 🗑️ Uninstalling extension: {ext_id}")
+    _owns_tab = _reuse_ws is None
     
     try:
-        # Step 1: Open chrome://extensions
-        ws_url = _open_extensions_page(port)
-        if not ws_url:
-            return False
-        
-        time.sleep(2.5)
-        ws_url = _get_extensions_ws_url(port) or ws_url
+        # Step 1: Open chrome://extensions (or reuse caller's tab)
+        if _reuse_ws:
+            ws_url = _reuse_ws
+        else:
+            ws_url = _open_extensions_page(port)
+            if not ws_url:
+                return False
+            time.sleep(2.5)
+            ws_url = _get_extensions_ws_url(port) or ws_url
         
         # Step 2: Click Remove on extension card
         js_remove = _js_click_remove_extension(ext_id)
@@ -1032,7 +1064,8 @@ def uninstall_extension(port: int, ext_id: Optional[str] = None) -> bool:
         
         if remove_result not in ("clicked_remove",):
             log.error(f"[ExtMgr] ❌ Failed to click Remove: {remove_result}")
-            _cleanup_extensions_tabs(port)
+            if _owns_tab:
+                _cleanup_extensions_tabs(port)
             return False
         
         # Step 3: Confirm removal dialog
@@ -1041,9 +1074,10 @@ def uninstall_extension(port: int, ext_id: Optional[str] = None) -> bool:
         confirm_result = result.get("result", {}).get("result", {}).get("value", "unknown")
         log.info(f"[ExtMgr] Confirm dialog: {confirm_result}")
         
-        # Step 4: Close extensions tab
+        # Step 4: Close extensions tab (only if we own it)
         time.sleep(1)
-        _cleanup_extensions_tabs(port)
+        if _owns_tab:
+            _cleanup_extensions_tabs(port)
         
         # Step 5: Verify extension removed
         time.sleep(2)
@@ -1056,26 +1090,35 @@ def uninstall_extension(port: int, ext_id: Optional[str] = None) -> bool:
         
     except Exception as e:
         log.error(f"[ExtMgr] ❌ Uninstall error: {e}")
-        _cleanup_extensions_tabs(port)
+        if _owns_tab:
+            _cleanup_extensions_tabs(port)
         return False
 
 
-def _find_extension_id_via_dom(port: int) -> Optional[str]:
+def _find_extension_id_via_dom(port: int, _reuse_ws: Optional[str] = None) -> Optional[str]:
     """Find our extension ID via chrome://extensions page DOM.
     
     Unlike get_extension_id() which needs an active service_worker in CDP /json,
     this works even when the MV3 service worker is suspended — searches
     extension cards by name in the shadow DOM.
     
+    Args:
+        _reuse_ws: If provided, reuse this chrome://extensions ws_url
+                   (caller manages tab lifecycle)
+    
     Returns:
         Extension ID string or None if not found.
     """
-    ws_url = _open_extensions_page(port)
-    if not ws_url:
-        return None
+    _owns_tab = _reuse_ws is None
     
-    time.sleep(2.5)
-    ws_url = _get_extensions_ws_url(port) or ws_url
+    if _reuse_ws:
+        ws_url = _reuse_ws
+    else:
+        ws_url = _open_extensions_page(port)
+        if not ws_url:
+            return None
+        time.sleep(2.5)
+        ws_url = _get_extensions_ws_url(port) or ws_url
     
     ext_name = EXTENSION_NAME  # "VEO Pro Max Bridge"
     js = f"""
@@ -1110,14 +1153,15 @@ def _find_extension_id_via_dom(port: int) -> Optional[str]:
         log.debug(f"[ExtMgr] DOM extension search error: {e}")
         return None
     finally:
-        _cleanup_extensions_tabs(port)
+        if _owns_tab:
+            _cleanup_extensions_tabs(port)
 
 
 def reinstall_extension(port: int, extension_dir: str, **kwargs) -> bool:
-    """Uninstall then reinstall extension.
+    """Uninstall then reinstall extension using a SINGLE chrome://extensions tab.
     
-    Uses DOM-based detection to find existing extension even when
-    MV3 service worker is suspended (CDP /json won't show it).
+    Optimized: opens tab once, reuses across find→uninstall→install, closes once.
+    Previously opened/closed the tab 3-6 times per reinstall.
     
     Args:
         port: Chrome CDP port
@@ -1128,34 +1172,57 @@ def reinstall_extension(port: int, extension_dir: str, **kwargs) -> bool:
     """
     log.info(f"[ExtMgr] 🔄 Reinstalling extension...")
     
-    # Step 1: Find existing extension via DOM (works with suspended service workers)
-    ext_id = get_extension_id(port)  # Try fast CDP /json first
-    if not ext_id:
-        ext_id = _find_extension_id_via_dom(port)  # Fallback: DOM search
+    # Step 1: Find existing extension — fast CDP /json first (no tab needed)
+    ext_id = get_extension_id(port)
     
-    # Step 2: Uninstall if found
+    if not ext_id:
+        # Fallback: DOM search (needs tab) — open tab and keep it for reuse
+        ws_url = _open_extensions_page(port)
+        if ws_url:
+            time.sleep(2.5)
+            ws_url = _get_extensions_ws_url(port) or ws_url
+            ext_id = _find_extension_id_via_dom(port, _reuse_ws=ws_url)
+    else:
+        ws_url = None  # Will be opened later if needed
+    
+    # Step 2: Uninstall if found (reuse tab)
     if ext_id:
         log.info(f"[ExtMgr] Found existing extension {ext_id} — removing before reinstall")
-        if not uninstall_extension(port, ext_id=ext_id):
-            log.warning("[ExtMgr] Uninstall failed — trying install anyway")
+        # Ensure tab is open for uninstall
+        if not ws_url:
+            ws_url = _open_extensions_page(port)
+            if ws_url:
+                time.sleep(2.5)
+                ws_url = _get_extensions_ws_url(port) or ws_url
+        if ws_url:
+            if not uninstall_extension(port, ext_id=ext_id, _reuse_ws=ws_url):
+                log.warning("[ExtMgr] Uninstall failed — trying install anyway")
+        else:
+            # Fallback: uninstall with own tab
+            if not uninstall_extension(port, ext_id=ext_id):
+                log.warning("[ExtMgr] Uninstall failed — trying install anyway")
+        # Close tab after uninstall — install needs fresh page state
+        _cleanup_extensions_tabs(port)
         time.sleep(2)
     else:
         log.info("[ExtMgr] No existing extension found — fresh install")
+        # Close any leftover tab from DOM search
+        if ws_url:
+            _cleanup_extensions_tabs(port)
     
-    # Step 3: Install
+    # Step 3: Install (opens its own tab, handles folder picker + cleanup)
     return install_extension(port, extension_dir)
 
 
 def _update_unpacked_extension(port: int, extension_dir: str) -> bool:
     """Update unpacked extension files and trigger Chrome to reload them.
     
-    For version updates, this is MUCH faster and more reliable than
-    uninstall+reinstall (which has confirm dialog issues on Chrome v137+).
+    Optimized: uses single chrome://extensions tab for both reload and verify.
     
     Steps:
     1. Refresh temp copy (if # path) with updated source files
     2. Click the extension's "Update" (↻) button via chrome://extensions DOM
-    3. Verify new version loaded
+    3. Verify new version on SAME tab (no re-open)
     
     Returns:
         True if update succeeded, False if should fall back to reinstall.
@@ -1212,9 +1279,6 @@ def _update_unpacked_extension(port: int, extension_dir: str) -> bool:
             updateBtn.click();
             return 'clicked_global_update';
         }}
-        // Method 3: Trigger the update via Dev mode reload
-        const devToggle = toolbar.shadowRoot.querySelector('#devMode');
-        // Dev mode should already be on; try the "Update" 
     }}
     
     return 'no_update_button';
@@ -1229,9 +1293,12 @@ def _update_unpacked_extension(port: int, extension_dir: str) -> bool:
             # Wait for Chrome to process the reload
             time.sleep(3)
             
-            # Verify new version
+            # Verify new version via fast CDP check (no tab needed)
             _cleanup_extensions_tabs(port)
-            new_ver = _get_installed_extension_version(port)
+            new_ver = _get_installed_version_fast(port)
+            if not new_ver:
+                # Fallback: slow check via tab (rare)
+                new_ver = _get_installed_extension_version(port)
             local_ver = get_local_extension_version()
             if new_ver and new_ver == local_ver:
                 log.info(f"[ExtMgr] ✅ Extension updated to v{new_ver} via reload")
@@ -1252,12 +1319,12 @@ def _update_unpacked_extension(port: int, extension_dir: str) -> bool:
 def install_if_needed(port: int, extension_dir: str, **kwargs) -> bool:
     """Install extension if missing, or update/reinstall if version outdated.
     
+    Optimized: uses fast CDP service worker version check (no tab needed)
+    instead of opening chrome://extensions tab for every check.
+    
     Checks:
     1. Is extension loaded at all? → install
     2. Is installed version != local version? → update (fast) → reinstall (fallback)
-    
-    Drop-in replacement for auto_install_extension.auto_install_extension_if_needed().
-    Called from chrome_manager.launch_chrome() and ensure_chrome_running().
     
     Args:
         port: Chrome CDP port
@@ -1280,10 +1347,15 @@ def install_if_needed(port: int, extension_dir: str, **kwargs) -> bool:
         log.info("[ExtMgr] Extension not loaded after retries — reinstalling (will remove stale if any)...")
         return reinstall_extension(port, extension_dir)
     
-    # Version check: compare installed vs local manifest
+    # Version check: fast method via service worker (no chrome://extensions tab)
     local_ver = get_local_extension_version()
     if local_ver:
-        installed_ver = _get_installed_extension_version(port)
+        # Try fast version check first (CDP service worker — no tab needed)
+        installed_ver = _get_installed_version_fast(port)
+        if not installed_ver:
+            # Fallback: slow check via chrome://extensions tab
+            installed_ver = _get_installed_extension_version(port)
+        
         if installed_ver and installed_ver != local_ver:
             log.warning(f"[ExtMgr] ⚠️ Version mismatch: installed={installed_ver}, local={local_ver}")
             

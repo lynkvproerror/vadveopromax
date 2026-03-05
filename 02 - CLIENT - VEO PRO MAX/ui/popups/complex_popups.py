@@ -518,6 +518,11 @@ class ImageManagerPopup(BasePopup):
         add_btn.clicked.connect(self._on_add_images)
         toolbar.addWidget(add_btn)
         
+        del_all_btn = QPushButton("🗑️ Delete All")
+        del_all_btn.setStyleSheet(f"background-color: {Theme.RED};")
+        del_all_btn.clicked.connect(self._on_delete_all)
+        toolbar.addWidget(del_all_btn)
+        
         self.search_entry = QLineEdit()
         self.search_entry.setPlaceholderText("🔍 Search by tag...")
         self.search_entry.setFixedWidth(200)
@@ -813,6 +818,24 @@ class ImageManagerPopup(BasePopup):
         """Delete image from library."""
         if self._library:
             self._library.remove_image(image_id, delete_file=False)
+            self._reload_grid()
+    
+    def _on_delete_all(self):
+        """Delete ALL images from library with confirmation."""
+        if not self._library or not self._library.image_count:
+            return
+        from PySide6.QtWidgets import QMessageBox
+        count = self._library.image_count
+        reply = QMessageBox.warning(
+            self, "🗑️ Delete All Images",
+            f"Xoá tất cả {count} ảnh khỏi library?\n\n"
+            "Lưu ý: File ảnh trên ổ đĩa không bị xoá,\n"
+            "chỉ xoá khỏi danh sách library.",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if reply == QMessageBox.Yes:
+            removed = self._library.remove_all(delete_files=False)
             self._reload_grid()
     
     def _on_add_category(self):

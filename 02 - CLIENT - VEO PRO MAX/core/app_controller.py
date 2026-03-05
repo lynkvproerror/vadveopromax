@@ -3225,7 +3225,7 @@ class AppController:
                             role_name = self._permissions.role.name  # TRIAL, PREMIUM, TESTER
                             tmpl = tier_defaults.get(role_name, {})
                             if tmpl:
-                                lim = {k: v for k, v in tmpl.items() if k in ('ac', 'fm', 'wk', 'op', 'dg')}
+                                lim = {k: v for k, v in tmpl.items() if k in ('ac', 'fm', 'wk', 'op', 'dg', 'pb')}
                                 if lim:
                                     self._permissions.apply_server_limits(lim)
                                     log.info(f"[License] Tier template applied ({role_name}): {lim}")

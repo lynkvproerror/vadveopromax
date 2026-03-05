@@ -264,6 +264,8 @@ class PermissionsSystem:
             role_lim.max_outputs_per_prompt = int(lim["op"])
         if "dg" in lim:
             role_lim.daily_generation_limit = int(lim["dg"])
+        if "pb" in lim:
+            role_lim.max_prompts_per_batch = int(lim["pb"])
         # Store for integrity verification
         self._server_lim = dict(lim)
     
@@ -282,6 +284,7 @@ class PermissionsSystem:
             and ram.max_workers_per_account == int(lim.get("wk", ram.max_workers_per_account))
             and ram.max_outputs_per_prompt == int(lim.get("op", ram.max_outputs_per_prompt))
             and ram.daily_generation_limit == int(lim.get("dg", ram.daily_generation_limit))
+            and ram.max_prompts_per_batch == int(lim.get("pb", ram.max_prompts_per_batch))
         )
     
     def reset_limits_from_cache(self):

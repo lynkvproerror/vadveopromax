@@ -301,6 +301,16 @@ class SettingsBrowserControlsMixin:
 
                 if result_email:
                     print(f"[Settings] Auto-login successful: {result_email}")
+                    
+                    # Auto-open debug browser → triggers extension install via CDP
+                    # Same flow as manually clicking the browser toggle button
+                    try:
+                        print(f"[Settings] 🧩 Auto-opening browser to install extension for {result_email}...")
+                        self.profiles_controller.open_browser_for_debug(result_email)
+                        print(f"[Settings] ✅ Browser opened + extension installed for {result_email}")
+                    except Exception as ext_e:
+                        print(f"[Settings] ⚠️ Auto extension install: {ext_e}")
+                    
                     QMetaObject.invokeMethod(
                         self, "_on_browser_login_complete",
                         Qt.ConnectionType.QueuedConnection

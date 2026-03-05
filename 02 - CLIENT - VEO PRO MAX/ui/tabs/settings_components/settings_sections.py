@@ -997,6 +997,9 @@ class SettingsSectionsMixin:
         self._update_status_label.setStyleSheet(
             f"color: {Theme.GREEN}; font-size: 12px; margin-left: 12px;"
         )
+        # Hide changelog and update button when already up-to-date
+        self._update_now_btn.setVisible(False)
+        self._changelog_label.setVisible(False)
 
     def _on_update_available(self, info):
         """Handle update available signal."""

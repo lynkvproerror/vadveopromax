@@ -172,8 +172,8 @@ class ImageLibrary:
         else:
             final_path = str(source)
         
-        # Normalize tags
-        normalized_tags = [t.lower().strip() for t in tags]
+        # Normalize tags — strip brackets if user named file like [tag].jpg
+        normalized_tags = [t.lower().strip().strip('[]') for t in tags]
         
         image = LibraryImage.create(final_path, normalized_tags, category)
         self._images.append(image)
@@ -219,6 +219,58 @@ class ImageLibrary:
             self._save_index()
             self._notify_change()
     
+    def remove_all(self, delete_files: bool = False) -> int:
+        """
+        Remove ALL images from the library.
+        
+        Args:
+            delete_files: If True, also delete image files from disk
+            
+        Returns:
+            Number of images removed
+        """
+        count = len(self._images)
+        if delete_files:
+            for img in self._images:
+                try:
+                    Path(img.path).unlink()
+                except Exception:
+                    pass
+        self._images.clear()
+        self._save_index()
+        self._notify_change()
+        return count
+    
+    def remove_by_tags(self, tags: list, delete_files: bool = False) -> int:
+        """
+        Remove images that match ANY of the given tags.
+        
+        Args:
+            tags: List of tag names to match (case-insensitive)
+            delete_files: If True, also delete image files from disk
+            
+        Returns:
+            Number of images removed
+        """
+        normalized = {t.lower().strip().strip('[]') for t in tags}
+        to_remove = []
+        for img in self._images:
+            if any(t.strip('[]') in normalized for t in img.tags):
+                to_remove.append(img)
+        
+        for img in to_remove:
+            if delete_files:
+                try:
+                    Path(img.path).unlink()
+                except Exception:
+                    pass
+            self._images.remove(img)
+        
+        if to_remove:
+            self._save_index()
+            self._notify_change()
+        return len(to_remove)
+    
     def resolve_tag(self, tag: str) -> Optional[LibraryImage]:
         """
         Resolve a tag to an image.
@@ -229,10 +281,12 @@ class ImageLibrary:
         Returns:
             LibraryImage if found, None otherwise
         """
-        normalized = tag.lower().strip()
+        normalized = tag.lower().strip().strip('[]')
         for image in self._images:
-            if normalized in image.tags:
-                return image
+            # Match against stored tags, also stripping brackets for backward compat
+            for stored_tag in image.tags:
+                if stored_tag.strip('[]') == normalized:
+                    return image
         return None
     
     def resolve_tags_in_prompt(self, prompt: str) -> Dict[str, Optional[LibraryImage]]:
@@ -279,7 +333,7 @@ class ImageLibrary:
         """Update tags for an image."""
         image = next((img for img in self._images if img.id == image_id), None)
         if image:
-            image.tags = [t.lower().strip() for t in tags]
+            image.tags = [t.lower().strip().strip('[]') for t in tags]
             self._save_index()
             self._notify_change()
     

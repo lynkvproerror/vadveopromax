@@ -120,7 +120,7 @@ class TabLicense(QWidget):
         limit_defs = [
             ("accounts", t("license.limits.accounts")),
             ("threads", t("license.limits.threads")),
-            ("workers", "Max Workers/Acc"),
+            ("workers", "Max OpPP/Acc"),
             ("daily", t("license.limits.daily")),
             ("batch", t("license.limits.batch")),
         ]
@@ -587,7 +587,7 @@ class TabLicense(QWidget):
                     return "∞" if v < 0 else str(v)
                 self._limit_labels.get("accounts", QLabel()).setText(fmt(lim.max_accounts))
                 self._limit_labels.get("threads", QLabel()).setText(fmt(lim.max_foremen))
-                self._limit_labels.get("workers", QLabel()).setText(fmt(lim.max_workers_per_account))
+                self._limit_labels.get("workers", QLabel()).setText(fmt(lim.max_outputs_per_prompt))
                 self._limit_labels.get("daily", QLabel()).setText(fmt(lim.daily_generation_limit))
                 self._limit_labels.get("batch", QLabel()).setText(fmt(lim.max_prompts_per_batch))
                 

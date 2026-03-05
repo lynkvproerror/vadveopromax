@@ -284,19 +284,39 @@ class LicenseRequiredDialog(QDialog):
         self._name_entry.setPlaceholderText("Nguyễn Văn A")
         self._name_entry.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px 8px;")
         self._name_locked = False
-        # Auto-fill and LOCK if name already registered on server
+        # Auto-fill and LOCK if name already registered
         try:
             cn = None
-            rest_client = self._get_rest_client()
-            mid = self._get_machine_id()
-            if rest_client and mid:
-                # Try _upgrade_requests first (has name from previous requests)
-                req = rest_client.read_upgrade_request(mid)
-                cn = (req.get('client_name', '') if req else '').strip()
-                # Fallback: try _trials (has name from trial registration)
-                if not cn:
-                    trial_doc = rest_client._read_doc('_trials', mid, mid)
-                    cn = ((trial_doc or {}).get('client_name', '')).strip()
+            # Priority: get name from license client (same as header "Chào mừng X")
+            # Already in memory — no Firebase call needed
+            if self.controller and hasattr(self.controller, '_license_client'):
+                lc = self.controller._license_client
+                if hasattr(lc, 'get_client_name'):
+                    cn = (lc.get_client_name() or '').strip()
+                    if cn == '***':
+                        cn = ''
+            # Fallback: try Firebase sources
+            if not cn:
+                rest_client = self._get_rest_client()
+                mid = self._get_machine_id()
+                if rest_client and mid:
+                    # Try _upgrade_requests first (has name from previous requests)
+                    req = rest_client.read_upgrade_request(mid)
+                    cn = (req.get('client_name', '') if req else '').strip()
+                    if cn == '***':
+                        cn = ''
+                    # Fallback 1: try _trials
+                    if not cn:
+                        trial_doc = rest_client._read_doc('_trials', mid, mid)
+                        cn = ((trial_doc or {}).get('client_name', '')).strip()
+                        if cn == '***':
+                            cn = ''
+                    # Fallback 2: try _keys (_cn from admin)
+                    if not cn:
+                        key_doc = rest_client._read_doc('_keys', mid, mid)
+                        cn = ((key_doc or {}).get('_cn', '')).strip()
+                        if cn == '***':
+                            cn = ''
             if cn:
                 self._name_entry.setText(cn)
                 self._name_entry.setReadOnly(True)
@@ -696,12 +716,16 @@ class LicenseRequiredDialog(QDialog):
         Uses the shared _name_entry from the upgrade request form.
         """
         name = getattr(self, '_name_entry', None)
-        if not name or not name.text().strip():
+        name_text = name.text().strip() if name else ''
+        if not name_text or name_text == '***':
             self._status_label.setVisible(True)
-            self._status_label.setText("❌ Vui lòng nhập họ tên ở mục 'Gửi yêu cầu nâng cấp' bên dưới")
+            self._status_label.setText("❌ Vui lòng nhập họ tên thật ở mục 'Gửi yêu cầu nâng cấp' bên dưới")
             self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
             # Highlight the name field
             if name:
+                if name_text == '***':
+                    name.clear()
+                    name.setReadOnly(False)
                 name.setFocus()
                 name.setStyleSheet(
                     f"background-color: {Theme.SURFACE2}; padding: 4px 8px; "
@@ -1097,10 +1121,13 @@ class LicenseRequiredDialog(QDialog):
         st = self._generate_st()
         
         # ── Guard 0: Require name only ──
-        if not name:
-            self._send_status.setText("⚠️ Vui lòng nhập họ tên")
+        if not name or name == '***':
+            self._send_status.setText("⚠️ Vui lòng nhập họ tên thật")
             self._send_status.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
             self._name_entry.setFocus()
+            if name == '***':
+                self._name_entry.clear()  # Clear masked placeholder
+                self._name_entry.setReadOnly(False)
             return
         
         # ── FREE tier → delegate to trial request logic ──

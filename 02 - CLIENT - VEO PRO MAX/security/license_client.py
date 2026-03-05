@@ -777,10 +777,12 @@ class LicenseClient:
         if cached.get('machine_id') != self.machine_id:
             return LicenseInfo(valid=False, error="License bound to different machine")
         
-        # Check local expiry (Tester role=2 bypasses expiry)
+        # Check local expiry (ALL roles, including TESTER)
         role_code = cached.get('role', 1)
         expires = self._safe_parse_dt(cached.get('expires', '2000-01-01'))
-        if role_code != 2 and expires < datetime.now():
+        if expires < datetime.now():
+            self.storage.clear()
+            self._invalidate_validate_cache()
             return LicenseInfo(valid=False, error="License expired")
         
         # 🔒 ONLINE-FIRST VALIDATION
@@ -821,9 +823,25 @@ class LicenseClient:
                     print(f"[LICENSE-DEBUG] ⛔ Clearing cache — server says invalid")
                     self.storage.clear()
                     self._invalidate_validate_cache()
+                else:
+                    # 🔒 Update last_verified on successful online check
+                    cached['last_verified'] = datetime.now().isoformat()
+                    cached['_last_known_time'] = datetime.now().isoformat()
+                    self.storage.save(cached)
                 return online_result
         else:
             print(f"[LICENSE-DEBUG] Online check skipped — last check {since_last_check:.0f}s ago (interval={ONLINE_CHECK_INTERVAL}s)")
+        
+        # 🔒 OFFLINE GRACE: hard deadline — revoke if no successful online check in N days
+        offline_seconds = since_last_check
+        if offline_seconds > (self.OFFLINE_GRACE_DAYS * 86400):
+            print(f"[LICENSE-DEBUG] ⛔ Offline grace exceeded: {offline_seconds/86400:.1f} days > {self.OFFLINE_GRACE_DAYS} days")
+            self.storage.clear()
+            self._invalidate_validate_cache()
+            return LicenseInfo(
+                valid=False,
+                error=f"Offline quá {self.OFFLINE_GRACE_DAYS} ngày. Kết nối internet để xác thực lại license."
+            )
         
         # 🔒 Update last known time (for next clock check)
         cached['_last_known_time'] = datetime.now().isoformat()
@@ -1264,6 +1282,17 @@ class LicenseClient:
             expires_str = result.get("expires", "")
             
             print(f"[LICENSE] Auto-restore: found key {key[:8]}... tier={tier_code}")
+            
+            # 🔒 CROSS-VALIDATE: verify key actually exists and is valid in _lic
+            if hasattr(rest_client, 'validate_with_crosscheck'):
+                try:
+                    is_valid, status, _data = rest_client.validate_with_crosscheck(key, self.machine_id)
+                    if not is_valid:
+                        print(f"[LICENSE] Auto-restore BLOCKED: key invalid on server ({status})")
+                        return None
+                except Exception as e:
+                    print(f"[LICENSE] Auto-restore cross-validate failed: {e}")
+                    return None  # Network error → don't restore blindly
             
             # Restore local cache
             try:

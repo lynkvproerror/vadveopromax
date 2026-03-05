@@ -3620,6 +3620,11 @@ class Engine:
         log_prefix = f"[Worker:{email[:12]}:V{video_index}]"
         
         try:
+            # Map worker index → original video index for correct variant letter naming
+            # e.g., retry_original_indices=[2,3] → worker 0 maps to index 2, worker 1 to index 3
+            ori = getattr(task, 'retry_original_indices', [])
+            effective_video_index = ori[video_index] if video_index < len(ori) else video_index
+            
             # ── Phase 1: Self-poll op ──
             task.video_outputs[video_index].quality = "polling"
             fife_url, media_id = await self._worker_poll_op(
@@ -3642,7 +3647,7 @@ class Engine:
 
             # ── Phase 2: Download 720p ──
             local_720p = await self._download_single(
-                task, account, fife_url, video_index, "720p"
+                task, account, fife_url, effective_video_index, "720p"
             )
 
             if not local_720p:
@@ -3690,7 +3695,7 @@ class Engine:
                 else:
                     # Inline upscale (upscale_priority mode)
                     upscaled = await self._upscale_single(
-                        task, account, fife_url, media_id, video_index
+                        task, account, fife_url, media_id, effective_video_index
                     )
                     if upscaled:
                         local_final = upscaled
@@ -3841,6 +3846,7 @@ class Engine:
                 task, [fife_url],
                 quality_subfolder=quality_subfolder,
                 generate_thumbnails=False,
+                video_index=video_index,
             )
             if paths and paths[0]:
                 log.info(f"{log_prefix} Downloaded {quality_subfolder}")
@@ -3873,6 +3879,7 @@ class Engine:
                     task, [upscaled_uri],
                     quality_subfolder=task.download_quality,
                     generate_thumbnails=False,
+                    video_index=video_index,
                 )
                 if dl_paths and dl_paths[0]:
                     task.video_outputs[video_index].upscale_status = "success"
@@ -6305,6 +6312,19 @@ class Engine:
         """
         import uuid
         
+        # Extract original failed video indices from results
+        failed_indices = []
+        for r in [r for r in (getattr(original_task, '_last_results_dict', {}) or {}).values() if r.quality == 'failed']:
+            failed_indices.append(r.index)
+        if not failed_indices:
+            # Fallback: compute from total - success count
+            total = getattr(original_task, 'output_count', 4) or 4
+            success_indices = set()
+            for vo in original_task.video_outputs:
+                if vo.quality != 'failed':
+                    success_indices.add(vo.index)
+            failed_indices = [i for i in range(total) if i not in success_indices]
+        
         retry_id = f"retry-{str(uuid.uuid4())[:8]}"
         
         retry_task = Task(
@@ -6326,6 +6346,7 @@ class Engine:
             continuation_frame_uri=original_task.continuation_frame_uri,
             continuation_frame_local_path=original_task.continuation_frame_local_path,
             extract_point_ms=original_task.extract_point_ms,
+            retry_original_indices=failed_indices,  # Preserve original indices for variant letter naming
         )
         # Pin to same account — reuse project_id, same image_uris (account-bound)
         retry_task.required_account = original_task.assigned_account
@@ -6335,6 +6356,7 @@ class Engine:
             log.info(
                 f"🔄 Auto-retry submitted: {retry_id} "
                 f"(output_count={failed_count}, "
+                f"original_indices={failed_indices}, "
                 f"replacing {', '.join(failed_labels)})"
             )
         else:
@@ -7298,6 +7320,7 @@ class Engine:
         quality_subfolder: str = "",
         generate_thumbnails: bool = True,
         overwrite_paths: list = None,
+        video_index: int = -1,
     ) -> list:
         """Download output URIs to output_folder/project_name/quality_subfolder/.
         
@@ -7315,7 +7338,8 @@ class Engine:
         async with self._download_locks[task_id]:
             return await self._download_outputs_inner(
                 task, output_uris, quality_subfolder,
-                generate_thumbnails, overwrite_paths
+                generate_thumbnails, overwrite_paths,
+                video_index=video_index,
             )
     
     async def _download_outputs_inner(
@@ -7323,6 +7347,7 @@ class Engine:
         quality_subfolder: str = "",
         generate_thumbnails: bool = True,
         overwrite_paths: list = None,
+        video_index: int = -1,
     ) -> list:
         """Actual download implementation (called under per-task lock)."""
         from config.settings import get_settings
@@ -7352,7 +7377,9 @@ class Engine:
         
         # Variant suffixes for multi-output
         variant_letters = "abcdefghijklmnopqrstuvwxyz"
-        is_multi = len(output_uris) > 1
+        # Multi-output: either batch download (len>1) or single worker with output_count>1
+        task_output_count = getattr(task, 'output_count', 1) or 1
+        is_multi = len(output_uris) > 1 or task_output_count > 1
         
         # Bug 4A: Timeout prevents infinite hang on unresponsive FIFE server
         dl_timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
@@ -7373,8 +7400,10 @@ class Engine:
                         parts = []
                         
                         # Index + variant suffix
-                        if is_multi and i < len(variant_letters):
-                            parts.append(f"{idx_str}{variant_letters[i]}")
+                        # Use video_index (from worker) if provided, otherwise loop index
+                        variant_idx = video_index if video_index >= 0 else i
+                        if is_multi and variant_idx < len(variant_letters):
+                            parts.append(f"{idx_str}{variant_letters[variant_idx]}")
                         else:
                             parts.append(idx_str)
                         

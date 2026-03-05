@@ -818,10 +818,11 @@ class MainWindow(QMainWindow):
             return "?.?.?"
     
     def _check_min_version(self):
-        """Check if app version meets server-configured minimum.
+        """Check server-configured min version & maintenance mode.
         
-        Fetches min_client_version from Firebase _config/client_settings.
-        If current version < minimum → show blocking popup + force quit.
+        Fetches from Firebase _config/client_settings:
+        - min_client_version: block if current < minimum
+        - maintenance_mode: block if server is in maintenance
         """
         def _ver_tuple(v: str):
             """Parse version string to comparable tuple."""
@@ -835,6 +836,16 @@ class MainWindow(QMainWindow):
             import logging
             log = logging.getLogger('veo')
             client = FirebaseRESTClient()
+            
+            # Check maintenance mode (strict bool — string "false" must not trigger)
+            raw_maint = client.get_config_value("maintenance_mode", False)
+            maintenance = raw_maint is True or str(raw_maint).lower() == "true"
+            if maintenance:
+                log.warning("[MaintenanceCheck] Server is in maintenance mode — blocking!")
+                self._show_maintenance_block()
+                return
+            
+            # Check min version
             min_ver = str(client.get_config_value("min_client_version", "1.0.0"))
             current = self._get_version()
             
@@ -850,7 +861,9 @@ class MainWindow(QMainWindow):
     def _show_version_block(self, current: str, minimum: str):
         """Show blocking dialog when app version is below minimum."""
         from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtCore import Qt
         msg = QMessageBox(self)
+        msg.setTextFormat(Qt.TextFormat.RichText)
         msg.setIcon(QMessageBox.Critical)
         msg.setWindowTitle("⚠️ Cập nhật bắt buộc")
         msg.setText(
@@ -870,6 +883,26 @@ class MainWindow(QMainWindow):
                 webbrowser.open("https://github.com/lynkv/veo-pro-max/releases")
         
         # Force quit — version is too old
+        from PySide6.QtWidgets import QApplication
+        QApplication.quit()
+    
+    def _show_maintenance_block(self):
+        """Show blocking dialog when server is in maintenance mode."""
+        from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtCore import Qt
+        msg = QMessageBox(self)
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setIcon(QMessageBox.Warning)
+        msg.setWindowTitle("🔧 Bảo trì hệ thống")
+        msg.setText(
+            "<b>Hệ thống đang trong quá trình bảo trì.</b><br><br>"
+            "Vui lòng thử lại sau ít phút.<br>"
+            "Xin lỗi vì sự bất tiện này!"
+        )
+        msg.addButton("OK", QMessageBox.AcceptRole)
+        msg.exec()
+        
+        # Force quit — server maintenance
         from PySide6.QtWidgets import QApplication
         QApplication.quit()
     
@@ -959,7 +992,11 @@ class MainWindow(QMainWindow):
             return None
     
     def _update_window_title(self):
-        """Build and set the window title bar text with all header info."""
+        """Build and set the window title bar text with all header info.
+        
+        Greeting is picked ONCE at first call and cached for the session.
+        Only changes on app restart.
+        """
         import random
         from config.contact_provider import get_contact_info
 
@@ -978,9 +1015,11 @@ class MainWindow(QMainWindow):
         else:
             welcome = t("app.welcome_default")
         
-        # Pick random greeting
-        greetings = t("app.greetings")
-        greeting = random.choice(greetings) if isinstance(greetings, list) and greetings else ""
+        # Pick greeting ONCE per session (cached until restart)
+        if not hasattr(self, '_cached_greeting'):
+            greetings = t("app.greetings")
+            self._cached_greeting = random.choice(greetings) if isinstance(greetings, list) and greetings else ""
+        greeting = self._cached_greeting
         
         # Get contact info from secure provider
         contact = get_contact_info()

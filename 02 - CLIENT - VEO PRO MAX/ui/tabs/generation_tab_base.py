@@ -388,7 +388,21 @@ class GenerationTabBase(QWidget):
                 self.prompt_input.setPlainText(f.read())
     
     def _on_clear(self):
-        """Clear prompt input."""
+        """Clear prompt input and remove auto-added images from library."""
+        # Collect tags from current parsed prompts before clearing
+        if self.IMAGE_MODE is not None:
+            all_tags = []
+            for row in self.prompt_table.get_prompts():
+                row.extract_tags()
+                all_tags.extend(row.image_tags)
+            if all_tags:
+                try:
+                    from services.image_library import get_image_library
+                    lib = get_image_library()
+                    lib.remove_by_tags(all_tags, delete_files=False)
+                except Exception:
+                    pass
+        
         self.prompt_input.clear()
         self.prompt_table.set_prompts([])
         self._update_parsed_count(0)
@@ -521,14 +535,20 @@ class GenerationTabBase(QWidget):
         if not prompts:
             return
         
-        # Trial guard: max 10 prompts per batch
-        if self._is_trial and len(prompts) > 10:
+        # Enforce max prompts per batch from server limits
+        max_pb = -1
+        try:
+            if self.controller and hasattr(self.controller, '_permissions'):
+                max_pb = self.controller._permissions.limits.max_prompts_per_batch
+        except Exception:
+            pass
+        if max_pb > 0 and len(prompts) > max_pb:
             from ui.popups import show_warning
             show_warning(
-                self, "🔒 Trial Limit",
-                f"Gói Trial giới hạn tối đa 10 prompts mỗi lần.\n"
+                self, "🔒 Prompt Limit",
+                f"Giới hạn tối đa {max_pb} prompts mỗi dự án.\n"
                 f"Hiện tại: {len(prompts)} prompts.\n\n"
-                "Nâng cấp lên Premium để thêm không giới hạn."
+                "Liên hệ admin để nâng giới hạn."
             )
             return
         

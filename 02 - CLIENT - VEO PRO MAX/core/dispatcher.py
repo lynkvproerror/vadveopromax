@@ -137,6 +137,7 @@ class Task:
     retry_attempts: int = 0        # Track retries for UI display
     chain_retry_count: int = 0     # Auto-retry count for chain root (engine-level)
     dl_retry_generation_count: int = 0  # Download failure re-generation attempts (max from settings)
+    retry_original_indices: List[int] = field(default_factory=list)  # Original video indices for variant letter naming
     
     # Results
     operation_name: Optional[str] = None
