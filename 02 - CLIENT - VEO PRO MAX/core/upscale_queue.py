@@ -193,6 +193,7 @@ class UpscaleJob:
     retry_count: int = 0            # Job-level retry counter
     max_retries: int = 3            # Max job-level retries before permanent fail
     retry_indices: List[int] = field(default_factory=list)  # Which video indices to retry (empty = all)
+    enqueue_after: float = 0.0      # Bug 2 fix: monotonic time to delay processing until (0 = no delay)
 
 
 class UpscaleQueue:
@@ -314,6 +315,10 @@ class UpscaleQueue:
         # multiple enqueue paths fire for same task)
         self._processing_ids: set = set()  # "task_id:media_id" strings
         
+        # Force-retry cancellation: task_ids whose upscale jobs should be
+        # discarded. Populated by cancel_task_jobs(), checked by _process_job.
+        self._cancelled_task_ids: set = set()  # task_id strings
+        
         # Counter for active image upscale jobs (bypass 720p_priority pause)
         self._active_image_jobs: int = 0
     
@@ -345,6 +350,9 @@ class UpscaleQueue:
             force: If True, bypass dedup check (used for re-upscale).
         """
         email = job.account_email
+        
+        # Clear cancelled flag if task is being re-enqueued (post-force-retry re-generation)
+        self._cancelled_task_ids.discard(job.task_id)
         
         # Bug 3: Dedup — skip if already enqueued
         dedup_keys = [f"{job.task_id}:{mid}" for mid in job.media_ids if mid]
@@ -385,6 +393,50 @@ class UpscaleQueue:
             f"[UpscaleQueue] Enqueued {source} for task {job.task_id} "
             f"({len(job.media_ids)} {_item_type}, {job.target_quality}) → {email}"
         )
+    
+    def cancel_task_jobs(self, task_id: str) -> int:
+        """Cancel all pending/in-flight upscale jobs for a task.
+        
+        Called by _force_reset_and_retry to prevent orphan upscale jobs
+        from corrupting the task's cleared video_outputs.
+        
+        Actions:
+          1. Mark task_id as cancelled → _process_job skips it immediately
+          2. Drain matching jobs from per-account queues
+          3. Clean dedup keys so re-generated results can enqueue normally
+        
+        Returns: number of queued jobs evicted.
+        """
+        self._cancelled_task_ids.add(task_id)
+        
+        # Clean dedup keys containing this task_id
+        stale_keys = {k for k in self._enqueued_ids if k.startswith(f"{task_id}:")}
+        self._enqueued_ids -= stale_keys
+        stale_proc = {k for k in self._processing_ids if k.startswith(f"{task_id}:")}
+        self._processing_ids -= stale_proc
+        
+        # Evict pending jobs from per-account queues
+        evicted = 0
+        for email, q in self._queues.items():
+            keep = []
+            try:
+                while not q.empty():
+                    job = q.get_nowait()
+                    if job.task_id == task_id:
+                        evicted += 1
+                    else:
+                        keep.append(job)
+            except Exception:
+                pass
+            for job in keep:
+                q.put_nowait(job)
+        
+        if evicted > 0 or stale_keys:
+            log.info(
+                f"[UpscaleQueue] cancel_task_jobs({task_id[:12]}): "
+                f"evicted {evicted} queued jobs, cleared {len(stale_keys)} dedup keys"
+            )
+        return evicted
     
     def has_active_jobs(self, email: str) -> bool:
         """Check if any upscale jobs are actively processing for this account.
@@ -497,6 +549,16 @@ class UpscaleQueue:
                     continue
                 
                 # Launch job concurrently (don't await — fire and forget)
+                # Bug 2 fix: if job has a delay, sleep BEFORE launching
+                if job.enqueue_after > 0:
+                    delay_remaining = job.enqueue_after - time.monotonic()
+                    if delay_remaining > 0:
+                        log.info(
+                            f"[UpscaleQueue] {email}: delaying job {job.task_id[:8]} "
+                            f"for {delay_remaining:.0f}s (scheduled retry)"
+                        )
+                        await asyncio.sleep(delay_remaining)
+                
                 task = asyncio.create_task(
                     self._process_job(job),
                     name=f"upscale-{job.task_id[:8]}"
@@ -540,10 +602,30 @@ class UpscaleQueue:
                 self._active_image_jobs = max(0, self._active_image_jobs - 1)
             return
         
+        # ── Staleness guard: skip if task was force-retried ──
+        if job.task_id in self._cancelled_task_ids:
+            log.info(
+                f"[UpscaleQueue] Skipping stale job for force-retried task "
+                f"{job.task_id[:12]} (cancelled)"
+            )
+            self._job_controller.record_failure(job.account_email)
+            return
+        
         task = self._dispatcher.get_task(job.task_id)
         if not task:
             log.warning(f"[UpscaleQueue] Task {job.task_id} not found, skipping")
             self._total_failed += 1
+            self._job_controller.record_failure(job.account_email)
+            return
+        
+        # Guard: if task was reset (video_outputs cleared by force retry)
+        # but cancel_task_jobs wasn't called yet (race), detect via empty outputs
+        if not task.video_outputs and not job.retry_indices:
+            log.warning(
+                f"[UpscaleQueue] Task {job.task_id[:12]} has empty video_outputs "
+                f"(likely force-retried), skipping stale upscale job"
+            )
+            self._job_controller.record_failure(job.account_email)
             return
         
         # Get the account
@@ -551,6 +633,7 @@ class UpscaleQueue:
         if not account:
             log.warning(f"[UpscaleQueue] Account {job.account_email} not found, skipping")
             self._total_failed += 1
+            self._job_controller.record_failure(job.account_email)
             return
         
         # DD6: Failover — if primary account unhealthy, try other accounts
@@ -626,6 +709,7 @@ class UpscaleQueue:
             )
             self._sync_status_fn(task)
             self._total_failed += 1
+            self._job_controller.record_failure(job.account_email)
             return
         
         # Store media IDs on task for re-upscale support
@@ -1093,6 +1177,7 @@ class UpscaleQueue:
             log.warning(f"[UpscaleQueue] All retries exhausted for task {job.task_id}")
             self._sync_status_fn(task)
             self._total_failed += 1
+            self._job_controller.record_failure(job.account_email)
             from core.dispatcher import TaskStage
             task.stage = TaskStage.COMPLETED
             self._dispatcher.update_progress(task.id, 100, "⚠️ Upscale failed — 720p saved")
@@ -1122,7 +1207,12 @@ class UpscaleQueue:
                 max_retries=job.max_retries,
                 retry_indices=failed_indices,  # Map back to original positions
             )
+            # Bug 2 fix: Use enqueue_after instead of fire-and-forget asyncio.create_task.
+            # _delayed_retry() would create a ghost task outside active_jobs tracking.
+            # Instead, set a delay on the retry job and enqueue directly — the worker loop
+            # handles the delay inline, keeping the job within active_jobs tracking.
             retry_delay = 30 * (2 ** job.retry_count)
+            retry_job.enqueue_after = time.monotonic() + retry_delay
             log.info(
                 f"[UpscaleQueue] Partial retry: {len(failed_indices)} failed videos "
                 f"(indices {failed_indices}) will retry in {retry_delay}s. "
@@ -1132,11 +1222,7 @@ class UpscaleQueue:
             for i in failed_indices:
                 task.video_outputs[i].upscale_status = "pending"
                 task.video_outputs[i].upscale_error = ""
-            
-            async def _delayed_retry():
-                await asyncio.sleep(retry_delay)
-                self.enqueue(retry_job)
-            asyncio.create_task(_delayed_retry())
+            self.enqueue(retry_job)
         
         # =====================================================
         # PHASE 2: Parallel Poll (all videos simultaneously)

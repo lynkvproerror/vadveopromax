@@ -283,6 +283,13 @@ class QueueContextMenuMixin:
     
     def _show_video_context_menu(self, pos, video_info: dict, parent_widget):
         """Right-click context menu on a THUMBNAIL SLOT."""
+        # Calculate global position FIRST, before anything can change
+        try:
+            global_pos = parent_widget.mapToGlobal(pos)
+        except (RuntimeError, AttributeError):
+            # Parent widget was deleted (queue refresh) — use cursor position
+            global_pos = QCursor.pos()
+
         menu = self._create_styled_menu()
         idx = video_info.get('index', 0)
         bc = video_info.get('border_color', 'gray')
@@ -338,7 +345,10 @@ class QueueContextMenuMixin:
                     lambda c=False, f=best_file: self._on_add_to_library(f)
                 )
         
-        menu.exec(parent_widget.mapToGlobal(pos))
+        # Pause refresh while menu is open, resume after
+        self._pause_refresh_for_menu = True
+        menu.aboutToHide.connect(lambda: setattr(self, '_pause_refresh_for_menu', False))
+        menu.exec(global_pos)
     
     def _on_reupscale_single_video(self, task_id, video_index, slot=None):
         """Re-upscale a single video by index."""

@@ -649,6 +649,9 @@ class Engine:
         # Fix G6: Inject burst_controller into upscale queue for anti-detect delay
         self._upscale_queue._burst_controller = self._burst_controller
         
+        # Wire force-retry → cancel upscale queue jobs (prevent orphan corruption)
+        self._dispatcher._on_cancel_upscale = self._upscale_queue.cancel_task_jobs
+        
         # Wire burst controller into account manager for health-score 403 penalty
         if hasattr(self._account_manager, 'set_burst_controller'):
             self._account_manager.set_burst_controller(self._burst_controller)
@@ -3694,9 +3697,13 @@ class Engine:
                     # Worker returns early with 720p quality
                 else:
                     # Inline upscale (upscale_priority mode)
-                    upscaled = await self._upscale_single(
-                        task, account, fife_url, media_id, effective_video_index
-                    )
+                    # Bug 3 fix: Gate with per-account semaphore (max 3 concurrent)
+                    # Without this, N workers = N simultaneous upscale requests
+                    upscale_sem = self._get_upscale_api_semaphore(email)
+                    async with upscale_sem:
+                        upscaled = await self._upscale_single(
+                            task, account, fife_url, media_id, effective_video_index
+                        )
                     if upscaled:
                         local_final = upscaled
                         final_quality = task.download_quality

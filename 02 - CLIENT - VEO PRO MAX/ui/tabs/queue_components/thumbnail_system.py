@@ -190,7 +190,15 @@ class QueueThumbnailMixin:
         return slot
     
     def _attach_slot_context_menu(self, slot: QLabel, video_info: dict):
-        """Attach right-click context menu to a thumbnail slot."""
+        """Attach right-click context menu to a thumbnail slot.
+        
+        Safe to call multiple times — disconnects previous handler first.
+        """
+        # Disconnect any existing context menu handler to prevent stacking
+        try:
+            slot.customContextMenuRequested.disconnect()
+        except (RuntimeError, TypeError):
+            pass  # No previous connection
         slot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         slot.customContextMenuRequested.connect(
             lambda pos, vi=dict(video_info), w=slot: self._show_video_context_menu(pos, vi, w)

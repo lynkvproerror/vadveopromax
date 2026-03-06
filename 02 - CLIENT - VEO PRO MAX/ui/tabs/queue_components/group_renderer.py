@@ -102,6 +102,8 @@ class QueueGroupMixin:
         for btn_text, btn_tip, btn_color, btn_connect in [
             ("⚒️", "Setup: change model, aspect ratio, output folder, outputs", Theme.BLUE,
              lambda checked, _gid=gid, _gd=group_data: self._on_setup_group(_gid, _gd)),
+            ("FRC", "Force retry ALL prompts in this group", Theme.PEACH,
+             lambda checked, _gid=gid: self._on_force_retry_group(_gid)),
             ("RST", "Reset group: delete all downloads & cache, re-queue", Theme.YELLOW,
              lambda checked, _gid=gid: self._on_reset_group(_gid)),
             ("DEL", "Delete entire group", Theme.SUBTEXT0,
@@ -646,6 +648,31 @@ class QueueGroupMixin:
         layout.addLayout(btn_layout)
         dialog.exec()
     
+    def _on_force_retry_group(self, group_id: str):
+        """Force retry ALL tasks in a group (re-generate everything)."""
+        if not self.controller or not hasattr(self.controller, 'dispatcher'):
+            return
+        group = self.controller.dispatcher.get_group(group_id)
+        if not group:
+            return
+        task_count = len(group.tasks)
+        if not show_confirm(self, "Force Retry Group",
+                f"Force re-generate ALL {task_count} prompts in this group?\n\n"
+                "This will delete existing outputs and re-queue everything.",
+                danger=True):
+            return
+        count = 0
+        if hasattr(self.controller, 'force_retry_task'):
+            for task in group.tasks:
+                if task.state.value != 'running':
+                    if self.controller.force_retry_task(str(task.id)):
+                        count += 1
+        self._refresh_queue_from_controller()
+        self._update_stats()
+        mw = self.window()
+        if mw and hasattr(mw, 'show_toast'):
+            mw.show_toast(f"🔄 Force retrying {count}/{task_count} prompts in group", "info")
+
     def _on_reset_group(self, group_id: str):
         """Reset all tasks in a group."""
         if not self.controller or not hasattr(self.controller, 'dispatcher'):

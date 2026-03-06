@@ -295,6 +295,7 @@ class Dispatcher:
         self._on_task_completed: Optional[Callable[[Task], None]] = None
         self._on_task_failed: Optional[Callable[[Task, str], None]] = None
         self._on_progress_callback: Optional[Callable[[str, int, str], None]] = None
+        self._on_cancel_upscale: Optional[Callable[[str], None]] = None  # cancel upscale jobs for task_id
     
     @property
     def ready_count(self) -> int:
@@ -1365,6 +1366,13 @@ class Dispatcher:
             log.info(f"[ForceRetry] Decremented running counters for {task_id} "
                      f"(was {prev_state.value}, running_count={self._running_count})")
         
+        # ── Cancel in-flight upscale jobs (prevent orphan corruption) ──
+        if self._on_cancel_upscale:
+            try:
+                self._on_cancel_upscale(task_id)
+            except Exception as e:
+                log.warning(f"[ForceRetry] cancel_upscale error: {e}")
+        
         # ── Identify continuation children (before deleting outputs) ──
         children_ids = [
             t.id for t in self._all_tasks.values()
@@ -1487,6 +1495,13 @@ class Dispatcher:
                 child = self._all_tasks.get(desc_id)
                 if not child:
                     continue
+                
+                # Cancel descendant's upscale queue jobs too
+                if self._on_cancel_upscale:
+                    try:
+                        self._on_cancel_upscale(desc_id)
+                    except Exception:
+                        pass
                 
                 # Delete descendant's files too
                 for path in list(child.output_uris):

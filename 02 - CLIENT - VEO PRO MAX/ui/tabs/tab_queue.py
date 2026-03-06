@@ -311,6 +311,9 @@ class TabQueue(
     
     def _on_auto_refresh_tick(self):
         """Periodic queue refresh while engine is running (every 2s)."""
+        # Skip refresh while context menu is open to prevent parent widget deletion
+        if getattr(self, '_pause_refresh_for_menu', False):
+            return
         self._refresh_queue_from_controller()
         # Auto-stop timer if engine no longer processing AND upscale queue is idle
         if self.controller and hasattr(self.controller, 'state'):
@@ -502,7 +505,14 @@ class TabQueue(
         self.retry_failed_btn.setToolTip("Retry all failed prompts")
         self.retry_failed_btn.clicked.connect(self._on_retry_failed)
         layout.addWidget(self.retry_failed_btn)
-        
+
+        # Force Retry All button — force re-generate ALL tasks
+        self.force_all_btn = QPushButton("Force All")
+        self.force_all_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.PEACH};")
+        self.force_all_btn.setToolTip("Force retry ALL prompts (re-generate everything)")
+        self.force_all_btn.clicked.connect(self._on_force_retry_all)
+        layout.addWidget(self.force_all_btn)
+
         # Reset All
         self.reset_btn = QPushButton(t("queue.reset_all"))
         self.reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.YELLOW};")
@@ -1245,6 +1255,35 @@ class TabQueue(
             main_window.show_toast(f"Retrying {total} failed prompts (1 per 2s)", "info")
         
         self._retry_next()
+
+    def _on_force_retry_all(self):
+        """Force retry ALL tasks (re-generate everything) — staggered 1 per 2s."""
+        all_items = [i for i in self._queue_items if i.status != 'running']
+        if not all_items:
+            return
+
+        if not show_confirm(self, "Force Retry All",
+                f"Force re-generate ALL {len(all_items)} prompts?\n\n"
+                "This will delete existing outputs and re-queue everything.",
+                danger=True):
+            return
+
+        # Debounce
+        self.force_all_btn.setEnabled(False)
+        QTimer.singleShot(5000, lambda: self.force_all_btn.setEnabled(True))
+
+        count = 0
+        if self.controller and hasattr(self.controller, 'force_retry_task'):
+            for item in all_items:
+                if self.controller.force_retry_task(str(item.id)):
+                    count += 1
+
+        self._refresh_queue_from_controller()
+        self._update_stats()
+
+        main_window = self.window()
+        if main_window and hasattr(main_window, 'show_toast'):
+            main_window.show_toast(f"🔄 Force retrying {count} prompts — re-queued", "info")
     
     def _retry_next(self):
         """Retry next item in the staggered queue."""
