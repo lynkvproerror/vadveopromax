@@ -1,12 +1,61 @@
 /* VEO Pro Max Extension v2.2.2 - Protected */
 const EXT_VERSION = chrome.runtime.getManifest().version;
-const WEBSOCKET_PORTS = [8765, 8766, 8767];
-const RECONNECT_INTERVAL = 3000;
 const MAX_TABS = 3;
-let ws = null;
 let wsConnected = false;
-let currentPortIndex = 0;
 const tabState = {};
+let _tabStateRestored = false;
+let _wsSendQueue = [];
+let _persistTimer = null;
+function persistTabState() {
+if (_persistTimer) clearTimeout(_persistTimer);
+_persistTimer = setTimeout(() => {
+const serializable = {};
+for (const [tabId, state] of Object.entries(tabState)) {
+serializable[tabId] = {
+email: state.email,
+headers: state.headers || {},
+accessToken: state.accessToken,
+lastHeartbeat: state.lastHeartbeat,
+recaptchaReady: state.recaptchaReady || false,
+};
+}
+chrome.storage.session.set({ tabState: serializable }).catch(() => { });
+}, 1000);
+}
+async function restoreTabState() {
+try {
+const result = await chrome.storage.session.get('tabState');
+if (result.tabState && Object.keys(result.tabState).length > 0) {
+for (const [tabId, state] of Object.entries(result.tabState)) {
+try {
+const tab = await chrome.tabs.get(parseInt(tabId));
+if (tab) {
+tabState[tabId] = state;
+}
+} catch (_) {
+}
+}
+if (Object.keys(tabState).length > 0) {
+return;
+}
+}
+} catch (e) {
+}
+try {
+const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+for (const tab of tabs) {
+if (!tabState[tab.id]) {
+tabState[tab.id] = {
+email: null, headers: {}, accessToken: null,
+lastHeartbeat: 0, recaptchaReady: false,
+};
+}
+}
+if (tabs.length > 0) {
+}
+} catch (e) {
+}
+}
 let globalBrowserValidation = null;
 const BROWSER_HEADERS = [
 'x-browser-channel',
@@ -41,26 +90,72 @@ return true;
 return false;
 }
 }
-chrome.alarms.create('ws_keepalive', { periodInMinutes: 0.4 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-if (alarm.name === 'ws_keepalive') {
-if (!ws || ws.readyState !== WebSocket.OPEN) {
-connectWebSocket();
-}
-}
+let _offscreenCreating = null;
+async function ensureOffscreenDocument() {
+const existingContexts = await chrome.runtime.getContexts({
+contextTypes: ['OFFSCREEN_DOCUMENT'],
+documentUrls: [chrome.runtime.getURL('offscreen.html')],
 });
-let wsReconnectDelay = RECONNECT_INTERVAL;
-function connectWebSocket() {
-if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+if (existingContexts.length > 0) {
 return;
 }
-const port = WEBSOCKET_PORTS[currentPortIndex];
-const url = `ws://127.0.0.1:${port}`;
+if (_offscreenCreating) {
+await _offscreenCreating;
+return;
+}
+for (let attempt = 1; attempt <= 3; attempt++) {
+_offscreenCreating = chrome.offscreen.createDocument({
+url: 'offscreen.html',
+reasons: ['WORKERS'],
+justification: 'Persistent WebSocket connection to Python app',
+});
 try {
-ws = new WebSocket(url);
-ws.onopen = () => {
-wsConnected = true;
-wsReconnectDelay = RECONNECT_INTERVAL;
+await _offscreenCreating;
+_offscreenCreating = null;
+return;
+} catch (e) {
+_offscreenCreating = null;
+if (attempt < 3) {
+await new Promise(r => setTimeout(r, 2000));
+} else {
+console.error(`[VEO Bridge] ❌ Offscreen creation failed after 3 attempts: ${e.message}`);
+}
+}
+}
+}
+function wsSend(data) {
+if (!wsConnected) {
+if (_wsSendQueue.length < 50) {
+_wsSendQueue.push(data);
+}
+return false;
+}
+chrome.runtime.sendMessage({
+type: 'offscreen_ws_send',
+data: data,
+}).catch(() => {
+if (_wsSendQueue.length < 50) {
+_wsSendQueue.push(data);
+}
+});
+return true;
+}
+async function onWsConnected() {
+if (!_tabStateRestored) {
+const start = Date.now();
+while (!_tabStateRestored && Date.now() - start < 2000) {
+await new Promise(r => setTimeout(r, 100));
+}
+if (!_tabStateRestored) {
+}
+}
+if (_wsSendQueue.length > 0) {
+const queue = [..._wsSendQueue];
+_wsSendQueue = [];
+for (const msg of queue) {
+wsSend(msg);
+}
+}
 for (const [tabId, state] of Object.entries(tabState)) {
 if (state.email) {
 wsSend({
@@ -80,45 +175,6 @@ accessToken: state.accessToken,
 extractAndPushToken(parseInt(tabId), state.email);
 }
 }
-};
-ws.onmessage = (event) => {
-try {
-const msg = JSON.parse(event.data);
-handleAppMessage(msg).catch(e => {
-console.error(String.fromCharCode(0x5b,0x56,0x45,0x4f,0x20,0x42,0x72,0x69,0x64,0x67,0x65,0x5d,0x20,0x41,0x73,0x79,0x6e,0x63,0x20,0x68,0x61,0x6e,0x64,0x6c,0x65,0x72,0x20,0x65,0x72,0x72,0x6f,0x72,0x3a), e.message || e);
-});
-} catch (e) {
-console.error('[VEO Bridge] Failed to parse message:', e);
-}
-};
-ws.onclose = (event) => {
-wsConnected = false;
-ws = null;
-if (event.wasClean) {
-currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
-}
-const nextPort = WEBSOCKET_PORTS[currentPortIndex];
-setTimeout(connectWebSocket, wsReconnectDelay);
-if (event.wasClean && currentPortIndex === 0) {
-wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
-} else if (!event.wasClean) {
-wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, 10000);
-}
-};
-ws.onerror = () => {
-};
-} catch (e) {
-currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
-setTimeout(connectWebSocket, wsReconnectDelay);
-wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
-}
-}
-function wsSend(data) {
-if (ws && ws.readyState === WebSocket.OPEN) {
-ws.send(JSON.stringify(data));
-return true;
-}
-return false;
 }
 async function handleAppMessage(msg) {
 switch (msg.action) {
@@ -134,7 +190,7 @@ error: `No tab found for ${msg.email}`,
 return;
 }
 try {
-const results = await chrome.scripting.executeScript({
+const scriptPromise = chrome.scripting.executeScript({
 target: { tabId },
 world: 'MAIN',
 func: async (siteKey) => {
@@ -180,6 +236,10 @@ return { token: null, error: err.message, tokenLength: 0 };
 },
 args: [msg.siteKey || null],
 });
+const timeoutPromise = new Promise((_, reject) =>
+setTimeout(() => reject(new Error('reCAPTCHA execute timeout (15s) — widget may be frozen')), 15000)
+);
+const results = await Promise.race([scriptPromise, timeoutPromise]);
 const result = results?.[0]?.result;
 if (result?.error?.includes('too short')) {
 shortTokenCounts[tabId] = (shortTokenCounts[tabId] || 0) + 1;
@@ -913,8 +973,243 @@ error: e.message,
 }
 break;
 }
+case 'provision_gemini_key': {
+const requestId = msg.requestId;
+const email = msg.email;
+const RPC_BASE = 'https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService';
+const STATIC_KEY = 'AIzaSyDdP816MREB3SkjZO04QXbjsigfcI0GWOs';
+const tabId = findTabForEmail(email) || Object.keys(tabState).find(tid => tabState[tid].email);
+if (!tabId) {
+wsSend({
+action: 'provision_gemini_key_result',
+requestId, email, success: false,
+error: 'No tab available for Gemini key provisioning',
+});
+break;
+}
+try {
+const sapisidCookie = await chrome.cookies.get({
+url: 'https://aistudio.google.com',
+name: 'SAPISID',
+});
+const sapisid = sapisidCookie?.value;
+if (!sapisid) {
+wsSend({
+action: 'provision_gemini_key_result',
+requestId, email, success: false,
+error: 'no_sapisid', msg: 'SAPISID cookie not found — user may not be logged in',
+});
+break;
+}
+const phase1Fn = async (RPC, KEY, sapisidValue) => {
+async function buildSapisidHash(sapisid) {
+try {
+const ORIGIN = "https://aistudio.google.com";
+const ts = Math.floor(Date.now() / 1000);
+const input = `${ts} ${sapisid} ${ORIGIN}`;
+const buf = await crypto.subtle.digest("SHA-1",
+new TextEncoder().encode(input));
+const hex = [...new Uint8Array(buf)]
+.map(b => b.toString(16).padStart(2, '0')).join('');
+const hash = `${ts}_${hex}`;
+return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
+} catch (e) { return null; }
+}
+const authHeader = await buildSapisidHash(sapisidValue);
+const H = {
+"Content-Type": "application/json+protobuf",
+"x-goog-api-key": KEY,
+"x-goog-authuser": "0",
+"x-user-agent": "grpc-web-javascript/0.1",
+"x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
+};
+if (authHeader) H["authorization"] = authHeader;
+try {
+let r = await fetch(RPC + "/ListCloudProjects", {
+method: "POST", credentials: "include", headers: H,
+body: JSON.stringify([null, null, null, 1, null, null])
+});
+if (!r.ok) return { error: "list_projects_http_" + r.status };
+let projects = await r.json();
+let projectRef = null;
+let projectId = null;
+if (projects && Array.isArray(projects)) {
+const flat = JSON.stringify(projects);
+const m = flat.match(/projects\/(\d+)/);
+if (m) projectRef = "projects/" + m[1];
+const m2 = flat.match(/gen-lang-client-[\w-]+/);
+if (m2) projectId = m2[0];
+}
+if (!projectRef) {
+return { error: "no_project", needs_navigate: true };
+}
+r = await fetch(RPC + "/ListCloudApiKeys", {
+method: "POST", credentials: "include", headers: H,
+body: JSON.stringify([100, null, 1, [projectRef]])
+});
+if (!r.ok) return { error: "list_keys_http_" + r.status };
+let keys = await r.json();
+const keysFlat = JSON.stringify(keys);
+const km = keysFlat.match(/AIza[\w-]{35}/);
+if (km) return { key: km[0], source: "existing" };
+if (!projectId) return { error: "no_project_id" };
+r = await fetch(RPC + "/GenerateCloudApiKey", {
+method: "POST", credentials: "include", headers: H,
+body: JSON.stringify([projectId, null, null, "GEMINI API AUTO"])
+});
+if (!r.ok) return { error: "gen_key_http_" + r.status };
+let newKey = await r.json();
+const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
+if (nkm) return { key: nkm[0], source: "created" };
+return { error: "create_failed", needs_navigate: true };
+} catch (e) {
+return { error: e.message };
+}
+};
+const phase1Script = chrome.scripting.executeScript({
+target: { tabId: parseInt(tabId) },
+world: 'MAIN',
+func: phase1Fn,
+args: [RPC_BASE, STATIC_KEY, sapisid],
+});
+const phase1Timeout = new Promise((_, reject) =>
+setTimeout(() => reject(new Error('Gemini provision Phase 1 timeout (30s)')), 30000)
+);
+const phase1Results = await Promise.race([phase1Script, phase1Timeout]);
+let result = phase1Results?.[0]?.result;
+if (result?.needs_navigate) {
+const origUrl = (await chrome.tabs.get(parseInt(tabId))).url;
+await chrome.tabs.update(parseInt(tabId), { url: 'https://aistudio.google.com/api-keys' });
+await new Promise(r => setTimeout(r, 6000));
+const phase2Fn = async (RPC, KEY, sapisidValue) => {
+async function buildSapisidHash(sapisid) {
+try {
+const ORIGIN = "https://aistudio.google.com";
+const ts = Math.floor(Date.now() / 1000);
+const input = `${ts} ${sapisid} ${ORIGIN}`;
+const buf = await crypto.subtle.digest("SHA-1",
+new TextEncoder().encode(input));
+const hex = [...new Uint8Array(buf)]
+.map(b => b.toString(16).padStart(2, '0')).join('');
+const hash = `${ts}_${hex}`;
+return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
+} catch (e) { return null; }
+}
+function extractToken() {
+try {
+if (typeof WIZ_global_data !== 'undefined' && WIZ_global_data.SNlM0e) return WIZ_global_data.SNlM0e;
+} catch (e) { }
+try {
+if (window.__WIZ_global_data__ && window.__WIZ_global_data__.SNlM0e) return window.__WIZ_global_data__.SNlM0e;
+} catch (e) { }
+try {
+const scripts = document.querySelectorAll('script');
+for (const s of scripts) {
+const txt = s.textContent || '';
+if (txt.length < 50) continue;
+let tm = txt.match(/SNlM0e['"]\s*[:,=]\s*['"](![^'"]{20,})['"]/);
+if (tm) return tm[1];
+tm = txt.match(/"(![A-Za-z0-9_\-]{20,})"/);
+if (tm) return tm[1];
+}
+} catch (e) { }
+return null;
+}
+const authHeader = await buildSapisidHash(sapisidValue);
+const H = {
+"Content-Type": "application/json+protobuf",
+"x-goog-api-key": KEY,
+"x-goog-authuser": "0",
+"x-user-agent": "grpc-web-javascript/0.1",
+"x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
+};
+if (authHeader) H["authorization"] = authHeader;
+try {
+const token = extractToken();
+if (!token) return { error: "no_token", msg: "Cannot extract SNlM0e token from AI Studio" };
+// Create project
+let r = await fetch(RPC + "/CreateCloudProject", {
+method: "POST", credentials: "include", headers: H,
+body: JSON.stringify([token, "GEMINI API FOR AUTO FLOW"])
+});
+if (!r.ok) return { error: "create_project_http_" + r.status };
+let newProj = await r.json();
+const npFlat = JSON.stringify(newProj);
+let projectRef = null, projectId = null;
+const npm = npFlat.match(/projects\/(\d+)/);
+if (npm) projectRef = "projects/" + npm[1];
+const npm2 = npFlat.match(/gen-lang-client-[\w-]+/);
+if (npm2) projectId = npm2[0];
+if (!projectRef) return { error: "create_project_failed" };
+// List keys for new project
+r = await fetch(RPC + "/ListCloudApiKeys", {
+method: "POST", credentials: "include", headers: H,
+body: JSON.stringify([100, null, 1, [projectRef]])
+});
+if (r.ok) {
+let keys = await r.json();
+const km = JSON.stringify(keys).match(/AIza[\w-]{35}/);
+if (km) return { key: km[0], source: "existing" };
+}
+// Generate new key
+if (!projectId) return { error: "no_project_id" };
+r = await fetch(RPC + "/GenerateCloudApiKey", {
+method: "POST", credentials: "include", headers: H,
+body: JSON.stringify([projectId, token, null, "GEMINI API FOR AUTO FLOW"])
+});
+if (!r.ok) return { error: "gen_key_http_" + r.status };
+let newKey = await r.json();
+const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
+if (nkm) return { key: nkm[0], source: "created" };
+return { error: "create_failed" };
+} catch (e) {
+return { error: e.message };
+}
+};
+// Fix #3: Timeout guard for Phase 2 gRPC calls (30s)
+const phase2Script = chrome.scripting.executeScript({
+target: { tabId: parseInt(tabId) },
+world: 'MAIN',
+func: phase2Fn,
+args: [RPC_BASE, STATIC_KEY, sapisid],
+});
+const phase2Timeout = new Promise((_, reject) =>
+setTimeout(() => reject(new Error('Gemini provision Phase 2 timeout (30s)')), 30000)
+);
+const phase2Results = await Promise.race([phase2Script, phase2Timeout]);
+result = phase2Results?.[0]?.result;
+// Navigate back to VEO
+setTimeout(() => {
+chrome.tabs.update(parseInt(tabId), { url: origUrl || 'https://labs.google/fx/vi/tools/flow' });
+}, 1000);
+}
+// ── Send result ──
+if (result?.key) {
+wsSend({
+action: 'provision_gemini_key_result',
+requestId, email, success: true,
+key: result.key, source: result.source,
+});
+} else {
+wsSend({
+action: 'provision_gemini_key_result',
+requestId, email, success: false,
+error: result?.error || 'unknown', msg: result?.msg || '',
+});
+}
+} catch (e) {
+console.error(`[VEO Bridge] Gemini key provision error: ${e.message}`);
+wsSend({
+action: 'provision_gemini_key_result',
+requestId, email, success: false,
+error: e.message,
+});
+}
+break;
 }
 }
+}
+// ── Header Interception ────────────────────────────────────────────────
 chrome.webRequest.onBeforeSendHeaders.addListener(
 (details) => {
 if (!details.requestHeaders) return;
@@ -922,9 +1217,12 @@ const headers = {};
 let authHeader = null;
 for (const h of details.requestHeaders) {
 const name = h.name.toLowerCase();
+// Capture x-browser-* headers
 if (BROWSER_HEADERS.includes(name)) {
 headers[name] = h.value;
 }
+// Capture Authorization — ONLY Bearer tokens (OAuth2 access tokens).
+// SAPISIDHASH is Google's 1st-party internal auth (accounts.google.com)
 if (name === 'authorization' && h.value && h.value.startsWith('Bearer ')) {
 authHeader = h.value;
 }
@@ -972,6 +1270,26 @@ urls: [
 ['requestHeaders', 'extraHeaders']
 );
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+if (msg.type === 'offscreen_ws_state') {
+const wasConnected = wsConnected;
+wsConnected = msg.connected;
+if (msg.connected && !wasConnected) {
+onWsConnected();
+} else if (!msg.connected && wasConnected) {
+}
+sendResponse({ ok: true });
+return false;
+}
+if (msg.type === 'offscreen_ws_incoming') {
+handleAppMessage(msg.data).catch(e => {
+console.error(String.fromCharCode(0x5b,0x56,0x45,0x4f,0x20,0x42,0x72,0x69,0x64,0x67,0x65,0x5d,0x20,0x41,0x73,0x79,0x6e,0x63,0x20,0x68,0x61,0x6e,0x64,0x6c,0x65,0x72,0x20,0x65,0x72,0x72,0x6f,0x72,0x3a), e.message || e);
+});
+sendResponse({ ok: true });
+return false;
+}
+return undefined;
+});
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 if (msg.action === 'register_tab' && sender.tab) {
 const tabId = sender.tab.id;
 if (!tabState[tabId]) {
@@ -979,6 +1297,7 @@ tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 
 }
 tabState[tabId].email = msg.email;
 tabState[tabId].lastHeartbeat = Date.now();
+persistTabState();
 if (tabState[tabId]._zombieTimer) {
 clearTimeout(tabState[tabId]._zombieTimer);
 delete tabState[tabId]._zombieTimer;
@@ -1296,11 +1615,7 @@ chrome.alarms.create(HEADER_REFRESH_ALARM, { periodInMinutes: 3 });
 chrome.alarms.create(TAB_CLEANUP_ALARM, { periodInMinutes: 2 });
 chrome.alarms.onAlarm.addListener((alarm) => {
 if (alarm.name === KEEPALIVE_ALARM) {
-if (ws && ws.readyState === WebSocket.OPEN) {
-wsSend({ action: 'ping' });
-} else {
-connectWebSocket();
-}
+ensureOffscreenDocument();
 }
 if (alarm.name === HEADER_REFRESH_ALARM) {
 lightweightRefreshAll();
@@ -1439,17 +1754,36 @@ world: 'MAIN',
 }]);
 } catch (e) {
 }
-connectWebSocket();
+await ensureOffscreenDocument();
 injectExistingTabs().then(() => {
 closeExcessTabs();
 ensureVeoTab();
 });
 });
-connectWebSocket();
+restoreTabState().then(() => {
+_tabStateRestored = true;
+ensureOffscreenDocument();
 injectExistingTabs().then(() => {
 closeExcessTabs();
 ensureVeoTab();
 });
+}).catch(() => {
+_tabStateRestored = true;
+ensureOffscreenDocument();
+});
+setInterval(async () => {
+try {
+const contexts = await chrome.runtime.getContexts({
+contextTypes: ['OFFSCREEN_DOCUMENT'],
+documentUrls: [chrome.runtime.getURL('offscreen.html')],
+});
+if (contexts.length === 0) {
+wsConnected = false;
+await ensureOffscreenDocument();
+}
+} catch (e) {
+}
+}, 15000);
 const ALLOWED_URL_FRAGMENTS = [
 'mail.google.com',
 'youtube.com',

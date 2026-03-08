@@ -15,6 +15,7 @@
             "Stay endlessly creative!"
         ],
         "tabs": {
+            "project": "Project Builder",
             "t2v": "Text to Video",
             "i2v": "Image to Video",
             "r2v": "Ingredients",
@@ -158,12 +159,12 @@
         },
         "features": {
             "trial_days": "⏳ {days}-day trial",
-            "one_account": "👤 1 Account only",
-            "two_threads": "⚡ 2 Threads",
-            "gen_per_day": "📊 100 gen/day",
+            "one_account": "👤 {count} Account only",
+            "two_threads": "⚡ {count} Threads",
+            "gen_per_day": "📊 {count} gen/day",
             "upscale_720": "🖼️ 720p + 1080p Upscale",
-            "no_continuation": "❌ No Continuation",
-            "no_priority": "❌ No Priority Support",
+            "no_continuation": "❌ Continuation Features",
+            "no_priority": "❌ Priority Support",
             "unlimited_accounts": "👥 Unlimited Accounts",
             "unlimited_threads": "⚡ Unlimited Threads",
             "unlimited_gen": "📊 Unlimited gen/day",
@@ -183,7 +184,9 @@
             "best_deal": "🔥 BEST DEAL — One-time",
             "no_expiry": "♾️ Never expires",
             "lifetime_updates": "🔄 Lifetime Updates",
-            "unlimited_everything": "👥 Unlimited Everything"
+            "unlimited_everything": "👥 Unlimited Everything",
+            "ai_prompt": "🤖 AI Prompt Processing",
+            "no_ai_prompt": "❌ Auto AI Enhance/Fix Prompt"
         },
         "usage_title": "📊 Usage Statistics",
         "total_gen": "Total Generations",
@@ -219,11 +222,11 @@
         "add_to_queue": "📋 Add to Queue"
     },
     "settings_buttons": {
-        "save_all": "💾 Save All",
-        "reset_defaults": "🔄 Reset Defaults",
-        "export_config": "📤 Export Config",
-        "import_config": "📥 Import Config",
-        "reload_app": "🔄 Reload App"
+        "save_all": "Save All",
+        "reset_defaults": "Reset Defaults",
+        "export_config": "Export Config",
+        "import_config": "Import Config",
+        "reload_app": "Reload App"
     },
     "queue": {
         "title": "📋 QUEUE",
@@ -251,6 +254,8 @@
         "trial_continuation": "Continuation is Premium-only.\n\nUpgrade to use smooth scene linking.",
         "trial_anti_detect": "Smooth Continuation is Premium-only.\n\nUpgrade to use smooth scene cutting.",
         "upgrade_required": "Upgrade to use this feature.",
+        "premium_feature_title": "🔒 Premium Feature",
+        "ai_prompt_premium_only": "AI Prompt Processing is Premium-only.\n\nUpgrade to use automatic prompt generation.",
         "confirm": "Confirm",
         "cancel": "Cancel",
         "ok": "OK",
@@ -304,5 +309,61 @@
         "refresh": "Refresh",
         "export": "Export",
         "import": "Import"
+    },
+    "project": {
+        "no_topics_title": "No Topics",
+        "no_topics_msg": "Enter at least 1 topic!",
+        "no_template_title": "No Template",
+        "no_template_msg": "Select a template first!",
+        "missing_info_title": "Missing Information",
+        "missing_info_msg": "Please fill in required fields:\n\n• ",
+        "api_error": "API Error",
+        "empty_prompts_title": "Empty",
+        "empty_prompts_msg": "No prompts to add!"
+    },
+    "license_popup": {
+        "not_found": "🔍 License not found on server. Please enter a new serial key.",
+        "enter_serial": "⚠️ Please enter a serial key to continue.",
+        "enter_name": "❌ Please enter your real name in the 'Upgrade Request' section below",
+        "sent_waiting": "✅ Sent! Please wait for admin approval.",
+        "not_approved": "❌ Not approved yet. Please wait for admin.",
+        "enter_key": "⚠️ Please enter a serial key",
+        "tamper_detected": "🔒 Unauthorized change detected. Please wait 1 hour.",
+        "rate_limit_invalid": "🔒 Invalid rate limit file. Please wait 1 hour.",
+        "too_many_attempts": "⏳ Too many attempts. Please wait {mins}:{secs}",
+        "enter_real_name": "⚠️ Please enter your real name"
+    },
+    "browser": {
+        "login_cancelled": "Login cancelled or failed.",
+        "cred_manager_error": "Credentials manager not available: {error}",
+        "enter_email_pw": "Please enter both email and password.",
+        "save_cred_failed": "Failed to save credentials.",
+        "login_timeout": "Login cancelled or timed out.",
+        "invalid_key": "Key must start with 'AIza...'",
+        "save_key_failed": "Cannot save key: {error}",
+        "profile_not_found": "Profile not found: {email}",
+        "pw_empty": "Password cannot be empty.",
+        "login_title": "Login",
+        "invalid_key_title": "Invalid Key"
+    },
+    "app_dialogs": {
+        "update_required_title": "⚠️ Update Required",
+        "version_too_old": "Current version ({current}) is outdated!",
+        "min_version_required": "Minimum required version: {minimum}",
+        "update_to_continue": "Please update VEO Pro Max to continue.",
+        "update_now": "🔄 Update Now",
+        "exit": "❌ Exit",
+        "maintenance_title": "🔧 System Maintenance",
+        "maintenance_msg": "The system is currently under maintenance.",
+        "maintenance_retry": "Please try again in a few minutes.",
+        "maintenance_sorry": "Sorry for the inconvenience!"
+    },
+    "settings_extra": {
+        "save_folder_label": "Save Folder:",
+        "premium_only_badge": "🔒 Premium Only — Upgrade to use",
+        "queue_restore_desc": "⚠️ When ON, tasks from previous session are reloaded. Turn OFF to prevent stale/broken tasks.",
+        "restore_label": "Choose what to restore:",
+        "action_label": "Action:",
+        "post_queue_desc": "⚠️ When enabled, the selected action runs automatically after all tasks complete (failed tasks are ignored)."
     }
 }

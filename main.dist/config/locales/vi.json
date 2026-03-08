@@ -15,6 +15,7 @@
             "Chúc bạn sáng tạo bất tận!"
         ],
         "tabs": {
+            "project": "Project Builder",
             "t2v": "Văn bản → Video",
             "i2v": "Ảnh → Video",
             "r2v": "Tổng hợp → Video",
@@ -158,12 +159,12 @@
         },
         "features": {
             "trial_days": "⏳ {days} ngày dùng thử",
-            "one_account": "👤 1 Account duy nhất",
-            "two_threads": "⚡ 2 Luồng",
-            "gen_per_day": "📊 100 gen/ngày",
+            "one_account": "👤 {count} Account duy nhất",
+            "two_threads": "⚡ {count} Luồng",
+            "gen_per_day": "📊 {count} gen/ngày",
             "upscale_720": "🖼️ 720p + 1080p Upscale",
-            "no_continuation": "❌ Không có Continuation",
-            "no_priority": "❌ Không có Priority Support",
+            "no_continuation": "❌ Continuation Features",
+            "no_priority": "❌ Priority Support",
             "unlimited_accounts": "👥 Unlimited Accounts",
             "unlimited_threads": "⚡ Không giới hạn số luồng",
             "unlimited_gen": "📊 Unlimited gen/ngày",
@@ -183,7 +184,9 @@
             "best_deal": "🔥 BEST DEAL — Mua 1 lần",
             "no_expiry": "♾️ Không hết hạn",
             "lifetime_updates": "🔄 Lifetime Updates",
-            "unlimited_everything": "👥 Unlimited Everything"
+            "unlimited_everything": "👥 Unlimited Everything",
+            "ai_prompt": "🤖 AI Prompt Processing",
+            "no_ai_prompt": "❌ Auto AI Enhance/Fix Prompt"
         },
         "usage_title": "📊 Thống kê sử dụng",
         "total_gen": "Tổng lượt tạo",
@@ -219,11 +222,11 @@
         "add_to_queue": "📋 Thêm vào hàng đợi"
     },
     "settings_buttons": {
-        "save_all": "💾 Lưu tất cả",
-        "reset_defaults": "🔄 Đặt lại mặc định",
-        "export_config": "📤 Xuất cài đặt",
-        "import_config": "📥 Nhập cài đặt",
-        "reload_app": "🔄 Tải lại ứng dụng"
+        "save_all": "Lưu tất cả",
+        "reset_defaults": "Đặt lại mặc định",
+        "export_config": "Xuất cài đặt",
+        "import_config": "Nhập cài đặt",
+        "reload_app": "Tải lại ứng dụng"
     },
     "queue": {
         "title": "📋 HÀNG ĐỢI",
@@ -251,6 +254,8 @@
         "trial_continuation": "Continuation chỉ dành cho gói Premium.\n\nNâng cấp để sử dụng tính năng nối cảnh mượt.",
         "trial_anti_detect": "Smooth Continuation chỉ dành cho gói Premium.\n\nNâng cấp để sử dụng tính năng cắt cảnh mượt.",
         "upgrade_required": "Nâng cấp để sử dụng tính năng này.",
+        "premium_feature_title": "🔒 Tính năng Premium",
+        "ai_prompt_premium_only": "AI Prompt Processing chỉ dành cho gói Premium.\n\nNâng cấp để sử dụng tính năng tạo prompt tự động.",
         "confirm": "Xác nhận",
         "cancel": "Huỷ",
         "ok": "OK",
@@ -304,5 +309,61 @@
         "refresh": "Làm mới",
         "export": "Xuất",
         "import": "Nhập"
+    },
+    "project": {
+        "no_topics_title": "Chưa có Topics",
+        "no_topics_msg": "Nhập ít nhất 1 topic!",
+        "no_template_title": "Chưa chọn Template",
+        "no_template_msg": "Chọn template trước!",
+        "missing_info_title": "Thiếu thông tin",
+        "missing_info_msg": "Vui lòng chọn đủ thông tin:\n\n• ",
+        "api_error": "Lỗi API",
+        "empty_prompts_title": "Trống",
+        "empty_prompts_msg": "Chưa có prompts để thêm!"
+    },
+    "license_popup": {
+        "not_found": "🔍 Không tìm thấy license trên server. Vui lòng nhập serial key mới.",
+        "enter_serial": "⚠️ Vui lòng nhập serial key để tiếp tục sử dụng.",
+        "enter_name": "❌ Vui lòng nhập họ tên thật ở mục 'Gửi yêu cầu nâng cấp' bên dưới",
+        "sent_waiting": "✅ Đã gửi! Vui lòng chờ admin phê duyệt.",
+        "not_approved": "❌ Chưa được phê duyệt. Vui lòng chờ admin.",
+        "enter_key": "⚠️ Vui lòng nhập serial key",
+        "tamper_detected": "🔒 Phát hiện thay đổi trái phép. Vui lòng chờ 1 giờ.",
+        "rate_limit_invalid": "🔒 File rate limit không hợp lệ. Vui lòng chờ 1 giờ.",
+        "too_many_attempts": "⏳ Quá nhiều lần thử. Vui lòng chờ {mins}:{secs}",
+        "enter_real_name": "⚠️ Vui lòng nhập họ tên thật"
+    },
+    "browser": {
+        "login_cancelled": "Đăng nhập bị huỷ hoặc thất bại.",
+        "cred_manager_error": "Trình quản lý credentials không khả dụng: {error}",
+        "enter_email_pw": "Vui lòng nhập cả email và mật khẩu.",
+        "save_cred_failed": "Lưu credentials thất bại.",
+        "login_timeout": "Đăng nhập bị huỷ hoặc hết thời gian.",
+        "invalid_key": "Key phải bắt đầu bằng 'AIza...'",
+        "save_key_failed": "Không thể lưu key: {error}",
+        "profile_not_found": "Không tìm thấy profile: {email}",
+        "pw_empty": "Mật khẩu không được để trống.",
+        "login_title": "Đăng nhập",
+        "invalid_key_title": "Key không hợp lệ"
+    },
+    "app_dialogs": {
+        "update_required_title": "⚠️ Cập nhật bắt buộc",
+        "version_too_old": "Phiên bản hiện tại ({current}) đã quá cũ!",
+        "min_version_required": "Phiên bản tối thiểu yêu cầu: {minimum}",
+        "update_to_continue": "Vui lòng cập nhật VEO Pro Max để tiếp tục sử dụng.",
+        "update_now": "🔄 Cập nhật ngay",
+        "exit": "❌ Thoát",
+        "maintenance_title": "🔧 Bảo trì hệ thống",
+        "maintenance_msg": "Hệ thống đang trong quá trình bảo trì.",
+        "maintenance_retry": "Vui lòng thử lại sau ít phút.",
+        "maintenance_sorry": "Xin lỗi vì sự bất tiện này!"
+    },
+    "settings_extra": {
+        "save_folder_label": "Thư mục lưu:",
+        "premium_only_badge": "🔒 Chỉ dành cho Premium — Nâng cấp để sử dụng",
+        "queue_restore_desc": "⚠️ Khi BẬT, các task phiên trước sẽ được khôi phục. TẮT để bỏ qua task cũ/lỗi.",
+        "restore_label": "Chọn nội dung khôi phục:",
+        "action_label": "Hành động:",
+        "post_queue_desc": "⚠️ Khi bật, hành động được chọn sẽ tự động chạy sau khi hoàn thành tất cả task (bỏ qua task lỗi)."
     }
 }

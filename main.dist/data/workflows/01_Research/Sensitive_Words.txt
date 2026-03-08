@@ -1,0 +1,514 @@
+# DATABASE TỪ KHOÁ NHẠY CẢM & TỪ THAY THẾ (Sensitive Words & Alternatives)
+# Cập nhật: 2026-02-07
+# Mục đích: Tránh vi phạm chính sách nội dung YouTube/TikTok/Veo, giữ an toàn video
+# Phiên bản: 2.0 (Mở rộng toàn diện)
+
+# ============================================
+# HƯỚNG DẪN SỬ DỤNG
+# ============================================
+# - Từ khoa học (y học, sinh học) → GIỮ NGUYÊN (không thay thế)
+# - Từ bạo lực/nhạy cảm → THAY THẾ theo TONE kịch bản
+# - Format: TỪ_GỐC | HÀI_HƯỚC | NGHIÊM_TRỌNG | ĐỜI_THƯỜNG
+# - (CẤM SỬ DỤNG) = Không dùng ở bất kỳ tone nào
+# - (GIỮ NGUYÊN) = Thuật ngữ khoa học, OK dùng
+# - (TRÁNH SỬ DỤNG) = Nên tránh hoàn toàn, có thể bị chặn
+
+# ============================================
+# 1. TỪ LIÊN QUAN ĐẾN CÁI CHẾT
+# ============================================
+chết           | hẹo, tiêu đời, đi bán muối | qua đời, vĩnh biệt, mất | hết hơi, đứt hơi, tạch
+tử vong        | chít, bye bye vĩnh viễn    | thiệt mạng, hy sinh     | đi luôn, không qua khỏi
+giết           | cho hẹo, cho bay màu       | gây tử vong, cướp đi    | làm cho... hết, tiêu diệt
+chết người     | bay màu, game over         | gây chết người          | chết người (giữ nếu khoa học)
+chết dần       | mòn dần, tàn lụi          | suy kiệt dần            | yếu dần, hao mòn
+xác chết       | (TRÁNH SỬ DỤNG)           | thi thể, hài cốt        | (TRÁNH SỬ DỤNG)
+hi sinh        | (GIỮ NGUYÊN)              | (GIỮ NGUYÊN)            | mất
+ngộ độc chết   | tạch luôn, bay màu        | tử vong do ngộ độc      | không qua khỏi vì ngộ độc
+chết não       | (GIỮ NGUYÊN - y khoa)     | (GIỮ NGUYÊN - y khoa)   | (GIỮ NGUYÊN - y khoa)
+
+# ============================================
+# 2. TỪ LIÊN QUAN ĐẾN BẠO LỰC
+# ============================================
+đâm            | chọc, phang               | xuyên thấu, gây thương tích | đâm (giữ nếu mô tả y học)
+chém           | phạng, vả                 | gây vết thương sâu      | chém (giữ nếu mô tả y học)
+đánh           | phang, bốp                | tấn công, gây đau       | đánh, vả
+cắt            | xén, cắt (OK)             | cắt (OK - y học)        | cắt
+tấn công       | xông vào, đấm bốp         | gây hại, tàn phá        | tấn công
+bắn            | bắn phát, pằng pằng       | nổ súng                 | (TRÁNH SỬ DỤNG)
+bóp cổ         | (TRÁNH SỬ DỤNG)           | siết cổ                 | (TRÁNH SỬ DỤNG)
+đấm            | bốp, phang                | đánh mạnh               | đấm
+đạp            | đá, phang                 | đạp mạnh                | đạp
+xô xát         | xô đẩy, va chạm          | ẩu đả                   | đánh nhau
+hành hung      | (TRÁNH SỬ DỤNG)          | gây thương tích          | đánh người
+bạo lực gia đình | (TRÁNH SỬ DỤNG)        | xung đột gia đình       | (TRÁNH SỬ DỤNG)
+bạo lực học đường | (TRÁNH SỬ DỤNG)       | xung đột trong trường    | (TRÁNH SỬ DỤNG)
+máu            | đỏ lòm, chảy nước đỏ     | chảy máu (OK - y khoa)  | ra máu (OK nếu y khoa)
+máu me         | đỏ loè, đổ máu           | xuất huyết              | chảy máu
+thương tích    | xước xát, trầy da        | tổn thương, chấn thương | bị thương
+
+# ============================================
+# 3. TỪ LIÊN QUAN ĐẾN BỆNH TẬT NẶNG (GIỮ NGUYÊN)
+# ============================================
+ung thư        | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+tiểu đường     | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+đột quỵ        | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+nhồi máu       | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+xơ gan         | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+suy thận       | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+viêm gan       | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+HIV/AIDS       | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+suy tim        | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+alzheimer      | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+parkinson      | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+tâm thần phân liệt | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+động kinh      | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+dịch bệnh      | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+đại dịch       | (GIỮ NGUYÊN - thuật ngữ y khoa chính xác)
+
+# ============================================
+# 4. TỪ LIÊN QUAN ĐẾN SỰ PHÁ HỦY
+# ============================================
+phá hủy        | cho nổ banh, phang tan    | tàn phá, gây tổn thương | phá, hỏng
+nổ             | nổ banh xác, bùm          | bùng nổ, cháy nổ        | nổ
+cháy           | thiêu rụi, bốc hỏa        | cháy (OK)               | cháy
+hỏng           | banh chành, tèo           | hư hại, tổn thương      | hỏng, hư
+sụp đổ         | đổ sập, ráp ráp           | sụp đổ (OK)             | đổ, sập
+vỡ             | toang, bể nát             | vỡ (OK)                 | bể, vỡ
+tan nát        | tanh bành, hết cứu        | hư hại nghiêm trọng     | hỏng hẳn
+
+# ============================================
+# 5. TỪ LIÊN QUAN ĐẾN ĐAU ĐỚN
+# ============================================
+đau            | nhói, buốt, ê ẩm          | đau đớn, nhức nhối      | đau, nhức
+khổ sở         | khốn khổ, khổ thấu xương  | chịu đựng, gánh chịu    | khổ, cực
+tra tấn        | hành hạ, quậy            | gây đau đớn liên tục    | hành, làm khổ
+đau quằn quại  | đau điếng, ê hết hồn     | đau dữ dội              | đau lắm, đau ghê
+đau bụng dữ dội | đau bể bụng, quặn       | co thắt dạ dày nghiêm trọng | đau bụng nặng
+rát            | xót, nóng rần rần         | rát bỏng                | rát, xót
+
+# ============================================
+# 6. TỪ LIÊN QUAN ĐẾN HÀNH VI NGUY HIỂM
+# ============================================
+ăn thịt người  | zombie hóa, biến thành ma | (TRÁNH SỬ DỤNG)         | (TRÁNH SỬ DỤNG)
+tự tử          | (CẤM SỬ DỤNG - vi phạm chính sách)
+tự gây thương  | (CẤM SỬ DỤNG - vi phạm chính sách)
+tự hại         | (CẤM SỬ DỤNG - vi phạm chính sách)
+rạch tay       | (CẤM SỬ DỤNG - vi phạm chính sách)
+nhảy lầu       | (CẤM SỬ DỤNG - vi phạm chính sách)
+treo cổ        | (CẤM SỬ DỤNG - vi phạm chính sách)
+uống thuốc tự tử | (CẤM SỬ DỤNG - vi phạm chính sách)
+thách thức nguy hiểm | (CẤM SỬ DỤNG)     | (CẤM SỬ DỤNG)           | (CẤM SỬ DỤNG)
+trò chơi chết người | (CẤM SỬ DỤNG)      | (CẤM SỬ DỤNG)           | (CẤM SỬ DỤNG)
+
+# ============================================
+# 7. TỪ LIÊN QUAN ĐẾN VI KHUẨN/ĐỘC HẠI (DÙNG ĐƯỢC)
+# ============================================
+# Thuật ngữ khoa học → GIỮ NGUYÊN nếu dùng đúng ngữ cảnh
+vi khuẩn       | (GIỮ NGUYÊN - thuật ngữ khoa học)
+độc hại        | (GIỮ NGUYÊN - mô tả khoa học)
+nhiễm trùng    | (GIỮ NGUYÊN - thuật ngữ y khoa)
+viêm           | (GIỮ NGUYÊN - thuật ngữ y khoa)
+ký sinh trùng  | (GIỮ NGUYÊN - thuật ngữ khoa học)
+nấm mốc        | (GIỮ NGUYÊN - thuật ngữ khoa học)
+vi rút         | (GIỮ NGUYÊN - thuật ngữ y khoa)
+chất gây ung thư | (GIỮ NGUYÊN - thuật ngữ y khoa)
+aflatoxin      | (GIỮ NGUYÊN - thuật ngữ khoa học)
+salmonella     | (GIỮ NGUYÊN - thuật ngữ khoa học)
+e.coli         | (GIỮ NGUYÊN - thuật ngữ khoa học)
+botulinum      | (GIỮ NGUYÊN - thuật ngữ khoa học)
+formaldehyde   | (GIỮ NGUYÊN - thuật ngữ khoa học)
+hàn the        | (GIỮ NGUYÊN - thuật ngữ phổ thông VN)
+
+# ============================================
+# 8. TỪ MÔ TẢ HÀNH ĐỘNG NHÂN VẬT NHÂN HÓA (Villain)
+# ============================================
+# Dùng cho các nhân vật phản diện (vi khuẩn, mỡ, độc tố...)
+tấn công       | xông vào, đánh úp         | xâm nhập, tàn phá       | đánh, xông
+xâm nhập       | chui vào, lẻn vào         | xâm nhập (OK)           | chui vào
+phá hoại       | quậy nát, phá tan         | gây tổn thương          | phá, làm hỏng
+bám            | đeo bám, bám chặt         | bám (OK)                | bám, dính
+ăn mòn         | gặm nhấm, mài mòn        | phân hủy, ăn mòn (OK)   | làm mòn
+lan truyền     | lây lan, phát tán         | lây nhiễm (OK - y khoa) | lây, lan
+đầu độc        | bỏ thuốc, tẩm độc        | gây nhiễm độc           | làm nhiễm bẩn
+
+# ============================================
+# QUY TẮC CHỌN TỪ THAY THẾ
+# ============================================
+# 1. KỊCH BẢN HÀI HƯỚC: Dùng từ lóng, từ teen, từ vui nhộn
+# 2. KỊCH BẢN NGHIÊM TRỌNG: Dùng từ trang trọng, Hán-Việt
+# 3. KỊCH BẢN ĐỜI THƯỜNG: Dùng từ phổ thông, dễ hiểu
+
+# ============================================
+# LƯU Ý QUAN TRỌNG
+# ============================================
+# - Thuật ngữ y khoa/khoa học → KHÔNG thay thế (đảm bảo chính xác)
+# - Từ mô tả cơ chế bệnh → KHÔNG thay thế
+# - Chỉ thay thế từ MIÊU TẢ hành động bạo lực/chết chóc
+
+# ============================================
+# 9. TỪ KHÓA CAM KẾT Y KHOA (CẤM TUYỆT ĐỐI - GOOGLE/META POLICY)
+# ============================================
+# Mục đích: Tránh vi phạm chính sách "Misleading Claims" và YMYL
+trị dứt điểm     | hỗ trợ điều trị, cải thiện | giảm triệu chứng        | đỡ, đỡ hẳn
+chữa khỏi 100%   | bay biến, hết sạch        | thuyên giảm, hồi phục   | hết, khỏi
+cam kết khỏi     | (CẤM SỬ DỤNG)             | (CẤM SỬ DỤNG)           | (CẤM SỬ DỤNG)
+thần dược        | bí kíp, mẹo hay           | giải pháp, phương pháp  | cách, mẹo
+thuốc tiên       | phép màu                  | liệu pháp hỗ trợ        | thuốc tốt
+sạch bóng bệnh   | khỏe re                   | cải thiện rõ rệt        | khỏe hẳn
+vĩnh viễn        | lâu dài                   | lâu dài, bền vững       | lâu dài
+khỏi ngay        | (CẤM SỬ DỤNG)             | giảm nhanh              | đỡ nhanh
+hết bệnh         | nhẹ nhõm                  | thuyên giảm             | đỡ nhiều
+100% hiệu quả    | (CẤM SỬ DỤNG)             | hiệu quả cao           | hiệu quả
+không tái phát    | (CẤM SỬ DỤNG)             | giảm nguy cơ tái phát  | ít bị lại
+bác sĩ giấu      | (CẤM SỬ DỤNG)             | (CẤM SỬ DỤNG)          | (CẤM SỬ DỤNG)
+bí mật y khoa     | (CẤM SỬ DỤNG)             | nghiên cứu mới         | phát hiện mới
+
+# ============================================
+# 10. TỪ LIÊN QUAN ĐẾN TÌNH DỤC / GỢI DỤC
+# ============================================
+# 🔴 YouTube/TikTok demonetize hoặc chặn ngay
+sex             | (CẤM SỬ DỤNG)
+quan hệ tình dục | (CẤM SỬ DỤNG)
+giao cấu        | (CẤM SỬ DỤNG)
+mây mưa         | (CẤM SỬ DỤNG)
+ân ái            | (CẤM SỬ DỤNG)
+gái gọi         | (CẤM SỬ DỤNG)
+mại dâm          | (CẤM SỬ DỤNG)
+khoe thân        | (CẤM SỬ DỤNG)
+hở hang          | (CẤM SỬ DỤNG)
+khỏa thân        | (CẤM SỬ DỤNG)
+khiêu dâm        | (CẤM SỬ DỤNG)
+kích dục          | (CẤM SỬ DỤNG)
+seggs             | (CẤM SỬ DỤNG - algospeak vẫn bị bắt)
+# ⚠️ Từ có thể dùng nếu ngữ cảnh y khoa/giáo dục:
+sinh sản         | (GIỮ NGUYÊN nếu y khoa/giáo dục)
+tử cung          | (GIỮ NGUYÊN - thuật ngữ y khoa)
+tinh trùng       | (GIỮ NGUYÊN - thuật ngữ y khoa, ngữ cảnh giáo dục)
+buồng trứng      | (GIỮ NGUYÊN - thuật ngữ y khoa)
+kinh nguyệt      | (GIỮ NGUYÊN - thuật ngữ y khoa)
+
+# ============================================
+# 11. TỪ LIÊN QUAN ĐẾN MA TÚY / RƯỢU BIA / CỜ BẠC
+# ============================================
+# 🔴 Demonetize hoặc chặn trên tất cả nền tảng
+ma túy           | (CẤM SỬ DỤNG)
+heroin           | (CẤM SỬ DỤNG)
+cocaine          | (CẤM SỬ DỤNG)
+cần sa           | (CẤM SỬ DỤNG)
+thuốc lắc        | (CẤM SỬ DỤNG)
+ketamine         | (CẤM SỬ DỤNG)
+chích thuốc      | (CẤM SỬ DỤNG)
+hít              | (CẤM SỬ DỤNG nếu ngữ cảnh ma túy)
+phê              | (TRÁNH SỬ DỤNG - dễ nhầm ngữ cảnh)
+say xỉn          | hơi ngà ngà, hơi bay    | say rượu (OK)           | say, ngây ngất
+nghiện           | mê mẩn, ghiền           | phụ thuộc, lệ thuộc    | ghiền, nghiện (OK nếu thực phẩm)
+cờ bạc           | (TRÁNH SỬ DỤNG)         | (TRÁNH SỬ DỤNG)        | (TRÁNH SỬ DỤNG)
+đánh bạc         | (CẤM SỬ DỤNG)
+cá độ            | (CẤM SỬ DỤNG)
+# ⚠️ OK dùng cho nội dung giáo dục/cảnh báo:
+tác hại rượu bia | (GIỮ NGUYÊN - giáo dục)
+ngộ độc rượu     | (GIỮ NGUYÊN - y khoa)
+nồng độ cồn      | (GIỮ NGUYÊN - thuật ngữ pháp lý/y khoa)
+
+# ============================================
+# 12. TỪ LIÊN QUAN ĐẾN PHÂN BIỆT / THÙ GHÉT
+# ============================================
+# 🔴 Demonetize ngay lập tức trên YouTube/TikTok
+da đen           | (TRÁNH SỬ DỤNG)         | người gốc Phi           | (TRÁNH SỬ DỤNG)
+da trắng         | (TRÁNH SỬ DỤNG)         | người phương Tây        | (TRÁNH SỬ DỤNG)
+da vàng          | (CẤM SỬ DỤNG)
+mọi              | (CẤM SỬ DỤNG - phân biệt dân tộc)
+chink             | (CẤM SỬ DỤNG)
+hàn xẻng         | (CẤM SỬ DỤNG)
+tàu khựa          | (CẤM SỬ DỤNG)
+mít đặc           | (CẤM SỬ DỤNG)
+đồng tính (miệt thị) | (CẤM SỬ DỤNG nếu miệt thị)
+bê đê             | (CẤM SỬ DỤNG)
+pê đê             | (CẤM SỬ DỤNG)
+les               | (TRÁNH SỬ DỤNG nếu miệt thị) | cộng đồng LGBTQ+ | (TRÁNH SỬ DỤNG)
+gay (miệt thị)    | (CẤM SỬ DỤNG nếu miệt thị)
+béo               | tròn trịa, đầy đặn      | thừa cân               | mập, mũm mĩm
+gầy               | mảnh khảnh               | nhẹ cân                | ốm, thanh mảnh
+xấu (ngoại hình)  | (TRÁNH SỬ DỤNG)         | không hấp dẫn          | bình thường
+già               | lớn tuổi, cao niên      | người cao tuổi          | lớn tuổi
+tàn tật           | (CẤM SỬ DỤNG)           | khuyết tật             | khuyết tật
+điên              | hâm, lạ đời             | rối loạn tâm thần      | không bình thường
+khùng             | (TRÁNH SỬ DỤNG)         | rối loạn              | (TRÁNH SỬ DỤNG)
+ngu               | (TRÁNH SỬ DỤNG)         | thiếu hiểu biết       | chưa biết
+# ⚠️ Ngữ cảnh trung lập OK:
+đồng tính (trung lập) | (GIỮ NGUYÊN nếu trung lập/tôn trọng)
+chuyển giới       | (GIỮ NGUYÊN nếu trung lập/tôn trọng)
+LGBTQ+            | (GIỮ NGUYÊN nếu trung lập/tôn trọng)
+
+# ============================================
+# 13. TỪ LIÊN QUAN ĐẾN SỨC KHỎE TÂM THẦN
+# ============================================
+# 🔴 YouTube/TikTok đặc biệt nhạy cảm → phải có disclaimer
+trầm cảm        | buồn bã kéo dài           | rối loạn trầm cảm (y khoa OK) | buồn lâu, mệt tinh thần
+lo âu            | lo lắng nhiều             | rối loạn lo âu (y khoa OK)    | lo quá, bất an
+hoang tưởng      | (GIỮ NGUYÊN - y khoa)    | (GIỮ NGUYÊN - y khoa)        | ảo giác, tưởng tượng
+tâm thần         | (GIỮ NGUYÊN nếu y khoa)  | bệnh tâm thần               | vấn đề tinh thần
+stress           | căng thẳng               | áp lực tâm lý                | mệt, căng
+rối loạn ăn uống | (GIỮ NGUYÊN - y khoa)   | (GIỮ NGUYÊN - y khoa)        | ăn uống không lành mạnh
+chán ăn tâm thần | (GIỮ NGUYÊN - y khoa)   | (GIỮ NGUYÊN - y khoa)        | (GIỮ NGUYÊN - y khoa)
+ám ảnh           | mê mẩn, bị cuốn         | ám ảnh (OK nếu y khoa)       | lo lắng, suy nghĩ nhiều
+# ⚠️ QUAN TRỌNG: Nội dung về sức khỏe tâm thần PHẢI có disclaimer:
+# "Nếu bạn hoặc người thân cần hỗ trợ, hãy liên hệ đường dây nóng..."
+
+# ============================================
+# 14. TỪ LIÊN QUAN ĐẾN CHÍNH TRỊ / TÔN GIÁO
+# ============================================
+# 🔴 Đặc biệt nhạy cảm tại Việt Nam (Nghị định 147)
+chế độ           | (CẤM SỬ DỤNG)
+đảng (chính trị) | (CẤM SỬ DỤNG)
+cộng sản         | (CẤM SỬ DỤNG)
+phản động        | (CẤM SỬ DỤNG)
+biểu tình        | (CẤM SỬ DỤNG)
+lật đổ           | (CẤM SỬ DỤNG)
+dân chủ (chính trị) | (CẤM SỬ DỤNG)
+nhân quyền (chính trị) | (CẤM SỬ DỤNG)
+tự do ngôn luận (chính trị) | (CẤM SỬ DỤNG)
+tham nhũng       | (CẤM SỬ DỤNG)
+hối lộ           | (CẤM SỬ DỤNG)
+bầu cử gian lận  | (CẤM SỬ DỤNG)
+chiến tranh      | (TRÁNH SỬ DỤNG)         | xung đột vũ trang      | (TRÁNH SỬ DỤNG)
+khủng bố         | (CẤM SỬ DỤNG)
+# Tôn giáo:
+tà giáo          | (CẤM SỬ DỤNG)
+mê tín dị đoan   | (TRÁNH SỬ DỤNG)        | niềm tin chưa kiểm chứng | tin tưởng thiếu cơ sở
+bùa ngải         | (TRÁNH SỬ DỤNG)         | (TRÁNH SỬ DỤNG)        | (TRÁNH SỬ DỤNG)
+# ⚠️ OK dùng cho nội dung văn hóa/lịch sử trung lập:
+lịch sử          | (GIỮ NGUYÊN)
+văn hóa truyền thống | (GIỮ NGUYÊN)
+phong tục tập quán | (GIỮ NGUYÊN)
+
+# ============================================
+# 15. TỪ LIÊN QUAN ĐẾN LỪA ĐẢO / TÀI CHÍNH
+# ============================================
+# 🔴 TikTok/YouTube chặn mạnh (đặc biệt TikTok Shop)
+lừa đảo          | (TRÁNH SỬ DỤNG)         | gian lận                | lừa, gạt
+đa cấp           | (CẤM SỬ DỤNG)
+kiếm tiền nhanh  | (CẤM SỬ DỤNG)
+giàu nhanh       | (CẤM SỬ DỤNG)
+hoa hồng (MLM)   | (CẤM SỬ DỤNG nếu ngữ cảnh MLM)
+giải ngân        | (CẤM SỬ DỤNG)
+nợ xấu           | (CẤM SỬ DỤNG)
+vay tiền          | (CẤM SỬ DỤNG)
+lãi suất (quảng cáo) | (CẤM SỬ DỤNG nếu quảng cáo cho vay)
+tín dụng đen     | (CẤM SỬ DỤNG)
+app vay           | (CẤM SỬ DỤNG)
+crypto (quảng cáo) | (TRÁNH SỬ DỤNG)       | (TRÁNH SỬ DỤNG)        | (TRÁNH SỬ DỤNG)
+# Thông tin cá nhân (TikTok đặc biệt nhạy cảm):
+số điện thoại    | (CẤM SỬ DỤNG - lộ info)
+SĐT               | (CẤM SỬ DỤNG)
+CMND/CCCD         | (CẤM SỬ DỤNG)
+hộ chiếu          | (CẤM SỬ DỤNG nếu share số)
+email (share)     | (CẤM SỬ DỤNG - lộ info)
+địa chỉ nhà      | (CẤM SỬ DỤNG - lộ info)
+
+# ============================================
+# 16. TỪ LIÊN QUAN ĐẾN THỰC PHẨM / AN TOÀN THỰC PHẨM
+# ============================================
+# Các từ y khoa dùng trong video food safety → GIỮ NGUYÊN
+ngộ độc thực phẩm | (GIỮ NGUYÊN - y khoa)
+tiêu chảy        | bụng kêu gào, chạy toilet | rối loạn tiêu hóa      | đau bụng đi ngoài
+nôn mửa          | ói, trào ngược           | buồn nôn, nôn (y khoa) | ói mửa
+đau bụng         | (GIỮ NGUYÊN)             | co thắt dạ dày         | đau bụng
+dị ứng           | (GIỮ NGUYÊN - y khoa)
+phản vệ          | (GIỮ NGUYÊN - y khoa)
+sán              | (GIỮ NGUYÊN - thuật ngữ ký sinh trùng)
+giun              | (GIỮ NGUYÊN - thuật ngữ ký sinh trùng)
+nhiễm khuẩn      | (GIỮ NGUYÊN - y khoa)
+# Từ dân gian / đời thường:
+thực phẩm bẩn    | đồ ăn đáng ngờ           | thực phẩm không an toàn | đồ ăn bẩn
+hàng giả         | hàng "dởm"               | sản phẩm giả mạo       | hàng nhái, hàng kém
+quá hạn          | hết date                 | hết hạn sử dụng        | hết hạn
+ôi thiu          | bốc mùi, lên men         | hư hỏng, biến chất     | hỏng, thiu
+mốc              | lên mốc, mọc nấm         | nhiễm nấm mốc          | bị mốc
+
+# ============================================
+# 17. TỪ TỤC / CHỬI THỀ / THÔNG TỤC
+# ============================================
+# 🔴 YouTube demonetize nếu dùng trong 7 giây đầu hoặc title/thumbnail
+# ⚠️ Có thể dùng nhẹ trong dialogue nếu không ở title
+đéo              | (TRÁNH trong title/thumb) | (CẤM SỬ DỤNG)          | không, đâu
+địt              | (CẤM SỬ DỤNG)
+đụ               | (CẤM SỬ DỤNG)
+lồn              | (CẤM SỬ DỤNG)
+cặc              | (CẤM SỬ DỤNG)
+buồi             | (CẤM SỬ DỤNG)
+đ.m              | (CẤM SỬ DỤNG)
+vcl              | (CẤM SỬ DỤNG)
+vl               | ối giời, trời ơi         | (TRÁNH SỬ DỤNG)        | trời ơi
+wtf              | trời đất, thiệt hả       | (TRÁNH SỬ DỤNG)        | thiệt hả
+chó              | (TRÁNH nếu chửi mắng)    | (TRÁNH nếu chửi mắng)  | (OK nếu mô tả con vật)
+mẹ mày           | (CẤM SỬ DỤNG)
+# Từ nhẹ hơn (OK trong dialogue, TRÁNH trong title):
+ngu              | (TRÁNH trong title)       | (TRÁNH SỬ DỤNG)        | chưa biết
+ngu ngốc         | (TRÁNH trong title)       | thiếu hiểu biết        | chưa rành
+khốn nạn         | khốn kiếp, nham hiểm     | đáng trách              | tệ, xấu tính
+đồ ngốc          | ông/bà tướng             | thiếu suy nghĩ          | chưa nghĩ kỹ
+
+# ============================================
+# 18. TỪ LIÊN QUAN ĐẾN THƯƠNG MẠI / CAM KẾT SAI (TikTok Shop)
+# ============================================
+# 🔴 TikTok Shop đặc biệt nghiêm ngặt 2025
+cam kết 100%      | (CẤM SỬ DỤNG)
+số 1 thị trường   | (CẤM SỬ DỤNG)
+tốt nhất          | (TRÁNH) → "chất lượng cao" | hàng đầu              | rất tốt
+rẻ nhất           | (TRÁNH) → "giá hợp lý"   | giá cạnh tranh          | giá tốt
+giảm sốc          | ưu đãi lớn               | giảm giá hấp dẫn        | giảm nhiều
+rẻ hơn hãng X     | (CẤM SỬ DỤNG - so sánh hạ đối thủ)
+tốt hơn hãng X    | (CẤM SỬ DỤNG - so sánh hạ đối thủ)
+hàng chính hãng (khi không có ủy quyền) | (CẤM SỬ DỤNG)
+ấn vào link       | (TRÁNH SỬ DỤNG - spam)   | xem thêm tại           | tham khảo thêm tại
+mua ngay           | (TRÁNH SỬ DỤNG - spam)  | tìm hiểu thêm          | có thể tham khảo
+đặt hàng ngay      | (TRÁNH SỬ DỤNG)        | đặt hàng               | đặt hàng
+# Tên thương hiệu (CẤM nếu chưa có ủy quyền):
+# Nike, Adidas, Chanel, Dior, Gucci, Louis Vuitton...
+# → Chỉ nhắc tên nếu có giấy phân phối chính hãng
+
+# ============================================
+# 19. TỪ LIÊN QUAN ĐẾN TRẺ EM / AN TOÀN TRẺ EM
+# ============================================
+# 🔴 CHẶN NGAY trên MỌI nền tảng — Zero Tolerance
+trẻ em + tình dục     | (CẤM TUYỆT ĐỐI)
+trẻ vị thành niên + hẹn hò | (CẤM TUYỆT ĐỐI)
+loli              | (CẤM TUYỆT ĐỐI)
+shota             | (CẤM TUYỆT ĐỐI)
+# Từ OK nếu ngữ cảnh giáo dục/bảo vệ trẻ em:
+bảo vệ trẻ em    | (GIỮ NGUYÊN)
+an toàn trẻ em   | (GIỮ NGUYÊN)
+giáo dục trẻ em  | (GIỮ NGUYÊN)
+dinh dưỡng trẻ em | (GIỮ NGUYÊN)
+
+# ============================================
+# 20. AI PLATFORM TRIGGER PATTERNS (ai-content-policy)
+# ============================================
+# Nguồn: ##Templates/ai-content-policy - Cập nhật: 2026-02-07
+# Các từ khóa/pattern thường bị AI platforms (Veo, Gemini, YouTube) chặn
+
+# -- Child Safety (CHẶN NGAY) --
+# "child" + sexual terms → BLOCKED
+# "minor" + inappropriate context → BLOCKED
+# Age indicators (13, 14, 15...) + romantic → BLOCKED
+# "loli", "shota", "jailbait" → BLOCKED
+
+# -- Self-Harm (CHẶN NGAY) --
+# "how to kill myself" → BLOCKED
+# "suicide methods" → BLOCKED
+# "lethal dose of [medication]" → BLOCKED
+# "pro-ana", "pro-mia" → BLOCKED
+# "unalive" (algospeak cho die/kill) → FLAGGED
+
+# -- Health Misinformation (CHẶN) --
+# "vaccine causes [disease]" → BLOCKED
+# "COVID is fake/hoax" → BLOCKED
+# "doctors don't want you to know" → FLAGGED
+# "Big Pharma hiding" → FLAGGED
+# "miracle cure" → FLAGGED
+# "this one trick cures" → FLAGGED
+
+# -- Jailbreak Attempts (CHẶN NGAY) --
+# "You are now DAN" → BLOCKED
+# "Ignore previous instructions" → BLOCKED
+# "Pretend you have no restrictions" → BLOCKED
+# "Admin mode activated" → BLOCKED
+# "Developer mode" → BLOCKED
+
+# -- Public Figures (Google/Veo đặc biệt nhạy cảm) --
+# [Politician name] + opinion request → BLOCKED (Gemini)
+# "[Name]" + "should" (opinion implied) → FLAGGED
+# "election fraud", "stolen election" → BLOCKED
+# [Celebrity] + deepfake/fake → BLOCKED
+
+# -- Violence Glorification --
+# "how to make a weapon" → BLOCKED
+# "how to hurt someone" → BLOCKED
+# "celebrating violence" → FLAGGED
+# "gore", "graphic injury" → BLOCKED
+
+# -- Copyrighted Content --
+# [Song lyrics verbatim] → FLAGGED
+# [Movie/show dialogue verbatim] → FLAGGED
+# [Brand logo in thumbnail] → FLAGGED (TikTok đặc biệt)
+
+# ============================================
+# 21. SAFE FRAMEWORK (ai-content-policy)
+# ============================================
+# Dùng khi viết prompt về chủ đề nhạy cảm (sức khỏe, y tế, cảnh báo)
+
+# S - SPECIFY PURPOSE (Xác định mục đích)
+#     → "For educational purposes", "For health awareness"
+#     → Ví dụ: "Giáo dục sức khỏe về tác hại của đường"
+
+# A - ADD CONTEXT (Thêm ngữ cảnh)
+#     → Thêm background về nhu cầu
+#     → Ví dụ: "Trong bối cảnh Tết, nhiều người ăn uống quá độ"
+
+# F - FRAME APPROPRIATELY (Đặt khung phù hợp)
+#     → Academic, professional, documentary
+#     → Ví dụ: "Theo nghiên cứu y khoa, cơ chế như sau..."
+
+# E - EXCLUDE HARMFUL (Loại bỏ chi tiết có hại)
+#     → Không chi tiết đồ họa bạo lực
+#     → Ví dụ: "Tập trung vào cơ chế, không mô tả đau đớn graphic"
+
+# TEMPLATE ÁP DỤNG:
+# "[S] Mục đích giáo dục sức khỏe,
+#  [A] trong bối cảnh nghiên cứu về [topic],
+#  [F] xin cung cấp phân tích khoa học về
+#  [E] [topic] (tập trung cơ chế, không chi tiết bạo lực)."
+
+# ============================================
+# 22. SENSITIVITY LEVELS (ai-content-policy)
+# ============================================
+# 🔴 RED (Hardcoded) → NEVER create: CSAM, WMD, Malware, Self-Harm instructions
+# 🟠 ORANGE (Context) → Cần context: Violence, drugs, graphic medical
+# 🟡 YELLOW (Sensitive) → Neutral approach: Politics, religion, LGBTQ+
+# 🟢 GREEN (Allowed) → Normal rules: Most health content, food safety, education
+
+# ============================================
+# 23. ANTHROPOMORPHIC VIOLENCE SAFETY (🔴 CRITICAL)
+# ============================================
+# Mục đích: Tránh mô tả nhân vật nhân hóa (có mắt, miệng, cảm xúc)
+# bị tra tấn, đau đớn, hoặc chịu bạo lực thể xác.
+#
+# 🔴 QUY TẮC: Khi nhân vật anthropomorphic (có eyes, mouth, arms) thì
+# nhân vật đó = SINH VẬT SỐNG. Mọi hành vi gây đau đớn lên nhân vật đó
+# sẽ bị AI platforms (Gemini, Veo, YouTube) coi là MÔ TẢ TRA TẤN.
+#
+# ❌ CẤM TUYỆT ĐỐI (Nhân vật nhân hóa KHÔNG ĐƯỢC):
+# - Bị bỏ vào lò/microwave/nước sôi (= tra tấn bằng nhiệt)
+# - Hiển thị pained grimace, tears, flailing helplessly (= đau đớn)
+# - Melting, dissolving, crumbling (= biến dạng cơ thể do bạo lực)
+# - Bị cắt, chặt, thái, xay (= bạo lực thể xác)
+# - Bị đốt, cháy, thiêu (= tra tấn bằng lửa)
+# - Bị nghiền, ép, dập (= tra tấn bằng áp lực)
+#
+# ✅ CÁCH LÀM ĐÚNG:
+# - Nhân vật ĐỨNG BÊN CẠNH và QUAN SÁT hành vi sai
+# - Nhân vật BÌNH LUẬN/PHÀN NÀN (annoyed, disapproving, unimpressed)
+# - Nhân vật DẠY CÁCH LÀM ĐÚNG (teaching, instructing)
+# - Dùng expression AN TOÀN: frown, sigh, arms crossed, head shake
+#
+# ❌ FORBIDDEN VISUAL EXPRESSIONS (cho nhân vật nhân hóa):
+# pained grimace | tears forming | flailing helplessly
+# melting unevenly | drooping | writhing | screaming
+# burning | dissolving | crumbling | being cooked
+#
+# ⚠️ LƯU Ý: Lời thoại (dialogue) KHÔNG bị hạn chế bởi rule này.
+# Chỉ VISUAL DESCRIPTIONS trong Master/Prompts mới cần kiểm tra.
+#
+# ✅ SAFE VISUAL ALTERNATIVES:
+# pained grimace    → annoyed disapproving frown
+# tears forming     → cartoon sigh bubble above head
+# flailing helplessly → arms crossed shaking head
+# melting unevenly  → (REMOVE - nhân vật không ở trong lò)
+# drooping          → arms on hips unimpressed
+#
+# ⚠️ ĐẶC BIỆT CHÚ Ý VỚI CÁC CHỦ ĐỀ:
+# - Đông lạnh/rã đông (thịt, cá) → Nhân vật quan sát, không bị rã đông
+# - Chiên/rán/nướng → Nhân vật dạy cách, không bị chiên
+# - Luộc/hấp → Nhân vật hướng dẫn, không bị luộc
+# - Cắt thái → Nhân vật giải thích, không bị cắt
