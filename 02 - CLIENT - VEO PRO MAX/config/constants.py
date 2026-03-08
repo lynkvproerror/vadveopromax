@@ -112,7 +112,7 @@ class VideoModel(str, Enum):
 # === IMAGE MODELS ===
 class ImageModel(str, Enum):
     """Image generation model keys (HAR-verified)."""
-    GEM_PIX = "GEM_PIX"          # 🔥 Nano Banana
+    NARWHAL = "NARWHAL"          # 🔥 Nano Banana 2 (HAR 2026-03-07)
     GEM_PIX_2 = "GEM_PIX_2"      # 🔥 Nano Banana Pro (default)
     IMAGEN_3_5 = "IMAGEN_3_5"    # Imagen 4
 
@@ -303,7 +303,7 @@ XCD_VARIATIONS_WAIT_TIMEOUT = 20  # seconds
 class AppConstants:
     """Application-wide constants."""
     APP_NAME = "VEO Pro Max"
-    APP_VERSION = "2.2.5"
+    APP_VERSION = "2.3.0"
     
     # Auto-update (GitHub public repo)
     GITHUB_REPO = "lynkvproerror/vadveopromax"

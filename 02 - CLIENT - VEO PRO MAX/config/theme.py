@@ -94,6 +94,7 @@ class Theme:
     
     # === TAB ICONS ===
     TAB_ICONS = {
+        "PROJECT": "📋",
         "T2V": "📹",
         "I2V": "🎬",
         "R2V": "✏️",
