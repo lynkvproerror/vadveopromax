@@ -12,17 +12,87 @@
  */
 
 // ── State ──────────────────────────────────────────────────────────────
-const EXT_VERSION = chrome.runtime.getManifest().version; // e.g. '2.1'
-const WEBSOCKET_PORTS = [8765, 8766, 8767]; // Primary + fallback ports
-const RECONNECT_INTERVAL = 3000; // 3 seconds
+const EXT_VERSION = chrome.runtime.getManifest().version; // e.g. '2.3.0'
 const MAX_TABS = 3; // Maximum number of browser tabs allowed (Gmail, YouTube, VEO Flow)
 
-let ws = null;
+// WebSocket is now managed by offscreen.js (persistent, not subject to SW suspension).
+// background.js relays messages via chrome.runtime.
 let wsConnected = false;
-let currentPortIndex = 0; // Which port to try next
 
 // Per-tab state: tabId → {email, headers, accessToken, lastHeartbeat, recaptchaReady}
 const tabState = {};
+
+// Fix G: Guard flag — prevents onWsConnected from running before tabState is restored
+let _tabStateRestored = false;
+
+// Fix J: Message queue for when offscreen is restarting
+let _wsSendQueue = [];
+
+// ── tabState Persistence ───────────────────────────────────────────────
+// MV3 service workers get terminated/restarted by Chrome.
+// Without persistence, tabState is lost → onWsConnected sends nothing
+// → Python sees unregistered connection → "extension disconnected".
+let _persistTimer = null;
+function persistTabState() {
+  // Debounce: batch rapid changes into one write
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    const serializable = {};
+    for (const [tabId, state] of Object.entries(tabState)) {
+      serializable[tabId] = {
+        email: state.email,
+        headers: state.headers || {},
+        accessToken: state.accessToken,
+        lastHeartbeat: state.lastHeartbeat,
+        recaptchaReady: state.recaptchaReady || false,
+      };
+    }
+    chrome.storage.session.set({ tabState: serializable }).catch(() => { });
+  }, 1000);
+}
+
+async function restoreTabState() {
+  try {
+    const result = await chrome.storage.session.get('tabState');
+    if (result.tabState && Object.keys(result.tabState).length > 0) {
+      // Verify tabs still exist before restoring
+      for (const [tabId, state] of Object.entries(result.tabState)) {
+        try {
+          const tab = await chrome.tabs.get(parseInt(tabId));
+          if (tab) {
+            tabState[tabId] = state;
+          }
+        } catch (_) {
+          // Tab no longer exists — skip
+        }
+      }
+      if (Object.keys(tabState).length > 0) {
+        console.log(`[VEO Bridge] ✅ Restored ${Object.keys(tabState).length} tab state(s) from session storage`);
+        return;
+      }
+    }
+  } catch (e) {
+    console.debug('[VEO Bridge] Session storage restore failed:', e.message);
+  }
+
+  // Fallback: discover VEO tabs by URL
+  try {
+    const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    for (const tab of tabs) {
+      if (!tabState[tab.id]) {
+        tabState[tab.id] = {
+          email: null, headers: {}, accessToken: null,
+          lastHeartbeat: 0, recaptchaReady: false,
+        };
+      }
+    }
+    if (tabs.length > 0) {
+      console.log(`[VEO Bridge] 🔍 Discovered ${tabs.length} VEO tab(s) (no stored state)`);
+    }
+  } catch (e) {
+    console.debug('[VEO Bridge] Tab discovery failed:', e.message);
+  }
+}
 
 // Global x-browser-validation captured from ANY request (including Chrome internal)
 // This header is only present on cross-origin requests to googleapis.com
@@ -92,117 +162,130 @@ async function safeTabReload(tabId, reason, bypassCache = false) {
 }
 
 
-// ── WebSocket Connection ───────────────────────────────────────────────
+// ── Offscreen Document Management ──────────────────────────────────────
+// WebSocket lives in offscreen.js — persistent, never suspended by Chrome.
+// background.js manages its lifecycle and relays messages.
 
-// Fix #2: MV3 keepalive — prevent Chrome from killing service worker during idle.
-// chrome.alarms fires even when SW is suspended, waking it up.
-// If WebSocket is dead after wake, reconnect immediately.
-chrome.alarms.create('ws_keepalive', { periodInMinutes: 0.4 }); // ~24s
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'ws_keepalive') {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      console.debug('[VEO Bridge] ⏰ Keepalive alarm — WebSocket not connected, reconnecting...');
-      connectWebSocket();
-    }
+let _offscreenCreating = null; // Promise guard against concurrent creation
+
+async function ensureOffscreenDocument() {
+  // Check if offscreen doc already exists
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [chrome.runtime.getURL('offscreen.html')],
+  });
+  if (existingContexts.length > 0) {
+    return; // Already exists
   }
-});
 
-let wsReconnectDelay = RECONNECT_INTERVAL; // starts at 3s, grows with backoff
-
-function connectWebSocket() {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+  // Prevent concurrent creation
+  if (_offscreenCreating) {
+    await _offscreenCreating;
     return;
   }
 
-  const port = WEBSOCKET_PORTS[currentPortIndex];
-  const url = `ws://127.0.0.1:${port}`;
+  // Fix I: Retry up to 3 times with 2s delay on creation failure
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    _offscreenCreating = chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['WORKERS'],  // MV3 reason for persistent background work
+      justification: 'Persistent WebSocket connection to Python app',
+    });
 
-  try {
-    ws = new WebSocket(url);
-
-    ws.onopen = () => {
-      wsConnected = true;
-      wsReconnectDelay = RECONNECT_INTERVAL; // reset backoff on success
-      console.log(`[VEO Bridge] ✅ WebSocket connected to App on port ${port}`);
-
-      // Register all known tabs + immediately push cached data
-      for (const [tabId, state] of Object.entries(tabState)) {
-        if (state.email) {
-          wsSend({
-            action: 'register',
-            email: state.email,
-            tabId: parseInt(tabId),
-            version: EXT_VERSION,
-          });
-
-          // Push cached headers immediately (don't wait for next webRequest)
-          if (Object.keys(state.headers).length > 0) {
-            wsSend({
-              action: 'headers_update',
-              email: state.email,
-              headers: state.headers,
-              accessToken: state.accessToken,
-            });
-            console.log(`[VEO Bridge] 📤 Pushed cached headers for ${state.email}`);
-          }
-
-          // Extract fresh access token from page
-          extractAndPushToken(parseInt(tabId), state.email);
-        }
+    try {
+      await _offscreenCreating;
+      console.log('[VEO Bridge] ✅ Offscreen document created for persistent WebSocket');
+      _offscreenCreating = null;
+      return; // Success
+    } catch (e) {
+      _offscreenCreating = null;
+      if (attempt < 3) {
+        console.warn(`[VEO Bridge] ⚠️ Offscreen creation failed (attempt ${attempt}/3): ${e.message} — retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        console.error(`[VEO Bridge] ❌ Offscreen creation failed after 3 attempts: ${e.message}`);
       }
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        handleAppMessage(msg).catch(e => {
-          console.error('[VEO Bridge] Async handler error:', e.message || e);
-        });
-      } catch (e) {
-        console.error('[VEO Bridge] Failed to parse message:', e);
-      }
-    };
-
-    ws.onclose = (event) => {
-      wsConnected = false;
-      ws = null;
-      // Only rotate port on clean close (server intentionally closed).
-      // Idle/network disconnects stay on same port — Python WS server
-      // only listens on port 8765, rotating to 8766/8767 causes error flood.
-      if (event.wasClean) {
-        currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
-      }
-      const nextPort = WEBSOCKET_PORTS[currentPortIndex];
-      console.debug(`[VEO Bridge] WebSocket closed (port ${port}, clean=${event.wasClean}), trying port ${nextPort} in ${wsReconnectDelay / 1000}s...`);
-      setTimeout(connectWebSocket, wsReconnectDelay);
-      // Exponential backoff: 3s → 6s → 12s → 24s → max 30s
-      // Only increase backoff after cycling all ports on clean close
-      if (event.wasClean && currentPortIndex === 0) {
-        wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
-      } else if (!event.wasClean) {
-        // Idle disconnect: use moderate backoff (3s → 6s → max 10s)
-        wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, 10000);
-      }
-    };
-
-    ws.onerror = () => {
-      // Suppress error — onclose will handle reconnect + port rotation
-      console.debug(`[VEO Bridge] WebSocket connection refused on port ${port}`);
-    };
-  } catch (e) {
-    console.debug('[VEO Bridge] WebSocket connection failed:', e.message);
-    currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
-    setTimeout(connectWebSocket, wsReconnectDelay);
-    wsReconnectDelay = Math.min(wsReconnectDelay * 2, 30000);
+    }
   }
 }
 
+// ── WebSocket Relay (via Offscreen Document) ───────────────────────────
+// wsSend() no longer uses a direct WebSocket. Instead, it sends the data
+// to offscreen.js via chrome.runtime.sendMessage, which forwards it over WS.
+
 function wsSend(data) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data));
-    return true;
+  if (!wsConnected) {
+    // Fix J: Queue message for when WS reconnects (max 50 to prevent leak)
+    if (_wsSendQueue.length < 50) {
+      _wsSendQueue.push(data);
+    }
+    return false;
   }
-  return false;
+  // Send via offscreen.js with error recovery
+  chrome.runtime.sendMessage({
+    type: 'offscreen_ws_send',
+    data: data,
+  }).catch(() => {
+    // Offscreen doc might be restarting — queue for retry
+    if (_wsSendQueue.length < 50) {
+      _wsSendQueue.push(data);
+    }
+  });
+  return true;
+}
+
+// Handle WS connection state + reconnect on initial load
+async function onWsConnected() {
+  console.log('[VEO Bridge] ✅ WebSocket connected (via offscreen)');
+
+  // Fix G: Wait for tabState restore before registering
+  // Prevents sending empty tabState when offscreen connects before restore finishes
+  if (!_tabStateRestored) {
+    console.debug('[VEO Bridge] ⏳ Waiting for tabState restore before registering...');
+    const start = Date.now();
+    while (!_tabStateRestored && Date.now() - start < 2000) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    if (!_tabStateRestored) {
+      console.warn('[VEO Bridge] ⚠️ tabState restore timed out (2s) — proceeding with current state');
+    }
+  }
+
+  // Fix J: Flush queued messages first
+  if (_wsSendQueue.length > 0) {
+    console.log(`[VEO Bridge] 📤 Flushing ${_wsSendQueue.length} queued message(s)`);
+    const queue = [..._wsSendQueue];
+    _wsSendQueue = [];
+    for (const msg of queue) {
+      wsSend(msg);
+    }
+  }
+
+  // Register all known tabs + immediately push cached data
+  for (const [tabId, state] of Object.entries(tabState)) {
+    if (state.email) {
+      wsSend({
+        action: 'register',
+        email: state.email,
+        tabId: parseInt(tabId),
+        version: EXT_VERSION,
+      });
+
+      // Push cached headers immediately
+      if (Object.keys(state.headers).length > 0) {
+        wsSend({
+          action: 'headers_update',
+          email: state.email,
+          headers: state.headers,
+          accessToken: state.accessToken,
+        });
+        console.log(`[VEO Bridge] 📤 Pushed cached headers for ${state.email}`);
+      }
+
+      // Extract fresh access token from page
+      extractAndPushToken(parseInt(tabId), state.email);
+    }
+  }
 }
 
 
@@ -228,7 +311,7 @@ async function handleAppMessage(msg) {
       try {
         // Execute directly in page's MAIN world via chrome.scripting API
         // This bypasses CSP (no eval) and isolated world (direct grecaptcha access)
-        const results = await chrome.scripting.executeScript({
+        const scriptPromise = chrome.scripting.executeScript({
           target: { tabId },
           world: 'MAIN',
           func: async (siteKey) => {
@@ -280,6 +363,12 @@ async function handleAppMessage(msg) {
           },
           args: [msg.siteKey || null],
         });
+
+        // Fix #1: Timeout guard — prevents grecaptcha.execute() from hanging forever
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('reCAPTCHA execute timeout (15s) — widget may be frozen')), 15000)
+        );
+        const results = await Promise.race([scriptPromise, timeoutPromise]);
 
         const result = results?.[0]?.result;
 
@@ -1081,7 +1170,8 @@ async function handleAppMessage(msg) {
         if (loadComplete) {
           console.log(`[VEO Bridge] ✅ Navigation complete in ${loadTime}s: ${targetUrl}`);
         } else {
-          console.warn(`[VEO Bridge] ⚠️ Navigation timeout (${loadTime}s): ${targetUrl}`);
+          // Fix #2: Navigation timeout — log warning + continue (don't hang)
+          console.warn(`[VEO Bridge] ⚠️ Navigation timeout after ${loadTime}s (max 25s): ${targetUrl} — proceeding without full load`);
         }
 
         wsSend({
@@ -1243,6 +1333,294 @@ async function handleAppMessage(msg) {
       }
       break;
     }
+
+    case 'provision_gemini_key': {
+      // Auto-provision Gemini API key via AI Studio's gRPC-web service.
+      // 2-Phase approach:
+      //   Phase 1: Use chrome.cookies.get for SAPISID → run on VEO tab (no navigate)
+      //   Phase 2: Only if no GCP project → navigate to AI Studio for SNlM0e token
+      const requestId = msg.requestId;
+      const email = msg.email;
+      const RPC_BASE = 'https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService';
+      const STATIC_KEY = 'AIzaSyDdP816MREB3SkjZO04QXbjsigfcI0GWOs';
+
+      const tabId = findTabForEmail(email) || Object.keys(tabState).find(tid => tabState[tid].email);
+
+      if (!tabId) {
+        wsSend({
+          action: 'provision_gemini_key_result',
+          requestId, email, success: false,
+          error: 'No tab available for Gemini key provisioning',
+        });
+        break;
+      }
+
+      try {
+        console.log(`[VEO Bridge] 🔑 Provisioning Gemini key for ${email} via tab ${tabId}...`);
+
+        // ── Read SAPISID via chrome.cookies API (no navigation needed!) ──
+        const sapisidCookie = await chrome.cookies.get({
+          url: 'https://aistudio.google.com',
+          name: 'SAPISID',
+        });
+        const sapisid = sapisidCookie?.value;
+        if (!sapisid) {
+          wsSend({
+            action: 'provision_gemini_key_result',
+            requestId, email, success: false,
+            error: 'no_sapisid', msg: 'SAPISID cookie not found — user may not be logged in',
+          });
+          break;
+        }
+        console.log(`[VEO Bridge] 🍪 SAPISID obtained via chrome.cookies API (no navigation)`);
+
+        // ── Phase 1: Run gRPC-web on current tab (no navigate) ──
+        // Pass SAPISID as argument instead of reading document.cookie
+        const phase1Fn = async (RPC, KEY, sapisidValue) => {
+          // Build SAPISIDHASH from passed SAPISID value
+          async function buildSapisidHash(sapisid) {
+            try {
+              const ORIGIN = "https://aistudio.google.com";
+              const ts = Math.floor(Date.now() / 1000);
+              const input = `${ts} ${sapisid} ${ORIGIN}`;
+              const buf = await crypto.subtle.digest("SHA-1",
+                new TextEncoder().encode(input));
+              const hex = [...new Uint8Array(buf)]
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+              const hash = `${ts}_${hex}`;
+              return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
+            } catch (e) { return null; }
+          }
+
+          const authHeader = await buildSapisidHash(sapisidValue);
+          const H = {
+            "Content-Type": "application/json+protobuf",
+            "x-goog-api-key": KEY,
+            "x-goog-authuser": "0",
+            "x-user-agent": "grpc-web-javascript/0.1",
+            "x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
+          };
+          if (authHeader) H["authorization"] = authHeader;
+
+          try {
+            // Step 1: List Cloud Projects
+            let r = await fetch(RPC + "/ListCloudProjects", {
+              method: "POST", credentials: "include", headers: H,
+              body: JSON.stringify([null, null, null, 1, null, null])
+            });
+            if (!r.ok) return { error: "list_projects_http_" + r.status };
+            let projects = await r.json();
+
+            let projectRef = null;
+            let projectId = null;
+            if (projects && Array.isArray(projects)) {
+              const flat = JSON.stringify(projects);
+              const m = flat.match(/projects\/(\d+)/);
+              if (m) projectRef = "projects/" + m[1];
+              const m2 = flat.match(/gen-lang-client-[\w-]+/);
+              if (m2) projectId = m2[0];
+            }
+
+            if (!projectRef) {
+              // No project found — Phase 2 needed (navigate for token)
+              return { error: "no_project", needs_navigate: true };
+            }
+
+            // Step 2: List existing API Keys
+            r = await fetch(RPC + "/ListCloudApiKeys", {
+              method: "POST", credentials: "include", headers: H,
+              body: JSON.stringify([100, null, 1, [projectRef]])
+            });
+            if (!r.ok) return { error: "list_keys_http_" + r.status };
+            let keys = await r.json();
+            const keysFlat = JSON.stringify(keys);
+            const km = keysFlat.match(/AIza[\w-]{35}/);
+            if (km) return { key: km[0], source: "existing" };
+
+            // Step 3: Generate new API Key (no token needed for this!)
+            // GenerateCloudApiKey only needs projectId, not SNlM0e token
+            if (!projectId) return { error: "no_project_id" };
+            r = await fetch(RPC + "/GenerateCloudApiKey", {
+              method: "POST", credentials: "include", headers: H,
+              body: JSON.stringify([projectId, null, null, "GEMINI API AUTO"])
+            });
+            if (!r.ok) return { error: "gen_key_http_" + r.status };
+            let newKey = await r.json();
+            const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
+            if (nkm) return { key: nkm[0], source: "created" };
+
+            // If GenerateCloudApiKey without token fails, try with null token
+            return { error: "create_failed", needs_navigate: true };
+          } catch (e) {
+            return { error: e.message };
+          }
+        };
+
+        // Execute Phase 1 on current VEO tab (no navigation!)
+        // Fix #3: Timeout guard for gRPC fetch calls (30s)
+        const phase1Script = chrome.scripting.executeScript({
+          target: { tabId: parseInt(tabId) },
+          world: 'MAIN',
+          func: phase1Fn,
+          args: [RPC_BASE, STATIC_KEY, sapisid],
+        });
+        const phase1Timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini provision Phase 1 timeout (30s)')), 30000)
+        );
+        const phase1Results = await Promise.race([phase1Script, phase1Timeout]);
+
+        let result = phase1Results?.[0]?.result;
+
+        // ── Phase 2: Navigate to AI Studio ONLY if no project ──
+        if (result?.needs_navigate) {
+          console.log(`[VEO Bridge] 🔑 Phase 2: Account has no GCP project — navigating to AI Studio for token...`);
+
+          const origUrl = (await chrome.tabs.get(parseInt(tabId))).url;
+
+          // Navigate to AI Studio to get SNlM0e token from DOM
+          await chrome.tabs.update(parseInt(tabId), { url: 'https://aistudio.google.com/api-keys' });
+          await new Promise(r => setTimeout(r, 6000)); // Wait for SPA to load
+
+          // Phase 2: Full provision with token extraction (on AI Studio page)
+          const phase2Fn = async (RPC, KEY, sapisidValue) => {
+            async function buildSapisidHash(sapisid) {
+              try {
+                const ORIGIN = "https://aistudio.google.com";
+                const ts = Math.floor(Date.now() / 1000);
+                const input = `${ts} ${sapisid} ${ORIGIN}`;
+                const buf = await crypto.subtle.digest("SHA-1",
+                  new TextEncoder().encode(input));
+                const hex = [...new Uint8Array(buf)]
+                  .map(b => b.toString(16).padStart(2, '0')).join('');
+                const hash = `${ts}_${hex}`;
+                return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
+              } catch (e) { return null; }
+            }
+
+            // Token extraction (only works on AI Studio page)
+            function extractToken() {
+              try {
+                if (typeof WIZ_global_data !== 'undefined' && WIZ_global_data.SNlM0e) return WIZ_global_data.SNlM0e;
+              } catch (e) { }
+              try {
+                if (window.__WIZ_global_data__ && window.__WIZ_global_data__.SNlM0e) return window.__WIZ_global_data__.SNlM0e;
+              } catch (e) { }
+              try {
+                const scripts = document.querySelectorAll('script');
+                for (const s of scripts) {
+                  const txt = s.textContent || '';
+                  if (txt.length < 50) continue;
+                  let tm = txt.match(/SNlM0e['"]\s*[:,=]\s*['"](![^'"]{20,})['"]/);
+                  if (tm) return tm[1];
+                  tm = txt.match(/"(![A-Za-z0-9_\-]{20,})"/);
+                  if (tm) return tm[1];
+                }
+              } catch (e) { }
+              return null;
+            }
+
+            const authHeader = await buildSapisidHash(sapisidValue);
+            const H = {
+              "Content-Type": "application/json+protobuf",
+              "x-goog-api-key": KEY,
+              "x-goog-authuser": "0",
+              "x-user-agent": "grpc-web-javascript/0.1",
+              "x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
+            };
+            if (authHeader) H["authorization"] = authHeader;
+
+            try {
+              const token = extractToken();
+              if (!token) return { error: "no_token", msg: "Cannot extract SNlM0e token from AI Studio" };
+
+              // Create project
+              let r = await fetch(RPC + "/CreateCloudProject", {
+                method: "POST", credentials: "include", headers: H,
+                body: JSON.stringify([token, "GEMINI API FOR AUTO FLOW"])
+              });
+              if (!r.ok) return { error: "create_project_http_" + r.status };
+              let newProj = await r.json();
+              const npFlat = JSON.stringify(newProj);
+              let projectRef = null, projectId = null;
+              const npm = npFlat.match(/projects\/(\d+)/);
+              if (npm) projectRef = "projects/" + npm[1];
+              const npm2 = npFlat.match(/gen-lang-client-[\w-]+/);
+              if (npm2) projectId = npm2[0];
+              if (!projectRef) return { error: "create_project_failed" };
+
+              // List keys for new project
+              r = await fetch(RPC + "/ListCloudApiKeys", {
+                method: "POST", credentials: "include", headers: H,
+                body: JSON.stringify([100, null, 1, [projectRef]])
+              });
+              if (r.ok) {
+                let keys = await r.json();
+                const km = JSON.stringify(keys).match(/AIza[\w-]{35}/);
+                if (km) return { key: km[0], source: "existing" };
+              }
+
+              // Generate new key
+              if (!projectId) return { error: "no_project_id" };
+              r = await fetch(RPC + "/GenerateCloudApiKey", {
+                method: "POST", credentials: "include", headers: H,
+                body: JSON.stringify([projectId, token, null, "GEMINI API FOR AUTO FLOW"])
+              });
+              if (!r.ok) return { error: "gen_key_http_" + r.status };
+              let newKey = await r.json();
+              const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
+              if (nkm) return { key: nkm[0], source: "created" };
+              return { error: "create_failed" };
+            } catch (e) {
+              return { error: e.message };
+            }
+          };
+
+          // Fix #3: Timeout guard for Phase 2 gRPC calls (30s)
+          const phase2Script = chrome.scripting.executeScript({
+            target: { tabId: parseInt(tabId) },
+            world: 'MAIN',
+            func: phase2Fn,
+            args: [RPC_BASE, STATIC_KEY, sapisid],
+          });
+          const phase2Timeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Gemini provision Phase 2 timeout (30s)')), 30000)
+          );
+          const phase2Results = await Promise.race([phase2Script, phase2Timeout]);
+
+          result = phase2Results?.[0]?.result;
+
+          // Navigate back to VEO
+          setTimeout(() => {
+            chrome.tabs.update(parseInt(tabId), { url: origUrl || 'https://labs.google/fx/vi/tools/flow' });
+          }, 1000);
+        }
+
+        // ── Send result ──
+        if (result?.key) {
+          console.log(`[VEO Bridge] 🔑 Gemini key ${result.source} for ${email}: ${result.key.substring(0, 10)}...`);
+          wsSend({
+            action: 'provision_gemini_key_result',
+            requestId, email, success: true,
+            key: result.key, source: result.source,
+          });
+        } else {
+          console.warn(`[VEO Bridge] ❌ Gemini key provision failed for ${email}:`, result);
+          wsSend({
+            action: 'provision_gemini_key_result',
+            requestId, email, success: false,
+            error: result?.error || 'unknown', msg: result?.msg || '',
+          });
+        }
+      } catch (e) {
+        console.error(`[VEO Bridge] Gemini key provision error: ${e.message}`);
+        wsSend({
+          action: 'provision_gemini_key_result',
+          requestId, email, success: false,
+          error: e.message,
+        });
+      }
+      break;
+    }
   }
 }
 
@@ -1332,6 +1710,36 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 );
 
 
+// ── Offscreen Document Message Relay ───────────────────────────────────
+// Handle messages FROM offscreen.js (WebSocket state + incoming WS messages)
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // ── Offscreen: WS state change ──
+  if (msg.type === 'offscreen_ws_state') {
+    const wasConnected = wsConnected;
+    wsConnected = msg.connected;
+    if (msg.connected && !wasConnected) {
+      onWsConnected();
+    } else if (!msg.connected && wasConnected) {
+      console.log('[VEO Bridge] ⚠️ WebSocket disconnected (offscreen)');
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  // ── Offscreen: incoming WS message ──
+  if (msg.type === 'offscreen_ws_incoming') {
+    handleAppMessage(msg.data).catch(e => {
+      console.error('[VEO Bridge] Async handler error:', e.message || e);
+    });
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  // ── Below: existing Tab/Content message handling ──
+  return undefined; // Fall through to other handlers
+});
+
+
 // ── Tab Email Detection ────────────────────────────────────────────────
 
 // When content.js loads on VEO page, it sends email
@@ -1343,6 +1751,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     tabState[tabId].email = msg.email;
     tabState[tabId].lastHeartbeat = Date.now();
+    persistTabState(); // Survive SW restart
     // Clear zombie timer if was pending
     if (tabState[tabId]._zombieTimer) {
       clearTimeout(tabState[tabId]._zombieTimer);
@@ -1803,11 +2212,8 @@ chrome.alarms.create(TAB_CLEANUP_ALARM, { periodInMinutes: 2 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === KEEPALIVE_ALARM) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      wsSend({ action: 'ping' });
-    } else {
-      connectWebSocket();
-    }
+    // Ensure offscreen document is alive (it handles WS keepalive internally)
+    ensureOffscreenDocument();
   }
 
   if (alarm.name === HEADER_REFRESH_ALARM) {
@@ -2026,7 +2432,8 @@ chrome.runtime.onInstalled.addListener(async () => {
     console.warn('[VEO Bridge] ⚠️ Stealth script registration failed (Chrome too old?):', e.message);
   }
 
-  connectWebSocket();
+  // ⚡ Create offscreen document for persistent WebSocket (replaces connectWebSocket)
+  await ensureOffscreenDocument();
   // Inject into already-open VEO tabs, clean up excess, then ensure one exists
   injectExistingTabs().then(() => {
     closeExcessTabs();
@@ -2036,13 +2443,40 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // ── Startup ─────────────────────────────────────────────────────────────
 
-connectWebSocket();
-// Also inject on service worker startup (not just install)
-injectExistingTabs().then(() => {
-  closeExcessTabs(); // Clean up any accumulated tabs first
-  ensureVeoTab();
+// 1. Restore tabState from session storage FIRST (before WS connects)
+restoreTabState().then(() => {
+  _tabStateRestored = true; // Fix G: Signal that restore is complete
+  // 2. Create offscreen document for persistent WebSocket
+  ensureOffscreenDocument();
+  // 3. Inject into existing VEO tabs
+  injectExistingTabs().then(() => {
+    closeExcessTabs();
+    ensureVeoTab();
+  });
+}).catch(() => {
+  _tabStateRestored = true; // Fix G: Even on failure, mark as done
+  ensureOffscreenDocument();
 });
-console.log('[VEO Bridge] Background service worker started');
+console.log('[VEO Bridge] Background service worker started (v2.3.0 — offscreen WS + persistence)');
+
+// ── Offscreen Health Monitor ────────────────────────────────────────────
+// Chrome may destroy offscreen documents under memory pressure.
+// Fix K: Monitor every 15s (was 30s) for faster recovery.
+setInterval(async () => {
+  try {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [chrome.runtime.getURL('offscreen.html')],
+    });
+    if (contexts.length === 0) {
+      console.warn('[VEO Bridge] ⚠️ Offscreen document destroyed — recreating...');
+      wsConnected = false; // Fix K: Reset state since offscreen is gone
+      await ensureOffscreenDocument();
+    }
+  } catch (e) {
+    console.debug('[VEO Bridge] Offscreen health check failed:', e.message);
+  }
+}, 15000);
 
 
 // ── Tab Cleanup ─────────────────────────────────────────────────────────

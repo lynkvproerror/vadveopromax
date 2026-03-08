@@ -29,6 +29,7 @@ import logging
 import time
 import uuid
 from typing import Optional, Dict, Callable, Any
+from collections import deque
 
 # websockets v16 State enum for connection health checks
 try:
@@ -82,9 +83,9 @@ class ExtensionBridge:
     """
 
     # Layer 5: Minimum valid reCAPTCHA token length.
-    # Real tokens are 2000+ chars; 330-char garbage tokens from
+    # Real tokens are 1742-2169+ chars; garbage tokens from
     # uninitialized grecaptcha must be rejected early.
-    MIN_TOKEN_LENGTH = 1000
+    MIN_TOKEN_LENGTH = 1500
 
     def __init__(self, port: int = 8765):
         self._port = port
@@ -122,6 +123,9 @@ class ExtensionBridge:
         self._pending_request_times: Dict[str, float] = {}  # requestId → time.time() when sent
         self._pending_request_actions: Dict[str, str] = {}  # requestId → action name
         self._pending_request_emails: Dict[str, str] = {}  # requestId → email
+
+        # ── Debug message log (ring buffer for DevConsole) ──
+        self._message_log: deque = deque(maxlen=500)  # {dir, action, email, ts, payload_preview}
         
         # Health summary: periodic aggregated log instead of per-heartbeat spam
         self._last_health_log: float = 0  # timestamp of last health summary log
@@ -516,6 +520,59 @@ class ExtensionBridge:
                 self._pending_requests.pop(request_id, None)
                 self._pending_request_conns.pop(request_id, None)  # GAP #9
 
+    async def request_gemini_key(self, email: str, timeout: float = 30.0) -> Optional[str]:
+        """Request Gemini API key provisioning via Extension.
+
+        Extension navigates to AI Studio, runs gRPC-web JS to list/create
+        projects and API keys, then returns the key.
+
+        Args:
+            email: Account email to provision key for
+            timeout: Max seconds to wait (default 30s — includes page navigation)
+
+        Returns:
+            API key string (AIza...) or None if failed
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] No connection for {email} — cannot provision Gemini key")
+            return None
+
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+        self._pending_request_conns[request_id] = conn
+
+        try:
+            await self._ws_send(conn, {
+                'action': 'provision_gemini_key',
+                'requestId': request_id,
+                'email': email,
+            })
+
+            result = await asyncio.wait_for(future, timeout=timeout)
+
+            if result.get('success') and result.get('key', '').startswith('AIza'):
+                source = result.get('source', 'unknown')
+                key = result['key']
+                log.info(f"[ExtensionBridge] 🔑 Gemini key {source} for {email}: {key[:10]}...")
+                return key
+            else:
+                error = result.get('error', 'unknown')
+                msg = result.get('msg', '')
+                log.warning(f"[ExtensionBridge] Gemini key provision failed for {email}: {error} — {msg}")
+                return None
+        except asyncio.TimeoutError:
+            log.error(f"[ExtensionBridge] Gemini key request timed out for {email} ({timeout}s)")
+            return None
+        except Exception as e:
+            log.error(f"[ExtensionBridge] Gemini key request error for {email}: {e}")
+            return None
+        finally:
+            self._cleanup_request_timing(request_id)
+            self._pending_requests.pop(request_id, None)
+            self._pending_request_conns.pop(request_id, None)
+
     async def navigate_to_url(
         self, email: str, url: str, timeout: float = 35.0
     ) -> Optional[dict]:
@@ -609,15 +666,16 @@ class ExtensionBridge:
             log.warning(f"[ExtensionBridge] No connection for {email} — cannot submit prompt")
             return None
 
-        # Pre-warm: simulate activity if tab has been idle >60s
-        last_hb = self._content_heartbeats.get(email, 0)
-        if last_hb and (time.time() - last_hb) > 60:
-            log.debug(f"[ExtensionBridge] Tab idle >60s for {email} — simulating activity before submit")
-            try:
-                await self.simulate_activity(email, timeout=3.0)
-                await asyncio.sleep(0.5)
-            except Exception:
-                pass
+        # NOTE: x-client-data is NOT checked here because Extension-based submit
+        # uses page-context fetch — Chrome auto-adds the real x-client-data header.
+        # The cached value (from CDP) may be 8 chars but the actual request has the full header.
+
+        # Guard: ALWAYS simulate activity before submit (prevent bot detection)
+        try:
+            await self.simulate_activity(email, timeout=3.0)
+            await asyncio.sleep(0.3)
+        except Exception:
+            pass
 
         # Serialize submissions per account (same lock as reCAPTCHA)
         if email not in self._recaptcha_locks:
@@ -651,12 +709,21 @@ class ExtensionBridge:
                 token_len = result.get('tokenLength', 0)
 
                 if success:
-                    log.info(
-                        f"[ExtensionBridge] ✅ submit_prompt {endpoint} for {email}: "
-                        f"HTTP {status} (token {token_len} chars)"
-                    )
-                    # Reset short token counter on success
-                    self._short_token_counts[email] = 0
+                    # Guard 3: Validate token length even on success
+                    if token_len > 0 and token_len < self.MIN_TOKEN_LENGTH:
+                        log.warning(
+                            f"[ExtensionBridge] ⚠️ submit_prompt {endpoint} for {email}: "
+                            f"HTTP {status} SUCCESS but token only {token_len} chars "
+                            f"(need ≥{self.MIN_TOKEN_LENGTH}) — may be rejected by Google"
+                        )
+                        self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
+                    else:
+                        log.info(
+                            f"[ExtensionBridge] ✅ submit_prompt {endpoint} for {email}: "
+                            f"HTTP {status} (token {token_len} chars)"
+                        )
+                        # Reset short token counter on success with valid token
+                        self._short_token_counts[email] = 0
                     return result
                 else:
                     # Check if it's a reCAPTCHA issue
@@ -709,6 +776,15 @@ class ExtensionBridge:
             log.warning(f"[ExtensionBridge] submit_upscale: no connection for {email}")
             return None
         
+        # NOTE: x-client-data NOT checked — Extension page-context fetch auto-adds it
+        
+        # Guard: ALWAYS simulate activity before upscale (prevent bot detection)
+        try:
+            await self.simulate_activity(email, timeout=3.0)
+            await asyncio.sleep(0.3)
+        except Exception:
+            pass
+        
         request_id = str(uuid.uuid4())
         future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
@@ -729,11 +805,21 @@ class ExtensionBridge:
             success = result.get('success', False)
             status = result.get('status', 0)
             error = result.get('error', '')
+            token_len = result.get('tokenLength', 0)
             
             if success:
-                log.info(
-                    f"[ExtensionBridge] ✅ submit_upscale for {email}: HTTP {status}"
-                )
+                # Guard 3: Validate token length on upscale success
+                if token_len > 0 and token_len < self.MIN_TOKEN_LENGTH:
+                    log.warning(
+                        f"[ExtensionBridge] ⚠️ submit_upscale for {email}: "
+                        f"HTTP {status} but token only {token_len} chars "
+                        f"(need ≥{self.MIN_TOKEN_LENGTH})"
+                    )
+                else:
+                    log.info(
+                        f"[ExtensionBridge] ✅ submit_upscale for {email}: "
+                        f"HTTP {status} (token {token_len} chars)"
+                    )
             else:
                 log.warning(
                     f"[ExtensionBridge] ❌ submit_upscale for {email}: "
@@ -1249,6 +1335,9 @@ class ExtensionBridge:
         conn.last_activity = time.time()  # Track for zombie detection
         action = msg.get('action', '')
 
+        # ── Debug log capture ──
+        self._log_message('IN', action, msg.get('email', msg.get('requestId', '')), msg)
+
         if action == 'register':
             email = msg.get('email', '')
             ext_version = msg.get('version', '')
@@ -1556,6 +1645,14 @@ class ExtensionBridge:
                 if not future.done():
                     future.set_result(msg)
 
+        elif action == 'provision_gemini_key_result':
+            # Response to provision_gemini_key request
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
         elif action == 'account_logged_out':
             email = msg.get('email', '')
             reason = msg.get('reason', 'unknown')
@@ -1679,6 +1776,8 @@ class ExtensionBridge:
         # Fix 1: Catch broken pipe / connection errors
         try:
             await conn.ws.send(payload)
+            # ── Debug log capture ──
+            self._log_message('OUT', data.get('action', '?'), data.get('email', '?'), data)
         except Exception as e:
             log.warning(f"[ExtensionBridge] Send failed ({e}), cleaning up connection")
             # Clean up timing on send failure
@@ -1854,6 +1953,26 @@ class ExtensionBridge:
                         f"conns={conns}, pending={pending}"
                     )
                 
+                # Fix B: Periodic unregistered connection detection
+                # If connections exist but none have registered emails after 15s,
+                # fire on_unregistered_connection for auto-assign.
+                # Catches cases where _delayed_assign_check was lost during SW restart.
+                unregistered = [
+                    c for c in self._connections
+                    if not c.registered_emails
+                    and self._is_ws_open(c.ws)
+                    and (time.time() - c.last_activity) > 15
+                ]
+                if unregistered and self.on_unregistered_connection:
+                    log.info(
+                        f"[ExtensionBridge] ⚠️ {len(unregistered)} unregistered "
+                        f"connection(s) detected — triggering auto-assign"
+                    )
+                    try:
+                        self.on_unregistered_connection()
+                    except Exception as e:
+                        log.error(f"[ExtensionBridge] Auto-assign trigger error: {e}")
+                
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -1866,6 +1985,7 @@ class ExtensionBridge:
     def get_status(self) -> dict:
         """Get bridge status for DevConsole."""
         now = time.time()
+        diag = self.get_connection_diagnosis()
         return {
             'running': self._server is not None,
             'port': self._port,
@@ -1881,8 +2001,145 @@ class ExtensionBridge:
                 for email, ts in self._content_heartbeats.items()
             },
             'recaptcha_readiness': dict(self._recaptcha_readiness),
+            'diagnosis': diag,
+        }
+
+    def _log_message(self, direction: str, action: str, email: str, data: dict):
+        """Record a message to the debug ring buffer."""
+        # Truncate payload for memory efficiency
+        preview = {}
+        for k, v in data.items():
+            if k in ('action', 'email', 'requestId'):
+                preview[k] = v
+            elif isinstance(v, str) and len(v) > 100:
+                preview[k] = v[:100] + '...'
+            elif isinstance(v, dict):
+                preview[k] = f'{{...{len(v)} keys}}'
+            elif isinstance(v, list):
+                preview[k] = f'[...{len(v)} items]'
+            else:
+                preview[k] = v
+        
+        self._message_log.append({
+            'dir': direction,
+            'action': action,
+            'email': str(email)[:50],
+            'ts': time.time(),
+            'preview': preview,
+        })
+
+    def get_message_log(self, last_n: int = 200) -> list:
+        """Get recent messages for DevConsole Extension Debug page."""
+        items = list(self._message_log)
+        return items[-last_n:] if len(items) > last_n else items
+
+    def get_connection_diagnosis(self) -> dict:
+        """Diagnose why extension is not connected.
+        
+        Returns dict with:
+            - status: 'healthy' | 'server_down' | 'no_connections' | 'no_emails'
+            - reason: Human-readable reason (Vietnamese)
+            - fix: Suggested fix action
+            - severity: 'ok' | 'warning' | 'error'
+        """
+        # Case E: Server failed to start (all ports occupied)
+        if self._server is None:
+            # Check if ports are occupied
+            port_info = self._check_ports_available()
+            if port_info['all_occupied']:
+                return {
+                    'status': 'server_down',
+                    'reason': f'Tất cả port {self.FALLBACK_PORTS} bị chiếm bởi process khác',
+                    'fix': f'Đóng process dùng port {port_info["occupied_ports"]} hoặc restart máy',
+                    'severity': 'error',
+                }
+            return {
+                'status': 'server_down',
+                'reason': 'WebSocket server chưa khởi động',
+                'fix': 'Restart ứng dụng',
+                'severity': 'error',
+            }
+        
+        # Case C+D: Server running but no connections
+        if len(self._connections) == 0:
+            lost_duration = ""
+            if self._connections_lost_at > 0:
+                elapsed = time.time() - self._connections_lost_at
+                lost_duration = f" ({elapsed:.0f}s)"
+            
+            # Check if we ever had connections
+            if self._had_connections:
+                return {
+                    'status': 'no_connections',
+                    'reason': f'Extension mất kết nối{lost_duration}',
+                    'fix': 'Kiểm tra: (1) Extension có bật không (icon vàng trên Chrome), '
+                           '(2) Chrome có đang chạy không, '
+                           '(3) Firewall có chặn localhost:8765 không',
+                    'severity': 'warning',
+                }
+            else:
+                return {
+                    'status': 'no_connections',
+                    'reason': 'Extension chưa từng kết nối',
+                    'fix': 'Kiểm tra: (1) Extension đã cài chưa, '
+                           '(2) Extension có bật không, '
+                           '(3) Đúng Chrome profile chưa, '
+                           f'(4) Firewall có chặn port {self._port} không',
+                    'severity': 'error',
+                }
+        
+        # Case F: Connected but no registered emails
+        emails = self.get_connected_emails()
+        if not emails:
+            return {
+                'status': 'no_emails',
+                'reason': 'Extension kết nối nhưng chưa đăng ký email',
+                'fix': 'Mở tab VEO (veo.google.com) trong Chrome để extension tự đăng ký',
+                'severity': 'warning',
+            }
+        
+        # Check for preserved (stale) headers — extension was connected but headers may be old
+        stale_emails = []
+        now = time.time()
+        for email in emails:
+            last_hb = self._content_heartbeats.get(email, 0)
+            if last_hb and (now - last_hb) > 60:
+                stale_emails.append(email)
+        
+        if stale_emails:
+            return {
+                'status': 'healthy',
+                'reason': f'Kết nối OK, nhưng heartbeat cũ cho: {", ".join(stale_emails)}',
+                'fix': 'Reload tab VEO hoặc kiểm tra content.js',
+                'severity': 'warning',
+            }
+        
+        return {
+            'status': 'healthy',
+            'reason': f'Kết nối tốt: {len(self._connections)} connection(s), '
+                       f'{len(emails)} email(s): {", ".join(emails)}',
+            'fix': '',
+            'severity': 'ok',
+        }
+    
+    def _check_ports_available(self) -> dict:
+        """Check which ports are available/occupied."""
+        import socket
+        occupied = []
+        for port in self.FALLBACK_PORTS:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                sock.bind(('127.0.0.1', port))
+                sock.close()
+            except OSError:
+                occupied.append(port)
+                sock.close()
+        return {
+            'all_occupied': len(occupied) == len(self.FALLBACK_PORTS),
+            'occupied_ports': occupied,
         }
 
     def is_recaptcha_ready(self, email: str) -> bool:
         """Check if reCAPTCHA is warm/ready for an email (from content.js reports)."""
         return self._recaptcha_readiness.get(email, False)
+

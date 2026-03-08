@@ -98,9 +98,9 @@ class RecaptchaPool:
         
         Args:
             email: Account email.
-            token: reCAPTCHA token string (must be ≥1000 chars to be useful).
+            token: reCAPTCHA token string (must be ≥1500 chars to be useful).
         """
-        if not token or len(token) < 1000:
+        if not token or len(token) < 1500:
             return  # Reject garbage tokens (valid tokens are 1742-2169 chars)
         pool = self._pools.get(email)
         if pool is None:

@@ -840,8 +840,51 @@ class ProfilesController:
         """, timeout=10)
         
         if not session_result or "error" in session_result:
-            log.error(f"[ProfilesController] __NEXT_DATA__ extraction failed: {session_result}")
-            return {"success": False, "reason": "no_session"}
+            # Recovery: navigate to VEO flow page to populate __NEXT_DATA__
+            error_info = session_result.get("error", "unknown") if session_result else "null"
+            log.warning(
+                f"[ProfilesController] __NEXT_DATA__ error: {error_info} "
+                f"— trying navigation recovery..."
+            )
+            try:
+                nav_result = self.execute_js_on_debug_browser(email, """
+                    async () => {
+                        window.location.href = 'https://labs.google/fx/tools/flow';
+                        return { navigating: true };
+                    }
+                """, timeout=5)
+                import time as _time
+                _time.sleep(8)  # Wait for page load + __NEXT_DATA__ population
+                
+                # Retry extraction
+                session_result = self.execute_js_on_debug_browser(email, """
+                    () => {
+                        const script = document.getElementById('__NEXT_DATA__');
+                        if (!script) return { error: 'no_next_data_after_nav' };
+                        try {
+                            const data = JSON.parse(script.textContent);
+                            const session = data?.props?.pageProps?.session;
+                            if (!session) return { error: 'no_session_after_nav' };
+                            return {
+                                access_token: session.access_token || session.accessToken || '',
+                                expires: session.expires || '',
+                                user: {
+                                    email: session.user?.email || '',
+                                    name: session.user?.name || ''
+                                }
+                            };
+                        } catch(e) { return { error: e.message }; }
+                    }
+                """, timeout=10)
+                
+                if session_result and "error" not in session_result:
+                    log.info("[ProfilesController] ✅ Session recovered after navigation")
+                else:
+                    log.error(f"[ProfilesController] ❌ Session recovery failed: {session_result}")
+                    return {"success": False, "reason": "no_session"}
+            except Exception as nav_err:
+                log.error(f"[ProfilesController] Navigation recovery error: {nav_err}")
+                return {"success": False, "reason": "no_session"}
         
         access_token = session_result.get("access_token", "")
         if not access_token:
@@ -1959,12 +2002,702 @@ class ProfilesController:
         # Wait for the browser thread to process it
         if result_event.wait(timeout=timeout):
             if result_holder["error"]:
-                log.error(f"[ProfilesController] JS eval error for {email}: {result_holder['error']}")
+                err_lower = result_holder["error"].lower()
+                # Page-closed/context-destroyed errors are expected during soft recovery
+                # (browser navigates away for ~20s). Downgrade to DEBUG to avoid 40+ ERROR spam.
+                if any(phrase in err_lower for phrase in (
+                    "has been closed", "context was destroyed", "target closed",
+                    "navigation", "frame was detached",
+                )):
+                    # Throttle: only log 1 DEBUG per 10 occurrences
+                    if not hasattr(self, '_js_eval_suppress_count'):
+                        self._js_eval_suppress_count = {}
+                    cnt = self._js_eval_suppress_count.get(email, 0) + 1
+                    self._js_eval_suppress_count[email] = cnt
+                    if cnt == 1:
+                        log.info(f"[ProfilesController] ⏳ JS eval paused for {email} (page navigating — soft recovery)")
+                    elif cnt % 10 == 0:
+                        log.debug(f"[ProfilesController] JS eval still failing for {email} (count={cnt}, likely recovery in progress)")
+                else:
+                    # Reset suppress counter on non-recovery errors
+                    if hasattr(self, '_js_eval_suppress_count'):
+                        self._js_eval_suppress_count.pop(email, None)
+                    log.error(f"[ProfilesController] JS eval error for {email}: {result_holder['error']}")
                 return None
+            # Reset suppress counter on success (recovery is over)
+            if hasattr(self, '_js_eval_suppress_count') and email in self._js_eval_suppress_count:
+                cnt = self._js_eval_suppress_count.pop(email, 0)
+                if cnt > 0:
+                    log.info(f"[ProfilesController] ✅ JS eval recovered for {email} (was paused for {cnt} calls)")
             return result_holder["value"]
         else:
             log.warning(f"[ProfilesController] JS eval timeout for {email} ({timeout}s)")
             return None
+    
+    def add_profile_single_browser(
+        self,
+        email: str,
+        password: str,
+        timeout_seconds: int = 120,
+        headless: bool = False,
+        on_state_change=None,
+    ) -> Optional[str]:
+        """Add profile using a SINGLE Chrome+CDP browser session.
+        
+        Complete flow in one browser (no closing/reopening):
+        1. Launch Chrome WITHOUT extension (skip_extension=True)
+        2. Login via CDP (accounts.google.com → fill email/password)
+        3. After login confirmed → install extension (cookies present, no LOGGED OUT)
+        4. Navigate to AI Studio → auto-provision Gemini API key
+        5. Navigate to labs.google → fetch subscription
+        6. Save profile → browser becomes the debug browser
+        
+        Args:
+            email: Google account email (will be normalized with @gmail.com if needed)
+            password: Google account password
+            timeout_seconds: Max time to wait for login completion
+            headless: If True, hide browser window
+            on_state_change: Optional callback(email, state) for browser state changes
+            
+        Returns:
+            Email of created/updated profile, or None if failed
+        """
+        import time
+        import threading
+        import queue as queue_mod
+        
+        # ── Normalize email ──
+        session_email = email
+        if "@" not in session_email:
+            session_email = session_email + "@gmail.com"
+            log.info(f"[ProfilesController] Email normalized: {session_email}")
+        
+        log.info(f"[ProfilesController] 🚀 Single-browser Add Profile for {session_email}...")
+        
+        # ── Get or create browser profile path ──
+        profile_path = None
+        existing = self.get_profile(session_email)
+        if existing and existing.browser_profile_path:
+            existing_path = Path(existing.browser_profile_path)
+            if existing_path.exists():
+                profile_path = existing_path
+                log.info(f"[ProfilesController] Reusing browser profile: {profile_path}")
+        
+        if not profile_path:
+            import uuid
+            profile_folder = f"browser_session_{uuid.uuid4().hex[:8]}"
+            profile_path = self.storage_path.parent / "browser_profiles" / profile_folder
+            profile_path.mkdir(parents=True, exist_ok=True)
+            log.info(f"[ProfilesController] NEW browser profile: {profile_path}")
+        
+        # ── Kill any existing Chrome for this profile ──
+        try:
+            if hasattr(self, '_debug_browsers') and session_email in self._debug_browsers:
+                entry = self._debug_browsers[session_email]
+                try:
+                    ctx = entry.get("context")
+                    if ctx: ctx.close()
+                except Exception:
+                    pass
+                self._debug_browsers[session_email] = {"context": None, "playwright": None}
+            
+            from core.chrome_manager import kill_chrome
+            kill_chrome(str(profile_path))
+        except Exception as e:
+            log.warning(f"[ProfilesController] Chrome kill warning: {e}")
+        
+        time.sleep(2)
+        
+        # ── Initialize debug browser tracking ──
+        if not hasattr(self, '_debug_browsers'):
+            self._debug_browsers = {}
+        
+        cmd_queue = queue_mod.Queue()
+        self._debug_browsers[session_email] = {
+            "cmd_queue": cmd_queue,
+            "state": "hidden",
+            "context": None,
+            "page": None,
+        }
+        
+        # Result container for the thread
+        result_container = {"email": None, "error": None}
+        
+        def _run_single_browser():
+            """Run the complete single-browser flow in a background thread."""
+            nonlocal result_container, session_email
+            
+            cdp_session = None
+            kill_on_exit = False
+            chrome_pid = None
+            
+            try:
+                from core.chrome_manager import launch_or_reconnect, kill_chrome
+                from config.settings import get_settings as _get_settings
+                
+                _s = _get_settings()
+                # Determine if browser should be hidden AFTER login completes
+                _should_hide_after = (
+                    getattr(_s, 'smart_hide_enabled', True) or 
+                    getattr(_s, 'hide_all_browsers', False)
+                )
+                
+                # ══════════════════════════════════════════════════════════
+                # STEP 1: Launch Chrome WITHOUT extension
+                # Browser MUST be VISIBLE during login for CAPTCHA/2FA
+                # ══════════════════════════════════════════════════════════
+                log.info("[ProfilesController] Step 1: Launching Chrome (no extension, VISIBLE for login)...")
+                chrome_info = launch_or_reconnect(
+                    str(profile_path),
+                    email=session_email,
+                    start_url="https://accounts.google.com",
+                    hidden=False,  # ★ VISIBLE during login
+                    skip_extension=True,  # ★ no extension until login done
+                )
+                chrome_pid = chrome_info["pid"]
+                cdp_port = chrome_info["port"]
+                
+                log.info(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port}")
+                
+                # Collect HWNDs (don't hide yet — user needs to see login page)
+                browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                
+                if on_state_change:
+                    try: on_state_change(session_email, "visible")
+                    except Exception: pass
+                
+                # ══════════════════════════════════════════════════════════
+                # STEP 2: Connect via CDP + Login
+                # ══════════════════════════════════════════════════════════
+                from playwright.sync_api import sync_playwright
+                
+                with sync_playwright() as pw:
+                    log.info("[ProfilesController] Step 2: Connecting to CDP...")
+                    browser = None
+                    for attempt in range(3):
+                        try:
+                            browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
+                            break
+                        except Exception as e:
+                            if attempt < 2:
+                                time.sleep(3)
+                            else:
+                                raise e
+                    
+                    context = browser.contexts[0] if browser.contexts else browser.new_context()
+                    
+                    # Find or create a page
+                    existing_pages = context.pages
+                    page = None
+                    for ep in existing_pages:
+                        try:
+                            if "accounts.google" in (ep.url or ""):
+                                page = ep
+                                break
+                        except Exception:
+                            pass
+                    if not page:
+                        page = existing_pages[0] if existing_pages else context.new_page()
+                    
+                    # Navigate to Google login if not already there
+                    if "accounts.google.com" not in (page.url or ""):
+                        page.goto("https://accounts.google.com", wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(3000)
+                    
+                    # ── Login flow ──
+                    current_url = page.url
+                    already_logged_in = "myaccount.google" in current_url
+                    
+                    if not already_logged_in:
+                        # Fill email
+                        log.info("[ProfilesController] Filling email...")
+                        email_input = page.locator("#identifierId")
+                        if email_input.count() > 0 and email_input.is_visible():
+                            email_input.fill(session_email)
+                            page.wait_for_timeout(500)
+                            page.keyboard.press("Enter")
+                            log.info("[ProfilesController] ✅ Email entered")
+                        else:
+                            alt_input = page.locator("input[type='email']")
+                            if alt_input.count() > 0:
+                                alt_input.first.fill(session_email)
+                                page.keyboard.press("Enter")
+                        
+                        page.wait_for_timeout(3000)
+                        
+                        # Fill password
+                        log.info("[ProfilesController] Filling password...")
+                        password_input = page.locator("input[name='Passwd']")
+                        for _ in range(10):
+                            if password_input.count() > 0 and password_input.is_visible():
+                                break
+                            page.wait_for_timeout(500)
+                        
+                        if password_input.count() > 0 and password_input.is_visible():
+                            password_input.fill(password)
+                            page.wait_for_timeout(500)
+                            page.keyboard.press("Enter")
+                            log.info("[ProfilesController] ✅ Password entered")
+                        else:
+                            log.warning("[ProfilesController] ⚠️ Password input not found")
+                            page.wait_for_timeout(10000)
+                        
+                        # Wait for login redirect
+                        log.info(f"[ProfilesController] Waiting for login (max {timeout_seconds}s)...")
+                        login_success = False
+                        for i in range(timeout_seconds // 5):
+                            page.wait_for_timeout(5000)
+                            current_url = page.url
+                            if "accounts.google.com" not in current_url:
+                                login_success = True
+                                log.info("[ProfilesController] ✅ Login redirect detected!")
+                                break
+                            log.info(f"[ProfilesController] Waiting... ({(i+1)*5}/{timeout_seconds}s)")
+                        
+                        if not login_success:
+                            log.error("[ProfilesController] ❌ Login timeout")
+                            result_container["error"] = "Login timeout"
+                            browser.close()
+                            return
+                    else:
+                        log.info("[ProfilesController] ✅ Already logged in")
+                    
+                    # Detect real email from page
+                    try:
+                        detected_email = page.evaluate("""() => {
+                            const el = document.querySelector('[data-email]');
+                            if (el) return el.getAttribute('data-email');
+                            const labels = document.querySelectorAll('[aria-label*="@"]');
+                            for (const l of labels) {
+                                const m = l.getAttribute('aria-label').match(/[\\w.+-]+@[\\w.-]+/);
+                                if (m) return m[0];
+                            }
+                            const spans = document.querySelectorAll('span, div');
+                            for (const el of spans) {
+                                const txt = el.textContent || '';
+                                if (txt.includes('@') && txt.length < 80) {
+                                    const m = txt.match(/[\\w.+-]+@[\\w.-]+\\.[a-z]{2,}/);
+                                    if (m) return m[0];
+                                }
+                            }
+                            return null;
+                        }""")
+                        if detected_email and "@" in detected_email:
+                            session_email = detected_email
+                            log.info(f"[ProfilesController] Detected email: {session_email}")
+                    except Exception:
+                        pass
+                    
+                    page.wait_for_timeout(2000)
+                    
+                    # ══════════════════════════════════════════════════════════
+                    # STEP 3: Install extension NOW (after login, cookies exist)
+                    # ══════════════════════════════════════════════════════════
+                    log.info("[ProfilesController] Step 3: Installing extension (post-login)...")
+                    try:
+                        from core.extension_manager import install_if_needed
+                        from core.chrome_manager import is_branded_chrome
+                        
+                        _client_dir = Path(__file__).resolve().parent.parent
+                        _ext_dir = _client_dir / "extension"
+                        _chrome_exe = chrome_info.get("chrome_exe", "")
+                        
+                        if _ext_dir.exists() and (_ext_dir / "manifest.json").exists():
+                            if is_branded_chrome(_chrome_exe):
+                                ext_ok = install_if_needed(cdp_port, str(_ext_dir))
+                                log.info(f"[ProfilesController] Extension install: {'✅' if ext_ok else '⚠️ failed'}")
+                            else:
+                                log.info("[ProfilesController] CfT — extension loaded via --load-extension flag")
+                        else:
+                            log.warning("[ProfilesController] No extension directory found")
+                    except Exception as ext_e:
+                        log.warning(f"[ProfilesController] Extension install error (non-fatal): {ext_e}")
+                    
+                    # Wait for extension to initialize
+                    time.sleep(5)
+                    
+                    # ══════════════════════════════════════════════════════════
+                    # STEP 4: Navigate to Flow page → account info + subscription
+                    # (Go here FIRST to get account info — browser stays open)
+                    # ══════════════════════════════════════════════════════════
+                    log.info("[ProfilesController] Step 4: Flow page → account info + subscription...")
+                    credits_data = {}
+                    try:
+                        page.goto("https://labs.google/fx/tools/flow",
+                                  wait_until="domcontentloaded", timeout=30000)
+                        page.wait_for_timeout(5000)
+                        
+                        # Click "Create with Flow" if present
+                        try:
+                            create_btn = page.locator("button:has-text('Create with Flow')")
+                            if create_btn.count() > 0 and create_btn.first.is_visible():
+                                create_btn.first.click()
+                                page.wait_for_timeout(3000)
+                        except Exception:
+                            pass
+                        
+                        # Extract token from __NEXT_DATA__
+                        access_token = None
+                        for attempt in range(3):
+                            try:
+                                session_result = page.evaluate("""() => {
+                                    const script = document.getElementById('__NEXT_DATA__');
+                                    if (!script) return { error: 'no_next_data' };
+                                    try {
+                                        const data = JSON.parse(script.textContent);
+                                        const session = data?.props?.pageProps?.session;
+                                        if (!session) return { error: 'no_session' };
+                                        return {
+                                            access_token: session.access_token || session.accessToken || '',
+                                            user: {
+                                                email: session.user?.email || '',
+                                                name: session.user?.name || ''
+                                            }
+                                        };
+                                    } catch(e) { return { error: e.message }; }
+                                }""")
+                                
+                                access_token = (session_result or {}).get("access_token")
+                                user_email = (session_result or {}).get("user", {}).get("email")
+                                if user_email and "@" in user_email:
+                                    session_email = user_email
+                                
+                                if access_token:
+                                    log.info(f"[ProfilesController] ✅ Token on attempt {attempt + 1}")
+                                    break
+                            except Exception:
+                                pass
+                            page.wait_for_timeout(3000)
+                        
+                        if access_token:
+                            try:
+                                credits_data = page.evaluate(f"""async () => {{
+                                    try {{
+                                        const resp = await fetch(
+                                            'https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY',
+                                            {{
+                                                headers: {{ 'Authorization': 'Bearer {access_token}' }},
+                                                credentials: 'include'
+                                            }}
+                                        );
+                                        if (resp.ok) return await resp.json();
+                                        return {{ error: resp.status }};
+                                    }} catch (e) {{ return {{ error: e.message }}; }}
+                                }}""")
+                                log.info(f"[ProfilesController] Credits: {credits_data}")
+                            except Exception as ce:
+                                log.warning(f"[ProfilesController] Credits API error: {ce}")
+                        else:
+                            log.warning("[ProfilesController] ⚠️ No access token")
+                    except Exception as sub_e:
+                        log.warning(f"[ProfilesController] Subscription error: {sub_e}")
+                    
+                    # ══════════════════════════════════════════════════════════
+                    # STEP 5: Navigate to AI Studio → API key provisioning
+                    # (Browser stays open — uses same session cookies for auth)
+                    # ══════════════════════════════════════════════════════════
+                    log.info("[ProfilesController] Step 5: AI Studio → API key provisioning...")
+                    gemini_key = None
+                    try:
+                        from services.gemini_key_manager import GeminiKeyManager
+                        mgr = GeminiKeyManager()
+                        
+                        if mgr.has_key(session_email):
+                            log.info(f"[ProfilesController] ✅ Gemini key already exists for {session_email}")
+                        else:
+                            # Provision via Extension Bridge (persistent, no Playwright needed)
+                            bridge = getattr(self, '_extension_bridge', None)
+                            app_ctrl = getattr(self, '_app_controller', None)
+                            if not bridge and app_ctrl:
+                                bridge = getattr(app_ctrl, '_extension_bridge', None)
+                            
+                            if bridge and bridge.is_connected(session_email):
+                                log.info("[ProfilesController] 🔑 Provisioning Gemini key via Extension...")
+                                try:
+                                    import asyncio
+                                    # Get event loop from app controller (runs bridge's async tasks)
+                                    loop = None
+                                    if app_ctrl and hasattr(app_ctrl, '_loop'):
+                                        loop = app_ctrl._loop
+                                    if not loop:
+                                        loop = asyncio.get_event_loop()
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        mgr.auto_provision_via_extension(session_email, bridge),
+                                        loop
+                                    )
+                                    key = future.result(timeout=35)  # 35s sync timeout
+                                except Exception as ext_e:
+                                    key = None
+                                    log.warning(f"[ProfilesController] Extension provision error: {ext_e}")
+                                
+                                if key:
+                                    gemini_key = key
+                                    log.info(f"[ProfilesController] ✅ API key provisioned via Extension for {session_email}: {key[:10]}...")
+                                else:
+                                    log.warning("[ProfilesController] ⚠️ Extension provision failed — user can paste manually in Settings")
+                            else:
+                                log.warning("[ProfilesController] ⚠️ Extension not connected — API key not provisioned. User can paste manually in Settings")
+                    except Exception as gem_e:
+                        log.warning(f"[ProfilesController] API key error (non-fatal): {gem_e}")
+                    
+                    # ══════════════════════════════════════════════════════════
+                    # STEP 6: Save profile
+                    # ══════════════════════════════════════════════════════════
+                    log.info(f"[ProfilesController] Step 6: Saving profile {session_email}...")
+                    
+                    existing_profile = self.get_profile(session_email)
+                    if existing_profile:
+                        existing_profile.login_method = "browser"
+                        existing_profile.browser_profile_path = str(profile_path)
+                        existing_profile.is_ready = True
+                        existing_profile.last_used = datetime.now().isoformat()
+                        if credits_data and "error" not in credits_data:
+                            existing_profile.sku = credits_data.get("sku", "WS_ULTRA")
+                            existing_profile.credits = credits_data.get("credits", 0)
+                            existing_profile.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
+                            existing_profile.subscription_fetched = True
+                        self.save_profiles()
+                    else:
+                        success = self.add_profile(
+                            email=session_email,
+                            profile_path=str(profile_path),
+                            display_name=session_email.split("@")[0],
+                            is_ready=True,
+                            notify=False
+                        )
+                        if success:
+                            profile = self.get_profile(session_email)
+                            if profile:
+                                profile.login_method = "browser"
+                                profile.browser_profile_path = str(profile_path)
+                                if credits_data and "error" not in credits_data:
+                                    profile.sku = credits_data.get("sku", "WS_ULTRA")
+                                    profile.credits = credits_data.get("credits", 0)
+                                    profile.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
+                                    profile.subscription_fetched = True
+                                self.save_profiles()
+                    
+                    result_container["email"] = session_email
+                    log.info(f"[ProfilesController] ✅ Profile saved: {session_email}")
+                    
+                    # ══════════════════════════════════════════════════════════
+                    # STEP 7: Become the debug browser (command loop)
+                    # ══════════════════════════════════════════════════════════
+                    log.info("[ProfilesController] Step 7: Entering debug browser command loop...")
+                    
+                    # Setup header capture via CDP
+                    captured_headers = {}
+                    try:
+                        cdp_session = context.new_cdp_session(page)
+                        
+                        HEADER_KEYS = [
+                            "x-browser-channel", "x-browser-copyright",
+                            "x-browser-year", "x-browser-validation", "x-client-data",
+                        ]
+                        
+                        def on_request_will_be_sent(event):
+                            url = event.get("request", {}).get("url", "")
+                            if "googleapis.com" in url or "aisandbox" in url:
+                                headers = event.get("request", {}).get("headers", {})
+                                for key in HEADER_KEYS:
+                                    val = headers.get(key) or headers.get(key.title())
+                                    if val:
+                                        captured_headers[key] = val
+                        
+                        cdp_session.on("Network.requestWillBeSent", on_request_will_be_sent)
+                        cdp_session.send("Network.enable")
+                    except Exception as cdp_e:
+                        log.warning(f"[ProfilesController] CDP session setup: {cdp_e}")
+                    
+                    # Reload page to capture headers
+                    try:
+                        page.reload(wait_until="load", timeout=15000)
+                        page.wait_for_timeout(3000)
+                    except Exception:
+                        pass
+                    
+                    # Compute missing branded headers
+                    if not captured_headers.get("x-browser-validation"):
+                        CHROME_API_KEY_WIN = "AIzaSyA2KlwBX3mkFo30om9LUFYQhpqLoa_BNhE"
+                        try:
+                            import hashlib, base64 as b64
+                            user_agent = page.evaluate("navigator.userAgent")
+                            sha1_hash = hashlib.sha1((CHROME_API_KEY_WIN + user_agent).encode("utf-8")).digest()
+                            captured_headers["x-browser-validation"] = b64.b64encode(sha1_hash).decode("ascii")
+                        except Exception:
+                            pass
+                    
+                    if "x-browser-channel" not in captured_headers:
+                        captured_headers["x-browser-channel"] = "stable"
+                    if "x-browser-copyright" not in captured_headers:
+                        captured_headers["x-browser-copyright"] = "Copyright 2026 Google LLC. All Rights reserved."
+                    if "x-browser-year" not in captured_headers:
+                        captured_headers["x-browser-year"] = "2026"
+                    
+                    log.info(f"[ProfilesController] Headers: {list(captured_headers.keys())}")
+                    
+                    # Store refs
+                    entry = self._debug_browsers.get(session_email)
+                    if entry:
+                        entry["context"] = context
+                        entry["page"] = page
+                        entry["hwnds"] = browser_hwnds
+                        entry["captured_headers"] = captured_headers
+                        entry["cdp_port"] = cdp_port
+                        entry["chrome_pid"] = chrome_pid
+                    
+                    # ALWAYS hide browser after save — user should not see it
+                    time.sleep(1)
+                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                    _win32_hide_hwnds(browser_hwnds)
+                    log.info(f"[ProfilesController] 🔇 Browser hidden after profile save for {session_email}")
+                    if entry:
+                        entry["hwnds"] = browser_hwnds
+                        entry["state"] = "hidden"
+                    
+                    # ── Command loop (same as open_browser_for_debug) ──
+                    running = True
+                    while running:
+                        try:
+                            cmd = cmd_queue.get(timeout=0.5)
+                            
+                            if isinstance(cmd, tuple) and cmd[0] == "evaluate":
+                                _, expression, eval_arg, result_event, result_holder = cmd
+                                for eval_attempt in range(2):
+                                    try:
+                                        if eval_arg is not None:
+                                            r = page.evaluate(expression, eval_arg)
+                                        else:
+                                            r = page.evaluate(expression)
+                                        result_holder["value"] = r
+                                        result_holder["error"] = None
+                                        break
+                                    except Exception as eval_err:
+                                        err_str = str(eval_err).lower()
+                                        if eval_attempt < 1 and ("context was destroyed" in err_str or "navigation" in err_str):
+                                            time.sleep(2)
+                                            continue
+                                        result_holder["value"] = None
+                                        result_holder["error"] = str(eval_err)
+                                result_event.set()
+                            
+                            elif cmd == "hide":
+                                browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                _win32_hide_hwnds(browser_hwnds)
+                                e = self._debug_browsers.get(session_email)
+                                if e: e["state"] = "hidden"
+                                log.info(f"[ProfilesController] 🔇 Browser hidden for {session_email}")
+                                if on_state_change:
+                                    try: on_state_change(session_email, "hidden")
+                                    except Exception: pass
+                            
+                            elif cmd == "show":
+                                browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                _win32_show_hwnds(browser_hwnds)
+                                e = self._debug_browsers.get(session_email)
+                                if e: e["state"] = "visible"
+                                log.info(f"[ProfilesController] 👁️ Browser shown for {session_email}")
+                                if on_state_change:
+                                    try: on_state_change(session_email, "visible")
+                                    except Exception: pass
+                            
+                            elif cmd == "refresh_token":
+                                log.info(f"[ProfilesController] 🔄 Refreshing token for {session_email}...")
+                                try:
+                                    try:
+                                        page.reload(wait_until="load", timeout=15000)
+                                    except Exception:
+                                        page.goto("https://labs.google/fx/tools/flow", wait_until="load", timeout=15000)
+                                    page.wait_for_timeout(2000)
+                                    token = page.evaluate("""() => {
+                                        try {
+                                            const nd = document.getElementById('__NEXT_DATA__');
+                                            if (nd) {
+                                                const data = JSON.parse(nd.textContent);
+                                                return data?.props?.pageProps?.userInfo?.accessToken
+                                                    || data?.props?.pageProps?.session?.accessToken
+                                                    || null;
+                                            }
+                                        } catch {}
+                                        return null;
+                                    }""")
+                                    if token and len(token) > 100:
+                                        profile = self.get_profile(session_email)
+                                        if profile:
+                                            profile.access_token = token
+                                            from datetime import timedelta
+                                            profile.token_expires = datetime.now() + timedelta(hours=1)
+                                        log.info(f"[ProfilesController] ✅ Token refreshed ({len(token)} chars)")
+                                    else:
+                                        log.error("[ProfilesController] ⚠️ Token refresh failed")
+                                except Exception as e:
+                                    log.error(f"[ProfilesController] ❌ Token refresh error: {e}")
+                            
+                            elif cmd == "close":
+                                running = False
+                            
+                            elif cmd == "kill":
+                                kill_on_exit = True
+                                running = False
+                        
+                        except queue_mod.Empty:
+                            pass
+                        
+                        # Check browser alive
+                        if running:
+                            try:
+                                from core.chrome_manager import _is_chrome_process_alive
+                                if not _is_chrome_process_alive(chrome_pid, str(profile_path)):
+                                    running = False
+                            except Exception:
+                                pass
+                    
+                    # Disconnect Playwright
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
+                
+                # Kill if requested
+                if kill_on_exit:
+                    kill_chrome(str(profile_path))
+                    log.info(f"[ProfilesController] 🔒 Chrome KILLED for {session_email}")
+                else:
+                    log.info(f"[ProfilesController] 🔗 Disconnected — Chrome still running for {session_email}")
+            
+            except Exception as e:
+                log.error(f"[ProfilesController] Single-browser error: {e}")
+                import traceback
+                traceback.print_exc()
+                result_container["error"] = str(e)
+            finally:
+                # Cleanup on failure
+                if result_container["error"]:
+                    if session_email in self._debug_browsers:
+                        del self._debug_browsers[session_email]
+                    if on_state_change:
+                        try: on_state_change(session_email, "closed")
+                        except Exception: pass
+        
+        # Launch in background thread
+        thread = threading.Thread(target=_run_single_browser, daemon=True, 
+                                  name=f"add_profile_{session_email}")
+        thread.start()
+        
+        # Wait for login result (Steps 1-6), but don't block forever
+        # The command loop (Step 7) runs indefinitely in the background
+        max_wait = timeout_seconds + 60  # login timeout + extra for steps 3-6
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            if result_container["email"]:
+                return result_container["email"]
+            if result_container["error"]:
+                log.error(f"[ProfilesController] Add profile failed: {result_container['error']}")
+                return None
+            time.sleep(1)
+        
+        log.error("[ProfilesController] Add profile timed out waiting for result")
+        return None
     
     def auto_login_with_credentials(
         self, 
@@ -2161,142 +2894,83 @@ class ProfilesController:
                         context.close()
                         return None
                     
-                    # Step 5: Navigate to labs.google and extract session from __NEXT_DATA__
-                    # Per docs (ACCOUNT_SESSION_MANAGEMENT.md Section 7.2):
-                    # Server-side renders session data into __NEXT_DATA__ when Google cookies are present
-                    log.info("[ProfilesController] Navigating to labs.google/fx/tools/flow...")
-                    page.goto("https://labs.google/fx/tools/flow", wait_until="domcontentloaded", timeout=30000)
-                    page.wait_for_timeout(5000)
-                    
-                    # Click "Create with Flow" button if present (activates VEO Flow)
-                    try:
-                        create_btn = page.locator("button:has-text('Create with Flow')")
-                        if create_btn.count() > 0 and create_btn.first.is_visible():
-                            log.info("[ProfilesController] Clicking 'Create with Flow' button...")
-                            create_btn.first.click()
-                            page.wait_for_timeout(3000)
-                    except Exception:
-                        pass
-                    
-                    # Step 6: Extract session from __NEXT_DATA__
-                    access_token = None
-                    session_result = {}
-                    user_info = {}
-                    session_email = email
-                    
-                    for attempt in range(3):
-                        log.info(f"[ProfilesController] Extracting __NEXT_DATA__ (attempt {attempt+1}/3)...")
-                        try:
-                            session_result = page.evaluate("""
-                                () => {
-                                    const script = document.getElementById('__NEXT_DATA__');
-                                    if (!script) return { error: 'no_next_data' };
-                                    
-                                    try {
-                                        const data = JSON.parse(script.textContent);
-                                        const session = data?.props?.pageProps?.session;
-                                        
-                                        if (!session) return { error: 'no_session_in_next_data' };
-                                        
-                                        return {
-                                            access_token: session.access_token || session.accessToken || '',
-                                            expires: session.expires || '',
-                                            user: {
-                                                email: session.user?.email || '',
-                                                name: session.user?.name || '',
-                                                image: session.user?.image || ''
-                                            }
-                                        };
-                                    } catch(e) {
-                                        return { error: e.message };
-                                    }
-                                }
-                            """)
-                        except Exception as eval_err:
-                            log.error(f"[ProfilesController] ⚠️ Evaluate failed: {eval_err}")
-                            session_result = {"error": str(eval_err)}
-                            page.wait_for_timeout(3000)
-                            continue
-                        
-                        log.info(f"[ProfilesController] __NEXT_DATA__ result: {session_result}")
-                        
-                        access_token = session_result.get("access_token") or session_result.get("accessToken")
-                        user_info = session_result.get("user", {})
-                        session_email = user_info.get("email", email)
-                        
-                        if access_token:
-                            log.info(f"[ProfilesController] ✅ Got access token on attempt {attempt+1}")
-                            break
-                        
-                        if attempt < 2:
-                            log.warning(f"[ProfilesController] ⚠️ No token yet, waiting 3s...")
-                            page.wait_for_timeout(3000)
-                    
-                    if not access_token:
-                        log.warning("[ProfilesController] ⚠️ No access token from __NEXT_DATA__ - profile saved without token")
-                    
-                    # Step 7: Fetch credits/subscription on the SAME page (no second browser needed)
-                    credits_data = {}
-                    if access_token:
-                        log.info(f"[ProfilesController] Fetching credits API with token...")
-                        try:
-                            credits_data = page.evaluate(f"""
-                                async () => {{
-                                    try {{
-                                        const resp = await fetch('https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY', {{
-                                            headers: {{
-                                                'Authorization': 'Bearer {access_token}'
-                                            }},
-                                            credentials: 'include'
-                                        }});
-                                        if (resp.ok) {{
-                                            return await resp.json();
-                                        }}
-                                        return {{ error: resp.status }};
-                                    }} catch (e) {{
-                                        return {{ error: e.message }};
-                                    }}
-                                }}
-                            """)
-                        except Exception as e:
-                            log.error(f"[ProfilesController] Credits API error: {e}")
-                            credits_data = {"error": str(e)}
-                        
-                        log.info(f"[ProfilesController] Credits result: {credits_data}")
-                    
-                    # Sync storage before close
-                    log.info("[ProfilesController] Syncing browser storage...")
+                    # Step 5: Login confirmed — sync storage and close browser
+                    # Extension install, API key, and subscription fetch happen
+                    # later in the debug browser (correct order).
+                    log.info("[ProfilesController] ✅ Login confirmed — syncing storage before close...")
                     page.wait_for_timeout(2000)
                     
-                    # Close browser (unless keep_browser_open for debugging)
+                    # Detect actual email — multiple strategies
+                    session_email = email
+                    
+                    # Strategy 1: Normalize email input (add @gmail.com if missing)
+                    if "@" not in session_email:
+                        session_email = session_email + "@gmail.com"
+                        log.info(f"[ProfilesController] Email normalized: {session_email}")
+                    
+                    # Strategy 2: Try to extract real email from the current page
+                    try:
+                        detected_email = page.evaluate("""() => {
+                            // Try data-email attribute
+                            const el = document.querySelector('[data-email]');
+                            if (el) return el.getAttribute('data-email');
+                            
+                            // Try aria-label containing @
+                            const labels = document.querySelectorAll('[aria-label*="@"]');
+                            for (const l of labels) {
+                                const m = l.getAttribute('aria-label').match(/[\\w.+-]+@[\\w.-]+/);
+                                if (m) return m[0];
+                            }
+                            
+                            // Try alt text (profile image often has email)
+                            const imgs = document.querySelectorAll('img[alt*="@"]');
+                            for (const img of imgs) {
+                                const m = img.alt.match(/[\\w.+-]+@[\\w.-]+/);
+                                if (m) return m[0];
+                            }
+                            
+                            // Try visible text on myaccount page
+                            const spans = document.querySelectorAll('span, div, a');
+                            for (const el of spans) {
+                                const txt = el.textContent || '';
+                                if (txt.includes('@') && txt.length < 80) {
+                                    const m = txt.match(/[\\w.+-]+@[\\w.-]+\\.[a-z]{2,}/);
+                                    if (m) return m[0];
+                                }
+                            }
+                            
+                            return null;
+                        }""")
+                        if detected_email and "@" in detected_email:
+                            session_email = detected_email
+                            log.info(f"[ProfilesController] Detected email from page: {session_email}")
+                    except Exception as e:
+                        log.debug(f"[ProfilesController] Email detection from page failed: {e}")
+                    
+                    # Close browser
                     if keep_browser_open:
-                        log.debug("[ProfilesController] 🔓 Browser kept open for debugging. Close manually when done.")
+                        log.debug("[ProfilesController] 🔓 Browser kept open for debugging.")
                     else:
                         context.close()
                     
-                    # Step 8: Save/update profile with ALL data (token + credits)
+                    # Step 6: Save profile with login data only (no subscription yet)
+                    # Subscription will be fetched later in the debug browser.
                     existing = self.get_profile(session_email)
                     if existing:
                         log.info(f"[ProfilesController] Updating existing profile: {session_email}")
                         existing.login_method = "browser"
                         existing.browser_profile_path = str(profile_path)
-                        existing.is_ready = True
+                        existing.is_ready = False  # Not fully ready until subscription fetched
                         existing.last_used = datetime.now().isoformat()
-                        if credits_data and "error" not in credits_data:
-                            existing.sku = credits_data.get("sku", "WS_ULTRA")
-                            existing.credits = credits_data.get("credits", 0)
-                            existing.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
-                            existing.subscription_fetched = True
-                            log.info(f"[ProfilesController] ✅ {existing.tier_display}, Credits: {existing.credits}")
                         self.save_profiles()
                         return session_email
                     
-                    # Add new profile
+                    # Add new profile (without subscription data)
                     success = self.add_profile(
                         email=session_email,
                         profile_path=str(profile_path),
                         display_name=session_email.split("@")[0],
-                        is_ready=True,
+                        is_ready=False,  # Not fully ready until subscription fetched
                         notify=False
                     )
                     
@@ -2305,12 +2979,6 @@ class ProfilesController:
                         if profile:
                             profile.login_method = "browser"
                             profile.browser_profile_path = str(profile_path)
-                            if credits_data and "error" not in credits_data:
-                                profile.sku = credits_data.get("sku", "WS_ULTRA")
-                                profile.credits = credits_data.get("credits", 0)
-                                profile.paygate_tier = credits_data.get("userPaygateTier", "PAYGATE_TIER_TWO")
-                                profile.subscription_fetched = True
-                                log.info(f"[ProfilesController] ✅ {profile.tier_display}, Credits: {profile.credits}")
                             self.save_profiles()
                         
                         log.info(f"[ProfilesController] ✅ Auto-login successful: {session_email}")

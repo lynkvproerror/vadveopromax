@@ -10,6 +10,8 @@ from .page_queue import QueuePerfPage
 from .page_accounts import AccountsPage
 from .page_logs import LogsPage
 from .page_network import NetworkPage
+from .page_gemini import GeminiApiPage
+from .page_extension import ExtensionDebugPage
 
 __all__ = [
     "DashboardPage",
@@ -17,4 +19,6 @@ __all__ = [
     "AccountsPage",
     "LogsPage",
     "NetworkPage",
+    "GeminiApiPage",
+    "ExtensionDebugPage",
 ]

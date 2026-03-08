@@ -13,11 +13,12 @@ Performance fixes:
 Architecture:
 - Sidebar navigation (QListWidget) selects content pages
 - QStackedWidget holds 5 page widgets:
-  0: DashboardPage — engine metrics cards
-  1: QueuePerfPage — queue state + performance
-  2: AccountsPage  — session + browser + extension per account
-  3: LogsPage       — live logs + JSON preview
-  4: NetworkPage    — extension bridge + API activity
+  0: DashboardPage  — engine metrics cards
+  1: QueuePerfPage  — queue state + performance
+  2: AccountsPage   — session + browser + extension per account
+  3: LogsPage        — live logs + JSON preview
+  4: NetworkPage     — extension bridge + API activity
+  5: GeminiApiPage   — Gemini API debug for Project Builder
 """
 
 import sys
@@ -190,6 +191,7 @@ class TabDevConsole(QWidget):
     2: 👥 Accounts   — Session, browser, extension per account
     3: 📝 Logs       — Live logs + JSON preview
     4: 🌐 Network    — Extension bridge + API activity
+    5: 🤖 Gemini API — Project Builder debug
     
     All existing public methods (`update_*`) are preserved for
     backward compatibility with AppController callbacks.
@@ -206,6 +208,8 @@ class TabDevConsole(QWidget):
         ("👥", "Accounts", 2),
         ("📝", "Logs", 3),
         ("🌐", "Network", 4),
+        ("🤖", "Gemini API", 5),
+        ("🧩", "Extension", 6),
     ]
     
     def __init__(self, parent: Optional[QWidget] = None, controller=None):
@@ -214,7 +218,8 @@ class TabDevConsole(QWidget):
         
         # Import page widgets
         from ui.tabs.devconsole import (
-            DashboardPage, QueuePerfPage, AccountsPage, LogsPage, NetworkPage
+            DashboardPage, QueuePerfPage, AccountsPage, LogsPage, NetworkPage,
+            GeminiApiPage, ExtensionDebugPage,
         )
         
         # Create pages
@@ -223,6 +228,8 @@ class TabDevConsole(QWidget):
         self._accounts_page = AccountsPage()
         self._logs_page = LogsPage()
         self._network_page = NetworkPage()
+        self._gemini_page = GeminiApiPage()
+        self._extension_page = ExtensionDebugPage(controller=controller)
         
         self._setup_ui()
         self._attach_logging()
@@ -298,6 +305,8 @@ class TabDevConsole(QWidget):
         self._stack.addWidget(self._accounts_page)    # 2
         self._stack.addWidget(self._logs_page)        # 3
         self._stack.addWidget(self._network_page)     # 4
+        self._stack.addWidget(self._gemini_page)      # 5
+        self._stack.addWidget(self._extension_page)   # 6
         self._stack.setCurrentIndex(0)
         
         splitter.addWidget(self._stack)

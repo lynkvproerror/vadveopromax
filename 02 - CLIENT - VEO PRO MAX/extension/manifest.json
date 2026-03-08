@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VEO Pro Max Bridge",
-  "version": "2.2.4",
+  "version": "2.3.0",
   "description": "Bridges VEO web tokens and headers to VEO Pro Max app via WebSocket",
   "permissions": [
     "webRequest",
@@ -10,12 +10,14 @@
     "tabs",
     "scripting",
     "storage",
-    "alarms"
+    "alarms",
+    "offscreen"
   ],
   "host_permissions": [
     "*://labs.google/*",
     "*://*.googleapis.com/*",
-    "*://*.aisandbox.com/*"
+    "*://*.aisandbox.com/*",
+    "*://aistudio.google.com/*"
   ],
   "background": {
     "service_worker": "background.js"

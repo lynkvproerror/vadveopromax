@@ -619,6 +619,7 @@ def launch_chrome(
     port: Optional[int] = None,
     start_url: str = "about:blank",
     hidden: bool = True,
+    skip_extension: bool = False,
 ) -> Dict[str, Any]:
     """Launch a detached Chrome process with CDP enabled.
     
@@ -730,7 +731,9 @@ def launch_chrome(
     # - CfT: loaded via --load-extension flag at launch time
     # - Branded: handled by ensure_all_extensions() after all browsers are up
     #   (has bridge-aware check to avoid reinstalling when extension is already connected)
-    if _has_extension and not _is_branded:
+    if skip_extension:
+        log.info(f"[ChromeManager] Extension install DEFERRED (skip_extension=True)")
+    elif _has_extension and not _is_branded:
         log.info(f"[ChromeManager] Extension loaded via --load-extension flag (CfT)")
     elif _has_extension and _is_branded and cdp_ready:
         log.info(f"[ChromeManager] Branded Chrome — installing extension NOW...")
@@ -874,6 +877,7 @@ def launch_or_reconnect(
     email: str = "",
     start_url: str = "about:blank",
     hidden: bool = True,
+    skip_extension: bool = False,
 ) -> Dict[str, Any]:
     """Try reconnect first, launch new Chrome if not possible.
     
@@ -935,7 +939,7 @@ def launch_or_reconnect(
                             # Remove stale PID file so reconnect doesn't find old instance
                             _remove_pid_file(profile_path)
                             # Launch fresh with --load-extension
-                            result = launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden)
+                            result = launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden, skip_extension=skip_extension)
                             enforce_tab_limit(result.get("port", 0))
                             return result
                         except Exception as e:
@@ -947,7 +951,7 @@ def launch_or_reconnect(
 
         # Launch new (will install extension after CDP ready)
         log.info(f"[ChromeManager] No existing Chrome found — launching new instance")
-        result = launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden)
+        result = launch_chrome(profile_path, email=email, start_url=start_url, hidden=hidden, skip_extension=skip_extension)
         # Enforce tab limit on new launch (close any extra tabs from start_url)
         enforce_tab_limit(result.get("port", 0))
         return result
