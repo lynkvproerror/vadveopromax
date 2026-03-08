@@ -93,7 +93,7 @@ class SettingsBrowserControlsMixin:
             email_item = self.profiles_table.item(row, 2)
             if not email_item or email not in email_item.text():
                 continue
-            actions_widget = self.profiles_table.cellWidget(row, 8)
+            actions_widget = self.profiles_table.cellWidget(row, 9)
             if not actions_widget:
                 break
             toggle_btn = actions_widget.findChild(QPushButton, f"toggle_vis_{email}")
@@ -304,10 +304,18 @@ class SettingsBrowserControlsMixin:
         self.setEnabled(False)
 
         def run_auto_login():
-            """Run auto-login in background thread."""
-            print(f"[Settings] Starting auto-login for {email} (headless={headless})...")
+            """Run single-browser add profile in background thread.
+            
+            All steps happen in ONE Chrome browser session:
+            1. Launch Chrome (no extension) → Login
+            2. Install extension (after login, cookies present)
+            3. AI Studio → API key
+            4. labs.google → subscription
+            5. Browser stays as debug browser
+            """
+            print(f"[Settings] Starting single-browser add profile for {email}...")
             try:
-                result_email = self.profiles_controller.auto_login_with_credentials(
+                result_email = self.profiles_controller.add_profile_single_browser(
                     email=email,
                     password=password,
                     timeout_seconds=120,
@@ -316,28 +324,22 @@ class SettingsBrowserControlsMixin:
 
                 from PySide6.QtCore import QMetaObject, Qt
 
-                if result_email:
-                    print(f"[Settings] Auto-login successful: {result_email}")
-                    
-                    # Auto-open debug browser → triggers extension install via CDP
-                    # Same flow as manually clicking the browser toggle button
-                    try:
-                        print(f"[Settings] 🧩 Auto-opening browser to install extension for {result_email}...")
-                        self.profiles_controller.open_browser_for_debug(result_email)
-                        print(f"[Settings] ✅ Browser opened + extension installed for {result_email}")
-                    except Exception as ext_e:
-                        print(f"[Settings] ⚠️ Auto extension install: {ext_e}")
-                    
-                    QMetaObject.invokeMethod(
-                        self, "_on_browser_login_complete",
-                        Qt.ConnectionType.QueuedConnection
-                    )
-                else:
-                    print("[Settings] Auto-login failed")
+                if not result_email:
+                    print("[Settings] ❌ Add profile failed")
                     QMetaObject.invokeMethod(
                         self, "_on_browser_login_failed",
                         Qt.ConnectionType.QueuedConnection
                     )
+                    return
+
+                print(f"[Settings] ✅ Profile added: {result_email}")
+                # Browser is already hidden by profiles_controller — do NOT show it
+                
+                QMetaObject.invokeMethod(
+                    self, "_on_browser_login_complete",
+                    Qt.ConnectionType.QueuedConnection
+                )
+
             except Exception as e:
                 print(f"[Settings] Auto-login error: {e}")
                 from PySide6.QtCore import QMetaObject, Qt
@@ -351,16 +353,31 @@ class SettingsBrowserControlsMixin:
 
     @Slot()
     def _on_browser_login_complete(self):
-        """Called when browser login completes successfully."""
+        """Called when browser login completes successfully.
+        
+        Gemini key provision already ran in run_auto_login thread (same browser).
+        This slot only refreshes UI.
+        """
         self.setEnabled(True)
         self._refresh_profiles_table()
         self._refresh_status_bar()
         self._push_dev_console_status()  # Refresh DevConsole panels
+
         show_info(
             self,
             "Success",
-            "✅ Profile added via browser!\n\nPlan/Credits are now available."
+            "✅ Profile added via browser!\n\n"
+            "Plan/Credits đã được lấy.\n"
+            "🔑 Gemini API key đã tự động xử lý."
         )
+
+    @Slot()
+    def _on_gemini_key_provisioned(self):
+        """Called when Gemini key auto-provision completes."""
+        # Refresh key display on Settings tab
+        if hasattr(self, '_refresh_gemini_key_display'):
+            self._refresh_gemini_key_display()
+        show_info(self, "Gemini Key", "✅ Gemini API key đã tự động lấy thành công!")
 
     @Slot()
     def _on_browser_login_failed(self):
@@ -368,6 +385,82 @@ class SettingsBrowserControlsMixin:
         self.setEnabled(True)
         self._refresh_profiles_table()
         show_warning(self, "Browser Login", "Login cancelled or timed out.")
+
+    def _on_paste_gemini_key(self, email: str):
+        """Show dialog to manually paste Gemini API key for a specific profile."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QLineEdit, QDialogButtonBox
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"🤖 Gemini API Key — {email}")
+        dialog.setMinimumWidth(450)
+
+        layout = QVBoxLayout(dialog)
+
+        form = QFormLayout()
+
+        email_label = QLineEdit(email)
+        email_label.setReadOnly(True)
+        email_label.setStyleSheet("color: #888;")
+
+        key_input = QLineEdit()
+        key_input.setPlaceholderText("Paste API key (AIza...)")
+
+        # Show existing key if any
+        try:
+            from services.gemini_key_manager import GeminiKeyManager
+            mgr = GeminiKeyManager()
+            existing = mgr.get_key(email)
+            if existing:
+                key_input.setText(existing)
+        except Exception:
+            pass
+
+        form.addRow("📧 Profile:", email_label)
+        form.addRow("🔑 API Key:", key_input)
+        layout.addLayout(form)
+
+        from PySide6.QtWidgets import QLabel
+        info = QLabel(
+            "⚠️ Key được mã hóa và lưu riêng cho từng profile.\n"
+            "Lấy key tại: aistudio.google.com/apikey"
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        key = key_input.text().strip()
+        if not key:
+            # Empty = remove key
+            try:
+                from services.gemini_key_manager import GeminiKeyManager
+                GeminiKeyManager().remove_key(email)
+                show_info(self, "Removed", f"🗑️ Đã xóa Gemini key cho {email}")
+                self._refresh_profiles_table()
+            except Exception:
+                pass
+            return
+
+        if not key.startswith("AIza"):
+            show_warning(self, "Invalid Key", "Key phải bắt đầu bằng 'AIza...'")
+            return
+
+        try:
+            from services.gemini_key_manager import GeminiKeyManager
+            mgr = GeminiKeyManager()
+            mgr.set_key(email, key)
+            self._refresh_profiles_table()
+            show_info(self, "Saved", f"✅ Gemini API key đã lưu cho {email}")
+        except Exception as e:
+            show_warning(self, "Error", f"Không thể lưu key: {e}")
 
     def _on_refresh_session(self, email: str):
         """Refresh session via browser — fetch subscription real-time."""
@@ -603,7 +696,7 @@ class SettingsBrowserControlsMixin:
                     for row in range(self.profiles_table.rowCount()):
                         email_item = self.profiles_table.item(row, 2)
                         if email_item and email in email_item.text():
-                            spin = self.profiles_table.cellWidget(row, 6)
+                            spin = self.profiles_table.cellWidget(row, 7)
                             if spin:
                                 spin.blockSignals(True)
                                 spin.setValue(max_wk)

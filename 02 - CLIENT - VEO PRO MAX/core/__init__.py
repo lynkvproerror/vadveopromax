@@ -15,6 +15,10 @@ from .multi_account import MultiAccountManager
 from .dispatcher import Dispatcher, Task, TaskGroup, TaskState
 from .worker import PromptExecutor, Worker, WorkerResult, WorkerState  # Worker = alias
 from .project_manager import ProjectManager
+from .workflow_scanner import WorkflowScanner, WorkflowTemplate, MatchResult
+from .rules_loader import RulesLoader
+from .project_builder import ProjectBuilder, TopicResult, PromptRow, DedupChecker
+from .prompt_enhancer import PromptEnhancer
 from .engine import Engine
 
 # API
@@ -85,6 +89,17 @@ __all__ = [
     "WorkerState",
     "ProjectManager",
     "Engine",
+    
+    # Workflow & Project Builder
+    "WorkflowScanner",
+    "WorkflowTemplate",
+    "MatchResult",
+    "RulesLoader",
+    "ProjectBuilder",
+    "TopicResult",
+    "PromptRow",
+    "DedupChecker",
+    "PromptEnhancer",
     
     # API
     "VEOApiClient",

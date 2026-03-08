@@ -504,9 +504,13 @@ class VEOApiClient:
                     "seed": validate_seed(actual_seed),
                     "imageModelName": model or "GEM_PIX_2",
                     "imageAspectRatio": img_ar,
-                    "prompt": prompt,
                     "imageInputs": image_inputs,  # HAR: always present
                 }
+                # HAR 2026-03-07: NARWHAL uses structuredPrompt, others use prompt
+                if model == "NARWHAL":
+                    req_item["structuredPrompt"] = {"parts": [{"text": prompt}]}
+                else:
+                    req_item["prompt"] = prompt
                 
                 requests_list.append(req_item)
             
@@ -869,10 +873,14 @@ class VEOApiClient:
                 "clientContext": client_ctx,
                 "seed": validate_seed(actual_seed),
                 "imageModelName": model,
-                "prompt": prompt,
                 "imageAspectRatio": aspect_ratio,
                 "imageInputs": image_inputs if image_inputs else [],
             }
+            # HAR 2026-03-07: NARWHAL uses structuredPrompt, others use prompt
+            if model == "NARWHAL":
+                req_item["structuredPrompt"] = {"parts": [{"text": prompt}]}
+            else:
+                req_item["prompt"] = prompt
             requests_list.append(req_item)
         
         data = {

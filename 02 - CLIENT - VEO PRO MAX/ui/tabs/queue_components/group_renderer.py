@@ -273,6 +273,37 @@ class QueueGroupMixin:
             if hasattr(widget, 'thumb_slots'):
                 self._update_thumb_slot_data(widget, td)
             
+            # Update Mode label if workflow type changed (e.g. force retry)
+            new_mode = td.get('mode', '')
+            if new_mode and hasattr(widget, 'mode_label'):
+                mode_icons = {"T2V": "📹", "I2V": "🎬", "R2V": "🧪", "T2I": "🎯", "I2I": "✨"}
+                new_text = f"{mode_icons.get(new_mode, '📹')} {new_mode}"
+                if widget.mode_label.text() != new_text:
+                    widget.mode_label.setText(new_text)
+            
+            # Refresh Image column only when source data changes
+            # (avoid rebuilding every 2s refresh cycle)
+            if hasattr(widget, 'input_thumbs_container'):
+                # Compute current image data fingerprint
+                img_data = td.get('image_paths', []) or []
+                cont = td.get('continuation_frame', '') or ''
+                if td.get('has_continuation') and not img_data and cont:
+                    img_data = [cont]
+                new_key = f"{new_mode}:{','.join(img_data)}"
+                old_key = getattr(widget, '_input_thumbs_key', None)
+                if new_key != old_key:
+                    new_container = self._create_input_thumbs(new_mode, td)
+                    old_container = widget.input_thumbs_container
+                    parent_layout = widget.layout()
+                    if parent_layout:
+                        idx = parent_layout.indexOf(old_container)
+                        if idx >= 0:
+                            parent_layout.removeWidget(old_container)
+                            old_container.deleteLater()
+                            parent_layout.insertWidget(idx, new_container)
+                            widget.input_thumbs_container = new_container
+                    widget._input_thumbs_key = new_key
+            
             # Toggle retry button visibility based on new status
             if hasattr(widget, 'retry_btn'):
                 if new_status in ('failed', 'cancelled'):
@@ -360,7 +391,15 @@ class QueueGroupMixin:
         if progress >= 100:
             retrying_count = sum(1 for vo in video_outputs if vo.get('quality') == 'retrying')
             if retrying_count > 0:
-                widget.status_label.setText(f"♻️ RETRYING {retrying_count}/{len(video_outputs)}")
+                retry_pct = td.get('retry_progress', -1)
+                retry_txt = td.get('retry_status_text', '')
+                if retry_pct >= 0 and retry_pct < 100:
+                    label = f"♻️ RETRYING {retrying_count}/{len(video_outputs)} • {retry_pct}%"
+                    if retry_txt:
+                        label += f" {retry_txt}"
+                else:
+                    label = f"♻️ RETRYING {retrying_count}/{len(video_outputs)}"
+                widget.status_label.setText(label)
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;"
                 )
@@ -384,13 +423,20 @@ class QueueGroupMixin:
                 f"color: {color}; font-size: 10px; font-weight: bold; border: none;"
             )
         elif status == 'failed':
-            widget.status_label.setText("❌ FAILED")
             error_msg = td.get('error', '')
+            # Distinct status for prompt policy violations
+            if error_msg and ('Policy Violation' in error_msg or 'UNSAFE' in error_msg.upper()):
+                widget.status_label.setText("⛔ POLICY VIOLATION")
+                widget.status_label.setStyleSheet(
+                    f"color: {Theme.PEACH}; font-size: 10px; font-weight: bold; border: none;"
+                )
+            else:
+                widget.status_label.setText("❌ FAILED")
+                widget.status_label.setStyleSheet(
+                    f"color: {Theme.RED}; font-size: 10px; font-weight: bold; border: none;"
+                )
             if error_msg:
                 widget.status_label.setToolTip(error_msg)
-            widget.status_label.setStyleSheet(
-                f"color: {Theme.RED}; font-size: 10px; font-weight: bold; border: none;"
-            )
         else:
             icons = {'ready': '⏳', 'pending': '⏳', 'waiting': '🔗', 'cancelled': '⛔'}
             icon = icons.get(status, '⏳')
@@ -414,7 +460,7 @@ class QueueGroupMixin:
             if vi:
                 slot._border_color_name = vi.get('border_color', 'gray')
         
-        if progress == 0 and status in ('ready', 'pending') and not video_outputs:
+        if progress == 0 and status in ('ready', 'pending', 'waiting') and not video_outputs:
             for slot in widget.thumb_slots:
                 try:
                     slot.clear()
@@ -532,7 +578,7 @@ class QueueGroupMixin:
         gw = self._group_widgets.get(group_id)
         if not gw:
             return
-        expanded = not self._group_expanded.get(group_id, False)
+        expanded = not self._group_expanded.get(group_id, True)
         self._group_expanded[group_id] = expanded
         gw['content'].setVisible(expanded)
         gw['arrow'].setText("▼" if expanded else "▶")
@@ -655,7 +701,9 @@ class QueueGroupMixin:
         group = self.controller.dispatcher.get_group(group_id)
         if not group:
             return
-        task_count = len(group.tasks)
+        # BUG-B19: Count only original tasks (exclude replacements) for display
+        original_tasks = [t for t in group.tasks if not t.replace_target]
+        task_count = len(original_tasks)
         if not show_confirm(self, "Force Retry Group",
                 f"Force re-generate ALL {task_count} prompts in this group?\n\n"
                 "This will delete existing outputs and re-queue everything.",
@@ -663,7 +711,11 @@ class QueueGroupMixin:
             return
         count = 0
         if hasattr(self.controller, 'force_retry_task'):
-            for task in group.tasks:
+            # BUG-B9 fix: Iterate over snapshot to avoid mutation during iteration
+            # BUG-B19 fix: Skip replacement tasks (handled by parent's force_retry)
+            for task in list(group.tasks):
+                if task.replace_target:
+                    continue
                 if task.state.value != 'running':
                     if self.controller.force_retry_task(str(task.id)):
                         count += 1
@@ -685,7 +737,10 @@ class QueueGroupMixin:
                 danger=True):
             return
         count = 0
-        for task in group.tasks:
+        # BUG-B19 fix: list() snapshot + skip replacement tasks
+        for task in list(group.tasks):
+            if task.replace_target:
+                continue
             if task.state.value in ('completed', 'running', 'waiting_poll'):
                 continue
             if hasattr(self.controller, 'force_retry_task'):
@@ -693,7 +748,8 @@ class QueueGroupMixin:
                     count += 1
         self._refresh_queue_from_controller()
         self._update_stats()
-        print(f"[Queue] Force-retried group {group_id}: {count}/{len(group.tasks)} tasks")
+        original_count = len([t for t in group.tasks if not t.replace_target])
+        print(f"[Queue] Force-retried group {group_id}: {count}/{original_count} tasks")
         mw = self.window()
         if mw and hasattr(mw, 'show_toast'):
             mw.show_toast(f"Force-retried {count} prompts — re-queued", "info")
@@ -706,20 +762,19 @@ class QueueGroupMixin:
         if not show_confirm(self, "Delete Group",
                 "Delete this group and all its tasks?", danger=True):
             return
+        # BUG-B7 fix: remove_group now handles cancel + _all_tasks cleanup
         if self.controller and hasattr(self.controller, 'dispatcher'):
-            dispatcher = self.controller.dispatcher
-            group = dispatcher.get_group(group_id)
-            if group:
-                for task in group.tasks:
-                    if hasattr(dispatcher, 'cancel_task'):
-                        dispatcher.cancel_task(task.id)
-                    self._queue_items = [i for i in self._queue_items if i.id != task.id]
-                    w = self._item_widgets.pop(task.id, None)
-                    if w:
-                        w.deleteLater()
-                dispatcher.remove_group(group_id)
+            self.controller.dispatcher.remove_group(group_id)
+        # Clean UI references
         gw['container'].deleteLater()
         self._group_widgets.pop(group_id, None)
         self._group_expanded.pop(group_id, None)
+        # Clean task widgets that belonged to this group
+        for tid in list(self._task_widgets.keys()):
+            if tid.startswith(group_id):
+                w = self._task_widgets.pop(tid, None)
+                if w:
+                    w.deleteLater()
+        self._queue_items = [i for i in self._queue_items if not str(i.id).startswith(group_id)]
         self._update_stats()
         print(f"[Queue] Deleted group: {group_id}")

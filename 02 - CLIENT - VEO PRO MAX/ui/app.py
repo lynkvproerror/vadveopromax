@@ -28,6 +28,7 @@ from ui.components.toast import ToastManager
 from core.notification_manager import NotificationManager
 
 # Import PySide6 tabs
+from ui.tabs.tab_project import TabProject
 from ui.tabs.tab_t2v import TabT2V
 from ui.tabs.tab_i2v import TabI2V
 from ui.tabs.tab_r2v import TabR2V
@@ -172,6 +173,7 @@ class MainWindow(QMainWindow):
         
         # Define tabs with their actual PySide6 classes
         self.tab_defs = [
+            ("app.tabs.project", "project", TabProject),
             ("app.tabs.t2v", "t2v", TabT2V),
             ("app.tabs.i2v", "i2v", TabI2V),
             ("app.tabs.r2v", "r2v", TabR2V),
@@ -682,6 +684,8 @@ class MainWindow(QMainWindow):
             return
         
         # One-time safety: if runtime pool is empty but profiles exist, trigger sync
+        # ⚡ FIX: run sync in background async loop instead of blocking main thread.
+        # sync_profiles_to_runtime() has future.result(timeout=15.0) which blocks UI.
         if not getattr(self, '_sync_triggered', False):
             try:
                 acc = self.controller.get_account_summary()
@@ -692,9 +696,16 @@ class MainWindow(QMainWindow):
                         if profiles:
                             import logging
                             logging.getLogger("veo.ui").info(
-                                f"[StatusBar] Runtime pool empty but {len(profiles)} profiles exist — triggering sync"
+                                f"[StatusBar] Runtime pool empty but {len(profiles)} profiles exist — triggering async sync"
                             )
-                            self.controller.sync_profiles_to_runtime()
+                            # ⚡ FIX: Don't block main thread — schedule in async loop
+                            if hasattr(self.controller, '_loop') and self.controller._loop:
+                                import asyncio
+                                async def _bg_sync():
+                                    self.controller.sync_profiles_to_runtime()
+                                asyncio.run_coroutine_threadsafe(_bg_sync(), self.controller._loop)
+                            else:
+                                self.controller.sync_profiles_to_runtime()
                 self._sync_triggered = True
             except Exception:
                 pass

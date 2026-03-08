@@ -197,8 +197,8 @@ class QueueThumbnailMixin:
         # Disconnect any existing context menu handler to prevent stacking
         try:
             slot.customContextMenuRequested.disconnect()
-        except (RuntimeError, TypeError):
-            pass  # No previous connection
+        except (RuntimeError, TypeError, RuntimeWarning):
+            pass  # No previous connection — safe to ignore
         slot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         slot.customContextMenuRequested.connect(
             lambda pos, vi=dict(video_info), w=slot: self._show_video_context_menu(pos, vi, w)
@@ -223,6 +223,15 @@ class QueueThumbnailMixin:
         # Get input image path(s) — field name matches TaskDTO.image_paths
         input_images = task_data.get('image_paths', [])
         
+        # Continuation tasks: frame comes from continuation_frame, not image_paths
+        if not input_images and task_data.get('has_continuation'):
+            cont_frame = task_data.get('continuation_frame', '')
+            if cont_frame:
+                input_images = [cont_frame]
+        
+        # BUG-A5 fix: Track thumbs per-container, don't append to global list indefinitely
+        container_thumbs = []
+        upload_status = task_data.get('image_upload_status', '') if task_data else ''
         for img_path in input_images[:3]:  # Max 3 thumbnails
             if img_path and self._cached_file_exists(img_path):
                 thumb = QLabel()
@@ -231,18 +240,32 @@ class QueueThumbnailMixin:
                 pix = self._get_cached_pixmap(img_path, 30)
                 if not pix.isNull():
                     thumb.setPixmap(pix)
+                    # Border color depends on upload status:
+                    # - "ready" → solid green (upload complete)
+                    # - "extracting"/"uploading" → pulsing blue (active)
+                    # - "" or other → solid blue (static)
+                    if upload_status == 'ready':
+                        border_color = Theme.GREEN
+                    else:
+                        border_color = Theme.BLUE
                     thumb.setStyleSheet(f"""
                         QLabel {{
-                            border: 1px solid {Theme.BLUE};
+                            border: 1px solid {border_color};
                             border-radius: 4px;
                             background-color: {Theme.BASE};
                             padding: 1px;
                         }}
                     """)
                     thumb.setToolTip(f"Input: {Path(img_path).name}")
-                    # Register for pulse animation
-                    self._input_pulse_thumbs.append(thumb)
+                    container_thumbs.append(thumb)
                     layout.addWidget(thumb)
+        
+        # BUG-A5 fix: Store refs on container for cleanup
+        container._pulse_thumbs = container_thumbs
+        # Only register pulsing for active upload (extracting/uploading)
+        # Once "ready" or empty → static border, no pulsing
+        if upload_status in ('extracting', 'uploading'):
+            self._input_pulse_thumbs.extend(container_thumbs)
         
         layout.addStretch()
         return container
@@ -270,6 +293,11 @@ class QueueThumbnailMixin:
             new_slot = self._create_thumb_slot(
                 vi, status, progress, thumb, video, video_info=vi_info
             )
+            
+            # Unregister REAL slot + temp slot from ALL animations before update
+            self._unregister_shimmer_slot(slot)
+            self._unregister_shimmer_slot(new_slot)
+            
             # Copy styling and content from new slot
             slot.setStyleSheet(new_slot.styleSheet())
             if new_slot.pixmap() and not new_slot.pixmap().isNull():
@@ -279,6 +307,18 @@ class QueueThumbnailMixin:
                 slot.setPixmap(QPixmap())
                 slot.setText(new_slot.text())
             slot.setToolTip(new_slot.toolTip())
+            # Transfer border color and video info
+            slot._border_color_name = getattr(new_slot, '_border_color_name', 'gray')
+            slot._video_info = getattr(new_slot, '_video_info', None)
+            slot._progress_pct = getattr(new_slot, '_progress_pct', 0.0)
+            
+            # Re-register shimmer ONLY if task is actively running
+            if status in ('running', 'waiting_poll') and progress < 100:
+                self._register_shimmer_slot(slot)
+            else:
+                # Task completed/failed/cancelled — ensure no residual animation
+                self._unregister_shimmer_slot(slot)
+            
             if video and self._cached_file_exists(video):
                 slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
                 slot.mousePressEvent = lambda e, p=video: self._open_video(p) if e.button() == Qt.MouseButton.LeftButton else None

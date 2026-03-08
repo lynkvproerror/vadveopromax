@@ -1214,17 +1214,29 @@ class AppController:
         
         results = {}
         for email, entry in pc._debug_browsers.items():
-            # _debug_browsers stores {cmd_queue, state, context, page} — no cdp_port
-            # Read CDP port from chrome_manager PID file instead
-            port = None
+            # ⚡ FIX: Read CDP port from in-memory entry FIRST (set by open_browser_for_debug),
+            # fall back to PID file on disk only if entry doesn't have it.
+            # Previously only read from PID file → "no CDP port" when file is stale/missing.
+            port = entry.get("cdp_port")
             chrome_exe = ""
-            profile = pc.get_profile(email)
-            if profile and profile.browser_profile_path:
-                from core.chrome_manager import _load_pid_file
-                pid_data = _load_pid_file(profile.browser_profile_path)
-                if pid_data:
-                    port = pid_data.get("port")
-                    chrome_exe = pid_data.get("chrome_exe", "")
+            
+            if not port:
+                # Fallback: read from PID file
+                profile = pc.get_profile(email)
+                if profile and profile.browser_profile_path:
+                    from core.chrome_manager import _load_pid_file
+                    pid_data = _load_pid_file(profile.browser_profile_path)
+                    if pid_data:
+                        port = pid_data.get("port")
+                        chrome_exe = pid_data.get("chrome_exe", "")
+            else:
+                # Have port from entry — still need chrome_exe for branded check
+                profile = pc.get_profile(email)
+                if profile and profile.browser_profile_path:
+                    from core.chrome_manager import _load_pid_file
+                    pid_data = _load_pid_file(profile.browser_profile_path)
+                    if pid_data:
+                        chrome_exe = pid_data.get("chrome_exe", "")
             
             if not port:
                 results[email] = "⚠️ no CDP port"
@@ -2273,7 +2285,7 @@ class AppController:
         # Auto-map model display name → API model key
         model_display = (settings or {}).get("model", "")
         dual_frame = (settings or {}).get("frame_mode", "") == "both"
-        if model_display and not model_display.startswith("veo_") and model_display not in ("GEM_PIX", "GEM_PIX_2", "IMAGEN_3_5"):
+        if model_display and not model_display.startswith("veo_") and model_display not in ("NARWHAL", "GEM_PIX_2", "IMAGEN_3_5"):
             model = resolve_model_key(model_display, workflow, raw_ar, dual_frame)
         else:
             model = model_display or self._default_model(workflow)
@@ -3015,9 +3027,11 @@ class AppController:
         try:
             # Wait for engine.start() TaskGroup to fully complete
             # (foremen exit, pipelines drain, browsers disconnect)
+            # BUG-19: Increased from 15s to 30s — cooperative stop lets
+            # pipelines finish gracefully (download retries, upscale polls)
             if self._engine_future:
                 try:
-                    self._engine_future.result(timeout=15.0)
+                    self._engine_future.result(timeout=30.0)
                 except Exception:
                     pass
                 self._engine_future = None
@@ -3028,11 +3042,8 @@ class AppController:
             except Exception:
                 pass
             
-            # Phase 3A: Stop UpscaleQueue
-            try:
-                self._engine._upscale_queue.stop()
-            except Exception:
-                pass
+            # BUG-20: UpscaleQueue.stop() already called by engine.stop()
+            # (removed duplicate call that was here)
             
             # Phase 3B: Stop ExtensionBridge (WebSocket server + heartbeat)
             bridge = getattr(self, '_extension_bridge', None)
@@ -3468,14 +3479,31 @@ class AppController:
             first = visible_tasks[0] if visible_tasks else None
             
             # Compute group elapsed time from task timestamps
+            # BUG-T1 fix: Correctly handle completed vs running groups
             from datetime import datetime as _dt
             _now = _dt.now()
-            task_starts = [t.started_at for t in visible_tasks if getattr(t, 'started_at', None)]
-            task_ends = [getattr(t, 'completed_at', None) or _now for t in visible_tasks 
-                        if getattr(t, 'started_at', None)]
-            if task_starts:
-                earliest = min(task_starts)
-                latest = max(task_ends) if task_ends else _now
+            started_tasks = [t for t in visible_tasks if getattr(t, 'started_at', None)]
+            
+            if started_tasks:
+                earliest = min(t.started_at for t in started_tasks)
+                
+                # Check if any tasks are still running (no completed_at)
+                has_running = any(
+                    not getattr(t, 'completed_at', None)
+                    for t in started_tasks
+                )
+                
+                if has_running:
+                    # Live timer: use _now as end point for running tasks
+                    end_times = [
+                        getattr(t, 'completed_at', None) or _now
+                        for t in started_tasks
+                    ]
+                    latest = max(end_times)
+                else:
+                    # All started tasks are done: freeze elapsed at completion time
+                    latest = max(t.completed_at for t in started_tasks)
+                
                 _elapsed = (latest - earliest).total_seconds()
             else:
                 _elapsed = 0.0
@@ -3484,7 +3512,8 @@ class AppController:
                 id=gid,
                 name=group.name,
                 status=group.status,
-                progress=group.progress,
+                # ⚡ FIX: compute from visible_tasks only (group.progress includes hidden replacement tasks)
+                progress=int(sum(getattr(t, 'progress', 0) or 0 for t in visible_tasks) / len(visible_tasks)) if visible_tasks else 0,
                 completed=completed,
                 total=total,
                 mode=_wf_display(first.workflow_type) if first else "T2V",
@@ -3524,6 +3553,15 @@ class AppController:
                         status_text=getattr(t, 'status_text', ''),
                         started_at=getattr(t, 'started_at', None),
                         completed_at=getattr(t, 'completed_at', None),
+                        # BUG-T3: Compute per-task elapsed time
+                        elapsed_seconds=(
+                            (
+                                (getattr(t, 'completed_at', None) or _now) - t.started_at
+                            ).total_seconds()
+                            if getattr(t, 'started_at', None) else 0.0
+                        ),
+                        retry_progress=getattr(t, '_retry_progress', -1),
+                        retry_status_text=getattr(t, '_retry_status_text', ''),
                         video_outputs=[
                             VideoSlotDTO(
                                 index=vo.index,
@@ -3786,6 +3824,10 @@ class AppController:
     def retry_all_failed(self) -> int:
         """Retry all failed tasks."""
         return self._dispatcher.retry_all_failed()
+    
+    def force_retry_all_failed_videos(self) -> int:
+        """Force retry ALL failed video slots across all tasks (including completed)."""
+        return self._dispatcher.force_retry_all_failed_videos()
     
     def reset_all_tasks(self) -> int:
         """Reset ALL non-running tasks to initial state."""

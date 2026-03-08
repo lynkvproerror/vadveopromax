@@ -71,6 +71,9 @@ class TaskDTO:
     status_text: str = ""
     started_at: Any = None   # datetime or ISO string
     completed_at: Any = None # datetime or ISO string
+    elapsed_seconds: float = 0.0  # computed per-task processing time
+    retry_progress: int = -1       # replacement task progress (-1 = not retrying)
+    retry_status_text: str = ""    # replacement task status text
     video_outputs: List[VideoSlotDTO] = field(default_factory=list)
     
     def to_dict(self) -> dict:

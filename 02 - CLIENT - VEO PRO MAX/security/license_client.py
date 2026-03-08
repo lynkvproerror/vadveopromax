@@ -573,12 +573,22 @@ class LicenseClient:
         """Get short display ID (for user to see)"""
         return self.display_id
     
+    @staticmethod
+    def _clean_client_name(name: str) -> str:
+        """Strip masked/placeholder client names. Returns '' if name is invalid."""
+        if not name:
+            return ''
+        name = name.strip()
+        if name in ('***', '****', '*'):
+            return ''
+        return name
+    
     def get_client_name(self) -> str:
         """Get client name from cached license data (loaded from Firebase _cn field)."""
         try:
             cached = self.storage.load()
             if cached:
-                return cached.get('client_name', '')
+                return self._clean_client_name(cached.get('client_name', ''))
         except Exception:
             pass
         return ""
@@ -658,7 +668,7 @@ class LicenseClient:
             tier_code = data.get('tier') or data.get('_t', 'TRIA')
             role_code = data.get('role') or data.get('_role', 1)
             expires_str = data.get('expires') or data.get('_exp', '2100-01-01')
-            client_name = data.get('client_name') or data.get('_cn', '')
+            client_name = self._clean_client_name(data.get('client_name') or data.get('_cn', ''))
             
             try:
                 if isinstance(expires_str, str):
@@ -1201,7 +1211,7 @@ class LicenseClient:
                                     '_validation_source': 'server_trial',
                                 }
                                 # Sync client_name from server trial record
-                                server_name = server_trial.get('client_name') or server_trial.get('_cn', '')
+                                server_name = self._clean_client_name(server_trial.get('client_name') or server_trial.get('_cn', ''))
                                 if server_name:
                                     trial_cache['client_name'] = server_name
                                 self.storage.save(trial_cache)
@@ -1459,7 +1469,7 @@ class LicenseClient:
                 cached = self.storage.load()
                 if cached:
                     tier = cached.get('tier', '')
-                    client_name = cached.get('client_name', '')
+                    client_name = self._clean_client_name(cached.get('client_name', ''))
             except Exception:
                 pass
             

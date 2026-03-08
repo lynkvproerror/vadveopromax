@@ -456,6 +456,7 @@ class FirebaseRESTClient:
         preferred, fallback, pref_name = self._pick_server(machine_id)
         base = _ConfigParts._get_api_base()
         
+        got_404 = False  # Track if any server returned 404
         for cfg, name in [(preferred, pref_name), (fallback, "backup" if pref_name == "primary" else "primary")]:
             if not cfg:
                 continue
@@ -467,7 +468,8 @@ class FirebaseRESTClient:
                     return self._parse_document(resp.json())
                 elif resp.status_code == 404:
                     self._server_health[name] = True
-                    return None  # Doc not found — valid response
+                    got_404 = True
+                    continue  # Try fallback — data may exist on other server
             except Exception:
                 # Mark unhealthy, try fallback
                 self._server_health[name] = False
@@ -476,7 +478,7 @@ class FirebaseRESTClient:
                     self._sticky_server = fail_name
                 continue
         
-        return None
+        return None  # Both servers checked — not found
     
     def _build_url(self, project_id: str, document_id: str) -> str:
         """Build Firestore REST API URL."""
@@ -815,7 +817,20 @@ class FirebaseRESTClient:
                 json=payload,
                 timeout=self.TIMEOUT
             )
-            return response.status_code == 200
+            if response.status_code == 200:
+                # Replicate to backup (best-effort)
+                try:
+                    backup_config = self.config.get_backup_config()
+                    if backup_config:
+                        b_key = backup_config.get("api_key")
+                        b_pid = backup_config.get("project_id")
+                        if b_key and b_pid:
+                            b_url = f"{base}/projects/{b_pid}/databases/(default)/documents/_upgrade_requests/{machine_id}"
+                            self._session.patch(b_url, params={"key": b_key}, json=payload, timeout=self.TIMEOUT)
+                except Exception:
+                    pass
+                return True
+            return False
         except Exception:
             return False
     
@@ -926,6 +941,18 @@ class FirebaseRESTClient:
             wr = self._session.patch(
                 url, params={"key": api_key}, json=payload, timeout=self.TIMEOUT
             )
+            # Replicate to backup (best-effort)
+            if wr.status_code != 403:
+                try:
+                    backup_config = self.config.get_backup_config()
+                    if backup_config:
+                        b_key = backup_config.get("api_key")
+                        b_pid = backup_config.get("project_id")
+                        if b_key and b_pid:
+                            b_url = self._build_rate_limit_url(b_pid, mid_hash)
+                            self._session.patch(b_url, params={"key": b_key}, json=payload, timeout=self.TIMEOUT)
+                except Exception:
+                    pass
             return wr.status_code != 403  # 403 = rules rejected = blocked
             
         except Exception:
@@ -1232,7 +1259,24 @@ class FirebaseRESTClient:
                 json=payload,
                 timeout=self.TIMEOUT,
             )
-            return response.status_code == 200
+            if response.status_code == 200:
+                # Replicate to backup (best-effort)
+                try:
+                    backup_config = self.config.get_backup_config()
+                    if backup_config:
+                        b_key = backup_config.get("api_key")
+                        b_pid = backup_config.get("project_id")
+                        if b_key and b_pid:
+                            b_url = f"{base}/projects/{b_pid}/databases/(default)/documents/_trials/{machine_id}"
+                            self._session.patch(
+                                b_url,
+                                params={"key": b_key, "updateMask.fieldPaths": ["daily_count", "daily_date"]},
+                                json=payload, timeout=self.TIMEOUT,
+                            )
+                except Exception:
+                    pass
+                return True
+            return False
         except Exception:
             return False
     

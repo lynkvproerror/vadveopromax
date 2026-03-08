@@ -49,8 +49,11 @@ class QueueAnimationMixin:
         alive = []
         for slot in self._shimmer_active_slots:
             try:
-                if slot.pixmap() and not slot.pixmap().isNull():
-                    continue  # Has real thumbnail now, skip
+                # BUG-A4: Don't skip slots with pixmaps if they're in retrying state
+                has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
+                is_retrying = getattr(slot, '_border_color_name', '') == 'purple'
+                if has_pixmap and not is_retrying:
+                    continue  # Has real thumbnail and not retrying — skip
                 
                 # Per-slot state
                 pct = getattr(slot, '_progress_pct', 0.0)
@@ -272,7 +275,8 @@ class QueueAnimationMixin:
         # Per-slot border color
         border = self._slot_border(slot)
         
-        if 0 < progress < 85:
+        # BUG-A2 fix: Keep shimmer running until progress=100 (was 85)
+        if 0 < progress < 100:
             # Shimmer phase — register for animated sweep + set base gradient
             self._register_shimmer_slot(slot)
             # Set initial progress fill gradient (shimmer will override periodically)
@@ -293,7 +297,7 @@ class QueueAnimationMixin:
                 }}
             """)
         else:
-            # Static gradient phase (≥85% or 0%) — unregister shimmer
+            # Static gradient phase (100% or 0%) — unregister shimmer
             self._unregister_shimmer_slot(slot)
             slot.setStyleSheet(f"""
                 QLabel {{
@@ -400,12 +404,19 @@ class QueueAnimationMixin:
         for tid, info in self._glow_slots.items():
             info['count'] += 1
             info['phase'] = not info['phase']
-            glow_color = Theme.GREEN if info['phase'] else Theme.SURFACE0
             for slot in info['slots']:
                 try:
+                    if info['phase']:
+                        # BUG-A6 fix: Glow ON = bright green border
+                        glow_color = Theme.GREEN
+                        border_w = "3px"
+                    else:
+                        # BUG-A6 fix: Glow OFF = per-slot final color (dim), not SURFACE0
+                        glow_color = self._slot_border(slot, Theme.GREEN)
+                        border_w = "1px"
                     slot.setStyleSheet(f"""
                         QLabel {{
-                            border: 2px solid {glow_color};
+                            border: {border_w} solid {glow_color};
                             border-radius: 4px;
                             background-color: {Theme.BASE};
                             padding: 1px;

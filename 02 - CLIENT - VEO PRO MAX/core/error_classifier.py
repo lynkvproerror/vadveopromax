@@ -18,6 +18,7 @@ class ErrorType(Enum):
     XCD_STUCK = "xcd_stuck_short"
     AUTH_EXPIRED = "auth_expired"
     NETWORK_ERROR = "network_error"
+    POLICY_VIOLATION = "policy_violation"
     UNKNOWN = "unknown"
 
 
@@ -30,6 +31,7 @@ ERROR_CREDIT_COST = {
     ErrorType.XCD_STUCK: 2,
     ErrorType.AUTH_EXPIRED: 1,
     ErrorType.NETWORK_ERROR: 0,  # Network errors don't penalize account
+    ErrorType.POLICY_VIOLATION: 0,  # Prompt issue, not account health
     ErrorType.UNKNOWN: 1,
 }
 
@@ -52,6 +54,15 @@ def classify_error(
     """
     ctx = context or {}
     lower = (error_msg or "").lower()
+    
+    # ── Policy violations (prompt blocked — not account issue) ──
+    policy_signals = (
+        "policy", "blocked", "safety", "harmful", "responsible ai",
+        "violat", "inappropri", "offensive", "filtered",
+        "unsafe", "sexual", "public_error_unsafe", "public_error_sexual",
+    )
+    if any(s in lower for s in policy_signals) and "403" not in (error_msg or ""):
+        return ErrorType.POLICY_VIOLATION
     
     # ── Network errors (highest priority — don't penalize account) ──
     network_signals = (

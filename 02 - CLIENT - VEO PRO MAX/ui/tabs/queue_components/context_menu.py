@@ -66,9 +66,10 @@ class QueueContextMenuMixin:
         video_outputs = task_data.get('video_outputs', []) if task_data else []
         has_upscale_quality = download_quality.upper() in ('1080P', '4K', '2K')
         
+        # BUG-B12 fix: Exclude 'retrying' from failed count (already has replacement task)
         failed_count = sum(
             1 for vo in video_outputs
-            if vo.get('quality') in ('failed', 'pending', '')
+            if (vo.get('quality') in ('failed', 'pending', '') and vo.get('quality') != 'retrying')
             or vo.get('upscale_status') == 'failed'
         )
         failed_upscale_count = sum(1 for vo in video_outputs if vo.get('upscale_status') == 'failed')
@@ -76,12 +77,17 @@ class QueueContextMenuMixin:
         
         if task_status != 'running':
             if 0 < failed_count < total_videos:
-                retry_label = f"♻️ Retry {failed_count} Failed Video(s)"
+                # Partial failure: show BOTH options
+                menu.addAction(f"♻️ Retry {failed_count} Failed Video(s)").triggered.connect(
+                    lambda: self._on_force_retry_item(task_id)
+                )
+                menu.addAction("🔄 Force Retry (re-generate all)").triggered.connect(
+                    lambda: self._on_force_retry_full(task_id)
+                )
             else:
-                retry_label = "🔄 Force Retry (re-generate all)"
-            menu.addAction(retry_label).triggered.connect(
-                lambda: self._on_force_retry_item(task_id)
-            )
+                menu.addAction("🔄 Force Retry (re-generate all)").triggered.connect(
+                    lambda: self._on_force_retry_item(task_id)
+                )
         
         if task_status == 'completed' and video_outputs:
             menu.addAction("⬇️ Re-download All 720p").triggered.connect(
@@ -140,9 +146,11 @@ class QueueContextMenuMixin:
         video_outputs = task_data.get('video_outputs', []) if task_data else []
         
         if video_outputs and self.controller and hasattr(self.controller, 'force_retry_video'):
+            # BUG-B12 fix: Exclude 'retrying' (already has active replacement task)
             failed_indices = [
                 i for i, vo in enumerate(video_outputs)
-                if vo.get('quality', '') in ('failed', 'pending', '') or vo.get('upscale_status') == 'failed'
+                if (vo.get('quality', '') in ('failed', 'pending', '') and vo.get('quality') != 'retrying')
+                or vo.get('upscale_status') == 'failed'
             ]
             if failed_indices and len(failed_indices) < len(video_outputs):
                 retried = sum(1 for idx in failed_indices if self.controller.force_retry_video(task_id, idx))
@@ -152,6 +160,7 @@ class QueueContextMenuMixin:
                     mw = self.window()
                     if mw and hasattr(mw, 'show_toast'):
                         mw.show_toast(f"♻️ Retrying {retried} failed video(s)", "info")
+                    self._auto_start_if_idle()
                     return
         
         if self.controller and hasattr(self.controller, 'force_retry_task'):
@@ -162,17 +171,29 @@ class QueueContextMenuMixin:
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
                 mw.show_toast(msg, "info" if success else "warning")
+            if success:
+                self._auto_start_if_idle()
+    
+    def _on_force_retry_full(self, item_id):
+        """Force retry entire task (re-generate ALL videos), skipping smart per-video logic."""
+        task_id = str(item_id)
+        if self.controller and hasattr(self.controller, 'force_retry_task'):
+            success = self.controller.force_retry_task(task_id)
+            self._refresh_queue_from_controller()
+            self._update_stats()
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
+                mw.show_toast(msg, "info" if success else "warning")
+            if success:
+                self._auto_start_if_idle()
     
     def _on_delete_item(self, item_id):
         """Delete a specific task."""
         task_id = str(item_id)
-        if self.controller and hasattr(self.controller, 'cancel_task'):
-            self.controller.cancel_task(task_id)
+        # BUG-B1 fix: Use dispatcher's remove_task API instead of mutating internals
         if self.controller and hasattr(self.controller, 'dispatcher'):
-            disp = self.controller.dispatcher
-            disp._all_tasks.pop(task_id, None)
-            for group in disp._task_groups.values():
-                group.tasks = [t for t in group.tasks if t.id != task_id]
+            self.controller.dispatcher.remove_task(task_id)
         tw = self._task_widgets.pop(task_id, None)
         if tw:
             tw.deleteLater()
@@ -214,22 +235,12 @@ class QueueContextMenuMixin:
         def on_save(row_index, new_prompt):
             if not new_prompt or not new_prompt.strip():
                 return
-            # Update prompt in dispatcher's Task object
+            # BUG-B2 fix: Update prompt via _all_tasks (was trying nonexistent disp._tasks)
             if self.controller and hasattr(self.controller, 'dispatcher'):
                 disp = self.controller.dispatcher
-                # Access internal task dict
-                tasks = getattr(disp, '_tasks', None) or getattr(disp, 'tasks', {})
-                if not tasks:
-                    # Try TaskGroup approach
-                    for group in getattr(disp, '_task_groups', {}).values():
-                        for task in group.tasks:
-                            if str(task.id) == str(task_id):
-                                task.prompt = new_prompt.strip()
-                                break
-                else:
-                    task = tasks.get(str(task_id))
-                    if task:
-                        task.prompt = new_prompt.strip()
+                task = disp._all_tasks.get(str(task_id))
+                if task:
+                    task.prompt = new_prompt.strip()
             
             self._refresh_queue_from_controller()
             mw = self.window()
@@ -368,8 +379,10 @@ class QueueContextMenuMixin:
             success = self.controller.force_retry_video(task_id, video_index)
             if success and slot:
                 self._apply_processing_overlay(slot, "♻️", Theme.PURPLE)
-            self._refresh_queue_from_controller()
-            self._update_stats()
+            # BUG-B8 fix: Delay refresh so overlay is visible (was immediately wiped)
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(500, self._refresh_queue_from_controller)
+            QTimer.singleShot(500, self._update_stats)
             mw = self.window()
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"♻️ Retrying video {video_index+1}" if success else f"Cannot retry video {video_index+1}"

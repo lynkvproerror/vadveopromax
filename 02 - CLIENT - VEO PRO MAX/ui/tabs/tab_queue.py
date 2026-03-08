@@ -41,6 +41,15 @@ from ui.tabs.queue_components.context_menu import QueueContextMenuMixin
 from ui.tabs.queue_components.group_renderer import QueueGroupMixin
 
 
+def _is_widget_alive(widget) -> bool:
+    """Check if a QWidget reference is still valid (not deleted)."""
+    try:
+        widget.isVisible()  # Will raise RuntimeError if C++ object deleted
+        return True
+    except RuntimeError:
+        return False
+
+
 @dataclass
 class QueueItem:
     id: int
@@ -120,6 +129,11 @@ class TabQueue(
         self._upscale_spinner_timer = QTimer(self)
         self._upscale_spinner_timer.setInterval(400)  # dots cycle 400ms
         self._upscale_spinner_timer.timeout.connect(self._tick_upscale_spinner)
+        # BUG-A8 fix: Input pulse timer for I2V/R2V thumbnails (was missing)
+        self._input_pulse_timer = QTimer(self)
+        self._input_pulse_timer.setInterval(800)  # 0.8s toggle
+        self._input_pulse_timer.timeout.connect(self._tick_input_pulse)
+        self._input_pulse_timer.start()
         # Auto-refresh timer: periodic full queue refresh while engine is running
         self._auto_refresh_timer = QTimer(self)
         self._auto_refresh_timer.setInterval(2000)  # every 2s
@@ -203,8 +217,13 @@ class TabQueue(
         
         # Update thumbnail slot gradients via unified _apply_thumb_effect
         if hasattr(widget, 'thumb_slots'):
-            # Get task status from widget (stored during creation)
+            # BUG-A3 fix: Get live task status (not stale from widget creation)
             task_status = getattr(widget, '_task_status', 'running')
+            if self.controller and hasattr(self.controller, 'dispatcher'):
+                live_task = self.controller.dispatcher.get_all_tasks_dict().get(task_id)
+                if live_task:
+                    task_status = live_task.state.value
+                    widget._task_status = task_status  # Update cached status
             for slot in widget.thumb_slots:
                 try:
                     self._apply_thumb_effect(slot, progress, task_status)
@@ -282,8 +301,9 @@ class TabQueue(
                 elif vi is None:
                     slot._video_info = {'quality': 'retrying', 'border_color': 'purple'}
                 slot._border_color_name = 'purple'
-                task_status = getattr(widget, '_task_status', 'completed')
-                self._apply_thumb_effect(slot, progress, task_status)
+                # BUG-A9 fix: Use 'running' status for retry animation path
+                # (original task is 'completed' but replacement is actively running)
+                self._apply_thumb_effect(slot, progress, 'running')
             except RuntimeError:
                 pass
     
@@ -338,6 +358,30 @@ class TabQueue(
                     self._auto_refresh_timer.stop()
         # Check post-queue action every tick (handles upscale-only completion)
         self._check_post_queue_action()
+    
+    def _tick_input_pulse(self):
+        """BUG-A8 fix: Animate input thumbnails border (I2V/R2V modes)."""
+        if not self._input_pulse_thumbs:
+            return
+        self._input_pulse_phase = not self._input_pulse_phase
+        bright = Theme.BLUE
+        dim = "#3a4a6a"  # Muted blue
+        border_color = bright if self._input_pulse_phase else dim
+        alive = []
+        for thumb in self._input_pulse_thumbs:
+            try:
+                thumb.setStyleSheet(f"""
+                    QLabel {{
+                        border: 1px solid {border_color};
+                        border-radius: 4px;
+                        background-color: {Theme.BASE};
+                        padding: 1px;
+                    }}
+                """)
+                alive.append(thumb)
+            except RuntimeError:
+                continue
+        self._input_pulse_thumbs = alive
     
     # ── UI Setup ─────────────────────────────────────────────────
     
@@ -413,6 +457,23 @@ class TabQueue(
     def _on_filter_changed(self, text: str = None):
         """Handle any filter change - apply all filters."""
         self._apply_filters()
+    
+    def _on_toggle_all_groups(self):
+        """Toggle expand/collapse ALL groups at once."""
+        if not self._group_widgets:
+            return
+        # Determine target state: if any group is expanded → collapse all, else expand all
+        any_expanded = any(self._group_expanded.get(gid, True) for gid in self._group_widgets)
+        new_state = not any_expanded  # If any expanded → collapse; if all collapsed → expand
+        
+        for gid, gw in self._group_widgets.items():
+            self._group_expanded[gid] = new_state
+            gw['content'].setVisible(new_state)
+            gw['arrow'].setText("▼" if new_state else "▶")
+        
+        # Update header button icon
+        if hasattr(self, '_toggle_all_btn'):
+            self._toggle_all_btn.setText("▼" if new_state else "▶")
     
     def _apply_filters(self):
         """Apply all filters to queue view."""
@@ -506,6 +567,13 @@ class TabQueue(
         self.retry_failed_btn.clicked.connect(self._on_retry_failed)
         layout.addWidget(self.retry_failed_btn)
 
+        # Retry Failed Videos button — retry only failed video slots (partial failures)
+        self.retry_videos_btn = QPushButton("♻️ Videos")
+        self.retry_videos_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE};")
+        self.retry_videos_btn.setToolTip("Retry all failed video slots across all tasks\n(includes partially-failed completed tasks)")
+        self.retry_videos_btn.clicked.connect(self._on_retry_failed_videos)
+        layout.addWidget(self.retry_videos_btn)
+
         # Force Retry All button — force re-generate ALL tasks
         self.force_all_btn = QPushButton("Force All")
         self.force_all_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.PEACH};")
@@ -558,19 +626,35 @@ class TabQueue(
         
         # Column widths matching item widget
         cols = [
-            ("#", 40, 0, False), ("Mode", 55, 0, False),
+            (None, 40, 0, False), ("Mode", 55, 0, False),
             ("Images", 120, 0, False),
             ("Prompt", 0, 1, False), 
             ("Progress", 180, 0, True), ("Status", 120, 0, True),
             ("Actions", 68, 0, True),
         ]
         for label_text, width, stretch, center in cols:
-            lbl = QLabel(label_text)
-            if width > 0:
-                lbl.setFixedWidth(width)
-            if center:
-                lbl.setAlignment(Qt.AlignCenter)
-            header_layout.addWidget(lbl, stretch=stretch)
+            if label_text is None:
+                # Toggle All expand/collapse button
+                self._toggle_all_btn = QPushButton("▼")
+                self._toggle_all_btn.setFixedSize(40, 24)
+                self._toggle_all_btn.setToolTip("Expand / Collapse all groups")
+                self._toggle_all_btn.setCursor(Qt.PointingHandCursor)
+                self._toggle_all_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: transparent; color: {Theme.SUBTEXT0};
+                        border: none; font-size: 12px; font-weight: bold;
+                    }}
+                    QPushButton:hover {{ color: {Theme.TEXT}; }}
+                """)
+                self._toggle_all_btn.clicked.connect(self._on_toggle_all_groups)
+                header_layout.addWidget(self._toggle_all_btn, stretch=stretch)
+            else:
+                lbl = QLabel(label_text)
+                if width > 0:
+                    lbl.setFixedWidth(width)
+                if center:
+                    lbl.setAlignment(Qt.AlignCenter)
+                header_layout.addWidget(lbl, stretch=stretch)
         
         container_layout.addWidget(header)
         
@@ -678,17 +762,44 @@ class TabQueue(
         mode_label.setFixedWidth(55)
         mode_label.setStyleSheet(f"color: {Theme.BLUE}; font-size: 11px; font-weight: bold; border: none;")
         layout.addWidget(mode_label)
+        widget.mode_label = mode_label  # Store ref for differential update
         
         # Col 3: Input Images — 120px
         input_thumbs = self._create_input_thumbs(item.mode, task_data)
         layout.addWidget(input_thumbs)
+        widget.input_thumbs_container = input_thumbs  # Store ref for differential update
         
-        # Col 4: Prompt — flex
-        prompt_text = item.prompt[:60] + "..." if len(item.prompt) > 60 else item.prompt
-        prompt_label = QLabel(prompt_text)
-        prompt_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; border: none;")
-        prompt_label.setToolTip(item.prompt)
-        layout.addWidget(prompt_label, stretch=1)
+        # Col 4: Prompt — flex (2-line: scene name + detail)
+        full_prompt = item.prompt or ""
+        # Extract scene name (text before first ". " or full if short)
+        dot_pos = full_prompt.find(". ")
+        if dot_pos > 0 and dot_pos < 120:
+            scene_name = full_prompt[:dot_pos]
+            detail_text = full_prompt[dot_pos + 2:]
+        else:
+            scene_name = full_prompt[:80]
+            detail_text = full_prompt[80:] if len(full_prompt) > 80 else ""
+        
+        prompt_widget = QWidget()
+        prompt_widget.setStyleSheet("border: none; background: transparent;")
+        prompt_layout_v = QVBoxLayout(prompt_widget)
+        prompt_layout_v.setContentsMargins(0, 2, 0, 2)
+        prompt_layout_v.setSpacing(1)
+        
+        # Line 1: Scene name (bold, prominent)
+        scene_label = QLabel(scene_name)
+        scene_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; font-weight: bold; border: none;")
+        scene_label.setToolTip(full_prompt)
+        prompt_layout_v.addWidget(scene_label)
+        
+        # Line 2: Remaining detail (smaller, muted)
+        if detail_text:
+            detail_label = QLabel(detail_text[:200])
+            detail_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; border: none;")
+            detail_label.setToolTip(full_prompt)
+            prompt_layout_v.addWidget(detail_label)
+        
+        layout.addWidget(prompt_widget, stretch=1)
         
         # Col 4: Thumbnail Slots (replaces QProgressBar)
         output_count = task_data.get('output_count', 4) if task_data else 4
@@ -927,10 +1038,22 @@ class TabQueue(
         if not self.controller:
             return
         
-        # Clear stale pulse/animation references (widgets may be rebuilt)
-        self._input_pulse_thumbs.clear()
-        self._shimmer_active_slots.clear()
-        self._upscale_spinner_slots.clear()
+        # BUG-A7 + A10 fix: Don't clear ALL animation slots — prune dead refs only
+        # Clearing all slots causes shimmer/spinner flicker on every 2s refresh
+        # because re-registration only happens via _apply_thumb_effect which
+        # may not run for all slots during differential update.
+        self._input_pulse_thumbs = [
+            t for t in self._input_pulse_thumbs
+            if _is_widget_alive(t)
+        ]
+        self._shimmer_active_slots = [
+            s for s in self._shimmer_active_slots
+            if _is_widget_alive(s)
+        ]
+        self._upscale_spinner_slots = [
+            s for s in self._upscale_spinner_slots
+            if _is_widget_alive(s)
+        ]
         
         # Try group-based data first (preferred)
         if hasattr(self.controller, 'get_queue_groups'):
@@ -970,7 +1093,7 @@ class TabQueue(
                 self._rebuild_group_children(gw, g)
             else:
                 # Create new group
-                expanded = self._group_expanded.get(gid, False)
+                expanded = self._group_expanded.get(gid, True)
                 container = self._create_group_widget(g, expanded)
                 self._group_expanded[gid] = expanded
                 self.queue_layout.insertWidget(
@@ -993,14 +1116,49 @@ class TabQueue(
             self._task_widgets.pop(tid, None)
             self._smooth_progress.pop(tid, None)
         
-        # Update total elapsed time across all groups
-        total_elapsed = sum(g.get('elapsed_seconds', 0) for g in groups_data)
-        if total_elapsed > 0:
+        # BUG-T2 fix: Compute total elapsed as wall-clock span
+        # (earliest start → latest end across ALL groups)
+        # instead of summing individual groups (which double-counts
+        # concurrent execution)
+        from datetime import datetime as _dt
+        _now_ts = _dt.now()
+        all_starts = []
+        all_ends = []
+        groups_with_time = 0
+        
+        for g in groups_data:
+            for td in g.get('tasks', []):
+                sa = td.get('started_at')
+                ca = td.get('completed_at')
+                if sa:
+                    # Parse ISO string if needed
+                    if isinstance(sa, str):
+                        try:
+                            sa = _dt.fromisoformat(sa)
+                        except (ValueError, TypeError):
+                            continue
+                    all_starts.append(sa)
+                    if ca:
+                        if isinstance(ca, str):
+                            try:
+                                ca = _dt.fromisoformat(ca)
+                            except (ValueError, TypeError):
+                                ca = _now_ts
+                        all_ends.append(ca)
+                    else:
+                        all_ends.append(_now_ts)  # Still running
+            
+            if g.get('elapsed_seconds', 0) > 0:
+                groups_with_time += 1
+        
+        if all_starts:
+            total_elapsed = (max(all_ends) - min(all_starts)).total_seconds()
             te = int(total_elapsed)
             if te >= 3600:
-                self.total_time_label.setText(f"⏱ Total: {te // 3600}h {(te % 3600) // 60:02d}m")
+                time_text = f"⏱ Total: {te // 3600}h {(te % 3600) // 60:02d}m"
             else:
-                self.total_time_label.setText(f"⏱ Total: {te // 60:02d}:{te % 60:02d}")
+                time_text = f"⏱ Total: {te // 60:02d}:{te % 60:02d}"
+            self.total_time_label.setText(time_text)
         else:
             self.total_time_label.setText("⏱ Total: --:--")
     
@@ -1100,6 +1258,31 @@ class TabQueue(
                 self.eta_label.setText(f"ETA: {minutes:02d}:{seconds:02d}")
     
     # ── Engine Controls ──────────────────────────────────────────
+    
+    def _auto_start_if_idle(self):
+        """Auto-start engine if idle and ready tasks exist.
+        
+        Called after force_retry creates replacement tasks
+        so the user doesn't have to click Start All manually.
+        Skips preflight/license checks (retry = re-running existing work).
+        """
+        if self._is_processing:
+            return  # Already running
+        if not self.controller:
+            return
+        if self.controller.ready_count == 0:
+            return  # No tasks to process
+        
+        # Auto-start
+        self.start_all.emit()
+        self._is_processing = self.controller.state.is_processing if self.controller else True
+        self._is_paused = False
+        self._auto_refresh_timer.start()
+        self._update_button_states()
+        
+        mw = self.window()
+        if mw and hasattr(mw, 'show_toast'):
+            mw.show_toast("▶️ Engine auto-started for retry tasks", "info", duration=3000)
     
     def _on_toggle_engine(self):
         """Unified Start/Pause/Resume toggle."""
@@ -1218,7 +1401,8 @@ class TabQueue(
         self.stop_all.emit()
         if self.controller:
             self.controller.stop_processing()
-        self._is_processing = self.controller.state.is_processing if self.controller else False
+        # BUG-B5 fix: Delayed state check — stop_processing is async
+        QTimer.singleShot(200, self._sync_processing_state)
         self._update_button_states()
     
     def _update_button_states(self):
@@ -1238,32 +1422,68 @@ class TabQueue(
     
     def _on_retry_failed(self):
         """Retry ALL failed tasks — staggered 1 per 2s to avoid flooding."""
-        failed_items = [i for i in self._queue_items if i.status == "failed"]
-        if not failed_items:
+        # BUG-B3 fix: Query dispatcher for live failed tasks (not stale _queue_items)
+        failed_ids = []
+        if self.controller and hasattr(self.controller, 'dispatcher'):
+            for task in self.controller.dispatcher._all_tasks.values():
+                if task.state.value == 'failed':
+                    failed_ids.append(task.id)
+        if not failed_ids:
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast("No failed tasks to retry", "info")
             return
         
-        # Bug 5 fix: Debounce — disable button for 3s to prevent double-click
+        # Debounce — disable button for 3s to prevent double-click
         self.retry_failed_btn.setEnabled(False)
         QTimer.singleShot(3000, lambda: self.retry_failed_btn.setEnabled(True))
         
-        self._retry_pending = list(failed_items)
-        total = len(self._retry_pending)
+        self._retry_pending_ids = list(failed_ids)
+        total = len(self._retry_pending_ids)
         self.retry_failed.emit()
         
         main_window = self.window()
         if main_window and hasattr(main_window, 'show_toast'):
             main_window.show_toast(f"Retrying {total} failed prompts (1 per 2s)", "info")
         
-        self._retry_next()
+        self._retry_next_by_id()
+
+    def _on_retry_failed_videos(self):
+        """Retry ALL failed video slots across all tasks (including completed with partial failures)."""
+        if not self.controller or not hasattr(self.controller, 'force_retry_all_failed_videos'):
+            return
+        
+        # Debounce — disable button for 3s
+        self.retry_videos_btn.setEnabled(False)
+        QTimer.singleShot(3000, lambda: self.retry_videos_btn.setEnabled(True))
+        
+        retried = self.controller.force_retry_all_failed_videos()
+        self._refresh_queue_from_controller()
+        self._update_stats()
+        
+        mw = self.window()
+        if mw and hasattr(mw, 'show_toast'):
+            if retried > 0:
+                mw.show_toast(f"♻️ Retrying {retried} failed video(s) across all tasks", "info")
+            else:
+                mw.show_toast("No failed videos found to retry", "info")
+        
+        # Auto-start engine if idle
+        if retried > 0:
+            self._auto_start_if_idle()
 
     def _on_force_retry_all(self):
-        """Force retry ALL tasks (re-generate everything) — staggered 1 per 2s."""
+        """Force retry ALL tasks (re-generate everything) — runs in background thread."""
         all_items = [i for i in self._queue_items if i.status != 'running']
         if not all_items:
             return
 
+        # BUG-B21 fix: Filter out replacement tasks (they'll be cleaned by parent's retry)
+        original_items = [i for i in all_items if '_retry_v' not in str(i.id)]
+        display_count = len(original_items) if original_items else len(all_items)
+
         if not show_confirm(self, "Force Retry All",
-                f"Force re-generate ALL {len(all_items)} prompts?\n\n"
+                f"Force re-generate ALL {display_count} prompts?\n\n"
                 "This will delete existing outputs and re-queue everything.",
                 danger=True):
             return
@@ -1272,18 +1492,22 @@ class TabQueue(
         self.force_all_btn.setEnabled(False)
         QTimer.singleShot(5000, lambda: self.force_all_btn.setEnabled(True))
 
-        count = 0
-        if self.controller and hasattr(self.controller, 'force_retry_task'):
-            for item in all_items:
-                if self.controller.force_retry_task(str(item.id)):
-                    count += 1
+        # BUG-B4 fix: Run heavy file I/O in background, use Signal for thread-safe UI
+        import threading
 
-        self._refresh_queue_from_controller()
-        self._update_stats()
+        # BUG-B21 fix: Only retry original tasks (replacements cleaned by parent's force_retry)
+        item_ids = [str(item.id) for item in (original_items if original_items else all_items)]
 
-        main_window = self.window()
-        if main_window and hasattr(main_window, 'show_toast'):
-            main_window.show_toast(f"🔄 Force retrying {count} prompts — re-queued", "info")
+        def _bg_force_retry():
+            count = 0
+            if self.controller and hasattr(self.controller, 'force_retry_task'):
+                for item_id in item_ids:
+                    if self.controller.force_retry_task(item_id):
+                        count += 1
+            # BUG-B4 fix: Use signal instead of QTimer from background thread
+            self._queue_updated_signal.emit()
+
+        threading.Thread(target=_bg_force_retry, daemon=True).start()
     
     def _retry_next(self):
         """Retry next item in the staggered queue."""
@@ -1305,6 +1529,30 @@ class TabQueue(
             # Last one done — refresh UI
             self._refresh_queue_from_controller()
             self._update_stats()
+    
+    def _retry_next_by_id(self):
+        """BUG-B3 fix: Staggered retry using task IDs from dispatcher."""
+        if not hasattr(self, '_retry_pending_ids') or not self._retry_pending_ids:
+            self._refresh_queue_from_controller()
+            self._update_stats()
+            return
+        
+        task_id = self._retry_pending_ids.pop(0)
+        if self.controller and hasattr(self.controller, 'retry_task'):
+            if self.controller.retry_task(str(task_id)):
+                print(f"[Queue] Retried task {task_id} ({len(self._retry_pending_ids)} remaining)")
+        
+        if self._retry_pending_ids:
+            QTimer.singleShot(2000, self._retry_next_by_id)
+        else:
+            self._refresh_queue_from_controller()
+            self._update_stats()
+    
+    def _sync_processing_state(self):
+        """BUG-B5 fix: Sync _is_processing from controller after async stop."""
+        if self.controller:
+            self._is_processing = self.controller.state.is_processing
+        self._update_button_states()
     
     def _on_delete_all(self):
         """Delete ALL groups and tasks from the queue."""

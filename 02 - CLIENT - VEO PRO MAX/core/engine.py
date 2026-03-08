@@ -34,7 +34,7 @@ from core.event_manager import emit_event, EventType
 from core.manifest_manager import ManifestManager
 from core.account_health import CreditWindow
 from core.remedy_registry import execute_recovery
-from core.error_classifier import classify_error, ERROR_CREDIT_COST
+from core.error_classifier import classify_error, ERROR_CREDIT_COST, ErrorType
 
 log = logging.getLogger(__name__)
 
@@ -524,6 +524,15 @@ class Engine:
         self._pause_event = asyncio.Event()  # Set = running, Clear = paused
         self._pause_event.set()  # Start unpaused
         self._task_available = asyncio.Event()  # Bug 14: signal workers when new task arrives
+        self._upscale_wake_event = asyncio.Event()  # T1: wake UpscaleQueue when last prompt completes
+        
+        # ★ CONTINUATION FIX: Register callback so foremen wake INSTANTLY
+        # when _resolve_dependencies activates continuation children.
+        # Without this, children stay READY until 2s polling timeout expires.
+        def _wake_foremen_on_ready(task):
+            self._task_available.set()
+        dispatcher.set_on_task_ready(_wake_foremen_on_ready)
+        self._workers_available: Dict[str, asyncio.Event] = {}  # T2: wake foremen when workers released
         self._browser_recovery_locks: Dict[str, asyncio.Lock] = {}   # Per-account browser recovery dedup
         self._browser_recovery_epoch: Dict[str, int] = {}             # Tracks recovery generation
         self._account_rate_locks: Dict[str, asyncio.Lock] = {}  # Bug 13: per-account rate limiter
@@ -620,6 +629,7 @@ class Engine:
             on_completed=lambda task: self._on_task_completed(task) if self._on_task_completed else None,
             profiles_controller=self._profiles_controller,
             extension_bridge=self._extension_bridge,
+            wake_event=self._upscale_wake_event,  # T1: event-driven wake
         )
         
         # Manifest manager: portable project data alongside output videos
@@ -694,12 +704,18 @@ class Engine:
         # 'upscale_priority' = worker does inline upscale before freeing slot
         # Fix G1: Default '720p_priority' — all 720p downloads complete before upscale,
         # preventing reCAPTCHA token contention between UpscaleQueue and workers
-        self._workload_priority = '720p_priority'
+        self._workload_priority = 'upscale_priority'
         
         # Pre-warm: proactive reCAPTCHA soft recovery after idle period
         # Prevents 403 cascade by resetting reCAPTCHA context before first submit
         self._last_successful_submit: Dict[str, float] = {}  # email → timestamp
         self._prewarm_stats: Dict[str, dict] = {}  # email → {count, last_idle_secs, last_time}
+        
+        # Gemini AI: Prompt enhancement + policy fix
+        from core.prompt_enhancer import PromptEnhancer
+        from services.gemini_key_manager import GeminiKeyManager
+        self._prompt_enhancer = PromptEnhancer()
+        self._gemini_key_mgr = GeminiKeyManager()
         
         # Tab Keepalive tracking (read by get_dashboard_stats)
         self._keepalive_last_ping_count: int = 0
@@ -712,6 +728,113 @@ class Engine:
     @property
     def is_paused(self) -> bool:
         return not self._pause_event.is_set()
+    
+    # ── Gemini AI: Prompt Enhancement + Policy Fix ──────────────
+    
+    async def _enhance_prompt(self, task, account) -> Optional[str]:
+        """Auto-enhance prompt via Gemini API before VEO submit.
+        
+        Uses per-profile key with rotation fallback.
+        Returns enhanced prompt or None (original prompt used).
+        """
+        email = account.email
+        api_key = self._gemini_key_mgr.get_key(email)
+        if not api_key:
+            api_key = self._gemini_key_mgr.get_rotation_key(email)
+        if not api_key:
+            log.debug(f"[Enhance] No Gemini API key for {email} — skipping")
+            return None
+        
+        try:
+            enhanced = await self._prompt_enhancer.enhance(
+                prompt=task.prompt or "",
+                api_key=api_key,
+                profile_email=email,
+            )
+            if enhanced:
+                log.info(
+                    f"[Enhance] {email}: '{(task.prompt or '')[:40]}...' "
+                    f"→ '{enhanced[:40]}...'"
+                )
+            return enhanced
+        except Exception as e:
+            # Key invalid → try rotation
+            if '429' in str(e) or '403' in str(e) or '401' in str(e):
+                rotation_key = self._gemini_key_mgr.get_rotation_key(email)
+                if rotation_key:
+                    try:
+                        return await self._prompt_enhancer.enhance(
+                            prompt=task.prompt or "",
+                            api_key=rotation_key,
+                            profile_email=email,
+                        )
+                    except Exception:
+                        pass
+            log.warning(f"[Enhance] Failed for {email}: {e}")
+            return None
+    
+    async def _fix_policy_prompt(
+        self, task, error_msg: str, account
+    ) -> Optional[str]:
+        """Auto-fix a policy-blocked prompt via Gemini API.
+        
+        Uses per-profile key with rotation fallback.
+        Returns fixed prompt or None (prompt unfixable).
+        """
+        email = account.email
+        api_key = self._gemini_key_mgr.get_key(email)
+        if not api_key:
+            api_key = self._gemini_key_mgr.get_rotation_key(email)
+        if not api_key:
+            # Lazy auto-provision: try to get key via Extension Bridge
+            bridge = getattr(self, '_extension_bridge', None)
+            if bridge and bridge.is_connected(email):
+                log.info(f"[Fix] No Gemini key for {email} — auto-provisioning via Extension...")
+                try:
+                    api_key = await self._gemini_key_mgr.auto_provision_via_extension(
+                        email, bridge
+                    )
+                    if api_key:
+                        log.info(f"[Fix] ✅ Auto-provisioned Gemini key for {email}: {api_key[:10]}...")
+                except Exception as prov_err:
+                    log.warning(f"[Fix] Auto-provision failed for {email}: {prov_err}")
+        if not api_key:
+            log.warning(f"[Fix] No Gemini API key for {email} — cannot auto-fix policy prompt")
+            return None
+        
+        try:
+            fixed = await self._prompt_enhancer.fix_policy(
+                prompt=task.prompt or "",
+                error_message=error_msg,
+                api_key=api_key,
+                profile_email=email,
+            )
+            if fixed:
+                log.info(
+                    f"[Fix] {email}: policy error fixed — "
+                    f"'{(task.prompt or '')[:40]}...' → '{fixed[:40]}...'"
+                )
+            return fixed
+        except Exception as e:
+            # Key invalid → try rotation
+            if '429' in str(e) or '403' in str(e) or '401' in str(e):
+                rotation_key = self._gemini_key_mgr.get_rotation_key(email)
+                if rotation_key:
+                    try:
+                        return await self._prompt_enhancer.fix_policy(
+                            prompt=task.prompt or "",
+                            error_message=error_msg,
+                            api_key=rotation_key,
+                            profile_email=email,
+                        )
+                    except Exception:
+                        pass
+            log.warning(f"[Fix] Failed for {email}: {e}")
+            return None
+    
+    def _is_policy_error(self, error_msg: str) -> bool:
+        """Check if error indicates a prompt policy violation."""
+        return classify_error(error_msg) == ErrorType.POLICY_VIOLATION
     
     def _get_api_semaphore(self, email: str) -> asyncio.Semaphore:
         """Get or create per-account API semaphore (for main pipeline).
@@ -1042,6 +1165,9 @@ class Engine:
         # Step 2: Create new with retry
         if not project_id:
             for attempt in range(2):
+                # BUG-36: Skip project creation during stop
+                if self._stop_event.is_set():
+                    break
                 try:
                     project_id = await account.project_manager.get_or_create_project(
                         email=email,
@@ -1866,7 +1992,11 @@ class Engine:
         
         if idle_secs < threshold_secs:
             return  # Not idle enough
-        
+    
+        # BUG-32: Skip prewarm during stop (soft recovery + reCAPTCHA = 20+s)
+        if self._stop_event.is_set():
+            return
+    
         log.info(
             f"[PreWarm] {email}: idle {idle_secs:.0f}s > {threshold_secs}s "
             f"— triggering soft recovery before submit"
@@ -1890,6 +2020,9 @@ class Engine:
                 pass
         
         # ── Step 2: Soft recovery ──
+        # BUG-32: Check stop before expensive recovery
+        if self._stop_event.is_set():
+            return
         try:
             recovered = await account.soft_recover_browser()
         except Exception as e:
@@ -1897,10 +2030,16 @@ class Engine:
             recovered = False
         
         if recovered:
+            # BUG-32: Check stop before reCAPTCHA wait
+            if self._stop_event.is_set():
+                return
             # ── Step 3: Wait for reCAPTCHA readiness ──
             await self._wait_for_recaptcha_ready(account, max_wait=20.0)
             
             # ── Step 4: Validate token ──
+            # BUG-32: Check stop before token validation
+            if self._stop_event.is_set():
+                return
             try:
                 test_token = await account.refresh_recaptcha()
                 if test_token and len(test_token) > 100:
@@ -1939,10 +2078,12 @@ class Engine:
     async def stop(self):
         """Stop the engine gracefully.
         
-        Bug 7 fix: Re-queue tasks in RUNNING/WAITING_POLL state so they
-        can be picked up when engine restarts (Resume).
-        Sets the stop event, causing all worker loops to exit.
-        The start() method's finally block handles browser cleanup.
+        BUG-01/02/03/07/11 fix: Cooperative stop.
+        1. Signal all loops to exit (_stop_event)
+        2. Unpause workers so they can exit (_pause_event.set)
+        3. Stop UpscaleQueue
+        4. Do NOT requeue tasks here — start()'s finally block does
+           that AFTER all pipelines have actually finished.
         """
         if not self._running:
             return
@@ -1951,24 +2092,22 @@ class Engine:
         self._stop_event.set()
         self._task_available.set()  # Wake up any waiting workers
         
-        # Bug 7: Re-queue tasks stuck in RUNNING or WAITING_POLL
-        requeued = 0
-        for task in self._dispatcher.get_all_tasks():
-            if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
-                task.state = TaskState.READY
-                self._dispatcher.requeue_running_task(task)
-                requeued += 1
-        if requeued:
-            log.info(f"Re-queued {requeued} tasks that were RUNNING/WAITING_POLL")
+        # BUG-09: Unpause so paused foremen/workers can exit their loops
+        self._pause_event.set()
         
-        # Give workers a moment to finish current iteration
-        await asyncio.sleep(0.5)
+        # BUG-07: Stop UpscaleQueue (cancels its background tasks)
+        if hasattr(self, '_upscale_queue') and self._upscale_queue:
+            try:
+                self._upscale_queue.stop()
+                log.info("UpscaleQueue stopped")
+            except Exception as e:
+                log.warning(f"UpscaleQueue stop error: {e}")
         
-        # Reset worker tracking so G1 gate allows spawning on next Start
-        self._workers.clear()
-        self._active_account_emails.clear()
-        self._supervisors.clear()
-        log.info("Engine stopped — worker/foreman tracking reset")
+        # NOTE: Do NOT requeue tasks or clear tracking here.
+        # Pipelines (poll/download/upscale) may still be running.
+        # start()'s finally block handles requeue + cleanup AFTER
+        # the TaskGroup completes (all pipelines finished/cancelled).
+        log.info("Engine stop signal sent — waiting for pipelines to finish")
     
     async def start(self):
         """Start the engine main loop.
@@ -2125,15 +2264,33 @@ class Engine:
                 if not isinstance(exc, asyncio.CancelledError):
                     log.error(f"Worker error: {exc}")
         finally:
+            # ── BUG-01/11 fix: Requeue tasks AFTER all pipelines finished ──
+            # At this point, TaskGroup is done — no pipeline can mutate tasks.
+            requeued = 0
+            for task in self._dispatcher.get_all_tasks():
+                if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                    # BUG-12: Clear stale retry metadata before requeue
+                    if hasattr(task, 'retry_original_indices'):
+                        task.retry_original_indices = []
+                    task.state = TaskState.READY
+                    self._dispatcher.requeue_running_task(task)
+                    requeued += 1
+            if requeued:
+                log.info(f"Re-queued {requeued} tasks that were RUNNING/WAITING_POLL")
+            
             # Disconnect Playwright from persistent Chrome (Chrome keeps running)
             try:
                 await self._account_manager.shutdown_browsers()
             except Exception as e:
                 log.error(f"Browser disconnect error: {e}")
+            
+            # BUG-03 fix: Clear tracking AFTER pipelines done (not in stop())
             self._running = False
             self._workers.clear()
             self._active_account_emails.clear()
+            self._supervisors.clear()
             self._task_group = None
+            log.info("Engine stopped — worker/foreman tracking reset")
     
     def _get_typical_output_count(self) -> int:
         """Peek at queue to determine typical output_count for foreman sizing.
@@ -2230,6 +2387,15 @@ class Engine:
                 )
         except Exception as e:
             log.error(f"[G1:{account.email}] Permission check error: {e}")
+        
+        # Cap foremen at ready_count — don't spawn 8 foremen for 1 retry task
+        ready = self._dispatcher.ready_count
+        if ready > 0 and foreman_count > ready:
+            log.info(
+                f"[Foreman:{account.email}] Capped foremen {foreman_count} → {ready} "
+                f"(only {ready} task(s) in queue)"
+            )
+            foreman_count = ready
         
         for i in range(foreman_count):
             foreman_worker = Worker(
@@ -2431,11 +2597,14 @@ class Engine:
         
         while not self._stop_event.is_set():
             try:
-                # Pause check — block until resumed (or stop signaled)
+                # T3: Event-driven pause — instantly wake on resume instead of 0.5s poll
                 if not self._pause_event.is_set():
                     log.debug(f"[{fid}] Paused, waiting for resume")
                     while not self._stop_event.is_set() and not self._pause_event.is_set():
-                        await asyncio.sleep(0.5)
+                        try:
+                            await asyncio.wait_for(self._pause_event.wait(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            pass  # Re-check stop_event
                     if self._stop_event.is_set():
                         break
                 
@@ -2454,15 +2623,22 @@ class Engine:
                     # Fix #2: Staggered resume — random delay per foreman
                     # to prevent thundering herd (all 8 foremen submitting
                     # simultaneously after circuit breaker closes → burst → 429/403).
-                    import random as _rng
-                    stagger = _rng.uniform(1.0, 5.0)
+                    stagger = random.uniform(1.0, 5.0)
                     log.info(f"[{fid}] Stagger {stagger:.1f}s before resume")
                     await asyncio.sleep(stagger)
                 
                 # Step 1: Two-phase admission — acquire 1 worker first
                 worker_count = 0
                 if not account.acquire_workers(1):
-                    await asyncio.sleep(0.5)
+                    # T2: Event-driven worker wake — instant instead of 0.5s poll
+                    _cap_evt = self._workers_available.setdefault(
+                        account.email, asyncio.Event()
+                    )
+                    _cap_evt.clear()
+                    try:
+                        await asyncio.wait_for(_cap_evt.wait(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        pass  # Re-check stop_event/capacity
                     continue
                 worker_count = 1
                 
@@ -2602,16 +2778,23 @@ class Engine:
                         if account.acquire_workers(extra):
                             worker_count += extra
                         else:
-                            # Not enough capacity — requeue task, release held worker
-                            log.debug(
-                                f"[{fid}] Insufficient capacity for "
-                                f"output_count={output_count} "
-                                f"(need {output_count}, have {account.session.available_workers + 1})"
-                            )
+                            # Not enough capacity — requeue task, wait with backoff
+                            # Throttle log: only emit once per 30s per task to avoid spam
+                            _cap_key = f"_cap_log_{task.id}"
+                            _now = time.monotonic()
+                            _last = getattr(self, _cap_key, 0.0)
+                            if _now - _last > 30.0:
+                                setattr(self, _cap_key, _now)
+                                log.debug(
+                                    f"[{fid}] Waiting for capacity: "
+                                    f"output_count={output_count} "
+                                    f"(need {output_count}, have {account.session.available_workers + 1})"
+                                )
                             self._dispatcher.requeue_task(task)
                             account.release_workers(worker_count)
                             worker_count = 0
-                            await asyncio.sleep(2.0)
+                            # 15s base + random jitter prevents all workers retrying simultaneously
+                            await asyncio.sleep(15.0 + random.uniform(0, 5.0))
                             continue
                     
                     # H3 fix: Store worker_count on task for proper cleanup
@@ -2659,6 +2842,9 @@ class Engine:
                     # Having it in both places caused double-refresh and wasted 200-500ms.
                     
                     # Step 5: Ensure project exists (shared logic)
+                    # BUG-35: Check stop between pre-submit steps
+                    if self._stop_event.is_set():
+                        break
                     if not account.project_id:
                         await self._ensure_runtime_project(
                             account, title=task.project_name or "My Video Project"
@@ -2714,6 +2900,9 @@ class Engine:
                     # MediaIds expire between retries/sessions — stale IDs cause silent
                     # failures. Fresh upload from local files is always preferred.
                     if task.image_paths:
+                        # BUG-35: Check stop before image upload sequence
+                        if self._stop_event.is_set():
+                            break
                         if task.image_uris:
                             log.info(
                                 f"[Foreman:{account.email}] Task {task.id}: clearing {len(task.image_uris)} "
@@ -2778,7 +2967,9 @@ class Engine:
                     
                     # ★ Pre-warm: detect idle and trigger soft recovery BEFORE first attempt
                     # This prevents 403 cascade — cheaper than recovering after failure
-                    await self._maybe_prewarm(account)
+                    # BUG-35: Check stop before prewarm (20+s)
+                    if not self._stop_event.is_set():
+                        await self._maybe_prewarm(account)
                     
                     # ═══ T2I/I2I FIRE-AND-FORGET DISPATCH ═══
                     # T2I API is synchronous (~30-60s per submit).
@@ -2873,6 +3064,11 @@ class Engine:
                         continue  # ← Foreman immediately picks next task
                     
                     for attempt in range(max_retries + 1):
+                        # BUG-13: Exit retry loop on stop (prevents 900s block)
+                        if self._stop_event.is_set():
+                            log.info(f"[{fid}] Stop signal — aborting submit retry")
+                            break
+                        
                         # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
                         # Both apply to ALL workers on this account (per-email key)
                         # → 1 worker hits 403 → all workers on same account must wait
@@ -2904,6 +3100,51 @@ class Engine:
                                 worker_count = 0
                                 result = None
                                 break
+                        
+                        # ── NEW: Extract frame from _pending_frame_source (set by retry_task) ──
+                        # When dispatcher retries a continuation child whose parent is COMPLETED,
+                        # it sets _pending_frame_source = parent's best video path.
+                        # We extract the last frame here before the first submit.
+                        _pfs = getattr(task, '_pending_frame_source', None)
+                        if (_pfs and not task.image_uris
+                                and not task.continuation_frame_uri):
+                            log.info(
+                                f"[Foreman:{account.email}] Task {task.id}: "
+                                f"extracting continuation frame from _pending_frame_source"
+                            )
+                            try:
+                                re_extracted = await self._re_extract_frame_from_parent(task)
+                                if not re_extracted and Path(_pfs).exists():
+                                    # Fallback: direct extract from the source path
+                                    loop = asyncio.get_running_loop()
+                                    re_extracted = await loop.run_in_executor(
+                                        self._process_pool,
+                                        self._frame_extractor.extract_frame,
+                                        _pfs, None,
+                                        getattr(task, 'extract_point_ms', None),
+                                        True,
+                                    )
+                                if re_extracted:
+                                    task.continuation_frame_local_path = re_extracted
+                                    async with self._account_rate_locks[account.email]:
+                                        if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
+                                            await self._burst_controller.wait(account.email)
+                                        fresh_uri = await self._re_upload_continuation_frame(task, account)
+                                        if fresh_uri:
+                                            task.image_uris = [fresh_uri]
+                                            task.continuation_frame_uri = fresh_uri
+                                            log.info(
+                                                f"[Foreman:{account.email}] Task {task.id}: "
+                                                f"frame extracted + uploaded from retry source"
+                                            )
+                                # Clean up the marker
+                                if hasattr(task, '_pending_frame_source'):
+                                    del task._pending_frame_source
+                            except Exception as pfs_err:
+                                log.warning(
+                                    f"[Foreman:{account.email}] Task {task.id}: "
+                                    f"_pending_frame_source extraction failed: {pfs_err}"
+                                )
                         
                         # Re-upload continuation frame on retry (mediaId may have expired)
                         if (attempt > 0 and task.parent_task_id
@@ -3000,6 +3241,17 @@ class Engine:
                                             task.id, 30,
                                             f"🎨 Submitting {_wt_sub}..."
                                         )
+                                    # ★ Gemini AI: Auto-enhance prompt (if enabled)
+                                    if (getattr(self._settings, 'prompt_enhance_enabled', False)
+                                            and getattr(self._settings, 'prompt_auto_enhance', False)):
+                                        try:
+                                            enhanced = await self._enhance_prompt(task, account)
+                                            if enhanced and enhanced != task.prompt:
+                                                task._original_prompt = task.prompt  # Keep original
+                                                task.prompt = enhanced
+                                        except Exception as e:
+                                            log.debug(f"[Enhance] Skip: {e}")
+                                    
                                     log.info(
                                         f"[Foreman:{account.email}] Task {task.id}: submitting via Extension "
                                         f"(page context fetch)"
@@ -3165,6 +3417,45 @@ class Engine:
                             # Workers released by finally block
                             return  # Exit worker loop — task preserved in queue
                         
+                        # ★ Gemini AI: Auto-fix policy-blocked prompts (max 3 attempts)
+                        _fix_attempts = getattr(task, '_policy_fix_attempts', 0)
+                        if (self._is_policy_error(result.error or "")
+                                and getattr(self._settings, 'prompt_enhance_enabled', False)
+                                and getattr(self._settings, 'prompt_auto_fix', False)
+                                and _fix_attempts < 3):
+                            task._policy_fix_attempts = _fix_attempts + 1
+                            log.warning(
+                                f"[Foreman:{account.email}] Task {task.id}: "
+                                f"POLICY VIOLATION (fix attempt {_fix_attempts + 1}/3): "
+                                f"{result.error} — attempting auto-fix..."
+                            )
+                            try:
+                                fixed = await self._fix_policy_prompt(
+                                    task, result.error or "", account
+                                )
+                                if fixed:
+                                    task.prompt = fixed
+                                    log.info(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"prompt auto-fixed (attempt {_fix_attempts + 1}/3) → retrying"
+                                    )
+                                    continue  # Retry with fixed prompt (no backoff)
+                                else:
+                                    log.warning(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"auto-fix returned None — prompt unfixable"
+                                    )
+                            except Exception as fix_err:
+                                log.warning(f"[Fix] Error (attempt {_fix_attempts + 1}/3): {fix_err}")
+                            # If fix failed/returned None, fall through to normal retry/fail
+                        elif (self._is_policy_error(result.error or "")
+                              and _fix_attempts >= 3):
+                            log.error(
+                                f"[Foreman:{account.email}] Task {task.id}: "
+                                f"POLICY FIX EXHAUSTED (3/3 attempts) — marking as error"
+                            )
+                            break  # Exit retry loop → task marked as error
+                        
                         # Auth errors → special handling, no retry
                         if self._is_auth_error(result.error or ""):
                             break
@@ -3172,6 +3463,20 @@ class Engine:
                         # Non-auth error — retry with backoff (OUTSIDE rate lock)
                         task.retry_attempts = attempt + 1
                         if attempt < max_retries:
+                            # ★ FIX: Early-abort if extension disconnected
+                            # Prevents wasting 10+ retries on a dead connection
+                            ext_bridge = getattr(account, 'extension_bridge', None)
+                            if ext_bridge and not ext_bridge.is_connected(account.email):
+                                log.warning(
+                                    f"[Foreman:{account.email}] Task {task.id}: "
+                                    f"extension disconnected — requeuing task"
+                                )
+                                self._dispatcher.requeue_task(task)
+                                account.release_workers(worker_count)
+                                worker_count = 0
+                                result = None
+                                break
+                            
                             # Risk 3 fix: Higher initial backoff for 403 cooldown
                             # Old: 2, 4, 8, 16, 30  →  New: 5, 10, 20, 40, 60
                             backoff = min(5 * (2 ** attempt), 60)
@@ -3470,6 +3775,10 @@ class Engine:
                     if worker_count > 0:
                         account.release_workers(worker_count)
                         worker_count = 0
+                        # T2: Wake foremen waiting for worker capacity
+                        _cap_evt = self._workers_available.get(account.email)
+                        if _cap_evt:
+                            _cap_evt.set()
                 
             except asyncio.CancelledError:
                 break
@@ -3586,6 +3895,13 @@ class Engine:
                     )
 
             # ── All workers done → finalize ──
+            # BUG-17: Don't finalize if stop was signaled (leave for requeue)
+            if self._stop_event.is_set():
+                log.info(
+                    f"[Foreman:{account.email}] Task {task.id}: "
+                    f"stop signal — skipping finalize (will be requeued)"
+                )
+                return
             await self._finalize_task_v2(task, account, results_dict)
 
         except* asyncio.CancelledError:
@@ -3604,6 +3920,10 @@ class Engine:
         finally:
             if worker_count > 0:
                 account.release_workers(worker_count)
+                # T2: Wake foremen waiting for worker capacity
+                _cap_evt = self._workers_available.get(account.email)
+                if _cap_evt:
+                    _cap_evt.set()
 
     async def _video_worker(
         self, task: Task, account: AccountManager,
@@ -3630,16 +3950,27 @@ class Engine:
             
             # ── Phase 1: Self-poll op ──
             task.video_outputs[video_index].quality = "polling"
-            fife_url, media_id = await self._worker_poll_op(
+            fife_url, media_id, poll_error = await self._worker_poll_op(
                 task, account, op_name, scene_id, video_index
             )
 
             if not fife_url:
-                log.warning(f"{log_prefix} Poll returned no result (failed/timeout)")
+                error_msg = poll_error or "Poll failed or timeout"
+                log.warning(f"{log_prefix} Poll returned no result (failed/timeout): {error_msg}")
                 task.video_outputs[video_index].quality = "failed"
                 results_dict[video_index] = WorkerVideoResult(
                     index=video_index, op_name=op_name,
-                    quality="failed", error="Poll failed or timeout",
+                    quality="failed", error=error_msg,
+                )
+                return
+
+            # BUG-09: Stop check between poll → download
+            if self._stop_event.is_set():
+                log.info(f"{log_prefix} Stop signal — aborting after poll")
+                results_dict[video_index] = WorkerVideoResult(
+                    index=video_index, op_name=op_name,
+                    media_id=media_id, fife_url=fife_url,
+                    quality="failed", error="Stopped by user",
                 )
                 return
 
@@ -3676,6 +4007,17 @@ class Engine:
             # ── Phase 3: Upscale (if needed) ──
             local_final = local_720p
             final_quality = "720p"
+
+            # BUG-08/09: Stop check between download → upscale
+            if self._stop_event.is_set():
+                log.info(f"{log_prefix} Stop signal — skipping upscale")
+                results_dict[video_index] = WorkerVideoResult(
+                    index=video_index, op_name=op_name,
+                    media_id=media_id, fife_url=fife_url,
+                    file_720p=local_720p, file_final=local_720p,
+                    quality="720p", thumbnail_path=thumb_path or "",
+                )
+                return
 
             if task.download_quality != "720p" and media_id:
                 # Check workload priority mode
@@ -3741,7 +4083,8 @@ class Engine:
     ) -> tuple:
         """Worker self-polls its own op until DONE.
         
-        Returns: (fife_url, media_id) or (None, None) if FAILED/timeout.
+        Returns: (fife_url, media_id, error) — error is populated on FAILED.
+        Returns (None, None, error_msg) if FAILED, (None, None, None) if timeout.
         1 op per API call — fully isolated from other workers.
         """
         from config.constants import AppConstants
@@ -3804,13 +4147,13 @@ class Engine:
                 if op_status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
                     details = self._extract_output_details({"operations": [op]})
                     if details:
-                        return details[0]["fifeUrl"], details[0]["mediaId"]
-                    return None, None
+                        return details[0]["fifeUrl"], details[0]["mediaId"], None
+                    return None, None, "No output details in response"
 
                 elif op_status == "MEDIA_GENERATION_STATUS_FAILED":
-                    error = op.get("error", {}).get("message", "")
+                    error = op.get("operation", {}).get("error", {}).get("message", "unknown")
                     log.warning(f"{log_prefix} Op FAILED: {error}")
-                    return None, None
+                    return None, None, error
 
                 else:
                     # Update status for next poll + progress
@@ -3839,7 +4182,7 @@ class Engine:
                 continue
 
         log.warning(f"{log_prefix} Poll timeout ({max_poll_time}s)")
-        return None, None  # Timeout
+        return None, None, None  # Timeout
 
     async def _download_single(
         self, task: Task, account: AccountManager,
@@ -3860,6 +4203,10 @@ class Engine:
                 return paths[0]
             log.warning(f"{log_prefix} Download returned empty")
             return ""
+        except asyncio.CancelledError:
+            # BUG-05: Re-raise CancelledError instead of swallowing
+            log.info(f"{log_prefix} Download cancelled")
+            raise
         except Exception as e:
             log.error(f"{log_prefix} Download error: {e}")
             return ""
@@ -3874,6 +4221,12 @@ class Engine:
         handled by the existing upscale infrastructure.
         """
         log_prefix = f"[Worker:{account.email}:#{video_index}]"
+        
+        # BUG-08: Early exit on stop (upscale can take 3-5 minutes)
+        if self._stop_event.is_set():
+            log.info(f"{log_prefix} Stop signal — skipping upscale")
+            return ""
+        
         try:
             task.video_outputs[video_index].upscale_status = "submitting"
             upscale_results = await self._auto_upscale(
@@ -3895,6 +4248,10 @@ class Engine:
             task.video_outputs[video_index].upscale_status = "failed"
             log.warning(f"{log_prefix} Upscale failed, keeping 720p")
             return ""
+        except asyncio.CancelledError:
+            log.info(f"{log_prefix} Upscale cancelled")
+            task.video_outputs[video_index].upscale_status = "failed"
+            raise
         except Exception as e:
             log.error(f"{log_prefix} Upscale error: {e}")
             task.video_outputs[video_index].upscale_status = "failed"
@@ -3937,6 +4294,14 @@ class Engine:
         Runs after ALL workers have finished (success or fail).
         Handles: partial failure retry, continuation frame, completion.
         """
+        # BUG-15: Don't complete task during stop (leave in RUNNING for requeue)
+        if self._stop_event.is_set():
+            log.info(
+                f"[Finalizer] Task {task.id}: stop active — "
+                f"skipping completion (task stays RUNNING for requeue)"
+            )
+            return
+        
         email = account.email
         total = len(task.operation_names)
         successes = [r for r in results_dict.values() if r.quality != "failed"]
@@ -3951,14 +4316,62 @@ class Engine:
 
         # ── G3: Handle all-failed ──
         if success_count == 0:
-            self._dispatcher.fail_task(task.id, "All video operations failed")
+            # ★ Check if failures are policy errors → auto-fix prompt + retry
+            all_errors = [r.error for r in failures if r.error]
+            is_policy = any(self._is_policy_error(e) for e in all_errors)
+            _fix_attempts = getattr(task, '_policy_fix_attempts', 0)
+            
+            if (is_policy
+                    and getattr(self._settings, 'prompt_enhance_enabled', False)
+                    and getattr(self._settings, 'prompt_auto_fix', False)
+                    and _fix_attempts < 3):
+                task._policy_fix_attempts = _fix_attempts + 1
+                log.warning(
+                    f"[Finalizer:{email}] Task {task.id}: "
+                    f"ALL {failed_count} ops POLICY VIOLATION (fix attempt {_fix_attempts + 1}/3): "
+                    f"{all_errors[0]} — attempting auto-fix..."
+                )
+                try:
+                    fixed = await self._fix_policy_prompt(
+                        task, all_errors[0], account
+                    )
+                    if fixed:
+                        task.prompt = fixed
+                        log.info(
+                            f"[Finalizer:{email}] Task {task.id}: "
+                            f"prompt auto-fixed (attempt {_fix_attempts + 1}/3) → requeueing"
+                        )
+                        # Requeue task for retry with fixed prompt
+                        self._dispatcher.requeue_task(task)
+                        self._task_available.set()  # Wake foremen for requeued task
+                        return  # Don't fail — task will be retried
+                    else:
+                        log.warning(
+                            f"[Finalizer:{email}] Task {task.id}: "
+                            f"auto-fix returned None — prompt unfixable"
+                        )
+                except Exception as fix_err:
+                    log.warning(
+                        f"[Finalizer:{email}] Task {task.id}: "
+                        f"auto-fix error (attempt {_fix_attempts + 1}/3): {fix_err}"
+                    )
+            
+            # Fall through: fail the task
+            error_detail = all_errors[0] if all_errors else "All video operations failed"
+            if is_policy:
+                error_detail = (
+                    f"⛔ Prompt Policy Violation — unfixable after "
+                    f"{_fix_attempts}/3 auto-fix attempts. "
+                    f"Original error: {all_errors[0][:80] if all_errors else 'unknown'}"
+                )
+            self._dispatcher.fail_task(task.id, error_detail)
             self._error_count += 1
             emit_event(EventType.TASK_FAILED, {
-                "task_id": task.id, "error": "All video operations failed",
+                "task_id": task.id, "error": error_detail,
                 "reason": "all_ops_failed",
             }, source="engine")
             if self._on_task_failed:
-                self._on_task_failed(task, "All video operations failed")
+                self._on_task_failed(task, error_detail)
             return
 
         # ── G3: Partial failure auto-retry ──
@@ -4026,8 +4439,16 @@ class Engine:
             )
             if frame_result:
                 continuation_frame_uri, continuation_frame_local = frame_result
-                # Smart cooldown
-                await self._wait_for_recaptcha_ready(account, max_wait=30.0)
+                # ★ SPEED OPT: Activate children FIRST, then reCAPTCHA wait
+                # Children will self-wait for reCAPTCHA when their foreman picks them
+                self._dispatcher.activate_children_early(
+                    task.id,
+                    continuation_frame_uri,
+                    continuation_frame_local,
+                )
+                # ★ CONTINUATION FIX: Wake sleeping foremen immediately
+                # so they pick up newly-READY children without 2s delay
+                self._task_available.set()
 
         # ── Complete task ──
         task.stage = TaskStage.COMPLETED
@@ -4045,6 +4466,11 @@ class Engine:
             "account": task.assigned_account,
         }, source="engine")
         self._save_manifest(task)
+        
+        # T1: Wake UpscaleQueue instantly when all prompts are done
+        if (self._dispatcher.ready_count <= 0 
+                and self._dispatcher.running_count <= 0):
+            self._upscale_wake_event.set()
         
         # G5: License usage tracking — moved to DOWNLOADED_720 checkpoint
         # (counts actual completed downloads, not submit attempts)
@@ -4500,6 +4926,11 @@ class Engine:
                         media_id=mid,
                         quality="pending",
                     ))
+            
+            # BUG-16: Skip download if stop is active
+            if self._stop_event.is_set():
+                log.info(f"[T2I-Pipeline] Task {task.id}: stop signal — skipping download")
+                return
             
             # === Stage 1: Download 1K images ===
             self._dispatcher.update_progress(
@@ -5081,6 +5512,10 @@ class Engine:
                     self._dispatcher.decrement_running()
                     return
                 elif task.stage == TaskStage.DOWNLOADED_720 and task.download_quality != "720p" and media_ids:
+                    # BUG-18: Skip inline upscale if stop is active
+                    if self._stop_event.is_set():
+                        log.info(f"[Poll] Task {task.id}: stop signal — skipping resume upscale")
+                        return
                     # Resume upscale from DOWNLOADED_720 — inline path
                     self._dispatcher.update_progress(task.id, 88, "⬆️ Resuming upscale")
                     task.upscale_media_ids = list(media_ids)
@@ -5127,14 +5562,10 @@ class Engine:
                     frame_result = await self._extract_continuation_frame(
                         task, account, task.output_uris[0]
                     )
-                    # Fix 3: Cooldown between parent's API burst and child's I2V submit
-                    # Parent just finished polling + downloading + possibly upscaling —
-                    # adding delay prevents rate limit cascade on the same account.
+                    # ★ SPEED OPT: No fixed cooldown — children will self-wait for
+                    # reCAPTCHA readiness when their foreman submits the I2V request
                     if frame_result:
                         continuation_frame_uri, continuation_frame_local = frame_result
-                        cooldown = random.uniform(3.0, 5.0)
-                        log.info(f"Continuation cooldown: {cooldown:.1f}s before releasing child")
-                        await asyncio.sleep(cooldown)
                 
                 task.stage = TaskStage.COMPLETED
                 self._dispatcher.update_progress(task.id, 100, "✅ Done")
@@ -5251,8 +5682,12 @@ class Engine:
                     elif op_status == "MEDIA_GENERATION_STATUS_FAILED":
                         any_failed = True
                         pending_ops.pop(op_name, None)
-                        error = op.get("error", {}).get("message", "Server generation failed")
+                        error = op.get("operation", {}).get("error", {}).get("message", "Server generation failed")
                         log.warning(f"[Poll] Op {op_name[:12]}... FAILED: {error}")
+                        # Track failed error for policy detection
+                        if not hasattr(task, '_poll_failed_errors'):
+                            task._poll_failed_errors = []
+                        task._poll_failed_errors.append(error)
                     elif op_name in pending_ops:
                         # Update status for next poll
                         pending_ops[op_name]["status"] = op_status
@@ -5263,10 +5698,47 @@ class Engine:
                 if not pending_ops:
                     # ALL operations resolved
                     if not completed_results:
-                        # All failed
-                        self._dispatcher.fail_task(task.id, "All video operations failed")
+                        # All failed — check for policy errors → auto-fix prompt
+                        poll_errors = getattr(task, '_poll_failed_errors', [])
+                        is_policy = any(self._is_policy_error(e) for e in poll_errors)
+                        _fix_attempts = getattr(task, '_policy_fix_attempts', 0)
+                        
+                        if (is_policy
+                                and getattr(self._settings, 'prompt_enhance_enabled', False)
+                                and getattr(self._settings, 'prompt_auto_fix', False)
+                                and _fix_attempts < 3):
+                            task._policy_fix_attempts = _fix_attempts + 1
+                            log.warning(
+                                f"[Poll] Task {task.id}: ALL ops POLICY VIOLATION "
+                                f"(fix attempt {_fix_attempts + 1}/3): {poll_errors[0]} "
+                                f"— attempting auto-fix..."
+                            )
+                            try:
+                                fixed = await self._fix_policy_prompt(
+                                    task, poll_errors[0], account
+                                )
+                                if fixed:
+                                    task.prompt = fixed
+                                    task._poll_failed_errors = []
+                                    log.info(
+                                        f"[Poll] Task {task.id}: prompt auto-fixed "
+                                        f"(attempt {_fix_attempts + 1}/3) → requeueing"
+                                    )
+                                    self._dispatcher.requeue_task(task)
+                                    return  # Will be retried with fixed prompt
+                                else:
+                                    log.warning(
+                                        f"[Poll] Task {task.id}: auto-fix returned None"
+                                    )
+                            except Exception as fix_err:
+                                log.warning(
+                                    f"[Poll] Task {task.id}: auto-fix error: {fix_err}"
+                                )
+                        
+                        error_detail = poll_errors[0] if poll_errors else "All video operations failed"
+                        self._dispatcher.fail_task(task.id, error_detail)
                         emit_event(EventType.TASK_FAILED, {
-                            "task_id": task.id, "error": "All video operations failed",
+                            "task_id": task.id, "error": error_detail,
                             "reason": "all_ops_failed",
                         }, source="engine")
                         return
@@ -5481,7 +5953,8 @@ class Engine:
                                         task, account, output_uris[0]
                                     )
                                     if frame_result:
-                                        await self._wait_for_recaptcha_ready(account, max_wait=30.0)
+                                        # ★ SPEED OPT: Activate children FIRST — they will
+                                        # self-wait for reCAPTCHA when their foreman picks them
                                         self._dispatcher.activate_children_early(
                                             task.id,
                                             frame_result[0],
@@ -5518,15 +5991,8 @@ class Engine:
                                         task, account, output_uris[0]
                                     )
                                     if frame_result:
-                                        # Note: Don't set continuation_frame on parent task —
-                                        # only children should have it (for Queue UI display).
-                                        # Parent is T2V and should NOT show "Frame" thumbnail.
-                                        
-                                        # Layer 2: Smart cooldown — wait for grecaptcha readiness
-                                        # instead of fixed sleep(3-5s).
-                                        await self._wait_for_recaptcha_ready(account, max_wait=30.0)
-                                        
-                                        # ★ Activate children NOW — don't wait for upscale
+                                        # ★ SPEED OPT: Activate children FIRST — don't wait for
+                                        # reCAPTCHA. Children will self-wait when foreman picks them.
                                         # _resolve_dependencies pops _parent_to_children,
                                         # so UpscaleQueue's complete_task() won't double-activate
                                         self._dispatcher.activate_children_early(
@@ -5699,6 +6165,11 @@ class Engine:
         Returns (mediaId, frame_local_path) tuple or None on error.
         Frame file is preserved for UI thumbnail display.
         """
+        # BUG-28: Skip frame extraction during stop (FFmpeg + upload = 30-60s)
+        if self._stop_event.is_set():
+            log.info(f"[ContinuationFrame] Task {task.id}: stop signal — skipping extraction")
+            return None
+        
         try:
             if not self._frame_extractor.is_available:
                 log.warning("FFmpeg not available, skipping continuation frame extraction")
@@ -5708,24 +6179,40 @@ class Engine:
             task.image_upload_status = "extracting"
             self._dispatcher.update_progress(task.id, task.progress, "📸 Extracting frame...")
             
-            # 1. Download video to temp file
-            import aiohttp
+            # 1. Get video bytes: either from local file or remote FIFE URL
             import tempfile
             
-            async with aiohttp.ClientSession() as session:
-                async with session.get(video_uri) as resp:
-                    if resp.status != 200:
-                        log.error(f"Failed to download video: HTTP {resp.status}")
-                        task.image_upload_status = "error"
-                        return None
-                    video_bytes = await resp.read()
+            # Detect local file path vs remote URL
+            # BUG FIX: After inline upscale, output_uris may contain local paths
+            # (e.g. d:\Downloads\...\1080p.mp4) instead of FIFE URLs. Trying to
+            # HTTP GET a local path causes aiohttp to fail → cascade-fail children.
+            is_local = (
+                Path(video_uri).exists()
+                or video_uri.startswith('/')
+                or (len(video_uri) >= 2 and video_uri[1] == ':')  # Windows drive
+            )
             
-            # Save to temp file
-            with tempfile.NamedTemporaryFile(
-                suffix=".mp4", delete=False, dir=str(self._frame_extractor.get_temp_dir())
-            ) as tmp:
-                tmp.write(video_bytes)
-                video_path = tmp.name
+            if is_local and Path(video_uri).exists():
+                # Local file — read directly from disk (no HTTP download needed)
+                log.info(f"[ContinuationFrame] Reading local video: {Path(video_uri).name}")
+                video_path = video_uri  # Use directly, no temp file needed
+            else:
+                # Remote FIFE URL — download via HTTP
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(video_uri) as resp:
+                        if resp.status != 200:
+                            log.error(f"Failed to download video: HTTP {resp.status}")
+                            task.image_upload_status = "error"
+                            return None
+                        video_bytes = await resp.read()
+                
+                # Save to temp file
+                with tempfile.NamedTemporaryFile(
+                    suffix=".mp4", delete=False, dir=str(self._frame_extractor.get_temp_dir())
+                ) as tmp:
+                    tmp.write(video_bytes)
+                    video_path = tmp.name
             
             # 2. Extract frame via FFmpeg (CPU-bound, run in process pool)
             # C3: VEO only uses start frame input → always extract from END
@@ -5739,8 +6226,9 @@ class Engine:
                 True   # C3: always from_end=True (VEO start frame)
             )
             
-            # Cleanup temp video
-            Path(video_path).unlink(missing_ok=True)
+            # Cleanup temp video (only if we created a temp file — NOT the user's local video)
+            if not is_local:
+                Path(video_path).unlink(missing_ok=True)
             
             if not frame_path:
                 log.error("Frame extraction failed")
@@ -6034,6 +6522,10 @@ class Engine:
         attempt = 0
         
         while (asyncio.get_event_loop().time() - start) < max_wait:
+            # BUG-34: Exit immediately on stop
+            if self._stop_event.is_set():
+                return False
+            
             attempt += 1
             try:
                 ready = await bridge.check_recaptcha_ready(account.email, timeout=5.0)
@@ -6086,6 +6578,10 @@ class Engine:
         )
         
         # Fix #3: Full page reload when reCAPTCHA ready check keeps timing out
+        # BUG-34: Skip reload + 25s wait during stop
+        if self._stop_event.is_set():
+            return False
+        
         # This recovers the tab from frozen/suspended state where the reCAPTCHA
         # widget is dead. Without this, we'd submit with broken reCAPTCHA → 403.
         if bridge:
@@ -6237,73 +6733,164 @@ class Engine:
         
         Called when task.image_paths has been populated by tag resolution
         in AppController but task.image_uris is still empty.
-        Each local file is base64-encoded and uploaded via the API.
         
-        Bug 2 fix: Uses _upload_cache to avoid re-uploading the same file
-        for the same account within a session. Key = (path, email).
+        ★ V2 UPGRADE:
+        - Per-image slots (ImageUploadSlot) with individual status/retry
+        - Content hash dedup (MD5) — different paths, same content → skip upload
+        - Per-image retry (3 attempts with exponential backoff)
+        - Parallel upload via asyncio.gather()
         """
-        log.info(f"Uploading {len(task.image_paths)} image(s) for task {task.id}")
-        uploaded_uris = []
+        import hashlib
+        from core.dispatcher import ImageUploadSlot
+        
+        MAX_RETRIES = 3
+        n_images = len(task.image_paths)
+        log.info(f"Uploading {n_images} image(s) for task {task.id} (parallel, v2)")
         task.image_upload_status = "uploading"
         self._dispatcher.update_progress(task.id, task.progress, "📤 Uploading images...")
         
+        # Initialize per-image slots
+        slots = []
         for path in task.image_paths:
+            slots.append(ImageUploadSlot(path=path))
+        task.image_slots = slots
+        
+        def _compute_hash(path: str) -> str:
+            """Compute MD5 hash of file content for dedup."""
             try:
-                # Bug 2 fix: Check cache first — same file + same account = reuse mediaId
-                cache_key = f"{path}:{account.email}"
+                h = hashlib.md5()
+                with open(path, 'rb') as f:
+                    for chunk in iter(lambda: f.read(8192), b''):
+                        h.update(chunk)
+                return h.hexdigest()
+            except Exception:
+                return ""
+        
+        async def _upload_single(slot: ImageUploadSlot) -> str:
+            """Upload a single image with retry, returning mediaId or empty string."""
+            # BUG-33: Skip during stop
+            if self._stop_event.is_set():
+                slot.status = "error"
+                slot.error = "stopped"
+                return ""
+            
+            slot.status = "uploading"
+            
+            # Compute content hash for dedup (CPU-bound, run in thread)
+            if not slot.content_hash:
+                loop = asyncio.get_running_loop()
+                slot.content_hash = await loop.run_in_executor(
+                    None, _compute_hash, slot.path
+                )
+            
+            # Content hash cache check — same content + same account = reuse mediaId
+            if slot.content_hash:
+                cache_key = f"hash:{slot.content_hash}:{account.email}"
                 async with self._upload_cache_lock:
                     cached_id = self._upload_cache.get(cache_key)
                 if cached_id:
-                    uploaded_uris.append(cached_id)
-                    log.info(f"  Cache hit: {Path(path).name} → {cached_id} (skipped upload)")
-                    continue
+                    slot.media_id = cached_id
+                    slot.status = "ready"
+                    log.info(f"  Hash match: {Path(slot.path).name} → {cached_id} (skip upload)")
+                    return cached_id
+            
+            # Also check path-based cache (backward compat)
+            path_cache_key = f"{slot.path}:{account.email}"
+            async with self._upload_cache_lock:
+                cached_id = self._upload_cache.get(path_cache_key)
+            if cached_id:
+                slot.media_id = cached_id
+                slot.status = "ready"
+                log.info(f"  Path hit: {Path(slot.path).name} → {cached_id} (skip upload)")
+                return cached_id
+            
+            # Encode image (once, reuse across retries)
+            from core.media_handler import MediaHandler
+            result = MediaHandler.image_to_base64(slot.path)
+            if not result:
+                slot.status = "error"
+                slot.error = "encode_failed"
+                log.error(f"  Failed to encode image: {slot.path}")
+                return ""
+            img_b64, mime_type = result
+            
+            # Retry loop for upload
+            for attempt in range(1, MAX_RETRIES + 1):
+                if self._stop_event.is_set():
+                    slot.status = "error"
+                    slot.error = "stopped"
+                    return ""
                 
-                # Use MediaHandler for proper format conversion + quality
-                from core.media_handler import MediaHandler
-                result = MediaHandler.image_to_base64(path)
-                if not result:
-                    log.error(f"  Failed to encode image: {path}")
-                    continue
-                img_b64, mime_type = result
-                
-                # HAR verified: upload endpoint always uses IMAGE_ASPECT_RATIO_LANDSCAPE
-                # regardless of the video's aspect ratio. Do NOT pass task.aspect_ratio
-                # (which is VIDEO_ASPECT_RATIO_*) — causes HTTP 400.
-                upload_resp = await self._api_client.upload_image(
-                    access_token=account.get_access_token(),
-                    recaptcha_token="",  # Not used by upload endpoint
-                    image_base64=img_b64,
-                    mime_type=mime_type,
-                    aspect_ratio="IMAGE_ASPECT_RATIO_LANDSCAPE",
-                    account_headers=account.get_api_headers(),
-                )
-
-                
-                if upload_resp.success:
-                    mgid = upload_resp.data.get("mediaGenerationId", {})
-                    if isinstance(mgid, dict):
-                        media_id = mgid.get("mediaGenerationId")
+                slot.retry_count = attempt
+                try:
+                    upload_resp = await self._api_client.upload_image(
+                        access_token=account.get_access_token(),
+                        recaptcha_token="",
+                        image_base64=img_b64,
+                        mime_type=mime_type,
+                        aspect_ratio="IMAGE_ASPECT_RATIO_LANDSCAPE",
+                        account_headers=account.get_api_headers(),
+                    )
+                    
+                    if upload_resp.success:
+                        mgid = upload_resp.data.get("mediaGenerationId", {})
+                        media_id = mgid.get("mediaGenerationId") if isinstance(mgid, dict) else mgid
+                        if media_id:
+                            slot.media_id = media_id
+                            slot.status = "ready"
+                            # Cache by both content hash and path
+                            async with self._upload_cache_lock:
+                                if slot.content_hash:
+                                    self._upload_cache[f"hash:{slot.content_hash}:{account.email}"] = media_id
+                                self._upload_cache[path_cache_key] = media_id
+                            log.info(f"  Uploaded: {Path(slot.path).name} → {media_id} (attempt {attempt})")
+                            return media_id
+                        else:
+                            slot.error = "no_media_id"
+                            log.warning(f"  Upload OK but no mediaId for {slot.path} (attempt {attempt})")
                     else:
-                        media_id = mgid
-                    if media_id:
-                        uploaded_uris.append(media_id)
-                        # Bug 2 fix: Cache the mediaId for reuse
-                        async with self._upload_cache_lock:
-                            self._upload_cache[cache_key] = media_id
-                        log.info(f"  Uploaded: {Path(path).name} → {media_id}")
-                    else:
-                        log.warning(f"  Upload OK but no mediaId for {path}")
-                else:
-                    log.error(f"  Upload failed for {path}: {upload_resp.error}")
-            except Exception as e:
-                log.error(f"  Image upload error for {path}: {e}")
+                        slot.error = upload_resp.error or "upload_failed"
+                        log.warning(f"  Upload failed for {Path(slot.path).name}: {slot.error} (attempt {attempt}/{MAX_RETRIES})")
+                except Exception as e:
+                    slot.error = str(e)
+                    log.warning(f"  Upload error for {Path(slot.path).name}: {e} (attempt {attempt}/{MAX_RETRIES})")
+                
+                # Exponential backoff before next retry
+                if attempt < MAX_RETRIES:
+                    backoff = 2 ** (attempt - 1)  # 1s, 2s
+                    await asyncio.sleep(backoff)
+            
+            # All retries exhausted
+            slot.status = "error"
+            log.error(f"  Upload FAILED after {MAX_RETRIES} attempts: {Path(slot.path).name} — {slot.error}")
+            return ""
+        
+        # ★ Launch all uploads in parallel
+        results = await asyncio.gather(
+            *[_upload_single(s) for s in slots],
+            return_exceptions=True,
+        )
+        
+        # Collect successful mediaIds (preserve order)
+        uploaded_uris = []
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                slots[i].status = "error"
+                slots[i].error = str(r)
+                log.error(f"  Image upload exception for {slots[i].path}: {r}")
+            elif r:
+                uploaded_uris.append(r)
+        
+        ok = sum(1 for s in slots if s.status == "ready")
+        fail = sum(1 for s in slots if s.status == "error")
         
         if uploaded_uris:
             task.image_uris = uploaded_uris
             task.image_upload_status = "ready"
-            log.info(f"  {len(uploaded_uris)} image(s) uploaded successfully")
+            log.info(f"  ✅ {ok}/{n_images} uploaded, {fail} failed (parallel v2)")
         else:
             task.image_upload_status = "error"
+            log.error(f"  ❌ All {n_images} image(s) failed to upload")
     
     def _auto_retry_partial_failure(
         self, original_task: Task, failed_count: int, failed_labels: list
@@ -6317,6 +6904,11 @@ class Engine:
         
         This is FREE for both T2V and I2V — no additional credits.
         """
+        # BUG-29: Don't create retry tasks during stop (zombie tasks)
+        if self._stop_event.is_set():
+            log.info(f"[AutoRetry] Task {original_task.id}: stop active — skipping partial retry")
+            return
+        
         import uuid
         
         # Extract original failed video indices from results
@@ -6381,6 +6973,11 @@ class Engine:
         If max retries exhausted → fail_task (cascade-fails continuation children).
         Otherwise → create retry task with incremented counter.
         """
+        # BUG-30: Don't create retry tasks during stop
+        if self._stop_event.is_set():
+            log.info(f"[AutoRetry] Task {original_task.id}: stop active — skipping download retry")
+            return
+        
         import uuid
         from config.settings import get_settings as _gs
         _s = _gs()
@@ -6478,6 +7075,11 @@ class Engine:
         max_submit_retries = 5
         
         for idx, media_id in enumerate(media_ids):
+            # BUG-14: Exit loop immediately on stop (upscale can take minutes)
+            if self._stop_event.is_set():
+                log.info(f"Upscale: stop signal — aborting at video {idx+1}/{total}")
+                break
+            
             video_label = f"{idx + 1}/{total}"
             if not media_id:
                 log.warning(f"Upscale {video_label}: no mediaId, skipping")
@@ -6489,6 +7091,9 @@ class Engine:
                 # === Submit with retry (5 attempts, browser restart on 3x reCAPTCHA fail) ===
                 resp = None
                 for attempt in range(max_submit_retries):
+                    # BUG-14: Stop check in inner retry loop
+                    if self._stop_event.is_set():
+                        break
                     # Risk 5 fix: Serialize upscale submits per account (prevents burst)
                     if account.email not in self._account_rate_locks:
                         self._account_rate_locks[account.email] = asyncio.Lock()
@@ -6575,13 +7180,36 @@ class Engine:
                     if resp.success:
                         break
                     
+                    error_msg_raw = resp.error or ""
+                    error_lower = error_msg_raw.lower()
+                    
+                    # ★ FIX: HTTP 409 "entity already exists" = server already accepted
+                    # the upscale. Don't retry — skip to poll phase directly.
+                    if "already exists" in error_lower or "409" in error_msg_raw:
+                        log.info(
+                            f"Upscale {video_label}: HTTP 409 — entity already exists. "
+                            f"Server accepted upscale, skipping to poll."
+                        )
+                        # Mark resp as "success" so we fall through to poll
+                        resp.success = True
+                        break
+                    
                     log.warning(
                         f"Upscale {video_label} submit attempt {attempt + 1}/{max_submit_retries} "
-                        f"failed: {resp.error}"
+                        f"failed: {error_msg_raw}"
                     )
                     
+                    # ★ FIX: Check circuit breaker + extension health before retry
+                    # Prevents wasting retries when extension is disconnected
+                    ext_bridge = getattr(account, 'extension_bridge', None)
+                    if ext_bridge and not ext_bridge.is_connected(account.email):
+                        log.warning(
+                            f"Upscale {video_label}: extension disconnected — "
+                            f"aborting retries (keeping 720p)"
+                        )
+                        break
+                    
                     # Tiered browser recovery on reCAPTCHA failures (same as worker)
-                    error_lower = (resp.error or "").lower()
                     if "recaptcha" in error_lower:
                         if attempt == 1:
                             # Tier 1: Soft recovery (keep browser alive)
@@ -6612,9 +7240,6 @@ class Engine:
                                     # after restart (new browser may have short value)
                                     self._account_manager.fix_short_client_data()
                                     # Fix #3: Wait for x-client-data recovery after restart
-                                    # Chrome Variations Service needs 15-30s to generate
-                                    # full x-client-data. Without this gate, attempts 4-5
-                                    # fire with 8-char stale value → guaranteed 403.
                                     log.info(f"⏳ Upscale: Waiting for x-client-data recovery...")
                                     await self._wait_for_account_ready(account, timeout=30.0)
                                     await self._wait_for_recaptcha_ready(account, max_wait=15.0)
@@ -6624,6 +7249,9 @@ class Engine:
                                 log.error(f"❌ Upscale browser restart failed: {restart_err}")
                     
                     if attempt < max_submit_retries - 1:
+                        # ★ FIX: Check stop event before delay
+                        if self._stop_event.is_set():
+                            break
                         delay = min(5 * (attempt + 1), 15)
                         await asyncio.sleep(delay)
                 else:
@@ -6741,7 +7369,17 @@ class Engine:
                                         task.video_outputs[idx].upscale_status = "failed"
                                         task.video_outputs[idx].upscale_error = task._upscale_error
                     else:
-                        if idx < len(task.video_outputs):
+                        # ★ FIX: Handle 409 on re-submit (entity already exists)
+                        resp2_err = (resp2.error or "").lower()
+                        if "already exists" in resp2_err or "409" in (resp2.error or ""):
+                            log.info(
+                                f"Upscale {video_label}: re-submit got 409 — "
+                                f"entity already exists (original upscale may have succeeded)"
+                            )
+                            # Can't poll without op_name — mark as needs-check
+                            if idx < len(task.video_outputs):
+                                task.video_outputs[idx].upscale_status = "409_conflict"
+                        elif idx < len(task.video_outputs):
                             task.video_outputs[idx].upscale_status = "failed"
                             task.video_outputs[idx].upscale_error = task._upscale_error
                 else:
@@ -6775,6 +7413,11 @@ class Engine:
         max_polls = 60  # 60 × 5s = max 5 min
         
         for poll_num in range(max_polls):
+            # BUG-21: Exit poll loop on stop (prevents 30-min block)
+            if self._stop_event.is_set():
+                log.info(f"Upscale {video_label}: stop signal — aborting poll")
+                return []
+            
             # Risk 2 fix: Jitter for upscale polls (prevents 4 workers polling at t=0,5,10...)
             jitter = random.uniform(0, 2.0)
             await asyncio.sleep(30 + jitter)
@@ -7455,6 +8098,11 @@ class Engine:
                     
                     downloaded_ok = False
                     for attempt in range(1, MAX_DOWNLOAD_RETRIES + 1):
+                        # BUG-04: Exit retry loop immediately on engine stop
+                        if self._stop_event.is_set():
+                            log.info(f"Download aborted (engine stopping): {filepath.name}")
+                            break
+                        
                         delay = RETRY_DELAYS[attempt - 1] if attempt <= len(RETRY_DELAYS) else RETRY_DELAYS[-1]
                         
                         # Check Content-Length header first (if available)

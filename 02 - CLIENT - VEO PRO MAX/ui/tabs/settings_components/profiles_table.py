@@ -31,9 +31,9 @@ class SettingsProfilesMixin:
     """
 
     def _create_profiles_section(self) -> QWidget:
-        """Create Chrome Profiles section - per TAB_07_SETTINGS.md spec.
+        """Create Chrome Profiles section.
 
-        9 columns: ✓, #, Email, Plan, Credits, Status, Total Output, Ext, Actions
+        10 columns: ✓, #, Email, API Key, Plan, Credits, Status, Total Output, Ext, Actions
         """
         from ui.tabs.tab_settings import ToggleSwitch
 
@@ -43,37 +43,40 @@ class SettingsProfilesMixin:
         from config.settings import get_settings
         self._emails_hidden = get_settings().hide_emails
 
-        # Create QTableWidget with 9 columns
+        # Create QTableWidget with 10 columns (API Key added between Email and Plan)
         self.profiles_table = QTableWidget()
-        self.profiles_table.setColumnCount(9)
+        self.profiles_table.setColumnCount(10)
         self.profiles_table.setHorizontalHeaderLabels([
             t("profiles.columns.toggle"), t("profiles.columns.num"),
-            t("profiles.columns.email"), t("profiles.columns.plan"),
+            t("profiles.columns.email"), "API Key",
+            t("profiles.columns.plan"),
             t("profiles.columns.credits"), t("profiles.columns.status"),
             t("profiles.columns.output"), t("profiles.columns.ext"),
             t("profiles.columns.actions")
         ])
 
-        # Set column widths per docs spec
+        # Set column widths
         header = self.profiles_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)    # ✓
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # #
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Email
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)    # Plan
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Credits
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Status
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Total Output
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Ext
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Actions
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)    # API Key
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Plan
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Credits
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Status
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Total Output
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Ext
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Actions
 
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
-        self.profiles_table.setColumnWidth(3, 80)   # Plan
-        self.profiles_table.setColumnWidth(4, 80)   # Credits
-        self.profiles_table.setColumnWidth(5, 110)  # Status
-        self.profiles_table.setColumnWidth(6, 95)   # Total Output - SpinBox 0-20
-        self.profiles_table.setColumnWidth(7, 50)   # Ext - emoji status
-        self.profiles_table.setColumnWidth(8, 250)  # Actions - 4 buttons
+        self.profiles_table.setColumnWidth(3, 110)  # API Key
+        self.profiles_table.setColumnWidth(4, 80)   # Plan
+        self.profiles_table.setColumnWidth(5, 80)   # Credits
+        self.profiles_table.setColumnWidth(6, 110)  # Status
+        self.profiles_table.setColumnWidth(7, 95)   # Total Output - SpinBox 0-20
+        self.profiles_table.setColumnWidth(8, 50)   # Ext - emoji status
+        self.profiles_table.setColumnWidth(9, 290)  # Actions - 6 buttons
 
         self.profiles_table.setMinimumHeight(120)
         self.profiles_table.setStyleSheet(f"""
@@ -181,20 +184,20 @@ class SettingsProfilesMixin:
                     email_text = email_text[len(prefix):].strip()
                     break
             if email_text == email:
-                # Update Status (col 5)
-                status_item = self.profiles_table.item(row, 5)
+                # Update Status (col 6)
+                status_item = self.profiles_table.item(row, 6)
                 if status_item:
                     status_item.setText(status)
 
-                # Update Credits if provided (col 4)
+                # Update Credits if provided (col 5)
                 if credits is not None:
-                    credits_item = self.profiles_table.item(row, 4)
+                    credits_item = self.profiles_table.item(row, 5)
                     if credits_item:
                         credits_item.setText(credits)
 
-                # Update Plan to show loading (col 3)
+                # Update Plan to show loading (col 4)
                 if credits is not None:
-                    plan_item = self.profiles_table.item(row, 3)
+                    plan_item = self.profiles_table.item(row, 4)
                     if plan_item:
                         plan_item.setText("⏳ Wait")
 
@@ -214,7 +217,7 @@ class SettingsProfilesMixin:
         if not accounts:
             placeholder = QTableWidgetItem(t("profiles.empty_state"))
             self.profiles_table.insertRow(0)
-            self.profiles_table.setSpan(0, 0, 1, 10)  # 10 columns
+            self.profiles_table.setSpan(0, 0, 1, 10)  # 10 columns (updated)
             self.profiles_table.setItem(0, 0, placeholder)
             self._adjust_table_height()
             return
@@ -257,30 +260,48 @@ class SettingsProfilesMixin:
             email_item.setFlags(email_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.profiles_table.setItem(actual_row, 2, email_item)
 
-            # Plan (col 3) - tier_display already formatted - centered
+            # API Key (col 3) — per-profile Gemini key status
+            api_key_text = "❌ None"
+            api_key_tip = "No Gemini API key for this profile"
+            try:
+                from services.gemini_key_manager import GeminiKeyManager
+                _km = GeminiKeyManager()
+                _key = _km.get_key(email_text)
+                if _key and _key.startswith("AIza"):
+                    api_key_text = f"✅ ●●●{_key[-6:]}"
+                    api_key_tip = f"Key: {_key[:10]}...{_key[-6:]}"
+            except Exception:
+                pass
+            key_item = QTableWidgetItem(api_key_text)
+            key_item.setFlags(key_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            key_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            key_item.setToolTip(api_key_tip)
+            self.profiles_table.setItem(actual_row, 3, key_item)
+
+            # Plan (col 4) - tier_display already formatted - centered
             plan_item = QTableWidgetItem(acc.get('tier', '👤 Free'))
             plan_item.setFlags(plan_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             plan_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(actual_row, 3, plan_item)
+            self.profiles_table.setItem(actual_row, 4, plan_item)
 
-            # Credits (col 4) - credits_display already formatted - centered
+            # Credits (col 5) - credits_display already formatted - centered
             credits_item = QTableWidgetItem(acc.get('credits', 'N/A'))
             credits_item.setFlags(credits_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             credits_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(actual_row, 4, credits_item)
+            self.profiles_table.setItem(actual_row, 5, credits_item)
 
-            # Status (col 5) - Uses enhanced status_display from ChromeProfile - centered
+            # Status (col 6) - Uses enhanced status_display from ChromeProfile - centered
             # Status values: 🔴 Expired, 🟠 Expiring, 🟢 Login, 🟢 Ready
             status = acc.get('status', '🟢 Login')
             status_item = QTableWidgetItem(status)
             status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.profiles_table.setItem(actual_row, 5, status_item)
+            self.profiles_table.setItem(actual_row, 6, status_item)
 
             # Get email for action handlers
             email = acc.get('email', '')
 
-            # Total Output SpinBox (col 6) — per-account concurrent worker limit
+            # Total Output SpinBox (col 7) — per-account concurrent worker limit
             slots_spin = QSpinBox()
             # Dynamic max from server (default=20, only server can raise above 20)
             _max_wk = 20
@@ -336,9 +357,9 @@ class SettingsProfilesMixin:
             slots_spin.valueChanged.connect(
                 lambda value, e=email: self._on_slots_changed(e, value)
             )
-            self.profiles_table.setCellWidget(actual_row, 6, slots_spin)
+            self.profiles_table.setCellWidget(actual_row, 7, slots_spin)
 
-            # Extension status (col 7) — 3-state: 🟢 has headers, 🟡 connecting, 🔴 disconnected
+            # Extension status (col 8) — 3-state: 🟢 has headers, 🟡 connecting, 🔴 disconnected
             ext_connected = False
             ext_has_headers = False
             try:
@@ -363,9 +384,9 @@ class SettingsProfilesMixin:
             ext_item.setFlags(ext_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             ext_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             ext_item.setToolTip(ext_tip)
-            self.profiles_table.setItem(actual_row, 7, ext_item)
+            self.profiles_table.setItem(actual_row, 8, ext_item)
 
-            # Actions buttons (col 8)
+            # Actions buttons (col 9)
             actions_widget = QWidget()
             actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
@@ -391,6 +412,11 @@ class SettingsProfilesMixin:
                     }}
                 """)
                 return btn
+
+            # Paste Gemini API Key button
+            gemini_btn = _action_btn("🤖", "Paste Gemini API Key cho profile này", Theme.TEAL if hasattr(Theme, 'TEAL') else "#2ecc71")
+            gemini_btn.clicked.connect(lambda checked, e=email: self._on_paste_gemini_key(e))
+            actions_layout.addWidget(gemini_btn)
 
             # Save Password button
             pwd_btn = _action_btn("🔑", "Save Password (for auto re-login)", Theme.YELLOW)
@@ -441,7 +467,7 @@ class SettingsProfilesMixin:
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
 
-            self.profiles_table.setCellWidget(actual_row, 8, actions_widget)
+            self.profiles_table.setCellWidget(actual_row, 9, actions_widget)
 
             actual_row += 1
 
@@ -531,7 +557,7 @@ class SettingsProfilesMixin:
             self.profiles_table.blockSignals(False)
 
     def _refresh_ext_column(self):
-        """Lightweight periodic refresh of Extension status column (col 7) only.
+        """Lightweight periodic refresh of Extension status column (col 8) only.
 
         Runs every 5s via QTimer. Does NOT rebuild the table — just updates
         the Ext icon cells using a composite check:
@@ -580,7 +606,7 @@ class SettingsProfilesMixin:
             except Exception:
                 pass
 
-            ext_item = self.profiles_table.item(row, 7)
+            ext_item = self.profiles_table.item(row, 8)
             if ext_item:
                 if ext_has_headers:
                     new_icon = "🟢"
@@ -594,6 +620,16 @@ class SettingsProfilesMixin:
                 else:
                     new_icon = "🔴"
                     new_tip = "Extension not loaded"
+                
+                # Enrich tooltip with diagnosis when not healthy
+                if not ext_has_headers:
+                    try:
+                        diag = bridge.get_connection_diagnosis()
+                        if diag.get('severity') in ('warning', 'error'):
+                            new_tip = f"{diag['reason']}\n\n💡 {diag['fix']}"
+                    except Exception:
+                        pass
+                
                 if ext_item.text() != new_icon:
                     ext_item.setText(new_icon)
                     ext_item.setToolTip(new_tip)

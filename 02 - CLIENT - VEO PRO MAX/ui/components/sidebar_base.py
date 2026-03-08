@@ -428,7 +428,7 @@ class ImageSidebar(SidebarBase):
         self.model = QComboBox()
         self.model.addItems([
             "🔥 Nano Banana Pro",
-            "🔥 Nano Banana",
+            "🔥 Nano Banana 2",
             "Imagen 4",
         ])
         if _s:
@@ -479,7 +479,7 @@ class ImageSidebar(SidebarBase):
         """Get selected image AI model (API key)."""
         _DISPLAY_TO_API = {
             "🔥 Nano Banana Pro": "GEM_PIX_2",
-            "🔥 Nano Banana": "GEM_PIX",
+            "🔥 Nano Banana 2": "NARWHAL",
             "Imagen 4": "IMAGEN_3_5",
         }
         return _DISPLAY_TO_API.get(self.model.currentText(), "GEM_PIX_2")
@@ -526,7 +526,7 @@ class ImageSidebar(SidebarBase):
             # Try API key → display name mapping
             _API_TO_DISPLAY = {
                 "GEM_PIX_2": "🔥 Nano Banana Pro",
-                "GEM_PIX": "🔥 Nano Banana",
+                "NARWHAL": "🔥 Nano Banana 2",
                 "IMAGEN_3_5": "Imagen 4",
             }
             display = _API_TO_DISPLAY.get(data["model"], data["model"])

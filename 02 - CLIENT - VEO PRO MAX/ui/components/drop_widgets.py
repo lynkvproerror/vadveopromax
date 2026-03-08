@@ -50,13 +50,37 @@ class FolderDropLineEdit(QLineEdit):
 
 
 class TextFileDropEdit(QTextEdit):
-    """QTextEdit that accepts .txt file drops to import content."""
+    """QTextEdit that accepts .txt file drops to import content.
+    
+    Also sanitizes clipboard paste from Google Sheets (HTML <table> → plain text).
+    """
     
     TEXT_EXTENSIONS = {'.txt', '.text', '.csv', '.md', '.log'}
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setAcceptDrops(True)
+        self.setAcceptRichText(False)  # ★ Force plain-text paste (Google Sheets sends HTML <table>)
+    
+    def insertFromMimeData(self, source):
+        """Override paste to sanitize Google Sheets / Excel clipboard content.
+        
+        Google Sheets copies data as HTML (<table><tr><td>...) AND as plain text.
+        By forcing plain-text mode and sanitizing, we ensure proper line breaks.
+        """
+        if source.hasText():
+            text = source.text()
+            # Normalize line endings: \r\n → \n, \r → \n
+            text = text.replace('\r\n', '\n').replace('\r', '\n')
+            # Strip BOM and zero-width chars that Google Sheets may inject
+            text = text.lstrip('\ufeff').replace('\u200b', '').replace('\u00a0', ' ')
+            # Insert as clean plain text
+            from PySide6.QtCore import QMimeData
+            clean = QMimeData()
+            clean.setText(text)
+            super().insertFromMimeData(clean)
+        else:
+            super().insertFromMimeData(source)
     
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():

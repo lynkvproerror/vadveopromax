@@ -236,6 +236,7 @@ class UpscaleQueue:
         on_completed: Optional[Callable] = None,   # engine._on_task_completed
         profiles_controller=None,        # engine._profiles_controller
         extension_bridge=None,           # engine._extension_bridge
+        wake_event: asyncio.Event = None, # T1: event-driven wake from engine
     ):
         """
         Fully decoupled UpscaleQueue — no engine reference.
@@ -286,6 +287,7 @@ class UpscaleQueue:
         self._on_completed = on_completed
         self._profiles_controller = profiles_controller
         self._extension_bridge = extension_bridge
+        self._wake_event = wake_event  # T1: event-driven wake from engine
         
         self._queues: Dict[str, asyncio.Queue] = {}      # email → Queue[UpscaleJob]
         self._upscale_processors: Dict[str, asyncio.Task] = {}       # email → background task
@@ -493,7 +495,17 @@ class UpscaleQueue:
                     if not _was_paused:
                         log.info(f"[UpscaleQueue] {email}: pausing — 720p_priority mode")
                         _was_paused = True
-                    await asyncio.sleep(5)
+                    # T1: Event-driven wake — instant instead of 5s poll
+                    if self._wake_event:
+                        try:
+                            await asyncio.wait_for(
+                                self._wake_event.wait(), timeout=5.0
+                            )
+                        except asyncio.TimeoutError:
+                            pass
+                        self._wake_event.clear()
+                    else:
+                        await asyncio.sleep(5)
                     continue
                 if _was_paused:
                     log.info(f"[UpscaleQueue] {email}: resuming — all 720p downloads complete")
@@ -579,10 +591,23 @@ class UpscaleQueue:
                 log.error(f"[UpscaleQueue] Worker {email} error: {e}")
                 await asyncio.sleep(5)
         
-        # Wait for remaining active jobs
+        # Wait for remaining active jobs (with timeout — don't block forever)
         if active_jobs:
             log.info(f"[UpscaleQueue] Worker {email}: waiting for {len(active_jobs)} active jobs")
-            await asyncio.gather(*active_jobs, return_exceptions=True)
+            # BUG-25: Add timeout to prevent indefinite wait (jobs may be in 30-min poll loops)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*active_jobs, return_exceptions=True),
+                    timeout=60.0,
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    f"[UpscaleQueue] Worker {email}: {len(active_jobs)} jobs "
+                    f"timed out after 60s — cancelling"
+                )
+                for t in active_jobs:
+                    t.cancel()
+                await asyncio.gather(*active_jobs, return_exceptions=True)
         
         log.info(f"[UpscaleQueue] Worker {email} exiting")
     
@@ -593,6 +618,11 @@ class UpscaleQueue:
         Image: synchronous (submit → decode → save)
         Video: 3-phase pipeline (submit-seq → poll-parallel → batch-download)
         """
+        # BUG-06: Early exit if queue was stopped (fire-and-forget tasks survive stop)
+        if not self._running:
+            log.info(f"[UpscaleQueue] Skipping job {job.task_id[:12]} — queue stopped")
+            return
+        
         # Route image upscale to dedicated handler
         if job.job_type == "image":
             self._active_image_jobs += 1
@@ -803,10 +833,19 @@ class UpscaleQueue:
                     f"waiting {warmup_wait}s for reCAPTCHA trust score..."
                 )
                 await asyncio.sleep(warmup_wait)
+                # BUG-27: Check if stopped during warmup sleep
+                if not self._running:
+                    log.info(f"[UpscaleQueue] {account.email}: stopped during warmup")
+                    return
             except Exception as e:
                 log.debug(f"[UpscaleQueue] pre-warm activity failed: {e}")
         
         for local_idx, media_id in enumerate(job.media_ids):
+            # BUG-22: Exit submit loop on stop
+            if not self._running:
+                log.info(f"[UpscaleQueue] Stopped — aborting submit at video {local_idx+1}/{total}")
+                break
+            
             # Map local index back to original video_outputs position
             orig_idx = job.retry_indices[local_idx] if job.retry_indices else local_idx
             video_label = f"{orig_idx + 1}/{len(task.video_outputs)}"
@@ -830,6 +869,10 @@ class UpscaleQueue:
                 # Submit with retry
                 resp = None
                 for attempt in range(max_submit_retries):
+                    # BUG-22: Stop check in inner retry loop
+                    if not self._running:
+                        break
+                    
                     # BUG 1 FIX: Check cooldown before each retry attempt
                     if attempt > 0 and self._is_on_cooldown(job.account_email):
                         await self._wait_cooldown(job.account_email)
@@ -1150,6 +1193,10 @@ class UpscaleQueue:
         
         if not pending_ops:
             # ALL submits failed — try full job retry
+            # BUG-26: Don't re-enqueue if stopped
+            if not self._running:
+                log.info(f"[UpscaleQueue] Stopped — skipping retry for {job.task_id}")
+                return
             if job.retry_count < job.max_retries:
                 job.retry_count += 1
                 retry_delay = 30 * (2 ** (job.retry_count - 1))
@@ -1193,7 +1240,8 @@ class UpscaleQueue:
         
         # ── PARTIAL RETRY: Some submitted OK, some failed ──
         # Schedule retry job for ONLY the failed indices (don't wait for it)
-        if failed_indices and job.retry_count < job.max_retries:
+        # BUG-26: Don't re-enqueue partial retry if stopped
+        if failed_indices and job.retry_count < job.max_retries and self._running:
             retry_media_ids = [job.media_ids[i] for i in failed_indices]
             retry_job = UpscaleJob(
                 task_id=job.task_id,
@@ -1242,6 +1290,10 @@ class UpscaleQueue:
             """
             video_label = f"{idx + 1}/{total}"
             
+            # BUG-23: Exit immediately if stopped
+            if not self._running:
+                return (idx, None)
+            
             # Acquire burst-controlled poll slot
             await self._burst.acquire()
             try:
@@ -1264,7 +1316,8 @@ class UpscaleQueue:
                     await self._burst.record_failure()
                 
                 # Try re-submit once for 1080p (free)
-                if is_free_upscale:
+                # BUG-23: Skip re-submit if stopped
+                if is_free_upscale and self._running:
                     log.info(f"Upscale {video_label}: 1080p poll failed, re-submitting (free)")
                     try:
                         if account.email not in self._rate_locks:
@@ -1370,19 +1423,23 @@ class UpscaleQueue:
         uris_to_download = [(i, u) for i, u in enumerate(upscaled_uris) if u]
         
         if uris_to_download:
-            self._dispatcher.update_progress(
-                task.id, 95, f"⬇️ Downloading {len(uris_to_download)} upscaled videos"
-            )
-            dl_uris = [u for _, u in uris_to_download]
-            dl_paths = await self._download_fn(
-                task, dl_uris,
-                quality_subfolder=job.target_quality,
-                generate_thumbnails=False,
-            )
-            # Map back to original indices
-            for dl_idx, (orig_idx, _) in enumerate(uris_to_download):
-                if dl_idx < len(dl_paths):
-                    upscale_paths[orig_idx] = dl_paths[dl_idx]
+            # BUG-24: Skip download if stopped
+            if not self._running:
+                log.info(f"[UpscaleQueue] Stopped — skipping upscale download")
+            else:
+                self._dispatcher.update_progress(
+                    task.id, 95, f"⬇️ Downloading {len(uris_to_download)} upscaled videos"
+                )
+                dl_uris = [u for _, u in uris_to_download]
+                dl_paths = await self._download_fn(
+                    task, dl_uris,
+                    quality_subfolder=job.target_quality,
+                    generate_thumbnails=False,
+                )
+                # Map back to original indices
+                for dl_idx, (orig_idx, _) in enumerate(uris_to_download):
+                    if dl_idx < len(dl_paths):
+                        upscale_paths[orig_idx] = dl_paths[dl_idx]
         
         # Merge upscaled paths with existing 720p paths
         for i in range(len(task.video_outputs)):
@@ -1404,6 +1461,15 @@ class UpscaleQueue:
         self._sync_status_fn(task)
         
         # === Complete the task (deferred from engine worker) ===
+        # BUG-31: Skip completion if stopped (task stays in current state for requeue)
+        if not self._running:
+            log.info(
+                f"[UpscaleQueue] Stopped — skipping completion for task {job.task_id} "
+                f"(task stays in current state for requeue)"
+            )
+            self._sync_status_fn(task)
+            return
+        
         from core.dispatcher import TaskStage
         any_success = any(p for p in upscale_paths if p)
         task.stage = TaskStage.COMPLETED

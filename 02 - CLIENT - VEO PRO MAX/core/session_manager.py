@@ -216,6 +216,8 @@ class SessionManager:
                     "upscale_error": getattr(task, 'upscale_error', ''),
                     "created_at": task.created_at.isoformat() if hasattr(task.created_at, 'isoformat') else None,
                     "completed_at": task.completed_at.isoformat() if hasattr(task.completed_at, 'isoformat') else None,
+                    # BUG-T4: Include started_at (was missing — timing lost on save/reload)
+                    "started_at": task.started_at.isoformat() if getattr(task, 'started_at', None) and hasattr(task.started_at, 'isoformat') else None,
                     "video_outputs": [
                         {
                             "index": vo.index,

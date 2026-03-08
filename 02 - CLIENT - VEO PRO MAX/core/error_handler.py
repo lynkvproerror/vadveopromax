@@ -27,6 +27,7 @@ class ErrorCategory(str, Enum):
     VALIDATION = "validation"     # Invalid input data
     PROCESSING = "processing"     # Generation/processing errors
     FILE_SYSTEM = "file_system"   # File read/write errors
+    POLICY = "policy"  # VEO content policy / safety filter violations
 
 
 @dataclass

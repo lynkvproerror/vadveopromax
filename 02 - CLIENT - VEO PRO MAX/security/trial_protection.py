@@ -231,30 +231,16 @@ class TrialMarkerManager:
     # =========================================================================
     
     def _write_firebase_marker(self, trial_start: datetime):
-        """Write trial start to Firebase via REST API."""
-        try:
-            from firebase_rest_client import FirebaseRESTClient
-            client = FirebaseRESTClient()
-            mid_hash = hashlib.sha256(self.machine_id.encode()).hexdigest()[:16]
-            client.set_document("_trials", mid_hash, {
-                "start": trial_start.isoformat(),
-                "mid_hash": mid_hash[:8],
-            })
-        except:
-            pass
+        """Write trial start to Firebase via REST API.
+        NOTE: Legacy v1 — disabled. Trial v2 uses register_trial() via admin/seller approve.
+        """
+        pass  # v1 disabled — FirebaseRESTClient has no set_document()
     
     def _read_firebase_marker(self) -> Optional[datetime]:
-        """Read trial start from Firebase via REST API."""
-        try:
-            from firebase_rest_client import FirebaseRESTClient
-            client = FirebaseRESTClient()
-            mid_hash = hashlib.sha256(self.machine_id.encode()).hexdigest()[:16]
-            data = client.get_document("_trials", mid_hash)
-            if data and "start" in data:
-                return datetime.fromisoformat(data["start"])
-        except:
-            pass
-        return None
+        """Read trial start from Firebase via REST API.
+        NOTE: Legacy v1 — disabled. Trial v2 uses check_trial_status() via admin/seller approve.
+        """
+        return None  # v1 disabled — FirebaseRESTClient has no get_document()
     
     # =========================================================================
     # MAIN API

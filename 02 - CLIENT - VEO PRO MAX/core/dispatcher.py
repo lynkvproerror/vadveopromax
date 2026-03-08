@@ -99,6 +99,17 @@ class VideoOutputInfo:
 
 
 @dataclass
+class ImageUploadSlot:
+    """Per-image upload tracking with retry and content hash."""
+    path: str                         # Local file path
+    content_hash: str = ""            # MD5 hash for dedup (computed on first upload)
+    media_id: str = ""                # Server-returned mediaGenerationId
+    status: str = "pending"           # pending | uploading | ready | error
+    retry_count: int = 0              # Number of upload attempts
+    error: str = ""                   # Last error message
+
+
+@dataclass
 class Task:
     """A single generation task."""
     id: str
@@ -152,6 +163,7 @@ class Task:
     
     # Image upload tracking (for UI thumbnail effects)
     image_upload_status: str = ""      # "" | "extracting" | "uploading" | "ready" | "error"
+    image_slots: List['ImageUploadSlot'] = field(default_factory=list)  # Per-image upload state
     
     # Per-video retry link: (original_task_id, video_index) or None
     replace_target: Optional[tuple] = None
@@ -247,7 +259,8 @@ class TaskGroup:
         states = [t.state for t in self.tasks]
         if all(s == TaskState.COMPLETED for s in states):
             return "completed"
-        if any(s == TaskState.RUNNING for s in states):
+        # BUG-T5: WAITING_POLL tasks are actively processing (polling API)
+        if any(s in (TaskState.RUNNING, TaskState.WAITING_POLL) for s in states):
             return "running"
         if any(s == TaskState.FAILED for s in states):
             return "partial_failure"
@@ -751,6 +764,49 @@ class Dispatcher:
             "task_id": task_id, "error": error,
         }, source="dispatcher")
         
+        # BUG-B13 fix: If this is a replacement task, reset parent's video quality
+        # AUTO RE-RETRY: If replacement fails with PUBLIC_ERROR_MINOR, auto re-retry
+        replace_target = task.replace_target
+        if replace_target:
+            orig_task_id, orig_video_idx = replace_target
+            orig_task = self._all_tasks.get(orig_task_id)
+            self._replace_target_map.pop(task_id, None)
+            
+            # Auto re-retry: if error is PUBLIC_ERROR_MINOR and retry count < 2
+            retry_count = getattr(task, '_video_retry_count', 0)
+            is_minor_error = 'PUBLIC_ERROR_MINOR' in error or 'MINOR' in error.upper()
+            if is_minor_error and retry_count < 2 and orig_task:
+                log.info(f"[Dispatcher] PUBLIC_ERROR_MINOR on replacement {task_id} "
+                         f"— auto re-retry (attempt {retry_count + 1}/2)")
+                # Reset parent video to 'failed' first so force_retry_video picks it up
+                if orig_video_idx < len(orig_task.video_outputs):
+                    vo = orig_task.video_outputs[orig_video_idx]
+                    if vo.quality == 'retrying':
+                        vo.quality = 'failed'
+                # Schedule auto re-retry
+                success = self.force_retry_video(orig_task_id, orig_video_idx)
+                if success:
+                    # Track retry count on the new replacement task
+                    new_rep_id = None
+                    for rep_id, (oid, vidx) in self._replace_target_map.items():
+                        if oid == orig_task_id and vidx == orig_video_idx:
+                            new_rep_id = rep_id
+                            break
+                    if new_rep_id and new_rep_id in self._all_tasks:
+                        self._all_tasks[new_rep_id]._video_retry_count = retry_count + 1
+                    log.info(f"[Dispatcher] ♻️ Auto re-retry initiated for {orig_task_id} "
+                             f"video[{orig_video_idx}] (attempt {retry_count + 1})")
+                    return  # Don't reset to 'failed', re-retry is in progress
+            
+            # Normal failure: reset parent video quality
+            if orig_task and orig_video_idx < len(orig_task.video_outputs):
+                vo = orig_task.video_outputs[orig_video_idx]
+                if vo.quality == 'retrying':
+                    vo.quality = 'failed'
+                    vo.upscale_error = f"Retry failed: {error[:80]}"
+                    log.info(f"[Dispatcher] Reset parent {orig_task_id} video[{orig_video_idx}] "
+                             f"quality retrying→failed (replacement failed)")
+        
         # C1: Cascade-fail ALL descendants waiting on this parent (recursive)
         self._cascade_fail_children(task_id, error)
     
@@ -803,8 +859,77 @@ class Dispatcher:
             self._decrement_account_running(task.assigned_account)
         
         log.info(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
+        
+        # BUG-B14 fix: If this is a replacement task, reset parent's video quality
+        replace_target = task.replace_target
+        if replace_target:
+            orig_task_id, orig_video_idx = replace_target
+            orig_task = self._all_tasks.get(orig_task_id)
+            if orig_task and orig_video_idx < len(orig_task.video_outputs):
+                vo = orig_task.video_outputs[orig_video_idx]
+                if vo.quality == 'retrying':
+                    vo.quality = 'failed'
+                    log.info(f"[Dispatcher] Reset parent {orig_task_id} video[{orig_video_idx}] "
+                             f"quality retrying→failed (replacement cancelled)")
+            self._replace_target_map.pop(task_id, None)
+        
         emit_event(EventType.QUEUE_UPDATED, {
             "action": "cancel", "task_id": task_id,
+        }, source="dispatcher")
+        return True
+    
+    def remove_task(self, task_id: str) -> bool:
+        """Remove a task completely from the queue (cancel + delete).
+        
+        BUG-B1 fix: Safe API for UI delete — handles all cleanup:
+        - Cancels running/polling tasks (decrement counters)
+        - Removes from _all_tasks and containing group
+        - Cleans up empty groups
+        - BUG-B17: Also cancels/removes any replacement tasks targeting this parent
+        
+        Returns True if task was found and removed.
+        """
+        task = self._all_tasks.get(task_id)
+        if not task:
+            return False
+        
+        # BUG-B17 fix: Cancel orphan replacement tasks targeting this parent
+        orphan_ids = [
+            rep_id for rep_id, (orig_id, _) in list(self._replace_target_map.items())
+            if orig_id == task_id
+        ]
+        for orphan_id in orphan_ids:
+            orphan = self._all_tasks.get(orphan_id)
+            if orphan:
+                if orphan.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                    self._running_count = max(0, self._running_count - 1)
+                    self._decrement_account_running(orphan.assigned_account)
+                orphan.state = TaskState.CANCELLED
+                self._all_tasks.pop(orphan_id, None)
+                for group in self._task_groups.values():
+                    group.tasks = [t for t in group.tasks if t.id != orphan_id]
+            self._replace_target_map.pop(orphan_id, None)
+        
+        # Cancel first (handles running_count, per_account, waiting_tasks)
+        self.cancel_task(task_id)
+        
+        # Remove from _all_tasks
+        self._all_tasks.pop(task_id, None)
+        
+        # Remove from containing group
+        empty_groups = []
+        for gid, group in self._task_groups.items():
+            group.tasks = [t for t in group.tasks if t.id != task_id]
+            if not group.tasks:
+                empty_groups.append(gid)
+        
+        # Clean up empty groups
+        for gid in empty_groups:
+            del self._task_groups[gid]
+        
+        log.info(f"[Dispatcher] Removed task {task_id}")
+        emit_event(EventType.QUEUE_UPDATED, {
+            "action": "remove", "task_id": task_id,
         }, source="dispatcher")
         return True
     
@@ -865,8 +990,8 @@ class Dispatcher:
                 task.continuation_frame_local_path = frame_local_path
                 task.image_upload_status = "uploading"
         
-        # Trigger UI refresh so thumbnails update
-        if child_ids and self._on_queue_updated:
+        # Trigger UI refresh so thumbnails update (safe: _on_queue_updated may not exist on Dispatcher)
+        if child_ids and hasattr(self, '_on_queue_updated') and self._on_queue_updated:
             self._on_queue_updated({
                 "event": "frame_preview",
                 "parent_id": parent_id,
@@ -937,6 +1062,20 @@ class Dispatcher:
             # so status_text changes (e.g. "⬆️ Re-upscaling...") reach the UI
             if hasattr(self, '_on_progress_callback') and self._on_progress_callback:
                 self._on_progress_callback(task_id, task.progress, status_text)
+                
+                # Forward replacement task progress to PARENT task's UI row.
+                # Replacement tasks are hidden from the UI (filtered in get_queue_groups),
+                # so their parent row won't refresh unless we notify for the parent ID too.
+                if task.replace_target:
+                    orig_id, _ = task.replace_target
+                    orig_task = self._all_tasks.get(orig_id)
+                    if orig_task:
+                        # Store replacement progress on parent for UI to read
+                        orig_task._retry_progress = task.progress
+                        orig_task._retry_status_text = status_text
+                        self._on_progress_callback(
+                            orig_id, orig_task.progress, status_text
+                        )
     
     def set_progress_callback(self, callback):
         """Register callback for progress updates: callback(task_id, progress, status_text)."""
@@ -951,15 +1090,24 @@ class Dispatcher:
         return self._task_groups.get(group_id)
     
     def remove_group(self, group_id: str) -> bool:
-        """Remove a task group by ID.
+        """Remove a task group and ALL its tasks.
         
-        Callers should cancel all tasks in the group first.
+        BUG-B6 fix: Also removes tasks from _all_tasks (was leaving orphans).
+        Cancels running tasks first so counters stay accurate.
         Returns True if group was found and removed.
         """
-        if group_id in self._task_groups:
-            self._task_groups.pop(group_id, None)
-            return True
-        return False
+        group = self._task_groups.get(group_id)
+        if not group:
+            return False
+        
+        # Remove each task properly (cancel + remove from _all_tasks)
+        for task in group.tasks:
+            self.cancel_task(task.id)  # Handle running counters
+            self._all_tasks.pop(task.id, None)
+        
+        self._task_groups.pop(group_id, None)
+        log.info(f"[Dispatcher] Removed group {group_id} with {len(group.tasks)} tasks")
+        return True
     
     def get_status_summary(self) -> dict:
         """Get queue status summary."""
@@ -1081,6 +1229,8 @@ class Dispatcher:
         ]
         for tid in completed_ids:
             del self._all_tasks[tid]
+            # BUG-B18 fix: Clean stale _replace_target_map entries
+            self._replace_target_map.pop(tid, None)
     
     def get_all_tasks(self) -> List[Task]:
         """Get all tasks for UI display."""
@@ -1127,6 +1277,76 @@ class Dispatcher:
         if self._has_failed_descendants(task_id):
             return self.retry_chain(task_id)
         
+        # ── Continuation child: special handling ──
+        if task.parent_task_id:
+            parent = self._all_tasks.get(task.parent_task_id)
+            if parent and parent.state == TaskState.COMPLETED:
+                # Parent done → need fresh frame from parent's video
+                task.continuation_frame_uri = None
+                task.continuation_frame_local_path = None
+                task.image_uris = []
+                task.image_upload_status = ""
+                # Find best video from parent for frame extraction
+                best_video = None
+                for vo in parent.video_outputs:
+                    f = vo.best_file
+                    if f:
+                        best_video = f
+                        break
+                if not best_video:
+                    for uri in parent.output_uris:
+                        if uri:
+                            best_video = uri
+                            break
+                if best_video:
+                    task._pending_frame_source = best_video
+                    log.info(
+                        f"[Dispatcher] Retry child {task_id}: "
+                        f"frame source set → {best_video}"
+                    )
+                task.state = TaskState.READY
+                task.error = None
+                task.progress = 0
+                task.stage = TaskStage.INIT
+                task.retry_attempts += 1
+                task.required_account = None
+                self._queued_task_ids.discard(task.id)
+                self._enqueue_task(task, priority=0)
+                if self._on_task_ready:
+                    self._on_task_ready(task)
+                return True
+            elif not parent or parent.state == TaskState.FAILED:
+                # Parent failed → must retry the whole chain from root
+                root_id = task.parent_task_id
+                # Walk up to find the chain root
+                while True:
+                    root = self._all_tasks.get(root_id)
+                    if root and root.parent_task_id:
+                        root_id = root.parent_task_id
+                    else:
+                        break
+                return self.retry_chain(root_id)
+            else:
+                # Parent still running → put child back to WAITING
+                task.state = TaskState.WAITING
+                task.error = None
+                task.progress = 0
+                task.continuation_frame_uri = None
+                task.continuation_frame_local_path = None
+                task.image_uris = []
+                self._waiting_tasks[task.id] = task
+                pid = task.parent_task_id
+                if pid not in self._parent_to_children:
+                    self._parent_to_children[pid] = []
+                if task.id not in self._parent_to_children[pid]:
+                    self._parent_to_children[pid].append(task.id)
+                log.info(
+                    f"[Dispatcher] Retry child {task_id}: parent still "
+                    f"{parent.state.value} → WAITING"
+                )
+                return True
+        
+        # ── Standard (non-continuation) retry ──
         task.state = TaskState.READY
         task.error = None
         task.progress = 0
@@ -1284,7 +1504,7 @@ class Dispatcher:
         
         self._queued_task_ids.discard(task.id)  # Allow re-enqueue
         self._enqueue_task(task, priority=0)  # High priority: was already running
-        log.info(
+        log.debug(
             f"[Dispatcher] 🔄 requeue_task({task.id}): "
             f"{prev_state.value if hasattr(prev_state, 'value') else prev_state} → READY, "
             f"account={prev_account} → None, "
@@ -1339,6 +1559,41 @@ class Dispatcher:
                     count += 1
         return count
     
+    def force_retry_all_failed_videos(self) -> int:
+        """Force retry ALL failed video slots across all tasks.
+        
+        Scans all tasks (including COMPLETED) for video_outputs with
+        quality='failed'. Creates replacement tasks for each failed video.
+        
+        This handles:
+        - Tasks that completed with some videos failed
+        - Tasks where previous retry attempts failed
+        - Replacement tasks that failed with PUBLIC_ERROR_MINOR
+        
+        Returns:
+            Total number of failed videos retried.
+        """
+        retried = 0
+        for task in list(self._all_tasks.values()):
+            # Skip replacement tasks (they're children, not originals)
+            if task.replace_target:
+                continue
+            # Skip running/cancelled tasks
+            if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL, TaskState.CANCELLED):
+                continue
+            
+            if not task.video_outputs:
+                continue
+            
+            for i, vo in enumerate(task.video_outputs):
+                if vo.quality == 'failed':
+                    if self.force_retry_video(task.id, i):
+                        retried += 1
+        
+        if retried > 0:
+            log.info(f"[Dispatcher] ♻️ force_retry_all_failed_videos: retried {retried} video(s)")
+        return retried
+    
     def force_retry_task(self, task_id: str) -> bool:
         """Backward-compatible wrapper. Use retry_task(task_id, force=True) instead."""
         return self.retry_task(task_id, force=True)
@@ -1372,6 +1627,31 @@ class Dispatcher:
                 self._on_cancel_upscale(task_id)
             except Exception as e:
                 log.warning(f"[ForceRetry] cancel_upscale error: {e}")
+        
+        # ── BUG-B10+B11: Cancel all replacement tasks for this parent ──
+        # force_retry_video() creates replacement tasks linked via _replace_target_map.
+        # If the parent is now force-retried (full re-gen), replacement tasks become
+        # orphans that would waste API credits and crash on completion (IndexError
+        # when writing to cleared video_outputs).
+        orphan_ids = [
+            rep_id for rep_id, (orig_id, _) in list(self._replace_target_map.items())
+            if orig_id == task_id
+        ]
+        for orphan_id in orphan_ids:
+            orphan = self._all_tasks.get(orphan_id)
+            if orphan:
+                if orphan.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                    self._running_count = max(0, self._running_count - 1)
+                    self._decrement_account_running(orphan.assigned_account)
+                orphan.state = TaskState.CANCELLED
+                self._all_tasks.pop(orphan_id, None)
+                # Remove from group
+                for group in self._task_groups.values():
+                    group.tasks = [t for t in group.tasks if t.id != orphan_id]
+                log.info(f"[ForceRetry] Cancelled orphan replacement {orphan_id}")
+            self._replace_target_map.pop(orphan_id, None)
+        if orphan_ids:
+            log.info(f"[ForceRetry] Cleaned {len(orphan_ids)} replacement task(s) for {task_id}")
         
         # ── Identify continuation children (before deleting outputs) ──
         children_ids = [
@@ -1441,7 +1721,40 @@ class Dispatcher:
         if task.parent_task_id:
             parent = self._all_tasks.get(task.parent_task_id)
             parent_done = parent and parent.state == TaskState.COMPLETED if parent else True
-            if parent_done:
+            if parent_done and parent:
+                # ★ FRAME RECOVERY: Parent is COMPLETED → extract frame from parent's video
+                # Without this, child goes READY with NO continuation frame → Missing Image error
+                best_video = None
+                for vo in parent.video_outputs:
+                    f = vo.best_file
+                    if f:
+                        import os as _os
+                        if _os.path.isfile(f):
+                            best_video = f
+                            break
+                if not best_video:
+                    for uri in parent.output_uris:
+                        if uri:
+                            import os as _os
+                            if _os.path.isfile(uri):
+                                best_video = uri
+                                break
+                if best_video:
+                    task._pending_frame_source = best_video
+                    task.state = TaskState.READY
+                    log.info(
+                        f"[ForceRetry] Child {task_id}: parent COMPLETED → "
+                        f"frame recovery from {best_video}"
+                    )
+                else:
+                    # Parent's video files missing → must wait for parent re-gen
+                    task.state = TaskState.WAITING
+                    log.warning(
+                        f"[ForceRetry] Child {task_id}: parent COMPLETED but "
+                        f"no video files found → WAITING"
+                    )
+            elif parent_done:
+                # parent_done=True but parent is None (orphan) → try READY
                 task.state = TaskState.READY
             else:
                 # Parent not completed → child must WAIT, not run immediately
@@ -1453,8 +1766,11 @@ class Dispatcher:
         task.error = None
         task.retry_attempts = 0
         task.chain_retry_count = 0          # Reset auto-retry counter too
+        task.dl_retry_generation_count = 0  # Reset download-failure re-gen counter
+        task.status_text = ""               # Clear stale UI status text
         task.started_at = None
         task.completed_at = None
+        task.excluded_accounts = set()      # Allow any account to pick up
         # prompt_index intentionally preserved for correct file naming (NNN_*)
         # image_paths intentionally preserved (local source files, not generated data)
         # parent_task_id intentionally preserved (structural relationship)
@@ -1552,10 +1868,13 @@ class Dispatcher:
                 child.error = None
                 child.retry_attempts = 0
                 child.chain_retry_count = 0
+                child.dl_retry_generation_count = 0
+                child.status_text = ""
                 child.started_at = None
                 child.completed_at = None
                 child.assigned_account = None
                 child.required_account = None
+                child.excluded_accounts = set()
                 
                 # Put back in waiting_tasks
                 self._waiting_tasks[desc_id] = child
@@ -1758,9 +2077,12 @@ class Dispatcher:
             key=lambda g: g.created_at
         )
         for group in sorted_groups:
-            for task in group.tasks:
+            for task in list(group.tasks):  # BUG-B9: snapshot for iteration safety
                 # Skip completed and running tasks — only retry failed/pending/cancelled
                 if task.state not in (TaskState.RUNNING, TaskState.COMPLETED, TaskState.WAITING_POLL):
+                    # BUG-B16 fix: Skip replacement tasks (they'll be cleaned by parent's retry)
+                    if task.replace_target:
+                        continue
                     if self.force_retry_task(task.id):
                         count += 1
         return count
@@ -1784,6 +2106,7 @@ class Dispatcher:
         
         self._task_groups.clear()
         self._all_tasks.clear()
+        self._replace_target_map.clear()  # BUG-B20 fix: Clean stale replacement mappings
         # Drain the ready queue
         while not self._ready_queue.empty():
             try:
@@ -1930,13 +2253,16 @@ class Dispatcher:
                 if rt:
                     if isinstance(rt, (list, tuple)) and len(rt) == 2:
                         task.replace_target = tuple(rt)
+                        # BUG-B15 fix: Rebuild _replace_target_map from field
+                        self._replace_target_map[task.id] = task.replace_target
                         log.info(f"[SessionRestore] Task {task.id}: restored replace_target → "
                                  f"({rt[0]}, video[{rt[1]}])")
                     else:
                         log.warning(f"[SessionRestore] Task {task.id}: invalid replace_target format: {rt!r}")
                         task.replace_target = None
                 # Restore timestamps
-                for ts_field in ("created_at", "completed_at"):
+                # BUG-T6: Include started_at (was missing — timing lost on reload)
+                for ts_field in ("created_at", "completed_at", "started_at"):
                     ts_val = td.get(ts_field)
                     if ts_val:
                         try:
