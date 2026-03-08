@@ -7,6 +7,8 @@ from security.license_client import LicenseClient, LicenseInfo, UsageStats
 from .firebase_rest_client import FirebaseRESTClient, FirebaseConfig, LicenseData
 from .permissions import PermissionsSystem, Role, Feature, RoleLimits
 from .image_library import ImageLibrary, LibraryImage, get_image_library
+from .gemini_client import GeminiClient, GeminiAPIError, RateLimitError, InvalidKeyError
+from .gemini_key_manager import GeminiKeyManager
 
 __all__ = [
     # License (from security/)
@@ -29,5 +31,12 @@ __all__ = [
     "ImageLibrary",
     "LibraryImage",
     "get_image_library",
+    
+    # Gemini AI
+    "GeminiClient",
+    "GeminiAPIError",
+    "RateLimitError",
+    "InvalidKeyError",
+    "GeminiKeyManager",
 ]
 

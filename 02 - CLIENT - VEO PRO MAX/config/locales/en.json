@@ -15,6 +15,7 @@
             "Stay endlessly creative!"
         ],
         "tabs": {
+            "project": "Project Builder",
             "t2v": "Text to Video",
             "i2v": "Image to Video",
             "r2v": "Ingredients",
@@ -219,11 +220,11 @@
         "add_to_queue": "📋 Add to Queue"
     },
     "settings_buttons": {
-        "save_all": "💾 Save All",
-        "reset_defaults": "🔄 Reset Defaults",
-        "export_config": "📤 Export Config",
-        "import_config": "📥 Import Config",
-        "reload_app": "🔄 Reload App"
+        "save_all": "Save All",
+        "reset_defaults": "Reset Defaults",
+        "export_config": "Export Config",
+        "import_config": "Import Config",
+        "reload_app": "Reload App"
     },
     "queue": {
         "title": "📋 QUEUE",

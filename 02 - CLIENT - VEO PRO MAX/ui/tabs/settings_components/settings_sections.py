@@ -102,7 +102,7 @@ class SettingsSectionsMixin:
         # Image: AI Model
         img_model_options = [
             "🔥 Nano Banana Pro",
-            "🔥 Nano Banana",
+            "🔥 Nano Banana 2",
             "Imagen 4",
         ]
         combo = self._create_setting_row(layout, t("settings.defaults_sub.image_model"), img_model_options)
@@ -237,10 +237,17 @@ class SettingsSectionsMixin:
             import logging
             settings = _gs()
             settings.output_folder = self.output_folder_entry.text()
-            settings.include_timestamp = self.output_toggles.get("Include timestamp in filename").isChecked() if "Include timestamp in filename" in self.output_toggles else True
-            settings.include_quality = self.output_toggles.get("Include quality in filename").isChecked() if "Include quality in filename" in self.output_toggles else True
-            settings.auto_start_queue = self.output_toggles.get("Auto-start queue when adding").isChecked() if "Auto-start queue when adding" in self.output_toggles else False
-            settings.pause_on_error = self.output_toggles.get("Pause on error").isChecked() if "Pause on error" in self.output_toggles else True
+            # B1 fix: match toggle keys by substring (i18n-safe)
+            for key, toggle in self.output_toggles.items():
+                k_lower = key.lower()
+                if "timestamp" in k_lower:
+                    settings.include_timestamp = toggle.isChecked()
+                elif "quality" in k_lower:
+                    settings.include_quality = toggle.isChecked()
+                elif "auto" in k_lower and "start" in k_lower:
+                    settings.auto_start_queue = toggle.isChecked()
+                elif "pause" in k_lower:
+                    settings.pause_on_error = toggle.isChecked()
             settings.save()
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save output settings: {e}')

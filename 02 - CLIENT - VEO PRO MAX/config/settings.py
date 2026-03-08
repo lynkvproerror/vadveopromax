@@ -7,10 +7,10 @@ Reference: TAB_07_SETTINGS.md
 import json
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from typing import Optional
+from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 9
+SETTINGS_VERSION = 10
 
 
 @dataclass
@@ -33,6 +33,24 @@ class AppSettings:
     default_image_quality: str = "1k"            # Image download quality
     default_image_model: str = "🔥 Nano Banana Pro"  # Image AI model display name
     auto_enhance_prompt: bool = False
+    
+    # === GEMINI AI ===
+    prompt_enhance_enabled: bool = True       # Master toggle for Gemini features
+    prompt_auto_enhance: bool = False          # Auto-enhance prompts before VEO submit
+    prompt_auto_fix: bool = True              # Auto-fix policy-blocked prompts
+    
+    # === PROJECT BUILDER ===
+    workflow_template_sources: List[str] = field(default_factory=list)
+    workflow_rules_sources: List[str] = field(default_factory=list)
+    project_default_scenes: int = 10
+    project_output_base: str = ""
+    
+    # === PROJECT BUILDER AI ===
+    pb_ai_source: str = "account"         # "account" = use profile Gemini keys, "custom" = external API
+    pb_ai_provider: str = "Google"        # Provider: Google, OpenAI, Anthropic, DeepSeek, xAI, Mistral, OpenRouter
+    pb_ai_model: str = "gemini-3.1-flash-lite-preview" # Model for AI (500 RPD free tier)
+    pb_ai_base_url: str = ""              # Custom base URL (auto-filled per provider, user-editable)
+    pb_ai_custom_keys: List[str] = field(default_factory=list)  # Custom API keys (round-robin)
     
     # === QUEUE ===
     auto_start_queue: bool = False
@@ -69,8 +87,8 @@ class AppSettings:
     use_persistent_profile: bool = True
     
     # === BROWSER VISIBILITY ===
-    smart_hide_enabled: bool = True             # ON = hide on success, show on 403 error; OFF = always visible
-    hide_all_browsers: bool = False              # ON = hide ALL browsers after startup; overrides smart_hide
+    smart_hide_enabled: bool = False            # ON = hide on success, show on 403 error; OFF = always visible
+    hide_all_browsers: bool = True               # ON = hide ALL browsers after startup; overrides smart_hide
     
     # === CONTINUATION ===
     continuation_enabled: bool = True
@@ -84,9 +102,9 @@ class AppSettings:
     recaptcha_pool_size: int = 2
     watchdog_timeout_min: int = 10           # minutes
     journal_save_interval_sec: int = 30      # seconds
-    workload_priority: str = "720p_priority" # 720p_priority | upscale_priority
+    workload_priority: str = "upscale_priority" # 720p_priority | upscale_priority
     auto_retry_download: bool = True         # Auto re-generate when 720p download fails
-    auto_retry_download_max: int = 3         # Max re-generation attempts before marking failed
+    auto_retry_download_max: int = 5         # Max re-generation attempts before marking failed
     prewarm_enabled: bool = True              # Pre-warm reCAPTCHA after idle period
     prewarm_idle_threshold: int = 10          # minutes — trigger soft recovery if idle > this
     smart_recovery_enabled: bool = True       # Smart Recovery: Credit Window + Diagnose-Remedy
@@ -94,8 +112,8 @@ class AppSettings:
     credit_probe_after: int = 3               # credits threshold for probe request
     
     # === ENHANCER IMAGE (AI Upscale — Real-ESRGAN + GFPGAN) ===
-    enhance_context_menu: bool = True        # Toggle 1: Right-click → ✨ Enhance Image
-    enhance_library: bool = True             # Toggle 2: Library toolbar enhance button
+    enhance_context_menu: bool = False        # Toggle 1: Right-click → ✨ Enhance Image
+    enhance_library: bool = False             # Toggle 2: Library toolbar enhance button
     enhance_auto_continuation: bool = False  # Toggle 3: Auto-enhance continuation frames (BETA)
     
     # === UI ===
@@ -217,6 +235,16 @@ class AppSettings:
             # 8 → 9: Add auto_update_enabled
             8: lambda d: {**d,
                 'auto_update_enabled': True,
+            },
+            # 9 → 10: Add Gemini AI + Project Builder fields
+            9: lambda d: {**d,
+                'prompt_enhance_enabled': True,
+                'prompt_auto_enhance': False,
+                'prompt_auto_fix': True,
+                'workflow_template_sources': [],
+                'workflow_rules_sources': [],
+                'project_default_scenes': 10,
+                'project_output_base': '',
             },
         }
         

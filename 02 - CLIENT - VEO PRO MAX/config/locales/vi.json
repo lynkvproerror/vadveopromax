@@ -15,6 +15,7 @@
             "Chúc bạn sáng tạo bất tận!"
         ],
         "tabs": {
+            "project": "Project Builder",
             "t2v": "Văn bản → Video",
             "i2v": "Ảnh → Video",
             "r2v": "Tổng hợp → Video",
@@ -219,11 +220,11 @@
         "add_to_queue": "📋 Thêm vào hàng đợi"
     },
     "settings_buttons": {
-        "save_all": "💾 Lưu tất cả",
-        "reset_defaults": "🔄 Đặt lại mặc định",
-        "export_config": "📤 Xuất cài đặt",
-        "import_config": "📥 Nhập cài đặt",
-        "reload_app": "🔄 Tải lại ứng dụng"
+        "save_all": "Lưu tất cả",
+        "reset_defaults": "Đặt lại mặc định",
+        "export_config": "Xuất cài đặt",
+        "import_config": "Nhập cài đặt",
+        "reload_app": "Tải lại ứng dụng"
     },
     "queue": {
         "title": "📋 HÀNG ĐỢI",

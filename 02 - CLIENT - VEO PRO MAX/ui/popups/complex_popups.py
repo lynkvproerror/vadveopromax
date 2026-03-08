@@ -43,7 +43,7 @@ class EditPromptPopup(BasePopup):
         self.prompt_text = prompt_text
         self.on_save = on_save
         
-        super().__init__(parent, title=f"📝 EDIT PROMPT - Row #{row_index}", width=500, height=280)
+        super().__init__(parent, title=f"📝 EDIT PROMPT - Row #{row_index}", width=560, height=320)
     
     def _create_content(self):
         """Create prompt editor."""
@@ -76,6 +76,30 @@ class EditPromptPopup(BasePopup):
         
         self.footer_layout.addStretch()
         
+        # Gemini AI buttons (left side)
+        self.enhance_btn = QPushButton("✨ Enhance")
+        self.enhance_btn.setStyleSheet(
+            f"background-color: {Theme.PURPLE}; color: #1e1e2e; font-weight: bold;"
+        )
+        self.enhance_btn.setToolTip("Enhance prompt with better visual details via Gemini AI")
+        self.enhance_btn.clicked.connect(self._on_enhance)
+        self.footer_layout.addWidget(self.enhance_btn)
+        
+        self.fix_btn = QPushButton("🔧 Fix")
+        self.fix_btn.setStyleSheet(
+            f"background-color: {Theme.PEACH}; color: #1e1e2e; font-weight: bold;"
+        )
+        self.fix_btn.setToolTip("Fix prompt to avoid policy violations via Gemini AI")
+        self.fix_btn.clicked.connect(self._on_fix)
+        self.footer_layout.addWidget(self.fix_btn)
+        
+        # Status label (for loading indicator)
+        self._ai_status = QLabel("")
+        self._ai_status.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        self.footer_layout.addWidget(self._ai_status)
+        
+        self.footer_layout.addStretch()
+        
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setProperty("variant", "secondary")
         cancel_btn.clicked.connect(self._on_close)
@@ -105,6 +129,103 @@ class EditPromptPopup(BasePopup):
             self.on_save(self.row_index, text)
         
         self.accept()
+    
+    def _on_enhance(self):
+        """Enhance prompt via Gemini AI."""
+        self._run_gemini(mode="enhance")
+    
+    def _on_fix(self):
+        """Fix policy-blocked prompt via Gemini AI."""
+        self._run_gemini(mode="fix")
+    
+    def _run_gemini(self, mode: str):
+        """Run Gemini AI enhance/fix in background thread."""
+        prompt = self.prompt_textbox.toPlainText().strip()
+        if not prompt:
+            self._ai_status.setText("⚠️ No prompt")
+            return
+        
+        # Disable buttons during processing
+        self.enhance_btn.setEnabled(False)
+        self.fix_btn.setEnabled(False)
+        self._ai_status.setText("⏳ Processing...")
+        self._ai_status.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
+        
+        import threading
+        threading.Thread(
+            target=self._gemini_worker,
+            args=(prompt, mode),
+            daemon=True,
+        ).start()
+    
+    def _gemini_worker(self, prompt: str, mode: str):
+        """Background worker: call Gemini API."""
+        import asyncio
+        result = None
+        error = None
+        
+        try:
+            from services.gemini_key_manager import GeminiKeyManager
+            from core.prompt_enhancer import PromptEnhancer
+            
+            mgr = GeminiKeyManager()
+            enhancer = PromptEnhancer()
+            
+            # Find any available key
+            api_key = mgr.get_rotation_key()
+            if not api_key:
+                error = "No Gemini API key available"
+            else:
+                loop = asyncio.new_event_loop()
+                try:
+                    if mode == "enhance":
+                        result = loop.run_until_complete(
+                            enhancer.enhance(prompt, api_key)
+                        )
+                    elif mode == "fix":
+                        result = loop.run_until_complete(
+                            enhancer.fix_policy(
+                                prompt,
+                                "Preemptive cleanup — replace only words that may trigger Google content policy while keeping everything else exactly the same",
+                                api_key,
+                            )
+                        )
+                finally:
+                    loop.close()
+        except Exception as e:
+            error = str(e)
+        
+        # Update UI in main thread
+        from PySide6.QtCore import QMetaObject, Qt as QtFlags, Q_ARG
+        QMetaObject.invokeMethod(
+            self, "_gemini_done",
+            QtFlags.QueuedConnection,
+            Q_ARG(str, result or ""),
+            Q_ARG(str, error or ""),
+            Q_ARG(str, mode),
+        )
+    
+    from PySide6.QtCore import Slot
+    
+    @Slot(str, str, str)
+    def _gemini_done(self, result: str, error: str, mode: str):
+        """Handle Gemini API result (main thread)."""
+        self.enhance_btn.setEnabled(True)
+        self.fix_btn.setEnabled(True)
+        
+        if error:
+            self._ai_status.setText(f"❌ {error[:40]}")
+            self._ai_status.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
+            return
+        
+        if result:
+            self.prompt_textbox.setPlainText(result)
+            label = "Enhanced" if mode == "enhance" else "Fixed"
+            self._ai_status.setText(f"✅ {label}!")
+            self._ai_status.setStyleSheet(f"color: {Theme.GREEN}; font-size: 11px;")
+        else:
+            self._ai_status.setText("⚠️ No result")
+            self._ai_status.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
 
 
 class AddProfileDialog(BasePopup):

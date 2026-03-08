@@ -203,16 +203,22 @@ class TabSettings(
         continuation_widget = self._create_continuation_section()
         layout.addWidget(continuation_widget)                # Smooth Continuation (self-guarded for Trial)
         
-        # ── 3. OUTPUT ──
+        # ── 3. AI & PRODUCTION ──
+        layout.addWidget(self._create_gemini_ai_section())    # Gemini AI: Enhance & Fix + Project Builder AI
+        # REMOVED: Project Builder section — bundled data/workflows/ auto-loads,
+        # these settings were confusing (showing '0 folder(s)' when data exists).
+        # layout.addWidget(self._create_project_builder_section())
+        
+        # ── 4. OUTPUT ──
         layout.addWidget(self._create_output_section())      # Output Settings (All)
         # Post-Queue Action: backend preserved, hidden from UI
         self._post_queue_section = self._create_post_queue_section()
         
-        # ── 4. BROWSER & SECURITY ──
+        # ── 5. BROWSER & SECURITY ──
         layout.addWidget(self._create_browser_visibility_section())  # Smart Hide (All)
         layout.addWidget(self._create_worker_section())              # Worker Settings + Anti-Detect (All)
         
-        # ── 5. UX & APPEARANCE ──
+        # ── 6. UX & APPEARANCE ──
         layout.addWidget(self._create_notification_section())# Notifications (All)
         layout.addWidget(self._create_ui_section())          # UI Theme (All)
         layout.addWidget(self._create_update_section())      # Auto-Update (All)
@@ -227,13 +233,18 @@ class TabSettings(
             layout.addWidget(w)
             self._tester_sections.append(w)
         
-        layout.addWidget(self._create_action_buttons())      # core
+        # (Action buttons moved to sticky bar below scroll area)
 
         # All sections built — allow auto-save signals now
         self._initializing = False
 
         layout.addStretch()
         scroll.setWidget(container)
+
+        # ── Sticky action buttons bar (OUTSIDE scroll area) ──
+        # This ensures Save/Reset/Export/Import/Reload are always visible
+        sticky_bar = self._create_sticky_action_bar()
+        main_layout.addWidget(sticky_bar)
 
     # ── Section helper (used by mixins) ─────────────────────
 
@@ -333,6 +344,531 @@ class TabSettings(
         row.addStretch()
         return switch
 
+    # ── AI Settings Section ────────────────────────────────────
+
+    def _create_gemini_ai_section(self) -> QFrame:
+        """Create AI settings section with 2 panels: Queue + Project Builder."""
+        from PySide6.QtWidgets import QTextEdit, QRadioButton, QButtonGroup, QLineEdit
+        from config.settings import get_settings
+        s = get_settings()
+
+        section, layout = self._create_section("🤖 AI Prompt Processing")
+
+        # ════════════════════════════════════════════════════════
+        # PANEL 1: Queue — Enhance / Fix (per-profile account keys)
+        # ════════════════════════════════════════════════════════
+        q_header = QLabel("✨ Queue: Auto Enhance & Fix")
+        q_header.setStyleSheet(
+            f"color: {Theme.BLUE}; font-size: 13px; font-weight: bold; "
+            f"margin-top: 4px;"
+        )
+        layout.addWidget(q_header)
+
+        q_desc = QLabel(
+            "Sử dụng Gemini API key từ các profile đã thêm.\n"
+            "Ưu tiên Pro (chất lượng cao) → tự động chuyển Flash nếu hết quota."
+        )
+        q_desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        q_desc.setWordWrap(True)
+        layout.addWidget(q_desc)
+
+        # Master toggle
+        self.gemini_enable_switch = self._create_enable_row(
+            "Bật tính năng",
+            checked=getattr(s, 'prompt_enhance_enabled', False),
+            bold=True
+        )
+        layout.addLayout(self.gemini_enable_switch._row_layout)
+
+        # Auto-enhance toggle
+        self.gemini_auto_enhance = self._create_enable_row(
+            "Auto Enhance",
+            checked=getattr(s, 'prompt_auto_enhance', False),
+        )
+        layout.addLayout(self.gemini_auto_enhance._row_layout)
+
+        # Auto-fix toggle
+        self.gemini_auto_fix = self._create_enable_row(
+            "Auto Fix Policy",
+            checked=getattr(s, 'prompt_auto_fix', False),
+        )
+        layout.addLayout(self.gemini_auto_fix._row_layout)
+
+        # Separator
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background-color: {Theme.SURFACE2}; margin: 8px 0;")
+        layout.addWidget(sep)
+
+        # ════════════════════════════════════════════════════════
+        # PANEL 2: Project Builder — model + API source selection
+        # ════════════════════════════════════════════════════════
+        pb_header = QLabel("📋 Project Builder: AI Model")
+        pb_header.setStyleSheet(
+            f"color: {Theme.PURPLE}; font-size: 13px; font-weight: bold;"
+        )
+        layout.addWidget(pb_header)
+
+        pb_desc = QLabel(
+            "Chọn nguồn API key và model cho tạo nội dung dự án (kịch bản, prompt, SEO...)."
+        )
+        pb_desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        pb_desc.setWordWrap(True)
+        layout.addWidget(pb_desc)
+
+        # API Source: Account keys vs Custom
+        src_row = QHBoxLayout()
+        src_label = QLabel("Nguồn API:")
+        src_label.setFixedWidth(150)
+        src_label.setStyleSheet(f"color: {Theme.TEXT};")
+        src_row.addWidget(src_label)
+
+        self._pb_source_group = QButtonGroup(self)
+        _radio_style = f"""
+            QRadioButton {{
+                color: {Theme.TEXT}; spacing: 6px; font-size: 12px;
+            }}
+            QRadioButton::indicator {{
+                width: 16px; height: 16px; border-radius: 8px;
+                border: 2px solid {Theme.SUBTEXT0};
+                background-color: {Theme.SURFACE0};
+            }}
+            QRadioButton::indicator:checked {{
+                border: 2px solid {Theme.BLUE};
+                background-color: {Theme.BLUE};
+            }}
+            QRadioButton::indicator:hover {{
+                border-color: {Theme.LAVENDER};
+            }}
+        """
+        self._pb_src_account = QRadioButton("🔑 Dùng key từ Profile")
+        self._pb_src_custom = QRadioButton("🔗 Custom API Keys")
+        self._pb_src_account.setStyleSheet(_radio_style)
+        self._pb_src_custom.setStyleSheet(_radio_style)
+        self._pb_source_group.addButton(self._pb_src_account, 0)
+        self._pb_source_group.addButton(self._pb_src_custom, 1)
+
+        current_src = getattr(s, 'pb_ai_source', 'account')
+        if current_src == 'custom':
+            self._pb_src_custom.setChecked(True)
+        else:
+            self._pb_src_account.setChecked(True)
+
+        src_row.addWidget(self._pb_src_account)
+        src_row.addWidget(self._pb_src_custom)
+        src_row.addStretch()
+        layout.addLayout(src_row)
+
+        self._pb_source_group.buttonClicked.connect(self._on_pb_source_changed)
+
+        # Provider-Model registry (7 providers)
+        self._PROVIDER_MODELS = {
+            "Google": [
+                "gemini-3.1-flash-lite-preview",
+                "gemini-3-flash-preview",
+                "gemini-3.1-pro-preview",
+                "gemini-2.5-flash",
+                "gemini-2.5-pro",
+                "gemini-2.0-flash",
+                "gemini-2.5-flash-lite",
+                "gemini-2.0-flash-lite",
+            ],
+            "OpenAI": [
+                "gpt-4o",
+                "gpt-4o-mini",
+                "gpt-4.1",
+                "gpt-4.1-mini",
+                "gpt-4.1-nano",
+                "o4-mini",
+                "o3",
+                "gpt-5",
+                "gpt-5-mini",
+            ],
+            "Anthropic": [
+                "claude-sonnet-4-20250514",
+                "claude-opus-4-20250514",
+                "claude-sonnet-4.5-20250929",
+                "claude-haiku-4.5-20251015",
+                "claude-opus-4.5-20251124",
+                "claude-sonnet-4.6-20260217",
+            ],
+            "DeepSeek": [
+                "deepseek-chat",
+                "deepseek-reasoner",
+            ],
+            "xAI": [
+                "grok-3",
+                "grok-3-mini",
+                "grok-4",
+            ],
+            "Mistral": [
+                "mistral-large-latest",
+                "mistral-small-latest",
+                "mistral-medium-latest",
+                "codestral-latest",
+                "pixtral-large-latest",
+            ],
+            "OpenRouter": [],  # Aggregator — user types any model name
+        }
+        self._PROVIDER_ICONS = {
+            "Google": "🟢", "OpenAI": "🟠", "Anthropic": "🟤",
+            "DeepSeek": "🔵", "xAI": "⚫", "Mistral": "🟣", "OpenRouter": "🌐",
+        }
+        self._PROVIDER_KEY_HINTS = {
+            "Google": "AIzaSy...",
+            "OpenAI": "sk-proj-...",
+            "Anthropic": "sk-ant-...",
+            "DeepSeek": "sk-...",
+            "xAI": "xai-...",
+            "Mistral": "...",
+            "OpenRouter": "sk-or-...",
+        }
+        self._PROVIDER_BASE_URLS = {
+            "Google": "https://generativelanguage.googleapis.com/v1beta",
+            "OpenAI": "https://api.openai.com/v1",
+            "Anthropic": "https://api.anthropic.com/v1",
+            "DeepSeek": "https://api.deepseek.com/v1",
+            "xAI": "https://api.x.ai/v1",
+            "Mistral": "https://api.mistral.ai/v1",
+            "OpenRouter": "https://openrouter.ai/api/v1",
+        }
+
+        # ── Provider row (visible only in Custom mode) ──
+        self._pb_provider_row_widget = QWidget()
+        provider_row = QHBoxLayout(self._pb_provider_row_widget)
+        provider_row.setContentsMargins(0, 0, 0, 0)
+        provider_label = QLabel("Nhà phân phối:")
+        provider_label.setFixedWidth(150)
+        provider_label.setStyleSheet(f"color: {Theme.TEXT};")
+        provider_row.addWidget(provider_label)
+
+        _combo_style = f"""
+            QComboBox {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.SURFACE2}; border-radius: 6px;
+                padding: 4px 8px; font-size: 12px;
+            }}
+            QComboBox:focus {{ border-color: {Theme.BLUE}; }}
+            QComboBox::drop-down {{
+                border: none; width: 24px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {Theme.SURFACE0}; color: {Theme.TEXT};
+                border: 1px solid {Theme.SURFACE2};
+                selection-background-color: {Theme.BLUE};
+                selection-color: {Theme.CRUST};
+            }}
+        """
+
+        self._pb_provider_combo = QComboBox()
+        self._pb_provider_combo.setFixedWidth(280)
+        self._pb_provider_combo.setStyleSheet(_combo_style)
+        for name in self._PROVIDER_MODELS:
+            icon = self._PROVIDER_ICONS.get(name, "")
+            self._pb_provider_combo.addItem(f"{icon} {name}", name)
+
+        # Set current provider
+        current_provider = getattr(s, 'pb_ai_provider', 'Google')
+        for i in range(self._pb_provider_combo.count()):
+            if self._pb_provider_combo.itemData(i) == current_provider:
+                self._pb_provider_combo.setCurrentIndex(i)
+                break
+
+        self._pb_provider_combo.currentIndexChanged.connect(self._on_pb_provider_changed)
+        provider_row.addWidget(self._pb_provider_combo)
+        provider_row.addStretch()
+        layout.addWidget(self._pb_provider_row_widget)
+
+        # ── Model row (always visible) ──
+        self._pb_model_row_widget = QWidget()
+        model_row = QHBoxLayout(self._pb_model_row_widget)
+        model_row.setContentsMargins(0, 0, 0, 0)
+        model_label = QLabel("Model:")
+        model_label.setFixedWidth(150)
+        model_label.setStyleSheet(f"color: {Theme.TEXT};")
+        model_row.addWidget(model_label)
+
+        self._pb_model_combo = QComboBox()
+        self._pb_model_combo.setFixedWidth(280)
+        self._pb_model_combo.setStyleSheet(_combo_style)
+        self._pb_model_combo.setEditable(True)  # Allow custom model names
+
+        # Populate models based on source + provider
+        if current_src == 'custom':
+            models_list = self._PROVIDER_MODELS.get(current_provider, [])
+        else:
+            models_list = self._PROVIDER_MODELS["Google"]
+        self._pb_model_combo.addItems(models_list)
+
+        # Set current model
+        current_model = getattr(s, 'pb_ai_model', 'gemini-2.0-flash')
+        idx = self._pb_model_combo.findText(current_model)
+        if idx >= 0:
+            self._pb_model_combo.setCurrentIndex(idx)
+        else:
+            self._pb_model_combo.addItem(current_model)
+            self._pb_model_combo.setCurrentText(current_model)
+
+        model_row.addWidget(self._pb_model_combo)
+        model_row.addStretch()
+        layout.addWidget(self._pb_model_row_widget)
+
+        # ── Base URL row (visible only in Custom mode) ──
+        self._pb_baseurl_row_widget = QWidget()
+        baseurl_row = QHBoxLayout(self._pb_baseurl_row_widget)
+        baseurl_row.setContentsMargins(0, 0, 0, 0)
+        baseurl_label = QLabel("Base URL:")
+        baseurl_label.setFixedWidth(150)
+        baseurl_label.setStyleSheet(f"color: {Theme.TEXT};")
+        baseurl_row.addWidget(baseurl_label)
+
+        self._pb_baseurl_edit = QLineEdit()
+        self._pb_baseurl_edit.setFixedWidth(380)
+        self._pb_baseurl_edit.setStyleSheet(
+            f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
+            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; "
+            f"font-family: Consolas, monospace; font-size: 11px; padding: 4px 8px;"
+        )
+        # Load saved or default base URL
+        saved_url = getattr(s, 'pb_ai_base_url', '') or ''
+        default_url = self._PROVIDER_BASE_URLS.get(current_provider, '')
+        self._pb_baseurl_edit.setText(saved_url if saved_url else default_url)
+        self._pb_baseurl_edit.setPlaceholderText(default_url)
+        baseurl_row.addWidget(self._pb_baseurl_edit)
+        baseurl_row.addStretch()
+        layout.addWidget(self._pb_baseurl_row_widget)
+
+        # ── API Keys frame (visible only in Custom mode) ──
+        self._pb_keys_frame = QFrame()
+        self._pb_keys_frame.setStyleSheet(
+            f"background-color: {Theme.SURFACE0}; border-radius: 8px; "
+            f"border: 1px solid {Theme.SURFACE2}; padding: 8px;"
+        )
+        keys_layout = QVBoxLayout(self._pb_keys_frame)
+        keys_layout.setContentsMargins(8, 8, 8, 8)
+        keys_layout.setSpacing(4)
+
+        keys_header_row = QHBoxLayout()
+        keys_title = QLabel("🔑 API Keys (mỗi key 1 dòng — dùng xoay vòng)")
+        keys_title.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; font-weight: bold;")
+        keys_header_row.addWidget(keys_title)
+
+        self._pb_keys_count = QLabel("0 keys")
+        self._pb_keys_count.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
+        keys_header_row.addStretch()
+        keys_header_row.addWidget(self._pb_keys_count)
+        keys_layout.addLayout(keys_header_row)
+
+        self._pb_keys_edit = QTextEdit()
+        self._pb_keys_edit.setFixedHeight(100)
+        self._pb_keys_edit.setStyleSheet(
+            f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
+            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; "
+            f"font-family: Consolas, monospace; font-size: 11px;"
+        )
+        # Set placeholder based on provider
+        hint = self._PROVIDER_KEY_HINTS.get(current_provider, "API key...")
+        self._pb_keys_edit.setPlaceholderText(f"{hint}\n{hint}")
+        # Load saved keys
+        saved_keys = getattr(s, 'pb_ai_custom_keys', [])
+        self._pb_keys_edit.setPlainText("\n".join(saved_keys))
+        self._pb_keys_edit.textChanged.connect(self._on_pb_keys_changed)
+        keys_layout.addWidget(self._pb_keys_edit)
+
+        # Initialize key count display (must be after textChanged connect)
+        self._on_pb_keys_changed()
+
+        layout.addWidget(self._pb_keys_frame)
+
+        # Initial visibility (Custom mode only)
+        is_custom_init = (current_src == 'custom')
+        self._pb_provider_row_widget.setVisible(is_custom_init)
+        self._pb_baseurl_row_widget.setVisible(False)  # Internal only, not shown to user
+        self._pb_keys_frame.setVisible(is_custom_init)
+
+        return section
+
+    def _on_pb_source_changed(self):
+        """Toggle provider/keys/baseurl visibility and filter models by source."""
+        is_custom = self._pb_src_custom.isChecked()
+        self._pb_provider_row_widget.setVisible(is_custom)
+        self._pb_keys_frame.setVisible(is_custom)
+
+        # Update model combo
+        if is_custom:
+            # Custom: use selected provider
+            self._on_pb_provider_changed()
+        else:
+            # Profile Key: Google-only
+            current_model = self._pb_model_combo.currentText().strip()
+            self._pb_model_combo.blockSignals(True)
+            self._pb_model_combo.clear()
+            self._pb_model_combo.addItems(self._PROVIDER_MODELS["Google"])
+            idx = self._pb_model_combo.findText(current_model)
+            if idx >= 0:
+                self._pb_model_combo.setCurrentIndex(idx)
+            else:
+                self._pb_model_combo.setCurrentIndex(0)
+            self._pb_model_combo.blockSignals(False)
+
+    def _on_pb_provider_changed(self):
+        """Filter model combo by selected provider, update base URL and key placeholder."""
+        provider = self._pb_provider_combo.currentData() or "Google"
+        models = self._PROVIDER_MODELS.get(provider, [])
+
+        current_model = self._pb_model_combo.currentText().strip()
+        self._pb_model_combo.blockSignals(True)
+        self._pb_model_combo.clear()
+        self._pb_model_combo.addItems(models)
+        idx = self._pb_model_combo.findText(current_model)
+        if idx >= 0:
+            self._pb_model_combo.setCurrentIndex(idx)
+        else:
+            if self._pb_model_combo.count() > 0:
+                self._pb_model_combo.setCurrentIndex(0)
+        self._pb_model_combo.blockSignals(False)
+
+        # Update base URL
+        default_url = self._PROVIDER_BASE_URLS.get(provider, '')
+        self._pb_baseurl_edit.setText(default_url)
+        self._pb_baseurl_edit.setPlaceholderText(default_url)
+
+        # Update key placeholder
+        hint = self._PROVIDER_KEY_HINTS.get(provider, "API key...")
+        self._pb_keys_edit.setPlaceholderText(f"{hint}\n{hint}")
+
+    def _on_pb_keys_changed(self):
+        """Update key count label when keys text changes."""
+        text = self._pb_keys_edit.toPlainText().strip()
+        keys = [k.strip() for k in text.split("\n") if k.strip()]
+        self._pb_keys_count.setText(f"{len(keys)} key(s)")
+
+    # ── Project Builder Section ──────────────────────────────
+
+    def _create_project_builder_section(self) -> QFrame:
+        """Create Project Builder settings section."""
+        from PySide6.QtWidgets import QLineEdit, QSpinBox
+        from config.settings import get_settings
+        s = get_settings()
+
+        section, layout = self._create_section("📋 Project Builder")
+
+        # Workflow Sources
+        ws_row = QHBoxLayout()
+        ws_label = QLabel("Workflow Sources:")
+        ws_label.setFixedWidth(150)
+        ws_label.setStyleSheet(f"color: {Theme.TEXT};")
+        ws_row.addWidget(ws_label)
+
+        sources = getattr(s, 'workflow_template_sources', [])
+        ws_count = QLabel(f"{len(sources)} folder(s)")
+        ws_count.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        ws_row.addWidget(ws_count)
+        self._ws_count_label = ws_count
+
+        ws_btn = QPushButton("Manage...")
+        ws_btn.setFixedWidth(90)
+        ws_btn.setStyleSheet(
+            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px; border-radius: 4px;"
+        )
+        ws_btn.clicked.connect(lambda: self._manage_source_dirs('workflow_template_sources'))
+        ws_row.addWidget(ws_btn)
+        ws_row.addStretch()
+        layout.addLayout(ws_row)
+
+        # Rules Sources
+        rs_row = QHBoxLayout()
+        rs_label = QLabel("Rules Sources:")
+        rs_label.setFixedWidth(150)
+        rs_label.setStyleSheet(f"color: {Theme.TEXT};")
+        rs_row.addWidget(rs_label)
+
+        rules = getattr(s, 'workflow_rules_sources', [])
+        rs_count = QLabel(f"{len(rules)} folder(s)")
+        rs_count.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        rs_row.addWidget(rs_count)
+        self._rs_count_label = rs_count
+
+        rs_btn = QPushButton("Manage...")
+        rs_btn.setFixedWidth(90)
+        rs_btn.setStyleSheet(
+            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px; border-radius: 4px;"
+        )
+        rs_btn.clicked.connect(lambda: self._manage_source_dirs('workflow_rules_sources'))
+        rs_row.addWidget(rs_btn)
+        rs_row.addStretch()
+        layout.addLayout(rs_row)
+
+        # Default scenes
+        scenes_row = QHBoxLayout()
+        scenes_label = QLabel("Default Scenes:")
+        scenes_label.setFixedWidth(150)
+        scenes_label.setStyleSheet(f"color: {Theme.TEXT};")
+        scenes_row.addWidget(scenes_label)
+
+        self._project_scenes_spin = QSpinBox()
+        self._project_scenes_spin.setRange(1, 30)
+        self._project_scenes_spin.setValue(getattr(s, 'project_default_scenes', 10))
+        self._project_scenes_spin.setFixedWidth(80)
+        scenes_row.addWidget(self._project_scenes_spin)
+        scenes_row.addStretch()
+        layout.addLayout(scenes_row)
+
+        # Default output folder
+        out_row = QHBoxLayout()
+        out_label = QLabel("Default Output:")
+        out_label.setFixedWidth(150)
+        out_label.setStyleSheet(f"color: {Theme.TEXT};")
+        out_row.addWidget(out_label)
+
+        self._project_output_entry = QLineEdit()
+        self._project_output_entry.setText(getattr(s, 'project_output_base', ''))
+        self._project_output_entry.setPlaceholderText("Select output folder...")
+        self._project_output_entry.setStyleSheet(
+            f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
+            f"border: 1px solid {Theme.BORDER}; border-radius: 4px; padding: 4px 8px;"
+        )
+        out_row.addWidget(self._project_output_entry)
+
+        browse_btn = QPushButton("📂")
+        browse_btn.setFixedWidth(40)
+        browse_btn.setStyleSheet(
+            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px;"
+        )
+        browse_btn.clicked.connect(self._browse_project_output)
+        out_row.addWidget(browse_btn)
+        layout.addLayout(out_row)
+
+        return section
+
+    def _manage_source_dirs(self, setting_key: str):
+        """Open dialog to manage source directories."""
+        from PySide6.QtWidgets import QFileDialog
+        folder = QFileDialog.getExistingDirectory(self, "Add Source Folder")
+        if folder:
+            from config.settings import get_settings, save_settings
+            s = get_settings()
+            current = getattr(s, setting_key, [])
+            if folder not in current:
+                current.append(folder)
+                setattr(s, setting_key, current)
+                save_settings()
+                # Update count labels
+                if setting_key == 'workflow_template_sources' and hasattr(self, '_ws_count_label'):
+                    self._ws_count_label.setText(f"{len(current)} folder(s)")
+                elif setting_key == 'workflow_rules_sources' and hasattr(self, '_rs_count_label'):
+                    self._rs_count_label.setText(f"{len(current)} folder(s)")
+                show_info(self, "Added", f"✅ Added: {folder}")
+            else:
+                show_info(self, "Exists", "Folder already in list.")
+
+    def _browse_project_output(self):
+        """Browse for project output folder."""
+        from PySide6.QtWidgets import QFileDialog
+        folder = QFileDialog.getExistingDirectory(self, "Select Project Output Folder")
+        if folder:
+            self._project_output_entry.setText(folder)
+
     def _create_setting_row(self, parent_layout, label: str, options: list) -> QComboBox:
         """Create a label + QComboBox setting row."""
         row_layout = QHBoxLayout()
@@ -396,6 +932,54 @@ class TabSettings(
 
         return frame
 
+    def _create_sticky_action_bar(self) -> QWidget:
+        """Create a sticky bar with ALL actions — always visible at bottom."""
+        bar = QFrame()
+        bar.setStyleSheet(f"""
+            QFrame {{
+                background-color: {Theme.MANTLE};
+                border-top: 1px solid {Theme.BORDER};
+            }}
+        """)
+        bar_layout = QHBoxLayout(bar)
+        bar_layout.setContentsMargins(16, 6, 16, 6)
+        bar_layout.setSpacing(8)
+
+        # Save All
+        save_btn = QPushButton("💾 " + t('settings_buttons.save_all'))
+        save_btn.setToolTip("Force-save ALL settings to disk")
+        save_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; height: 32px; font-weight: bold; border-radius: 4px; padding: 0 14px;")
+        save_btn.clicked.connect(self._on_save)
+        bar_layout.addWidget(save_btn)
+
+        # Reset Defaults
+        reset_btn = QPushButton("🔄 " + t('settings_buttons.reset_defaults'))
+        reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 32px; border-radius: 4px; padding: 0 12px;")
+        reset_btn.clicked.connect(self._on_reset)
+        bar_layout.addWidget(reset_btn)
+
+        # Export Config
+        export_btn = QPushButton("📤 " + t('settings_buttons.export_config'))
+        export_btn.setStyleSheet(f"background-color: {Theme.BLUE}; height: 32px; border-radius: 4px; padding: 0 12px;")
+        export_btn.clicked.connect(self._on_export)
+        bar_layout.addWidget(export_btn)
+
+        # Import Config
+        import_btn = QPushButton("📥 " + t('settings_buttons.import_config'))
+        import_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 32px; border-radius: 4px; padding: 0 12px;")
+        import_btn.clicked.connect(self._on_import)
+        bar_layout.addWidget(import_btn)
+
+        # Reload App
+        reload_btn = QPushButton("⚡ " + t('settings_buttons.reload_app'))
+        reload_btn.setToolTip("Restart application (browsers keep running)")
+        reload_btn.setStyleSheet(f"background-color: #FF6B00; color: {Theme.CRUST}; height: 32px; font-weight: bold; border-radius: 4px; padding: 0 12px;")
+        reload_btn.clicked.connect(self._on_reload_app)
+        bar_layout.addWidget(reload_btn)
+
+        bar_layout.addStretch()
+        return bar
+
     def _on_save(self):
         """Save ALL settings to AppSettings and persist to disk."""
         import logging
@@ -422,14 +1006,17 @@ class TabSettings(
 
             # ── Output Settings ──
             s.output_folder = self.output_folder_entry.text()
-            if "Include timestamp in filename" in self.output_toggles:
-                s.include_timestamp = self.output_toggles["Include timestamp in filename"].isChecked()
-            if "Include quality in filename" in self.output_toggles:
-                s.include_quality = self.output_toggles["Include quality in filename"].isChecked()
-            if "Auto-start queue when adding" in self.output_toggles:
-                s.auto_start_queue = self.output_toggles["Auto-start queue when adding"].isChecked()
-            if "Pause on error" in self.output_toggles:
-                s.pause_on_error = self.output_toggles["Pause on error"].isChecked()
+            # B1 fix: lookup output toggles by matching the actual dict keys
+            for key, toggle in self.output_toggles.items():
+                k_lower = key.lower()
+                if "timestamp" in k_lower:
+                    s.include_timestamp = toggle.isChecked()
+                elif "quality" in k_lower:
+                    s.include_quality = toggle.isChecked()
+                elif "auto" in k_lower and "start" in k_lower:
+                    s.auto_start_queue = toggle.isChecked()
+                elif "pause" in k_lower:
+                    s.pause_on_error = toggle.isChecked()
 
             # ── Continuation ──
             if hasattr(self, 'cont_switch'):
@@ -490,6 +1077,33 @@ class TabSettings(
                 s.smart_hide_enabled = self.smart_hide_switch.isToggled()
             if hasattr(self, 'hide_all_switch'):
                 s.hide_all_browsers = self.hide_all_switch.isToggled()
+            
+            # ── Gemini AI ──
+            if hasattr(self, 'gemini_enable_switch'):
+                s.prompt_enhance_enabled = self.gemini_enable_switch.isToggled()
+            if hasattr(self, 'gemini_auto_enhance'):
+                s.prompt_auto_enhance = self.gemini_auto_enhance.isToggled()
+            if hasattr(self, 'gemini_auto_fix'):
+                s.prompt_auto_fix = self.gemini_auto_fix.isToggled()
+            
+            # ── Project Builder AI ──
+            if hasattr(self, '_pb_src_custom'):
+                s.pb_ai_source = "custom" if self._pb_src_custom.isChecked() else "account"
+            if hasattr(self, '_pb_provider_combo'):
+                s.pb_ai_provider = self._pb_provider_combo.currentData() or "Google"
+            if hasattr(self, '_pb_model_combo'):
+                s.pb_ai_model = self._pb_model_combo.currentText().strip()
+            if hasattr(self, '_pb_baseurl_edit'):
+                s.pb_ai_base_url = self._pb_baseurl_edit.text().strip()
+            if hasattr(self, '_pb_keys_edit'):
+                text = self._pb_keys_edit.toPlainText().strip()
+                s.pb_ai_custom_keys = [k.strip() for k in text.split("\n") if k.strip()]
+            
+            # REMOVED: Project Builder settings — section hidden from UI
+            # if hasattr(self, '_project_scenes_spin'):
+            #     s.project_default_scenes = self._project_scenes_spin.value()
+            # if hasattr(self, '_project_output_entry'):
+            #     s.project_output_base = self._project_output_entry.text()
             
             # Hide emails state
             if hasattr(self, '_emails_hidden'):
@@ -615,9 +1229,9 @@ class TabSettings(
 
             # ── Browser Visibility ──
             if hasattr(self, 'smart_hide_switch'):
-                self.smart_hide_switch.setToggled(True)
+                self.smart_hide_switch.setToggled(False)
             if hasattr(self, 'hide_all_switch'):
-                self.hide_all_switch.setToggled(False)
+                self.hide_all_switch.setToggled(True)
 
             # ── Pipeline Optimization ──
             if hasattr(self, 'burst_switch'):
@@ -692,14 +1306,19 @@ class TabSettings(
         # Output Settings
         if "output_folder" in settings:
             self.output_folder_entry.setText(settings["output_folder"])
-        for key, toggle_name in [
-            ("include_timestamp", "Include timestamp in filename"),
-            ("include_quality", "Include quality in filename"),
-            ("auto_start_queue", "Auto-start queue when adding"),
-            ("pause_on_error", "Pause on error"),
-        ]:
-            if key in settings and toggle_name in self.output_toggles:
-                self.output_toggles[toggle_name].setChecked(bool(settings[key]))
+        # B1 fix: match output toggles by substring (i18n-safe)
+        _import_map = {
+            "include_timestamp": "timestamp",
+            "include_quality": "quality",
+            "auto_start_queue": "auto",
+            "pause_on_error": "pause",
+        }
+        for setting_key, substr in _import_map.items():
+            if setting_key in settings:
+                for tkey, toggle in self.output_toggles.items():
+                    if substr in tkey.lower():
+                        toggle.setChecked(bool(settings[setting_key]))
+                        break
         # Continuation
         if "continuation_enabled" in settings and hasattr(self, 'cont_switch'):
             self.cont_switch.setToggled(bool(settings["continuation_enabled"]))
@@ -790,6 +1409,18 @@ class TabSettings(
 
     def get_settings(self) -> dict:
         """Get current settings — used for export and signal emission."""
+        # B1 fix: lookup output toggles by substring matching (i18n-safe)
+        _ot_ts = _ot_q = _ot_as = _ot_pe = False
+        for key, toggle in self.output_toggles.items():
+            k_lower = key.lower()
+            if "timestamp" in k_lower:
+                _ot_ts = toggle.isChecked()
+            elif "quality" in k_lower:
+                _ot_q = toggle.isChecked()
+            elif "auto" in k_lower and "start" in k_lower:
+                _ot_as = toggle.isChecked()
+            elif "pause" in k_lower:
+                _ot_pe = toggle.isChecked()
         result = {
             "aspect_ratio": self.setting_combos.get("Aspect Ratio").currentText() if "Aspect Ratio" in self.setting_combos else "",
             "download_quality": self.setting_combos.get("Download Quality").currentText() if "Download Quality" in self.setting_combos else "",
@@ -798,10 +1429,10 @@ class TabSettings(
             "image_ai_model": self.setting_combos.get("Image AI Model").currentText() if "Image AI Model" in self.setting_combos else "",
             "image_quality": self.setting_combos.get("Image Quality").currentText() if "Image Quality" in self.setting_combos else "",
             "output_folder": self.output_folder_entry.text(),
-            "include_timestamp": self.output_toggles.get("Include timestamp in filename").isChecked() if "Include timestamp in filename" in self.output_toggles else False,
-            "include_quality": self.output_toggles.get("Include quality in filename").isChecked() if "Include quality in filename" in self.output_toggles else False,
-            "auto_start_queue": self.output_toggles.get("Auto-start queue when adding").isChecked() if "Auto-start queue when adding" in self.output_toggles else False,
-            "pause_on_error": self.output_toggles.get("Pause on error").isChecked() if "Pause on error" in self.output_toggles else False,
+            "include_timestamp": _ot_ts,
+            "include_quality": _ot_q,
+            "auto_start_queue": _ot_as,
+            "pause_on_error": _ot_pe,
             "continuation_enabled": self.cont_switch.isToggled(),
             "extract_point_ms": self._parse_extract_point(self.extract_menu.currentText()),
             # Enhancer Image (3-toggle system)
@@ -825,7 +1456,10 @@ class TabSettings(
             "notify_sound_file": self._get_selected_sound() if hasattr(self, '_get_selected_sound') else "default",
             # Post-Queue Action
             "post_queue_action_enabled": self.post_queue_switch.isToggled() if hasattr(self, 'post_queue_switch') else False,
-            "post_queue_action": self.post_queue_action_combo.currentText() if hasattr(self, 'post_queue_action_combo') else "nothing",
+            # B2 fix: reverse-map display text to internal value
+            "post_queue_action": {"🔌 Do Nothing": "nothing", "⚡ Shutdown": "shutdown", "💤 Sleep": "sleep"}.get(
+                self.post_queue_action_combo.currentText(), "nothing"
+            ) if hasattr(self, 'post_queue_action_combo') else "nothing",
             # Browser Visibility
             "smart_hide_enabled": self.smart_hide_switch.isToggled() if hasattr(self, 'smart_hide_switch') else True,
             "hide_all_browsers": self.hide_all_switch.isToggled() if hasattr(self, 'hide_all_switch') else False,
