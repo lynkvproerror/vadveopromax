@@ -98,3 +98,123 @@ with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
 
 Root folder trong ZIP PHẢI là `VEO_Pro_Max/` (không phải `main.dist/`).
 
+---
+
+## 📌 Rule #6: Mã hóa dữ liệu Data (Fernet AES-256)
+
+> **Status**: 🔜 Chưa triển khai — CHỈ xử lý khi bắt đầu build EXE
+
+> [!CAUTION]
+> **TUYỆT ĐỐI KHÔNG sửa folder gốc `02 - CLIENT - VEO PRO MAX`!**
+> - Folder gốc LUÔN giữ nguyên `.md` plaintext để dev/nâng cấp bình thường
+> - Encryption CHỈ chạy trên BẢN COPY trong quá trình build EXE
+> - `data_source/` CHÍNH LÀ folder `data/` gốc từ 02 (không cần copy riêng)
+> - Flow: `build_release.py` copy 02 → temp → encrypt data → compile exe → output 03
+
+### Nguyên tắc cốt lõi
+```
+02 - CLIENT (gốc)     → KHÔNG BAO GIỜ bị thay đổi bởi encryption
+                         Luôn giữ .md plaintext để dev tiếp
+
+build_release.py       → Copy 02 → temp folder
+                         Chạy encrypt_data.py trên temp/data/
+                         Compile temp → EXE
+                         Output → 03 - Final App Client
+
+03 - Final App Client  → Chỉ chứa .enc (encrypted)
+                         Ship cho khách
+```
+
+```
+data_source/             ← 🔑 CHỈ DEV GIỮ (plaintext .md, KHÔNG ship)
+├── workflows/
+│   ├── 01_Research/
+│   ├── 02_Universal/Templates/
+│   ├── 03_Advanced/
+│   └── content-video.md
+
+data/                    ← 🔒 SHIP cho khách (encrypted .enc)
+├── workflows/
+│   ├── 01_Research/
+│   ├── 02_Universal/Templates/
+│   │   ├── Cooking_Tips.enc
+│   │   ├── Health_PMCS.enc
+│   │   └── ...
+│   ├── 03_Advanced/
+│   └── content-video.enc
+```
+
+### Quy trình cập nhật
+
+```
+1. Sửa/thêm file .md trong data_source/
+2. Chạy: python encrypt_data.py
+   → Tự encrypt tất cả .md → .enc trong data/
+   → Tự xóa .enc orphan (nếu xóa .md source)
+3. Chạy build_release.py như bình thường
+4. Ship cho khách (data/ chỉ chứa .enc)
+```
+
+### Cần tạo khi triển khai
+
+#### 1. `encrypt_data.py` (Build tool)
+```python
+# Chức năng:
+# - Scan data_source/**/*.md
+# - Encrypt mỗi file → data/**/*.enc (giữ cấu trúc thư mục)
+# - Xóa .enc không còn .md source tương ứng
+# - Report: X files encrypted, Y files removed
+#
+# Key: Fernet (from cryptography library)
+# Key storage: Hardcode trong file hoặc derive từ APP_SECRET
+# Dependency: pip install cryptography
+```
+
+#### 2. `core/data_loader.py` (Runtime module)
+```python
+# Chức năng:
+# - Decrypt .enc files in memory (KHÔNG ghi ra disk)
+# - Expose API: load_text(path) → str
+# - Dev mode: đọc .md trực tiếp (cho dev)
+#
+# Config: DATA_MODE = "dev" | "encrypted"
+# - dev: đọc từ data_source/*.md (plaintext)
+# - encrypted: đọc từ data/*.enc (decrypt in memory)
+```
+
+#### 3. Sửa `core/workflow_scanner.py`
+```python
+# Thay đổi:
+# - scan_sources() gọi data_loader.load_text() thay vì Path.read_text()
+# - _parse_template() nhận content string thay vì Path
+# - Fallback: nếu .enc không có, thử .md (backward compatible)
+```
+
+#### 4. Sửa `core/project_builder.py`
+```python
+# Thay đổi:
+# - load_workflow_data() gọi data_loader thay vì đọc file trực tiếp
+# - context_manager cũng dùng data_loader
+```
+
+### Lưu ý bảo mật
+
+- **Key management**: Key nhúng trong Python code → dễ decompile
+  → Giải pháp: kết hợp Nuitka compile Python → .exe (key ẩn trong binary)
+- **Memory**: Decrypt in RAM, KHÔNG BAO GIỜ ghi plaintext ra disk
+- **Dev mode**: CHỈ enable khi dev, disable trong production build
+- **Dependency**: `cryptography` library (pip install cryptography)
+
+### Checklist triển khai
+
+- [ ] Tạo `data_source/` — copy toàn bộ từ `data/` hiện tại
+- [ ] Viết `encrypt_data.py` — encrypt tool
+- [ ] Viết `core/data_loader.py` — runtime decrypt
+- [ ] Sửa `workflow_scanner.py` — dùng data_loader
+- [ ] Sửa `project_builder.py` — dùng data_loader
+- [ ] Thêm `DATA_MODE` config (dev/encrypted)
+- [ ] Test: encrypt → run app → verify tất cả features OK
+- [ ] Thêm `data_source/` vào `.gitignore` (nếu dùng git)
+- [ ] Cập nhật `build_release.py` — auto chạy encrypt trước build
+
+

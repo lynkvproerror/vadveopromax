@@ -19,13 +19,26 @@ from PySide6.QtWidgets import (
     QFrame, QTabWidget, QStackedWidget
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont, QColor, QIcon, QPixmap
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 from seller_auth import (
     get_machine_id, get_display_mid,
     SellerFirebaseManager, SellerPermissions
 )
+
+
+def _get_app_icon() -> QIcon:
+    """Load app icon from logo folder (works in both dev and compiled)."""
+    candidates = [
+        Path(__file__).parent / "logo" / "LOGO 5.png",
+        Path(sys.argv[0]).parent / "logo" / "LOGO 5.png",
+        Path(".") / "logo" / "LOGO 5.png",
+    ]
+    for p in candidates:
+        if p.exists():
+            return QIcon(QPixmap(str(p)))
+    return QIcon()
 
 # ============================================================
 # DARK THEME
@@ -136,6 +149,7 @@ class LoginDialog(QDialog):
         self.firebase = firebase
         self.machine_id = get_machine_id()
         self.login_result = None
+        self.setWindowIcon(_get_app_icon())
         self.setup_ui()
     
     def setup_ui(self):
@@ -254,6 +268,7 @@ class SellerMainWindow(QMainWindow):
         self.app_filter = login_data.get('app_filter', ['VEO'])
         self.permissions = SellerPermissions(self.level)
         
+        self.setWindowIcon(_get_app_icon())
         self.setup_ui()
         self.refresh_data()
         

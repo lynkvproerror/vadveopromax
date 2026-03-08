@@ -243,6 +243,13 @@ def build_with_nuitka() -> bool:
         print("  ❌ Nuitka not installed! Run: pip install nuitka")
         return False
     
+    # Copy icon to temp path (Nuitka can't handle '#' in paths)
+    icon_src = SELLER_DIR / 'logo' / 'icon.ico'
+    icon_tmp = Path(os.environ.get('TEMP', '/tmp')) / 'veo_seller_icon.ico'
+    if icon_src.exists():
+        shutil.copy2(icon_src, icon_tmp)
+        print(f"  Icon: {icon_src.name} → {icon_tmp}")
+    
     # Build command
     build_cmd = [
         sys.executable, "-m", "nuitka",
@@ -250,12 +257,14 @@ def build_with_nuitka() -> bool:
         "--onefile",
         "--enable-plugin=pyside6",
         "--windows-console-mode=disable",
+        f"--windows-icon-from-ico={icon_tmp}",
         f"--output-dir={BUILD_DIR}",
         "--output-filename=SellerManager.exe",
         
         # Include data files
         f"--include-data-dir={SELLER_DIR / 'primary'}=primary",
         f"--include-data-dir={SELLER_DIR / 'backup'}=backup",
+        f"--include-data-dir={SELLER_DIR / 'logo'}=logo",
         
         # Include modules that are dynamically imported
         "--include-module=firebase_admin",

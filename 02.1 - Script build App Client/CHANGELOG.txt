@@ -1,9 +1,6 @@
-🚀 Tối ưu tốc độ tạo ảnh T2I (pipeline thông minh hơn)
-🔧 Fix: Upscale không còn block việc tạo ảnh tiếp theo
-🔧 Fix: Giảm lỗi 429 khi upscale nhiều ảnh cùng lúc
-🔧 Fix: Extension kết nối ổn định hơn khi bị gián đoạn
-🔧 Fix: Extension tự cài khi thêm tài khoản mới
-🔧 Fix: Tự khôi phục kết nối Extension sau sự cố
-🔧 Fix: Trình duyệt không còn mở 2 lần khi khởi động
+🔧 Fix: Ảnh kéo thả vào I2V/R2V/I2I giờ được nhận đúng khi tạo video
+🔧 Fix: Xử lý đúng đường dẫn file:/// URI trong prompt
+🔧 Fix: Cột Images trong hàng đợi hiển thị thumbnail đúng
+🔧 Fix: Xoá profile lưu đúng khi khởi động lại
+🔧 Fix: Số tài khoản trên thanh trạng thái cập nhật realtime
 🔒 Tăng cường: Bảo mật dữ liệu người dùng
-

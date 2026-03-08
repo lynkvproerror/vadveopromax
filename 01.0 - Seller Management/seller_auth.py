@@ -587,7 +587,7 @@ class SellerFirebaseManager:
             trial_data = {
                 "machine_id": machine_id,
                 "_ecn": encrypt_with_mid(client_name, machine_id),
-                "client_name": "***",
+                "client_name": client_name,
                 "started_at": base_time.isoformat(),
                 "expires_at": (base_time + timedelta(days=trial_days)).isoformat(),
                 "status": "active",
@@ -784,7 +784,7 @@ class SellerFirebaseManager:
                 cust_update = {
                     "machine_id": machine_id,
                     "_ecn": encrypt_with_mid(client_name, machine_id),
-                    "client_name": "***",
+                    "client_name": client_name,
                     "purchase_count": prev_count + 1,
                     "_etp": encrypt_with_mid(str(prev_paid + amount), machine_id),
                     "total_paid": 0,  # Masked — real value in _etp
@@ -824,6 +824,7 @@ class SellerFirebaseManager:
                 "tier": tier_code,
                 "status": "a",
                 "role": 1,
+                "expires": (datetime.now() + timedelta(days=days)).isoformat(),
                 "updated_at": datetime.now().isoformat(),
             }
             self.db.collection("_mid_to_key").document(machine_id).set(mid_key_data)
