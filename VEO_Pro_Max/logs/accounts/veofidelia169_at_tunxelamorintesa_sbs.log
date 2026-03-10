@@ -5,3 +5,269 @@
 ======================================================================
 
 20:59:16 [DEBUG] [ENGINE] Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+20:59:31 [DEBUG] [ENGINE] Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+20:59:31 [INFO ] [ENGINE] [AutoLaunch] 🔇 Starting hidden browser 2/2: veofidelia169@tunxelamorintesa.sbs...
+20:59:32 [INFO ] [ENGINE] [AutoLaunch] ✅ veofidelia169@tunxelamorintesa.sbs browser hidden
+20:59:32 [INFO ] [ENGINE] [veofidelia169@tunxelamorintesa.sbs] No debug browser — extension-only mode (TRPCClient unavailable)
+20:59:32 [INFO ] [ENGINE] [BridgeInject] Injected extension_bridge into veofidelia169@tunxelamorintesa.sbs (lazy)
+20:59:33 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.0)
+20:59:33 [INFO ] [WS    ] [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+20:59:33 [INFO ] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+20:59:33 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+20:59:34 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:59:34 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:59:34 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+20:59:35 [INFO ] [ENGINE] [AutoLaunch] Extension status: 2 emails registered: ['veofidelia169@tunxelamorintesa.sbs', 'levanlinh.kma@gmail.com']
+20:59:39 [INFO ] [ENGINE] [AppController] Extension v2.3.0 connected via bridge for veofidelia169@tunxelamorintesa.sbs — up-to-date
+20:59:39 [DEBUG] [WS    ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+20:59:39 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:59:39 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+20:59:39 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:59:41 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:59:41 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+20:59:41 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:59:43 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+20:59:44 [INFO ] [RECAP ] [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2148 chars)
+20:59:44 [DEBUG] [RECAP ] [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2148 chars) → AM + Pool
+20:59:44 [DEBUG] [RECAP ] [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2148 chars)
+20:59:44 [INFO ] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+21:00:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:01:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:01:44 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:01:48 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:01:48 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:01:48 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:02:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:02:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:02:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:02:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:03:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:04:09 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:04:12 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:04:12 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:04:12 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:04:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:05:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:05:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:05:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:05:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:06:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:07:01 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:07:05 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:07:05 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:07:05 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:07:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:08:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:08:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:08:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:08:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:09:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:09:41 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:09:42 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:09:42 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:09:42 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:10:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:11:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:11:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:11:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:11:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:12:14 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:12:17 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:12:17 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:12:17 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:12:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:13:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:14:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:14:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:14:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:14:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:14:43 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:14:47 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:14:47 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:14:47 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:15:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:16:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:17:16 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:17:20 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:17:20 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:17:20 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:17:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:17:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:17:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:17:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:18:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:19:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:19:43 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:19:47 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:19:47 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:19:47 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:20:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:20:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:20:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:20:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:21:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:22:20 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:22:23 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:22:23 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:22:23 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:22:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:23:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:23:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:23:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:23:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:24:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:25:01 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:25:05 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:25:05 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:25:05 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:25:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:26:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:26:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:26:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:26:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:27:23 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:27:26 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:27:26 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:27:26 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:27:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:28:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:29:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:29:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:29:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:29:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:29:52 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:29:56 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:29:56 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:29:56 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:30:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:31:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:32:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:32:34 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:32:37 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:32:37 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:32:37 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:33:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:34:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:35:15 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:35:18 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:35:18 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:35:18 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:35:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:35:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:35:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:35:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:36:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:37:28 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:37:31 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:37:31 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:37:31 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:37:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:38:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:38:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:38:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:38:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:39:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:39:36 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:39:39 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:39:39 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:39:39 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:40:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:41:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:41:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:41:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:41:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:42:05 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:42:09 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:42:09 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:42:09 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:42:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:43:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:44:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:44:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:44:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:44:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:44:50 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:44:54 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:44:54 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:44:54 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:45:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:46:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:47:27 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:47:31 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:47:31 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:47:31 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:47:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:47:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:47:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:47:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:48:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:49:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:50:12 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:50:16 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:50:16 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:50:16 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:50:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:50:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:50:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:50:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:51:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:52:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:52:50 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:52:54 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:52:54 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:52:54 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:53:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:53:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:53:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:53:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:54:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:55:18 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:55:22 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:55:22 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:55:22 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:55:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:56:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:56:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:56:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:56:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:57:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:57:40 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+21:57:44 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:57:44 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:57:44 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:58:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:59:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+21:59:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:59:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+21:59:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+21:59:57 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+22:00:01 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:00:01 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+22:00:01 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:00:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:01:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:02:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:02:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:02:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+22:02:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:02:43 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+22:02:46 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:02:46 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+22:02:46 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:03:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:04:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:05:13 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+22:05:17 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:05:17 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+22:05:17 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:05:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:05:36 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:05:36 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+22:05:36 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:06:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:07:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+22:07:56 [INFO ] [WS    ] [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+22:08:00 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:08:00 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+22:08:00 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+22:08:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
