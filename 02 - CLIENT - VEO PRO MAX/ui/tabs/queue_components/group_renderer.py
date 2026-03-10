@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 class QueueGroupMixin:
@@ -95,7 +96,7 @@ class QueueGroupMixin:
             timer_text = "⏱ --:--"
         timer_label = QLabel(timer_text)
         timer_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
-        timer_label.setToolTip("Elapsed processing time for this group")
+        timer_label.setToolTip(t("queue_extra.group_elapsed_tooltip"))
         h_layout.addWidget(timer_label)
         
         # Header buttons
@@ -153,6 +154,10 @@ class QueueGroupMixin:
             row._task_id = str(td['id'])
             content_layout.addWidget(row)
             self._task_widgets[str(td['id'])] = row
+        
+        import logging
+        _glog = logging.getLogger("veo.tab_queue")
+        _glog.info(f"[GroupCreate] gid={gid} name='{group_data.get('name', '?')}' children={content_layout.count()} expanded={expanded}")
         
         content.setVisible(expanded)
         container_layout.addWidget(content)
@@ -404,7 +409,7 @@ class QueueGroupMixin:
                     f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;"
                 )
             else:
-                widget.status_label.setText("✅ COMPLETED")
+                widget.status_label.setText(t("queue_extra.completed"))
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;"
                 )
@@ -426,12 +431,12 @@ class QueueGroupMixin:
             error_msg = td.get('error', '')
             # Distinct status for prompt policy violations
             if error_msg and ('Policy Violation' in error_msg or 'UNSAFE' in error_msg.upper()):
-                widget.status_label.setText("⛔ POLICY VIOLATION")
+                widget.status_label.setText(t("queue_extra.status_policy"))
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.PEACH}; font-size: 10px; font-weight: bold; border: none;"
                 )
             else:
-                widget.status_label.setText("❌ FAILED")
+                widget.status_label.setText(t("queue_extra.label_failed"))
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.RED}; font-size: 10px; font-weight: bold; border: none;"
                 )
@@ -615,16 +620,25 @@ class QueueGroupMixin:
         title.setStyleSheet(f"color: {Theme.TEXT}; font-size: 14px; font-weight: bold;")
         layout.addWidget(title)
         
+        # ── Detect mode: Image vs Video ──
+        mode = group_data.get('mode', 'T2V').upper()
+        is_image = mode in ('T2I', 'I2I')
+        
         layout.addWidget(QLabel("🤖 AI Model"))
         model_combo = QComboBox()
-        model_combo.addItems(["Veo 3.1 - Fast", "Veo 3.1 - Fast [LP]", "Veo 3.1 - Quality", "Veo 2 - Fast", "Veo 2 - Quality"])
-        current_model = group_data.get('model', '').lower()
-        if '3_1' in current_model or '3.1' in current_model:
-            idx = 1 if ('lp' in current_model or 'relaxed' in current_model) else (2 if 'quality' in current_model else 0)
-        elif '2' in current_model or '3_0' in current_model:
-            idx = 4 if 'quality' in current_model else 3
+        if is_image:
+            model_combo.addItems(["🔥 Nano Banana Pro", "🔥 Nano Banana 2", "Imagen 4"])
+            current_model = group_data.get('model', '').upper()
+            idx = 1 if 'NARWHAL' in current_model else (2 if 'IMAGEN' in current_model else 0)
         else:
-            idx = 0
+            model_combo.addItems(["Veo 3.1 - Fast", "Veo 3.1 - Fast [LP]", "Veo 3.1 - Quality", "Veo 2 - Fast", "Veo 2 - Quality"])
+            current_model = group_data.get('model', '').lower()
+            if '3_1' in current_model or '3.1' in current_model:
+                idx = 1 if ('lp' in current_model or 'relaxed' in current_model) else (2 if 'quality' in current_model else 0)
+            elif '2' in current_model or '3_0' in current_model:
+                idx = 4 if 'quality' in current_model else 3
+            else:
+                idx = 0
         model_combo.setCurrentIndex(idx)
         layout.addWidget(model_combo)
         
@@ -648,11 +662,30 @@ class QueueGroupMixin:
         folder_row.addWidget(browse_btn)
         layout.addLayout(folder_row)
         
-        layout.addWidget(QLabel("🎬 Outputs per Prompt"))
+        out_label = "🖼️ Outputs per Prompt" if is_image else "🎬 Outputs per Prompt"
+        out_unit = "image" if is_image else "video"
+        layout.addWidget(QLabel(out_label))
         output_combo = QComboBox()
-        output_combo.addItems(["1 video", "2 videos", "3 videos", "4 videos"])
+        output_combo.addItems([f"1 {out_unit}", f"2 {out_unit}s", f"3 {out_unit}s", f"4 {out_unit}s"])
         output_combo.setCurrentIndex(max(0, min(group_data.get('output_count', 4) - 1, 3)))
         layout.addWidget(output_combo)
+        
+        if is_image:
+            layout.addWidget(QLabel("🖼️ Image Quality"))
+            quality_combo = QComboBox()
+            quality_combo.addItems(["1k", "2k", "4k"])
+            cq = group_data.get('download_quality', '2k').lower()
+            qi = {"1k": 0, "2k": 1, "4k": 2}.get(cq, 1)
+            quality_combo.setCurrentIndex(qi)
+            layout.addWidget(quality_combo)
+        else:
+            layout.addWidget(QLabel("📺 Download Quality"))
+            quality_combo = QComboBox()
+            quality_combo.addItems(["720p", "1080p", "4K"])
+            cq = group_data.get('download_quality', '720p')
+            qi = {"720p": 0, "1080p": 1, "4K": 2, "4k": 2}.get(cq, 0)
+            quality_combo.setCurrentIndex(qi)
+            layout.addWidget(quality_combo)
         
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -669,10 +702,14 @@ class QueueGroupMixin:
             from config.constants import resolve_model_key, WorkflowType
             ar_text = ar_combo.currentText()
             ar_value = "PORTRAIT" if "Portrait" in ar_text else "LANDSCAPE"
-            mode = group_data.get('mode', 'T2V')
             wf = getattr(WorkflowType, mode, WorkflowType.T2V)
             try:
-                model_key = resolve_model_key(model_combo.currentText(), wf, ar_value, False)
+                if is_image:
+                    # Image models: map display name → API key
+                    img_map = {"🔥 Nano Banana Pro": "GEM_PIX_2", "🔥 Nano Banana 2": "NARWHAL", "Imagen 4": "IMAGEN_3_5"}
+                    model_key = img_map.get(model_combo.currentText(), model_combo.currentText())
+                else:
+                    model_key = resolve_model_key(model_combo.currentText(), wf, ar_value, False)
             except Exception:
                 model_key = model_combo.currentText()
             ar_api = "VIDEO_ASPECT_RATIO_PORTRAIT" if ar_value == "PORTRAIT" else "VIDEO_ASPECT_RATIO_LANDSCAPE"
@@ -680,6 +717,7 @@ class QueueGroupMixin:
                 'model': model_key, 'aspect_ratio': ar_api,
                 'output_folder': folder_input.text().strip(),
                 'output_count': int(output_combo.currentText().split()[0]),
+                'download_quality': quality_combo.currentText(),
             }
             if self.controller and hasattr(self.controller, 'update_group_settings'):
                 if self.controller.update_group_settings(group_id, settings):
@@ -704,7 +742,7 @@ class QueueGroupMixin:
         # BUG-B19: Count only original tasks (exclude replacements) for display
         original_tasks = [t for t in group.tasks if not t.replace_target]
         task_count = len(original_tasks)
-        if not show_confirm(self, "Force Retry Group",
+        if not show_confirm(self, t("queue_extra.confirm_force_group"),
                 f"Force re-generate ALL {task_count} prompts in this group?\n\n"
                 "This will delete existing outputs and re-queue everything.",
                 danger=True):
@@ -732,7 +770,7 @@ class QueueGroupMixin:
         group = self.controller.dispatcher.get_group(group_id)
         if not group:
             return
-        if not show_confirm(self, "Reset Group",
+        if not show_confirm(self, t("queue_extra.confirm_reset_group"),
                 "Reset incomplete/failed prompts in this group?\n\nCompleted tasks will be PRESERVED.",
                 danger=True):
             return
@@ -759,7 +797,7 @@ class QueueGroupMixin:
         gw = self._group_widgets.get(group_id)
         if not gw:
             return
-        if not show_confirm(self, "Delete Group",
+        if not show_confirm(self, t("queue_extra.confirm_delete_group"),
                 "Delete this group and all its tasks?", danger=True):
             return
         # BUG-B7 fix: remove_group now handles cancel + _all_tasks cleanup

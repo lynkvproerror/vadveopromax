@@ -91,10 +91,14 @@ class VideoOutputInfo:
             return "purple"
         if self.quality == "retrying":
             return "purple"  # Per-video retry in progress
+        if self.upscale_status == "success":
+            return "blue"  # Upscale completed (2K/4K/1080p) — distinct from base green
         if self.quality in ("1080p", "4K", "2K"):
             return "blue"
         if self.quality in ("720p", "1K"):
-            return "yellow"
+            return "green"  # Downloaded original quality (video 720p / image 1K)
+        if self.thumbnail_path:
+            return "green"  # Has thumbnail = successfully generated
         return "gray"
 
 
@@ -303,6 +307,14 @@ class Dispatcher:
         # Smart Recovery: CreditWindow reference for credit-based routing
         self._credit_window = None  # Set via set_credit_window()
         
+        # reCAPTCHA health check callback — set by engine via set_recaptcha_health_fn()
+        # fn(email) -> bool: True if reCAPTCHA is healthy for this account
+        self._is_recaptcha_healthy_fn: Optional[Callable[[str], bool]] = None
+        
+        # Max workers per account callback — set by engine
+        # fn(email) -> int: returns max_workers for this account (hard cap)
+        self._get_max_workers_fn: Optional[Callable[[str], int]] = None
+        
         # Callbacks
         self._on_task_ready: Optional[Callable[[Task], None]] = None
         self._on_task_completed: Optional[Callable[[Task], None]] = None
@@ -354,14 +366,20 @@ class Dispatcher:
         """
         self._on_task_ready = callback
     
-    def decrement_running(self):
+    def decrement_running(self, account_email: str = None):
         """Thread-safe decrement of running count (floor at 0).
         
         Replaces direct `dispatcher._running_count -= 1` mutation.
         Previously a race condition: engine mutated without lock.
+        
+        Args:
+            account_email: If provided, also decrements _per_account_running
+                for this account. MUST be provided for accurate hard-cap tracking.
         """
         with self._lock:
             self._running_count = max(0, self._running_count - 1)
+        if account_email:
+            self._decrement_account_running(account_email)
     
     def _decrement_account_running(self, email: Optional[str]):
         """PA3: Decrement per-account running counter."""
@@ -465,6 +483,19 @@ class Dispatcher:
         """Set CreditWindow reference for credit-based task routing."""
         self._credit_window = credit_window
     
+    def set_recaptcha_health_fn(self, fn: Callable[[str], bool]) -> None:
+        """Set reCAPTCHA health check callback. Called by Engine at startup."""
+        self._is_recaptcha_healthy_fn = fn
+    
+    def set_max_workers_fn(self, fn: Callable[[str], int]) -> None:
+        """Set max-workers-per-account callback. Called by Engine at startup.
+        
+        Prevents _per_account_running from growing beyond max_workers.
+        Critical for T2I fire-and-forget which releases session workers
+        immediately, allowing unbounded dispatcher task dispatch without this cap.
+        """
+        self._get_max_workers_fn = fn
+    
     def get_next_task(self, account_email: str = None) -> Optional[Task]:
         """Pop next ready task from queue (non-blocking).
         
@@ -492,6 +523,19 @@ class Dispatcher:
                 )
                 return None
         
+        # Hard cap: prevent _per_account_running from exceeding max_workers
+        # Without this, T2I fire-and-forget releases session workers immediately,
+        # allowing unbounded task dispatch (e.g., 54 tasks for max_workers=20)
+        if account_email and self._get_max_workers_fn:
+            my_running = self._per_account_running.get(account_email, 0)
+            max_wk = self._get_max_workers_fn(account_email)
+            if max_wk > 0 and my_running >= max_wk:
+                log.debug(
+                    f"[Dispatcher] HardCap: {account_email} running={my_running} "
+                    f">= max_workers={max_wk} — yielding"
+                )
+                return None
+        
         # PA3: Fair-share gate — only when multi-account
         # Smart Recovery: exclude suspended accounts from average calc
         if account_email and len(self._per_account_running) > 1:
@@ -500,6 +544,12 @@ class Dispatcher:
             for email, count in self._per_account_running.items():
                 if self._credit_window and self._credit_window.is_suspended(email):
                     continue  # Skip suspended accounts
+                # ★ Fix #2: Skip reCAPTCHA-dead accounts from PA3 average
+                # When an account's reCAPTCHA is stuck (538-char tokens), its
+                # running tasks make no progress — counting them inflates
+                # the average and blocks healthy accounts from picking tasks.
+                if self._is_recaptcha_healthy_fn and not self._is_recaptcha_healthy_fn(email):
+                    continue  # Skip reCAPTCHA-dead accounts
                 active_counts[email] = count
             
             if len(active_counts) > 1:
@@ -543,6 +593,7 @@ class Dispatcher:
                     continue  # Try next task
                 
                 task.state = TaskState.RUNNING
+                task._counter_decremented = False  # Reset flag for new run
                 task.started_at = datetime.now()
                 self._running_count += 1
                 
@@ -672,8 +723,14 @@ class Dispatcher:
         task.completed_at = datetime.now()
         task.output_uris = output_uris
         task.progress = 100
-        self._running_count = max(0, self._running_count - 1)
-        self._decrement_account_running(task.assigned_account)
+        # Guard: skip decrement if engine already called decrement_running()
+        # (e.g., when task was delegated to UpscaleQueue). Without this guard,
+        # counters get decremented TWICE: once by engine, once here.
+        if not getattr(task, '_counter_decremented', False):
+            self._running_count = max(0, self._running_count - 1)
+            self._decrement_account_running(task.assigned_account)
+        else:
+            task._counter_decremented = False  # Reset flag
         log.info(
             f"[Dispatcher] ✅ Task {task_id} → COMPLETED "
             f"(account={task.assigned_account}, outputs={len(output_uris)}, "
@@ -750,8 +807,12 @@ class Dispatcher:
         else:
             task.error = error
         task.completed_at = datetime.now()
-        self._running_count = max(0, self._running_count - 1)
-        self._decrement_account_running(task.assigned_account)
+        # Guard: skip decrement if engine already called decrement_running()
+        if not getattr(task, '_counter_decremented', False):
+            self._running_count = max(0, self._running_count - 1)
+            self._decrement_account_running(task.assigned_account)
+        else:
+            task._counter_decremented = False  # Reset flag
         log.warning(
             f"[Dispatcher] ❌ Task {task_id} → FAILED "
             f"(account={task.assigned_account}, error={error[:80]}, "
@@ -854,9 +915,13 @@ class Dispatcher:
             del self._waiting_tasks[task_id]
         
         # If was running, decrement counter so dispatcher counts stay accurate
+        # Guard: skip if engine already called decrement_running() (flag=True)
         if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
-            self._running_count = max(0, self._running_count - 1)
-            self._decrement_account_running(task.assigned_account)
+            if not getattr(task, '_counter_decremented', False):
+                self._running_count = max(0, self._running_count - 1)
+                self._decrement_account_running(task.assigned_account)
+            else:
+                task._counter_decremented = False  # Reset flag
         
         log.info(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
         
@@ -1051,9 +1116,9 @@ class Dispatcher:
             # Bug 5 fix: Monotonic progress — never go backward
             # Exception: full reset via force_retry sets stage=INIT + progress=0
             if new_progress < task.progress and task.stage != TaskStage.INIT:
-                # Still update status_text (stage label), just skip progress decrease
-                if status_text:
-                    task.status_text = status_text
+                # Skip BOTH progress decrease AND status_text regression
+                # to prevent confusing "backward" text (e.g. "Submitting" → "Waiting")
+                pass
             else:
                 task.progress = new_progress
                 if status_text:
@@ -1359,7 +1424,7 @@ class Dispatcher:
         task.required_account = None
         # Stage preserved — foreman will resume from checkpoint
         self._queued_task_ids.discard(task.id)  # Allow re-enqueue
-        self._enqueue_task(task, priority=0)  # Retry = high priority
+        self._enqueue_task(task, priority=1)  # Normal priority: runs in FIFO ordery
         # Wake up scheduler waiting for tasks
         if self._on_task_ready:
             self._on_task_ready(task)
@@ -1495,9 +1560,13 @@ class Dispatcher:
         # NOTE: Preserve task.stage — resume from checkpoint after reconnect
         
         # Decrement running counters if task was actually running
+        # Guard: skip if engine already called decrement_running() (flag=True)
         if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
-            self._running_count = max(0, self._running_count - 1)
-            self._decrement_account_running(task.assigned_account)
+            if not getattr(task, '_counter_decremented', False):
+                self._running_count = max(0, self._running_count - 1)
+                self._decrement_account_running(task.assigned_account)
+            else:
+                task._counter_decremented = False  # Reset flag
         
         # Clear account binding so any foreman can pick this task
         task.assigned_account = None
@@ -1616,10 +1685,16 @@ class Dispatcher:
         # ── Decrement running counters if task was actively running ──
         prev_state = task.state
         if prev_state in (TaskState.RUNNING, TaskState.WAITING_POLL):
-            self._running_count = max(0, self._running_count - 1)
-            self._decrement_account_running(task.assigned_account)
-            log.info(f"[ForceRetry] Decremented running counters for {task_id} "
-                     f"(was {prev_state.value}, running_count={self._running_count})")
+            # Guard: skip if engine already called decrement_running() (flag=True)
+            if not getattr(task, '_counter_decremented', False):
+                self._running_count = max(0, self._running_count - 1)
+                self._decrement_account_running(task.assigned_account)
+                log.info(f"[ForceRetry] Decremented running counters for {task_id} "
+                         f"(was {prev_state.value}, running_count={self._running_count})")
+            else:
+                task._counter_decremented = False  # Reset flag
+                log.info(f"[ForceRetry] Skipped decrement for {task_id} "
+                         f"(already decremented by engine)")
         
         # ── Cancel in-flight upscale jobs (prevent orphan corruption) ──
         if self._on_cancel_upscale:
@@ -1641,8 +1716,10 @@ class Dispatcher:
             orphan = self._all_tasks.get(orphan_id)
             if orphan:
                 if orphan.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
-                    self._running_count = max(0, self._running_count - 1)
-                    self._decrement_account_running(orphan.assigned_account)
+                    # Guard: skip if engine already decremented
+                    if not getattr(orphan, '_counter_decremented', False):
+                        self._running_count = max(0, self._running_count - 1)
+                        self._decrement_account_running(orphan.assigned_account)
                 orphan.state = TaskState.CANCELLED
                 self._all_tasks.pop(orphan_id, None)
                 # Remove from group
@@ -1896,7 +1973,7 @@ class Dispatcher:
         # Re-queue or register dependency
         if task.state == TaskState.READY:
             self._queued_task_ids.discard(task.id)  # Allow re-enqueue
-            self._enqueue_task(task, priority=0)
+            self._enqueue_task(task, priority=1)  # Normal priority: runs in FIFO order from Start All
             if self._on_task_ready:
                 self._on_task_ready(task)
             log.info(f"[ForceRetry] Task {task_id} fully purged and re-queued"
@@ -2054,7 +2131,7 @@ class Dispatcher:
         self._all_tasks[replacement_id] = replacement
         replacement.state = TaskState.READY
         self._queued_task_ids.discard(replacement_id)
-        self._enqueue_task(replacement, priority=0)  # High priority
+        self._enqueue_task(replacement, priority=1)  # Normal priority: FIFO order
         if self._on_task_ready:
             self._on_task_ready(replacement)
         

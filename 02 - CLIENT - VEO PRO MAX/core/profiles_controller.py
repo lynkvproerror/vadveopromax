@@ -211,11 +211,16 @@ class ChromeProfile:
         """Get display status with detailed token state.
         
         Status priority:
+        0. ⚫ Disabled - Account is disabled (toggle OFF)
         1. 🔴 Expired - Token đã hết hạn, cần login lại
         2. 🟠 Expiring - Token sắp hết hạn (< 5 phút)
         3. 🟢 Login - Chưa đăng nhập hoặc chưa có token
         4. 🟢 Ready - Sẵn sàng sử dụng
         """
+        # Check enabled state first
+        if not self.is_enabled:
+            return "⚫ Disabled"
+        
         # Check token expiry if available
         if self.token_expires_at:
             try:
@@ -407,6 +412,16 @@ class ProfilesController:
             self._notify("profiles_changed")
         
         log.info(f"[ProfilesController] Added profile: {email}")
+        
+        # Hot-add: auto-connect browser + extension (no restart needed)
+        ctrl = getattr(self, '_app_controller', None)
+        if ctrl and hasattr(ctrl, '_hot_add_profile'):
+            try:
+                ctrl._hot_add_profile(email)
+                log.info(f"[ProfilesController] 🔥 Hot-add triggered for {email}")
+            except Exception as e:
+                log.warning(f"[ProfilesController] Hot-add failed (non-fatal): {e}")
+        
         return True
     
     def remove_profile(self, email: str) -> bool:

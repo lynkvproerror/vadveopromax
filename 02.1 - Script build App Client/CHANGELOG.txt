@@ -1,3 +1,69 @@
+v2.3.1 — Tăng cường tính năng + Cập nhật sạch
+
+🚀 Project Builder
+• Hiển thị kết quả từng project realtime (không cần đợi hoàn tất toàn bộ)
+• Cải thiện giao diện sidebar rõ ràng, dễ thao tác hơn
+• Parsed Projects panel hiển thị chi tiết file đã tạo
+• Áp dụng cài đặt mặc định chính xác cho các tab tạo video/ảnh
+
+🔌 Extension & Kết nối
+• Đảm bảo kết nối extension ổn định, tự phục hồi khi mất liên lạc
+• Cải thiện logic chờ extension sau khi khởi động browser
+
+✨ Enhancer & Fix Prompt
+• Tăng cường logic xử lý Enhancer/Fix prompt chính xác hơn
+• Đa ngôn ngữ hóa giao diện Pipeline Enhancer
+• Cải thiện trải nghiệm workflow cho người dùng
+
+⚙️ Settings & Giao diện
+• Gộp phần Output Settings vào giao diện chính, tiện hơn
+• Hiển thị đầy đủ text thay vì thu gọn
+• Tuỳ chọn tên file xuất lưu chính xác sau khi khởi động lại
+• Cài đặt vùng giọng mặc định hoạt động đúng
+
+🔄 Cập nhật tự động
+• Cập nhật sạch: xóa hoàn toàn bản cũ trước khi cài mới, tránh lỗi do file cũ xung đột
+
+🔒 Bảo mật
+• Tăng cường bảo mật dữ liệu người dùng
+
+---
+v2.3.0 — Extension Upgrade + Beta Project Builder + Prompt Enhancer + Bug Fixes
+
+🔌 Extension Upgrade (Manifest V3)
+• Offscreen document support for improved reliability
+• TabState persistence for reliable reconnection after browser restart
+• Extension DevConsole page for real-time monitoring
+• Improved reCAPTCHA pool with burst control and priority prefetch
+
+🧪 Beta: AI Project Builder
+• 8-dimension Setup Matrix: Category, Structure, Visual Style, Character, Audience, Persona, Tone, Voice Region
+• Topics Input: Paste from Google Sheets or type manually
+• Full Auto Generation: Bible → Master → Prompts → Dubbing → SEO in one click
+• Parsed Projects Panel with file viewer for reviewing generated content
+
+🧪 Beta: AI Prompt Enhancer
+• Multi-phase prompt processing (local filter → Gemini API → refined prompt)
+• Local keyword filtering before API submission
+• Prompt cache between enhancement phases for efficiency
+• Auto-fix up to 3 attempts for policy violations
+
+🧪 Beta: AI Services Layer
+• Multi-provider support: Google Gemini, OpenAI-compatible, custom endpoints
+• Model rotation and key quota management
+• Per-profile Gemini API key management
+• DevConsole Gemini API monitoring page
+
+🐛 Bug Fixes
+• Fix: Continuation chain stuck — children staying in READY state after parent completes
+• Fix: Frame recovery on Reset — continuation children losing reference frame on Reset Group
+• Fix: Policy Violation status — Queue tab shows distinct ⛔ POLICY VIOLATION (orange) instead of generic ❌ FAILED
+• Fix: Google Sheets paste — Fixed paste from Sheets/Excel breaking prompt input fields
+• Fix: Queue UI animation and thumbnail system improvements
+• Fix: Error classifier and handler reliability updates
+
+---
+v2.2.x
 🔧 Fix: Ảnh kéo thả vào I2V/R2V/I2I giờ được nhận đúng khi tạo video
 🔧 Fix: Xử lý đúng đường dẫn file:/// URI trong prompt
 🔧 Fix: Cột Images trong hàng đợi hiển thị thumbnail đúng

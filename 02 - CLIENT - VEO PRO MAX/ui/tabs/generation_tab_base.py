@@ -239,7 +239,7 @@ class GenerationTabBase(QWidget):
         
         btn_layout.addStretch()
         
-        self.prompt_count = QLabel("0 prompts")
+        self.prompt_count = QLabel(t("generation.prompt_count").replace("{count}", "0"))
         self.prompt_count.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
         btn_layout.addWidget(self.prompt_count)
         

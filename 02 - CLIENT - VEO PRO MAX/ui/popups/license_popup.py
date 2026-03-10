@@ -23,6 +23,7 @@ from PySide6.QtCore import Qt, QTimer
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 # ── Tier definitions (shared) ───────────────────────────────────
@@ -138,7 +139,7 @@ class LicenseRequiredDialog(QDialog):
         elif "deleted" in err or "not found" in err or "xoá" in err:
             header_text = "❌ LICENSE KHÔNG TỒN TẠI"
             header_color = Theme.RED
-            warn_text = "🔍 Không tìm thấy license trên server. Vui lòng nhập serial key mới."
+            warn_text = t("license_popup.not_found")
         elif "expired" in err or "hết hạn" in err:
             header_text = "⏰ LICENSE ĐÃ HẾT HẠN"
             header_color = Theme.PEACH
@@ -158,7 +159,7 @@ class LicenseRequiredDialog(QDialog):
         else:
             header_text = "❌ LICENSE HẾT HẠN"
             header_color = Theme.RED
-            warn_text = "⚠️ Vui lòng nhập serial key để tiếp tục sử dụng."
+            warn_text = t("license_popup.enter_serial")
         
         header.setStyleSheet(f"background-color: {header_color};")
         hlayout = QHBoxLayout(header)
@@ -719,7 +720,7 @@ class LicenseRequiredDialog(QDialog):
         name_text = name.text().strip() if name else ''
         if not name_text or name_text == '***':
             self._status_label.setVisible(True)
-            self._status_label.setText("❌ Vui lòng nhập họ tên thật ở mục 'Gửi yêu cầu nâng cấp' bên dưới")
+            self._status_label.setText(t("license_popup.enter_name"))
             self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
             # Highlight the name field
             if name:
@@ -767,7 +768,7 @@ class LicenseRequiredDialog(QDialog):
             
             if success:
                 self._set_trial_requested_flag()
-                self._status_label.setText("✅ Đã gửi! Vui lòng chờ admin phê duyệt.")
+                self._status_label.setText(t("license_popup.sent_waiting"))
                 self._status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 11px;")
                 
                 if hasattr(self, '_name_entry'):
@@ -851,7 +852,7 @@ class LicenseRequiredDialog(QDialog):
             if rest_client and hasattr(rest_client, 'check_trial_status'):
                 trial = rest_client.check_trial_status(mid)
                 if not trial.get("exists") or trial.get("status") != "active":
-                    self._status_label.setText("❌ Chưa được phê duyệt. Vui lòng chờ admin.")
+                    self._status_label.setText(t("license_popup.not_approved"))
                     self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
                     return
                 
@@ -964,7 +965,7 @@ class LicenseRequiredDialog(QDialog):
             key = self._serial_entry.text().strip()
             if not key:
                 self._status_label.setVisible(True)
-                self._status_label.setText("⚠️ Vui lòng nhập serial key")
+                self._status_label.setText(t("license_popup.enter_key"))
                 self._status_label.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
                 return
             
@@ -1021,19 +1022,19 @@ class LicenseRequiredDialog(QDialog):
                         else:
                             # TAMPERED! Treat as max attempts (punish tampering)
                             self._status_label.setVisible(True)
-                            self._status_label.setText("🔒 Phát hiện thay đổi trái phép. Vui lòng chờ 1 giờ.")
+                            self._status_label.setText(t("license_popup.tamper_detected"))
                             self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
                             return
                     else:
                         # Invalid format → treat as tampered
                         self._status_label.setVisible(True)
-                        self._status_label.setText("🔒 File rate limit không hợp lệ. Vui lòng chờ 1 giờ.")
+                        self._status_label.setText(t("license_popup.rate_limit_invalid"))
                         self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
                         return
             except json.JSONDecodeError:
                 # Tampered JSON → block
                 self._status_label.setVisible(True)
-                self._status_label.setText("🔒 Phát hiện thay đổi trái phép. Vui lòng chờ 1 giờ.")
+                self._status_label.setText(t("license_popup.tamper_detected"))
                 self._status_label.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
                 return
             except Exception:
@@ -1045,7 +1046,7 @@ class LicenseRequiredDialog(QDialog):
                 mins = remaining_secs // 60
                 secs = remaining_secs % 60
                 self._status_label.setVisible(True)
-                self._status_label.setText(f"⏳ Quá nhiều lần thử. Vui lòng chờ {mins}:{secs:02d}")
+                self._status_label.setText(t("license_popup.too_many_attempts").replace("{mins}", str(mins)).replace("{secs}", f"{secs:02d}"))
                 self._status_label.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
                 return
             
@@ -1122,7 +1123,7 @@ class LicenseRequiredDialog(QDialog):
         
         # ── Guard 0: Require name only ──
         if not name or name == '***':
-            self._send_status.setText("⚠️ Vui lòng nhập họ tên thật")
+            self._send_status.setText(t("license_popup.enter_real_name"))
             self._send_status.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
             self._name_entry.setFocus()
             if name == '***':

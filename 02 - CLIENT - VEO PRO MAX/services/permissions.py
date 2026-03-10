@@ -47,6 +47,10 @@ class Feature(str, Enum):
     CUSTOM_OUTPUT = "custom_output"
     ADVANCED_SETTINGS = "advanced_settings"
     BETA_FEATURES = "beta_features"
+    
+    # AI Prompt Processing (beta)
+    AI_PROMPT_PROCESSING = "ai_prompt_processing"
+    PROJECT_BUILDER = "project_builder"
 
 
 @dataclass
@@ -93,7 +97,9 @@ class PermissionsSystem:
                 Feature.IMAGE_LIBRARY,
                 Feature.CUSTOM_OUTPUT,
                 Feature.ADVANCED_SETTINGS,
-                # NOT included: CONTINUATION, DEV_CONSOLE, BETA_FEATURES
+                # NOT included: CONTINUATION, DEV_CONSOLE, BETA_FEATURES,
+                #               AI_PROMPT_PROCESSING, PROJECT_BUILDER
+                # NOTE: AI_PROMPT_PROCESSING can be granted via server flag
             },
         ),
         Role.PREMIUM: RoleLimits(
@@ -118,6 +124,8 @@ class PermissionsSystem:
                 Feature.IMAGE_LIBRARY,
                 Feature.CUSTOM_OUTPUT,
                 Feature.ADVANCED_SETTINGS,
+                Feature.AI_PROMPT_PROCESSING,
+                Feature.PROJECT_BUILDER,
             },
         ),
         Role.TESTER: RoleLimits(
@@ -226,6 +234,14 @@ class PermissionsSystem:
         """Check if user can do batch processing."""
         return self.has_feature(Feature.BATCH_PROCESSING)
     
+    def can_use_ai_prompt(self) -> bool:
+        """Check if user can use AI Prompt Processing / Enhancer."""
+        return self.has_feature(Feature.AI_PROMPT_PROCESSING)
+    
+    def can_use_project_builder(self) -> bool:
+        """Check if user can use Project Builder."""
+        return self.has_feature(Feature.PROJECT_BUILDER)
+    
     def get_feature_status(self) -> Dict[str, bool]:
         """Get status of all features."""
         return {
@@ -292,3 +308,30 @@ class PermissionsSystem:
         lim = getattr(self, '_server_lim', None)
         if lim:
             self.apply_server_limits(lim)
+    
+    def apply_server_features(self, config: dict):
+        """Apply server-controlled feature flags from _config/client_settings.
+        
+        Currently supports:
+        - ai_prompt_trial_enabled (bool): If True, grant AI_PROMPT_PROCESSING
+          and PROJECT_BUILDER to TRIAL users. Default: False.
+        
+        PREMIUM/TESTER always have these features regardless of this flag.
+        """
+        if not config or not isinstance(config, dict):
+            return
+        
+        # Only applies to TRIAL users — PREMIUM/TESTER already have it
+        if self._current_role != Role.TRIAL:
+            return
+        
+        ai_trial = config.get("ai_prompt_trial_enabled", False)
+        # Strict bool check (string "false" must not trigger)
+        enabled = ai_trial is True or str(ai_trial).lower() == "true"
+        
+        if enabled:
+            self.grant_feature(Feature.AI_PROMPT_PROCESSING)
+            self.grant_feature(Feature.PROJECT_BUILDER)
+        else:
+            self.revoke_feature(Feature.AI_PROMPT_PROCESSING)
+            self.revoke_feature(Feature.PROJECT_BUILDER)

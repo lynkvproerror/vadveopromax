@@ -324,7 +324,11 @@ class SellerMainWindow(QMainWindow):
         # Tab 4: Overview
         self._setup_overview_tab()
         
-        # Tab 5: Change Password
+        # Tab 5: Server Config (Level 2 ONLY)
+        if self.permissions.can('manage_server_config'):
+            self._setup_server_config_tab()
+        
+        # Tab 6: Change Password
         self._setup_password_tab()
         
         layout.addWidget(self.tabs)
@@ -471,6 +475,138 @@ class SellerMainWindow(QMainWindow):
         layout.addWidget(group)
         layout.addStretch()
         self.tabs.addTab(widget, "⚙ Đổi mật khẩu")
+    
+    def _setup_server_config_tab(self):
+        """Server Config tab — manage _config/client_settings from GUI."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(40, 30, 40, 30)
+        layout.setSpacing(16)
+        
+        # Title
+        title = QLabel("⚙️ Cài đặt Server (client_settings)")
+        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setStyleSheet("color: #7aa2f7; margin-bottom: 4px;")
+        layout.addWidget(title)
+        
+        subtitle = QLabel("Thay đổi sẽ áp dụng cho TẤT CẢ client app khi khởi động lại.")
+        subtitle.setStyleSheet("color: #8a8bac; font-size: 12px; margin-bottom: 12px;")
+        layout.addWidget(subtitle)
+        
+        # ── Feature Toggles ──
+        feature_group = QGroupBox("🎛️ Feature Flags")
+        feature_layout = QVBoxLayout(feature_group)
+        feature_layout.setSpacing(12)
+        
+        from PySide6.QtWidgets import QCheckBox
+        
+        # Maintenance Mode
+        self.cfg_maintenance = QCheckBox("🔧 Maintenance Mode — Chặn tất cả client khi bảo trì")
+        self.cfg_maintenance.setStyleSheet("font-size: 13px; color: #e0e0f0; padding: 4px;")
+        feature_layout.addWidget(self.cfg_maintenance)
+        
+        # AI Prompt Trial
+        self.cfg_ai_prompt_trial = QCheckBox("🤖 AI Prompt Trial — Cho phép Trial dùng AI Prompt Processing")
+        self.cfg_ai_prompt_trial.setStyleSheet("font-size: 13px; color: #e0e0f0; padding: 4px;")
+        feature_layout.addWidget(self.cfg_ai_prompt_trial)
+        
+        layout.addWidget(feature_group)
+        
+        # ── Version Control ──
+        version_group = QGroupBox("🔢 Version Control")
+        version_layout = QFormLayout(version_group)
+        
+        self.cfg_min_version = QLineEdit()
+        self.cfg_min_version.setPlaceholderText("VD: 2.3.0")
+        self.cfg_min_version.setFixedWidth(200)
+        version_layout.addRow("Min Client Version:", self.cfg_min_version)
+        
+        layout.addWidget(version_group)
+        
+        # ── Save Button ──
+        btn_row = QHBoxLayout()
+        
+        save_btn = QPushButton("💾 Lưu cài đặt Server")
+        save_btn.setObjectName("successBtn")
+        save_btn.setMinimumHeight(42)
+        save_btn.clicked.connect(self.action_save_server_config)
+        btn_row.addWidget(save_btn)
+        
+        reload_btn = QPushButton("🔄 Tải lại từ Server")
+        reload_btn.setMinimumHeight(42)
+        reload_btn.clicked.connect(self._load_server_config)
+        btn_row.addWidget(reload_btn)
+        
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        
+        # Status
+        self.cfg_status = QLabel("")
+        self.cfg_status.setWordWrap(True)
+        self.cfg_status.setStyleSheet("font-size: 12px; padding: 4px;")
+        layout.addWidget(self.cfg_status)
+        
+        layout.addStretch()
+        self.tabs.addTab(widget, "⚙ Server Config")
+        
+        # Load current values
+        self._load_server_config()
+    
+    def _load_server_config(self):
+        """Load current client_settings from Firebase into UI controls."""
+        try:
+            config = self.firebase.get_client_settings()
+            
+            self.cfg_maintenance.setChecked(
+                config.get('maintenance_mode') is True or 
+                str(config.get('maintenance_mode', '')).lower() == 'true'
+            )
+            self.cfg_ai_prompt_trial.setChecked(
+                config.get('ai_prompt_trial_enabled') is True or 
+                str(config.get('ai_prompt_trial_enabled', '')).lower() == 'true'
+            )
+            self.cfg_min_version.setText(
+                str(config.get('min_client_version', '1.0.0'))
+            )
+            
+            self.cfg_status.setStyleSheet("color: #9ece6a; font-size: 12px;")
+            self.cfg_status.setText(f"✅ Đã tải cài đặt từ Firebase — {datetime.now().strftime('%H:%M:%S')}")
+        except Exception as e:
+            self.cfg_status.setStyleSheet("color: #f7768e; font-size: 12px;")
+            self.cfg_status.setText(f"❌ Lỗi tải: {e}")
+    
+    def action_save_server_config(self):
+        """Save server config changes to Firebase."""
+        updates = {
+            "maintenance_mode": self.cfg_maintenance.isChecked(),
+            "ai_prompt_trial_enabled": self.cfg_ai_prompt_trial.isChecked(),
+            "min_client_version": self.cfg_min_version.text().strip() or "1.0.0",
+        }
+        
+        # Confirm if enabling maintenance
+        if updates["maintenance_mode"]:
+            confirm = QMessageBox.question(
+                self, "⚠ Cảnh báo",
+                "Bật Maintenance Mode sẽ CHẶN TẤT CẢ client app!\n\n"
+                "Bạn có chắc chắn?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if confirm != QMessageBox.Yes:
+                return
+        
+        result = self.firebase.update_client_settings(updates, self.machine_id)
+        if result.get('success'):
+            self.cfg_status.setStyleSheet("color: #9ece6a; font-size: 12px;")
+            self.cfg_status.setText(
+                f"✅ Đã lưu thành công — {datetime.now().strftime('%H:%M:%S')}\n"
+                f"   AI Prompt Trial: {'BẬT' if updates['ai_prompt_trial_enabled'] else 'TẮT'}  |  "
+                f"Maintenance: {'BẬT ⚠️' if updates['maintenance_mode'] else 'TẮT'}  |  "
+                f"Min Version: {updates['min_client_version']}"
+            )
+            self.statusBar().showMessage(f"✅ Server config saved — {datetime.now().strftime('%H:%M:%S')}")
+        else:
+            self.cfg_status.setStyleSheet("color: #f7768e; font-size: 12px;")
+            self.cfg_status.setText(f"❌ {result.get('error', 'Unknown error')}")
     
     def _setup_trials_tab(self):
         widget = QWidget()
@@ -734,7 +870,7 @@ class SellerMainWindow(QMainWindow):
         
         tier = req.get('tier', '1M')
         # Tier → days is inherent to tier code (business rule)
-        tier_days_map = {'1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'LIFETIME': 36500}
+        tier_days_map = {'12H': 1, '1D': 1, '1M': 30, '3M': 90, '6M': 180, '1Y': 365, 'LIFETIME': 36500}
         days = tier_days_map.get(tier, 30)
         
         confirm = QMessageBox.question(

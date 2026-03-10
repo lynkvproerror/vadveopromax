@@ -209,8 +209,7 @@ class TabSettings(
         # these settings were confusing (showing '0 folder(s)' when data exists).
         # layout.addWidget(self._create_project_builder_section())
         
-        # ── 4. OUTPUT ──
-        layout.addWidget(self._create_output_section())      # Output Settings (All)
+        # ── 4. OUTPUT (merged into Defaults section above) ──
         # Post-Queue Action: backend preserved, hidden from UI
         self._post_queue_section = self._create_post_queue_section()
         
@@ -357,7 +356,7 @@ class TabSettings(
         # ════════════════════════════════════════════════════════
         # PANEL 1: Queue — Enhance / Fix (per-profile account keys)
         # ════════════════════════════════════════════════════════
-        q_header = QLabel("✨ Queue: Auto Enhance & Fix")
+        q_header = QLabel(t("settings_ai.queue_header"))
         q_header.setStyleSheet(
             f"color: {Theme.BLUE}; font-size: 13px; font-weight: bold; "
             f"margin-top: 4px;"
@@ -403,7 +402,7 @@ class TabSettings(
         # ════════════════════════════════════════════════════════
         # PANEL 2: Project Builder — model + API source selection
         # ════════════════════════════════════════════════════════
-        pb_header = QLabel("📋 Project Builder: AI Model")
+        pb_header = QLabel(t("settings_ai.pb_header"))
         pb_header.setStyleSheet(
             f"color: {Theme.PURPLE}; font-size: 13px; font-weight: bold;"
         )
@@ -418,7 +417,7 @@ class TabSettings(
 
         # API Source: Account keys vs Custom
         src_row = QHBoxLayout()
-        src_label = QLabel("Nguồn API:")
+        src_label = QLabel(t("settings_ai.api_source"))
         src_label.setFixedWidth(150)
         src_label.setStyleSheet(f"color: {Theme.TEXT};")
         src_row.addWidget(src_label)
@@ -537,7 +536,7 @@ class TabSettings(
         self._pb_provider_row_widget = QWidget()
         provider_row = QHBoxLayout(self._pb_provider_row_widget)
         provider_row.setContentsMargins(0, 0, 0, 0)
-        provider_label = QLabel("Nhà phân phối:")
+        provider_label = QLabel(t("settings_ai.provider"))
         provider_label.setFixedWidth(150)
         provider_label.setStyleSheet(f"color: {Theme.TEXT};")
         provider_row.addWidget(provider_label)
@@ -583,7 +582,7 @@ class TabSettings(
         self._pb_model_row_widget = QWidget()
         model_row = QHBoxLayout(self._pb_model_row_widget)
         model_row.setContentsMargins(0, 0, 0, 0)
-        model_label = QLabel("Model:")
+        model_label = QLabel(t("settings_ai.model"))
         model_label.setFixedWidth(150)
         model_label.setStyleSheet(f"color: {Theme.TEXT};")
         model_row.addWidget(model_label)
@@ -617,7 +616,7 @@ class TabSettings(
         self._pb_baseurl_row_widget = QWidget()
         baseurl_row = QHBoxLayout(self._pb_baseurl_row_widget)
         baseurl_row.setContentsMargins(0, 0, 0, 0)
-        baseurl_label = QLabel("Base URL:")
+        baseurl_label = QLabel(t("settings_ai.base_url"))
         baseurl_label.setFixedWidth(150)
         baseurl_label.setStyleSheet(f"color: {Theme.TEXT};")
         baseurl_row.addWidget(baseurl_label)
@@ -649,11 +648,11 @@ class TabSettings(
         keys_layout.setSpacing(4)
 
         keys_header_row = QHBoxLayout()
-        keys_title = QLabel("🔑 API Keys (mỗi key 1 dòng — dùng xoay vòng)")
+        keys_title = QLabel(t("settings_ai.api_keys_title"))
         keys_title.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; font-weight: bold;")
         keys_header_row.addWidget(keys_title)
 
-        self._pb_keys_count = QLabel("0 keys")
+        self._pb_keys_count = QLabel(t("settings_ai.keys_count").replace("{count}", "0"))
         self._pb_keys_count.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
         keys_header_row.addStretch()
         keys_header_row.addWidget(self._pb_keys_count)
@@ -686,7 +685,47 @@ class TabSettings(
         self._pb_baseurl_row_widget.setVisible(False)  # Internal only, not shown to user
         self._pb_keys_frame.setVisible(is_custom_init)
 
+        # ── Auto-save on change (R4 fix) ──
+        self.gemini_enable_switch.toggled_signal.connect(self._save_gemini_ai_settings)
+        self.gemini_auto_enhance.toggled_signal.connect(self._save_gemini_ai_settings)
+        self.gemini_auto_fix.toggled_signal.connect(self._save_gemini_ai_settings)
+        self._pb_source_group.buttonClicked.connect(self._save_gemini_ai_settings)
+        self._pb_provider_combo.currentIndexChanged.connect(self._save_gemini_ai_settings)
+        self._pb_model_combo.currentTextChanged.connect(self._save_gemini_ai_settings)
+        self._pb_keys_edit.textChanged.connect(self._save_gemini_ai_settings)
+
         return section
+
+    def _save_gemini_ai_settings(self, *args):
+        """Persist Gemini AI + Project Builder AI settings to AppSettings."""
+        if getattr(self, '_initializing', False):
+            return
+        try:
+            from config.settings import get_settings, save_settings
+            import logging
+            s = get_settings()
+            # Queue toggles
+            if hasattr(self, 'gemini_enable_switch'):
+                s.prompt_enhance_enabled = self.gemini_enable_switch.isToggled()
+            if hasattr(self, 'gemini_auto_enhance'):
+                s.prompt_auto_enhance = self.gemini_auto_enhance.isToggled()
+            if hasattr(self, 'gemini_auto_fix'):
+                s.prompt_auto_fix = self.gemini_auto_fix.isToggled()
+            # Project Builder source
+            if hasattr(self, '_pb_src_custom'):
+                s.pb_ai_source = 'custom' if self._pb_src_custom.isChecked() else 'account'
+            if hasattr(self, '_pb_provider_combo'):
+                s.pb_ai_provider = self._pb_provider_combo.currentData() or 'Google'
+            if hasattr(self, '_pb_model_combo'):
+                s.pb_ai_model = self._pb_model_combo.currentText().strip()
+            if hasattr(self, '_pb_baseurl_edit'):
+                s.pb_ai_base_url = self._pb_baseurl_edit.text().strip()
+            if hasattr(self, '_pb_keys_edit'):
+                text = self._pb_keys_edit.toPlainText().strip()
+                s.pb_ai_custom_keys = [k.strip() for k in text.split('\n') if k.strip()]
+            save_settings()
+        except Exception as e:
+            logging.getLogger('settings').error(f'Failed to save Gemini AI settings: {e}')
 
     def _on_pb_source_changed(self):
         """Toggle provider/keys/baseurl visibility and filter models by source."""
@@ -755,7 +794,7 @@ class TabSettings(
 
         # Workflow Sources
         ws_row = QHBoxLayout()
-        ws_label = QLabel("Workflow Sources:")
+        ws_label = QLabel(t("settings_ai.workflow_sources"))
         ws_label.setFixedWidth(150)
         ws_label.setStyleSheet(f"color: {Theme.TEXT};")
         ws_row.addWidget(ws_label)
@@ -766,7 +805,7 @@ class TabSettings(
         ws_row.addWidget(ws_count)
         self._ws_count_label = ws_count
 
-        ws_btn = QPushButton("Manage...")
+        ws_btn = QPushButton(t("settings_ai.manage"))
         ws_btn.setFixedWidth(90)
         ws_btn.setStyleSheet(
             f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px; border-radius: 4px;"
@@ -778,7 +817,7 @@ class TabSettings(
 
         # Rules Sources
         rs_row = QHBoxLayout()
-        rs_label = QLabel("Rules Sources:")
+        rs_label = QLabel(t("settings_ai.rules_sources"))
         rs_label.setFixedWidth(150)
         rs_label.setStyleSheet(f"color: {Theme.TEXT};")
         rs_row.addWidget(rs_label)
@@ -789,7 +828,7 @@ class TabSettings(
         rs_row.addWidget(rs_count)
         self._rs_count_label = rs_count
 
-        rs_btn = QPushButton("Manage...")
+        rs_btn = QPushButton(t("settings_ai.manage"))
         rs_btn.setFixedWidth(90)
         rs_btn.setStyleSheet(
             f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px; border-radius: 4px;"
@@ -801,7 +840,7 @@ class TabSettings(
 
         # Default scenes
         scenes_row = QHBoxLayout()
-        scenes_label = QLabel("Default Scenes:")
+        scenes_label = QLabel(t("settings_ai.default_scenes"))
         scenes_label.setFixedWidth(150)
         scenes_label.setStyleSheet(f"color: {Theme.TEXT};")
         scenes_row.addWidget(scenes_label)
@@ -816,14 +855,14 @@ class TabSettings(
 
         # Default output folder
         out_row = QHBoxLayout()
-        out_label = QLabel("Default Output:")
+        out_label = QLabel(t("settings_ai.default_output"))
         out_label.setFixedWidth(150)
         out_label.setStyleSheet(f"color: {Theme.TEXT};")
         out_row.addWidget(out_label)
 
         self._project_output_entry = QLineEdit()
         self._project_output_entry.setText(getattr(s, 'project_output_base', ''))
-        self._project_output_entry.setPlaceholderText("Select output folder...")
+        self._project_output_entry.setPlaceholderText(t("tooltips.select_output"))
         self._project_output_entry.setStyleSheet(
             f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
             f"border: 1px solid {Theme.BORDER}; border-radius: 4px; padding: 4px 8px;"
@@ -858,9 +897,9 @@ class TabSettings(
                     self._ws_count_label.setText(f"{len(current)} folder(s)")
                 elif setting_key == 'workflow_rules_sources' and hasattr(self, '_rs_count_label'):
                     self._rs_count_label.setText(f"{len(current)} folder(s)")
-                show_info(self, "Added", f"✅ Added: {folder}")
+                show_info(self, t("dialogs.added"), t("dialogs.folder_added").replace("{folder}", folder))
             else:
-                show_info(self, "Exists", "Folder already in list.")
+                show_info(self, t("dialogs.exists"), t("dialogs.folder_exists"))
 
     def _browse_project_output(self):
         """Browse for project output folder."""
@@ -898,7 +937,7 @@ class TabSettings(
 
         # Save All button - explicitly force-saves all sections
         save_btn = QPushButton(t("settings_buttons.save_all"))
-        save_btn.setToolTip("Force-save ALL settings to disk (individual settings also auto-save on change)")
+        save_btn.setToolTip(t("tooltips.save_all_tooltip"))
         save_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; height: 36px;")
         save_btn.clicked.connect(self._on_save)
         layout.addWidget(save_btn)
@@ -923,7 +962,7 @@ class TabSettings(
 
         # Reload App button — restart Python process
         reload_btn = QPushButton(t("settings_buttons.reload_app"))
-        reload_btn.setToolTip("Restart application (browsers keep running)")
+        reload_btn.setToolTip(t("tooltips.reload_tooltip"))
         reload_btn.setStyleSheet(f"background-color: #FF6B00; color: {Theme.CRUST}; height: 36px; font-weight: bold;")
         reload_btn.clicked.connect(self._on_reload_app)
         layout.addWidget(reload_btn)
@@ -947,7 +986,7 @@ class TabSettings(
 
         # Save All
         save_btn = QPushButton("💾 " + t('settings_buttons.save_all'))
-        save_btn.setToolTip("Force-save ALL settings to disk")
+        save_btn.setToolTip(t("tooltips.save_all_tooltip"))
         save_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; height: 32px; font-weight: bold; border-radius: 4px; padding: 0 14px;")
         save_btn.clicked.connect(self._on_save)
         bar_layout.addWidget(save_btn)
@@ -972,7 +1011,7 @@ class TabSettings(
 
         # Reload App
         reload_btn = QPushButton("⚡ " + t('settings_buttons.reload_app'))
-        reload_btn.setToolTip("Restart application (browsers keep running)")
+        reload_btn.setToolTip(t("tooltips.reload_tooltip"))
         reload_btn.setStyleSheet(f"background-color: #FF6B00; color: {Theme.CRUST}; height: 32px; font-weight: bold; border-radius: 4px; padding: 0 12px;")
         reload_btn.clicked.connect(self._on_reload_app)
         bar_layout.addWidget(reload_btn)
@@ -1024,12 +1063,6 @@ class TabSettings(
             if hasattr(self, 'extract_menu'):
                 s.extract_point_ms = self._parse_extract_point(self.extract_menu.currentText())
 
-            # ── Worker Settings ──
-            if hasattr(self, 'retry_count'):
-                s.retry_count = self.retry_count.value()
-            if hasattr(self, 'request_timeout'):
-                s.request_timeout = self.request_timeout.value()
-
             # ── Anti-Detect Spam ──
             if hasattr(self, 'anti_detect_switch'):
                 s.anti_detect_enabled = self.anti_detect_switch.isToggled()
@@ -1063,6 +1096,8 @@ class TabSettings(
                 s.post_queue_action = _reverse_map.get(
                     self.post_queue_action_combo.currentText(), "nothing"
                 )
+            if hasattr(self, 'sweep_rounds_spin'):
+                s.auto_sweep_max_rounds = self.sweep_rounds_spin.value()
 
             # ── Enhancer Toggles ──
             if hasattr(self, '_enhance_context_toggle'):
@@ -1128,6 +1163,18 @@ class TabSettings(
                 s.workload_priority = self._wp_map.get(
                     self.workload_priority.currentIndex(), '720p_priority'
                 )
+            if hasattr(self, 'auto_retry_dl_switch'):
+                s.auto_retry_download = self.auto_retry_dl_switch.isToggled()
+            if hasattr(self, 'dl_retry_max'):
+                s.auto_retry_download_max = self.dl_retry_max.value()
+            if hasattr(self, 'prewarm_switch'):
+                s.prewarm_enabled = self.prewarm_switch.isToggled()
+            if hasattr(self, 'prewarm_threshold'):
+                s.prewarm_idle_threshold = self.prewarm_threshold.value()
+
+            # ── Auto-Update ──
+            if hasattr(self, 'auto_update_toggle'):
+                s.auto_update_enabled = self.auto_update_toggle.isToggled()
 
             # ── UI (Language) ──
             if hasattr(self, 'lang_menu'):
@@ -1138,18 +1185,18 @@ class TabSettings(
             log.info(f"Settings saved to {s._default_path()}")
 
             # Show confirmation
-            show_info(self, "Saved", "✅ All settings saved successfully.")
+            show_info(self, t("dialogs.saved"), t("dialogs.all_saved"))
 
             # Also emit signal for live-update consumers
             settings_dict = self.get_settings()
             self.settings_changed.emit(settings_dict)
         except Exception as e:
             log.error(f"Failed to save settings: {e}")
-            show_warning(self, "Error", f"Failed to save settings:\n{e}")
+            show_warning(self, t("dialogs.error"), t("dialogs.save_failed").replace("{error}", str(e)))
 
     def _on_reset(self):
         """Reset to default values and persist."""
-        if not show_confirm(self, "Reset Defaults",
+        if not show_confirm(self, t("dialogs.reset_defaults"),
                 "Reset all settings to factory defaults?\n\nThis cannot be undone.",
                 danger=True):
             return
@@ -1186,16 +1233,13 @@ class TabSettings(
             if hasattr(self, 'extract_menu'):
                 self.extract_menu.setCurrentText("750ms (recommended)")
 
-            # ── Worker Settings ──
-            if hasattr(self, 'retry_count'):
-                self.retry_count.setValue(3)
-            if hasattr(self, 'request_timeout'):
-                self.request_timeout.setValue(120)
-
             # ── Anti-Detect Spam ──
-            self.anti_detect_switch.setToggled(True)
-            self.anti_detect_delay_min.setValue(3.0)
-            self.anti_detect_delay_max.setValue(8.0)
+            if hasattr(self, 'anti_detect_switch'):
+                self.anti_detect_switch.setToggled(True)
+            if hasattr(self, 'anti_detect_delay_min'):
+                self.anti_detect_delay_min.setValue(3.0)
+            if hasattr(self, 'anti_detect_delay_max'):
+                self.anti_detect_delay_max.setValue(8.0)
 
             # ── Enhancer Toggles ──
             if hasattr(self, '_enhance_context_toggle'):
@@ -1206,8 +1250,10 @@ class TabSettings(
                 self._enhance_auto_toggle.setToggled(False)
 
             # ── Session & Data ──
-            self.restore_queue_switch.setToggled(False)
-            self.restore_tabs_switch.setToggled(True)
+            if hasattr(self, 'restore_queue_switch'):
+                self.restore_queue_switch.setToggled(False)
+            if hasattr(self, 'restore_tabs_switch'):
+                self.restore_tabs_switch.setToggled(True)
             # Reset granular restore sub-toggles to ON
             if hasattr(self, '_restore_sub_toggles'):
                 for attr_name, toggle in self._restore_sub_toggles.items():
@@ -1233,6 +1279,28 @@ class TabSettings(
             if hasattr(self, 'hide_all_switch'):
                 self.hide_all_switch.setToggled(True)
 
+            # ── Gemini AI ──
+            if hasattr(self, 'gemini_enable_switch'):
+                self.gemini_enable_switch.setToggled(False)
+            if hasattr(self, 'gemini_auto_enhance'):
+                self.gemini_auto_enhance.setToggled(False)
+            if hasattr(self, 'gemini_auto_fix'):
+                self.gemini_auto_fix.setToggled(False)
+
+            # ── Project Builder AI ──
+            if hasattr(self, '_pb_src_account'):
+                self._pb_src_account.setChecked(True)
+            if hasattr(self, '_pb_provider_combo'):
+                self._pb_provider_combo.setCurrentIndex(0)  # Google
+            if hasattr(self, '_pb_model_combo'):
+                self._pb_model_combo.setCurrentText('gemini-2.0-flash')
+            if hasattr(self, '_pb_keys_edit'):
+                self._pb_keys_edit.clear()
+            if hasattr(self, '_pb_provider_row_widget'):
+                self._pb_provider_row_widget.setVisible(False)
+            if hasattr(self, '_pb_keys_frame'):
+                self._pb_keys_frame.setVisible(False)
+
             # ── Pipeline Optimization ──
             if hasattr(self, 'burst_switch'):
                 self.burst_switch.setToggled(True)
@@ -1250,6 +1318,22 @@ class TabSettings(
                 self.journal_interval.setValue(30)
             if hasattr(self, 'workload_priority'):
                 self.workload_priority.setCurrentIndex(0)  # 720p_priority
+            if hasattr(self, 'auto_retry_dl_switch'):
+                self.auto_retry_dl_switch.setToggled(True)
+            if hasattr(self, 'dl_retry_max'):
+                self.dl_retry_max.setValue(3)
+            if hasattr(self, 'prewarm_switch'):
+                self.prewarm_switch.setToggled(True)
+            if hasattr(self, 'prewarm_threshold'):
+                self.prewarm_threshold.setValue(10)
+
+            # ── Auto-Update ──
+            if hasattr(self, 'auto_update_toggle'):
+                self.auto_update_toggle.setToggled(True)
+
+            # ── Post-Queue Sweep Rounds ──
+            if hasattr(self, 'sweep_rounds_spin'):
+                self.sweep_rounds_spin.setValue(5)
 
             # ── Language ──
             if hasattr(self, 'lang_menu'):
@@ -1398,6 +1482,29 @@ class TabSettings(
         # Language
         if "language" in settings and hasattr(self, 'lang_menu'):
             self.lang_menu.setCurrentText(settings["language"])
+        # Auto-Update
+        if "auto_update_enabled" in settings and hasattr(self, 'auto_update_toggle'):
+            self.auto_update_toggle.setToggled(bool(settings["auto_update_enabled"]))
+        # Post-Queue Sweep Rounds
+        if "auto_sweep_max_rounds" in settings and hasattr(self, 'sweep_rounds_spin'):
+            self.sweep_rounds_spin.setValue(int(settings["auto_sweep_max_rounds"]))
+        # Gemini AI
+        if "prompt_enhance_enabled" in settings and hasattr(self, 'gemini_enable_switch'):
+            self.gemini_enable_switch.setToggled(bool(settings["prompt_enhance_enabled"]))
+        if "prompt_auto_enhance" in settings and hasattr(self, 'gemini_auto_enhance'):
+            self.gemini_auto_enhance.setToggled(bool(settings["prompt_auto_enhance"]))
+        if "prompt_auto_fix" in settings and hasattr(self, 'gemini_auto_fix'):
+            self.gemini_auto_fix.setToggled(bool(settings["prompt_auto_fix"]))
+        # Pipeline: Auto-Retry Download
+        if "auto_retry_download" in settings and hasattr(self, 'auto_retry_dl_switch'):
+            self.auto_retry_dl_switch.setToggled(bool(settings["auto_retry_download"]))
+        if "auto_retry_download_max" in settings and hasattr(self, 'dl_retry_max'):
+            self.dl_retry_max.setValue(int(settings["auto_retry_download_max"]))
+        # Pipeline: Pre-warm
+        if "prewarm_enabled" in settings and hasattr(self, 'prewarm_switch'):
+            self.prewarm_switch.setToggled(bool(settings["prewarm_enabled"]))
+        if "prewarm_idle_threshold" in settings and hasattr(self, 'prewarm_threshold'):
+            self.prewarm_threshold.setValue(int(settings["prewarm_idle_threshold"]))
 
     # ── Helpers ──
 
@@ -1439,17 +1546,14 @@ class TabSettings(
             "enhance_context_menu": self._enhance_context_toggle.isToggled() if hasattr(self, '_enhance_context_toggle') else True,
             "enhance_library": self._enhance_library_toggle.isToggled() if hasattr(self, '_enhance_library_toggle') else True,
             "enhance_auto_continuation": self._enhance_auto_toggle.isToggled() if hasattr(self, '_enhance_auto_toggle') else False,
-            "language": self.lang_menu.currentText(),
+            "language": self.lang_menu.currentText() if hasattr(self, 'lang_menu') else "English",
             # Worker Settings
-            "retry_count": self.retry_count.value() if hasattr(self, 'retry_count') else 3,
-            "request_timeout": self.request_timeout.value() if hasattr(self, 'request_timeout') else 120,
-            # Anti-Detect Spam
-            "anti_detect_enabled": self.anti_detect_switch.isToggled(),
-            "anti_detect_delay_min": self.anti_detect_delay_min.value(),
-            "anti_detect_delay_max": self.anti_detect_delay_max.value(),
+            "anti_detect_enabled": self.anti_detect_switch.isToggled() if hasattr(self, 'anti_detect_switch') else True,
+            "anti_detect_delay_min": self.anti_detect_delay_min.value() if hasattr(self, 'anti_detect_delay_min') else 3.0,
+            "anti_detect_delay_max": self.anti_detect_delay_max.value() if hasattr(self, 'anti_detect_delay_max') else 8.0,
             # Session & Data
-            "restore_queue_on_startup": self.restore_queue_switch.isToggled(),
-            "restore_tabs_on_startup": self.restore_tabs_switch.isToggled(),
+            "restore_queue_on_startup": self.restore_queue_switch.isToggled() if hasattr(self, 'restore_queue_switch') else False,
+            "restore_tabs_on_startup": self.restore_tabs_switch.isToggled() if hasattr(self, 'restore_tabs_switch') else True,
             # Notifications
             "notify_toast_enabled": self.notify_toast_toggle.isToggled() if hasattr(self, 'notify_toast_toggle') else True,
             "notify_sound_enabled": self.notify_sound_toggle.isToggled() if hasattr(self, 'notify_sound_toggle') else True,
@@ -1472,6 +1576,18 @@ class TabSettings(
             "watchdog_timeout_min": self.watchdog_timeout.value() if hasattr(self, 'watchdog_timeout') else 10,
             "journal_save_interval_sec": self.journal_interval.value() if hasattr(self, 'journal_interval') else 30,
             "workload_priority": self._wp_map.get(self.workload_priority.currentIndex(), '720p_priority') if hasattr(self, '_wp_map') and hasattr(self, 'workload_priority') else '720p_priority',
+            "auto_retry_download": self.auto_retry_dl_switch.isToggled() if hasattr(self, 'auto_retry_dl_switch') else True,
+            "auto_retry_download_max": self.dl_retry_max.value() if hasattr(self, 'dl_retry_max') else 3,
+            "prewarm_enabled": self.prewarm_switch.isToggled() if hasattr(self, 'prewarm_switch') else True,
+            "prewarm_idle_threshold": self.prewarm_threshold.value() if hasattr(self, 'prewarm_threshold') else 10,
+            # Auto-Update
+            "auto_update_enabled": self.auto_update_toggle.isToggled() if hasattr(self, 'auto_update_toggle') else True,
+            # Post-Queue Sweep Rounds
+            "auto_sweep_max_rounds": self.sweep_rounds_spin.value() if hasattr(self, 'sweep_rounds_spin') else 5,
+            # Gemini AI
+            "prompt_enhance_enabled": self.gemini_enable_switch.isToggled() if hasattr(self, 'gemini_enable_switch') else False,
+            "prompt_auto_enhance": self.gemini_auto_enhance.isToggled() if hasattr(self, 'gemini_auto_enhance') else False,
+            "prompt_auto_fix": self.gemini_auto_fix.isToggled() if hasattr(self, 'gemini_auto_fix') else False,
         }
         # Granular restore sub-toggles
         if hasattr(self, '_restore_sub_toggles'):

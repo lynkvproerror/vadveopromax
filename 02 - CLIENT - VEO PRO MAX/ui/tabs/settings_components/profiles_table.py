@@ -27,7 +27,8 @@ class SettingsProfilesMixin:
     _on_toggle_account, _on_slots_changed, _on_save_password,
     _on_refresh_session, _on_toggle_browser_visibility,
     _on_reload_extension, _on_delete_profile,
-    _on_add_profile_browser
+    _on_add_profile_browser,
+    _on_bulk_add_profiles
     """
 
     def _create_profiles_section(self) -> QWidget:
@@ -48,7 +49,7 @@ class SettingsProfilesMixin:
         self.profiles_table.setColumnCount(10)
         self.profiles_table.setHorizontalHeaderLabels([
             t("profiles.columns.toggle"), t("profiles.columns.num"),
-            t("profiles.columns.email"), "API Key",
+            t("profiles.columns.email"), t("profiles.columns.api_key"),
             t("profiles.columns.plan"),
             t("profiles.columns.credits"), t("profiles.columns.status"),
             t("profiles.columns.output"), t("profiles.columns.ext"),
@@ -70,7 +71,7 @@ class SettingsProfilesMixin:
 
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
-        self.profiles_table.setColumnWidth(3, 110)  # API Key
+        self.profiles_table.setColumnWidth(3, 50)  # API Key
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status
@@ -117,7 +118,7 @@ class SettingsProfilesMixin:
 
         # Browser login - full session with real-time subscription
         browser_btn = QPushButton(t("profiles.add_profile"))
-        browser_btn.setToolTip("Login in browser. Plan/Credits available immediately.")
+        browser_btn.setToolTip(t("tooltips.login_tooltip"))
         browser_btn.setFixedHeight(32)
         browser_btn.setStyleSheet(f"""
             QPushButton {{
@@ -137,12 +138,34 @@ class SettingsProfilesMixin:
         browser_btn.clicked.connect(self._on_add_profile_browser)
         btn_layout.addWidget(browser_btn)
 
+        # Bulk Add — paste email|password list
+        bulk_btn = QPushButton(t("profiles.bulk_add"))
+        bulk_btn.setToolTip(t("bulk_add.info"))
+        bulk_btn.setFixedHeight(32)
+        bulk_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.BLUE};
+                color: #1e1e2e;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 4px 16px;
+                border: none;
+                border-radius: 6px;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.BLUE};
+                opacity: 0.9;
+            }}
+        """)
+        bulk_btn.clicked.connect(self._on_bulk_add_profiles)
+        btn_layout.addWidget(bulk_btn)
+
         btn_layout.addStretch()
 
         # Email hide/show toggle button
-        self._email_toggle_btn = QPushButton("🙈 Hiện Email" if self._emails_hidden else "👁️ Ẩn Email")
+        self._email_toggle_btn = QPushButton(t("profiles.show_email") if self._emails_hidden else t("profiles.hide_email"))
         self._email_toggle_btn.setFixedHeight(32)
-        self._email_toggle_btn.setToolTip("Nhấn để hiện email" if self._emails_hidden else "Ẩn/hiện email trong bảng")
+        self._email_toggle_btn.setToolTip(t("profiles.show_email") if self._emails_hidden else t("profiles.hide_email"))
         self._email_toggle_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE2};
@@ -199,7 +222,7 @@ class SettingsProfilesMixin:
                 if credits is not None:
                     plan_item = self.profiles_table.item(row, 4)
                     if plan_item:
-                        plan_item.setText("⏳ Wait")
+                        plan_item.setText(t("pipeline_status.wait"))
 
                 break
 
@@ -230,7 +253,7 @@ class SettingsProfilesMixin:
             # Toggle switch (col 0) - Enable/Disable account for rotation
             is_enabled = acc.get('is_enabled', True)
             toggle = ToggleSwitch(checked=is_enabled)
-            toggle.setToolTip("Toggle ON/OFF to enable/disable account for generation")
+            toggle.setToolTip(t("tooltips.toggle_account"))
             email_for_toggle = acc.get('email', '')
             toggle.toggled_signal.connect(
                 lambda checked, e=email_for_toggle: self._on_toggle_account(e, checked)
@@ -260,15 +283,15 @@ class SettingsProfilesMixin:
             email_item.setFlags(email_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.profiles_table.setItem(actual_row, 2, email_item)
 
-            # API Key (col 3) — per-profile Gemini key status
-            api_key_text = "❌ None"
-            api_key_tip = "No Gemini API key for this profile"
+            # API Key (col 3) — per-profile Gemini key status (emoji only)
+            api_key_text = "❌"
+            api_key_tip = t("profiles.no_api_key")
             try:
                 from services.gemini_key_manager import GeminiKeyManager
                 _km = GeminiKeyManager()
                 _key = _km.get_key(email_text)
                 if _key and _key.startswith("AIza"):
-                    api_key_text = f"✅ ●●●{_key[-6:]}"
+                    api_key_text = "✅"
                     api_key_tip = f"Key: {_key[:10]}...{_key[-6:]}"
             except Exception:
                 pass
@@ -414,17 +437,17 @@ class SettingsProfilesMixin:
                 return btn
 
             # Paste Gemini API Key button
-            gemini_btn = _action_btn("🤖", "Paste Gemini API Key cho profile này", Theme.TEAL if hasattr(Theme, 'TEAL') else "#2ecc71")
+            gemini_btn = _action_btn("🤖", t("profiles.actions_tooltip.gemini_key"), Theme.TEAL if hasattr(Theme, 'TEAL') else "#2ecc71")
             gemini_btn.clicked.connect(lambda checked, e=email: self._on_paste_gemini_key(e))
             actions_layout.addWidget(gemini_btn)
 
             # Save Password button
-            pwd_btn = _action_btn("🔑", "Save Password (for auto re-login)", Theme.YELLOW)
+            pwd_btn = _action_btn("🔑", t("profiles.actions_tooltip.save_password"), Theme.YELLOW)
             pwd_btn.clicked.connect(lambda checked, e=email: self._on_save_password(e))
             actions_layout.addWidget(pwd_btn)
 
             # Refresh button
-            refresh_btn = _action_btn("🔃", "Refresh Session", Theme.BLUE)
+            refresh_btn = _action_btn("🔃", t("profiles.actions_tooltip.refresh_session"), Theme.BLUE)
             refresh_btn.clicked.connect(lambda checked, e=email: self._on_refresh_session(e))
             actions_layout.addWidget(refresh_btn)
 
@@ -458,12 +481,12 @@ class SettingsProfilesMixin:
 
 
             # Reload Extension button
-            ext_btn = _action_btn("🧩", "Reload Extension (hot-reload from disk)", "#9B59B6")
+            ext_btn = _action_btn("🧩", "Reload Extension", "#9B59B6")
             ext_btn.clicked.connect(lambda checked, e=email: self._on_reload_extension(e))
             actions_layout.addWidget(ext_btn)
 
             # Delete button
-            delete_btn = _action_btn("🗑️", "Delete Profile", Theme.RED)
+            delete_btn = _action_btn("🗑️", t("profiles.actions_tooltip.delete_profile"), Theme.RED)
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
 
@@ -527,9 +550,9 @@ class SettingsProfilesMixin:
             pass
 
         # Update button text
-        self._email_toggle_btn.setText("🙈 Hiện Email" if self._emails_hidden else "👁️ Ẩn Email")
+        self._email_toggle_btn.setText(t("profiles.show_email") if self._emails_hidden else t("profiles.hide_email"))
         self._email_toggle_btn.setToolTip(
-            "Nhấn để hiện email" if self._emails_hidden else "Nhấn để ẩn email"
+            t("profiles.show_email") if self._emails_hidden else t("profiles.hide_email")
         )
 
         # Update all email cells (col 2) — block signals to avoid side effects

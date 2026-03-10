@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Callable, Any
 from datetime import datetime
 
+from core.data_loader import load_text, scan_data_files
+
 log = logging.getLogger("veo.builder")
 
 
@@ -178,14 +180,10 @@ class ContextManager:
         """Load content-video.md workflow rules (cached)."""
         if "content-video" not in self._workflow_cache:
             wf_path = Path(__file__).parent.parent / "data" / "workflows" / "content-video.md"
-            if wf_path.exists():
-                try:
-                    content = wf_path.read_text(encoding="utf-8", errors="ignore")
-                    # Extract key sections: Phase rules, compliance checklist, format rules
-                    self._workflow_cache["content-video"] = content
-                except Exception:
-                    self._workflow_cache["content-video"] = ""
-            else:
+            try:
+                content = load_text(wf_path)
+                self._workflow_cache["content-video"] = content
+            except (FileNotFoundError, Exception):
                 self._workflow_cache["content-video"] = ""
         return self._workflow_cache["content-video"]
 
@@ -195,14 +193,13 @@ class ContextManager:
             research_dir = Path(__file__).parent.parent / "data" / "workflows" / "01_Research"
             parts = []
             if research_dir.exists():
-                for f in sorted(research_dir.iterdir()):
-                    if f.is_file() and f.suffix in (".md", ".txt"):
-                        try:
-                            content = f.read_text(encoding="utf-8", errors="ignore")
-                            # Limit each file to ~4000 chars to manage token budget
-                            parts.append(f"## {f.stem}\n{content[:4000]}")
-                        except Exception:
-                            pass
+                for f in sorted(scan_data_files(research_dir, recursive=False)):
+                    try:
+                        content = load_text(f)
+                        # Limit each file to ~4000 chars to manage token budget
+                        parts.append(f"## {f.stem}\n{content[:4000]}")
+                    except Exception:
+                        pass
             self._workflow_cache["research"] = "\n\n".join(parts)
         return self._workflow_cache["research"]
 
@@ -929,8 +926,10 @@ class ProjectBuilder:
         # Load core principles as context
         core_path = self._bundled_path() / "02_Universal" / "00_Core_Principles.md"
         core_text = ""
-        if core_path.exists():
-            core_text = core_path.read_text(encoding="utf-8", errors="ignore")[:3000]
+        try:
+            core_text = load_text(core_path)[:3000]
+        except (FileNotFoundError, Exception):
+            pass
 
         system_prompt = (
             "You are a VEO video production template designer.\n"
@@ -1020,9 +1019,12 @@ class ProjectBuilder:
         existing_rules = ""
         rules_dir = self._bundled_path() / "03_Advanced"
         if rules_dir.exists():
-            for f in sorted(rules_dir.glob("*.md"))[:3]:
-                preview = f.read_text(encoding="utf-8", errors="ignore")[:600]
-                existing_rules += f"\n--- EXAMPLE: {f.name} ---\n{preview}\n"
+            for f in sorted(scan_data_files(rules_dir, recursive=False))[:3]:
+                try:
+                    preview = load_text(f)[:600]
+                    existing_rules += f"\n--- EXAMPLE: {f.name} ---\n{preview}\n"
+                except Exception:
+                    pass
 
         system_prompt = (
             "You are a VEO video production rules designer.\n"

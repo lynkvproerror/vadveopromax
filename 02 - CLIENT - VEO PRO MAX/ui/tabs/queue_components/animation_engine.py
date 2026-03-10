@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 class QueueAnimationMixin:
@@ -242,7 +243,7 @@ class QueueAnimationMixin:
                     font-weight: bold;
                 }}
             """)
-            slot.setToolTip("Generation failed")
+            slot.setToolTip(t("queue_extra.generation_failed"))
             return
         
         is_active = task_status in ('running', 'waiting_poll')

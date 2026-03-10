@@ -100,121 +100,143 @@ Root folder trong ZIP PHẢI là `VEO_Pro_Max/` (không phải `main.dist/`).
 
 ---
 
-## 📌 Rule #6: Mã hóa dữ liệu Data (Fernet AES-256)
+## 📌 Rule #6: Mã hóa dữ liệu Data (Fernet AES)
 
-> **Status**: 🔜 Chưa triển khai — CHỈ xử lý khi bắt đầu build EXE
+> **Status**: ✅ ĐÃ TRIỂN KHAI — Tự động chạy trong `build_release.py` Step 5.8
 
 > [!CAUTION]
-> **TUYỆT ĐỐI KHÔNG sửa folder gốc `02 - CLIENT - VEO PRO MAX`!**
+> **TUYỆT ĐỐI KHÔNG sửa folder gốc `02 - CLIENT - VEO PRO MAX/data/`!**
 > - Folder gốc LUÔN giữ nguyên `.md` plaintext để dev/nâng cấp bình thường
-> - Encryption CHỈ chạy trên BẢN COPY trong quá trình build EXE
-> - `data_source/` CHÍNH LÀ folder `data/` gốc từ 02 (không cần copy riêng)
-> - Flow: `build_release.py` copy 02 → temp → encrypt data → compile exe → output 03
+> - Encryption CHỈ chạy trên output `main.dist/data/` SAU KHI Nuitka compile xong
 
-### Nguyên tắc cốt lõi
-```
-02 - CLIENT (gốc)     → KHÔNG BAO GIỜ bị thay đổi bởi encryption
-                         Luôn giữ .md plaintext để dev tiếp
-
-build_release.py       → Copy 02 → temp folder
-                         Chạy encrypt_data.py trên temp/data/
-                         Compile temp → EXE
-                         Output → 03 - Final App Client
-
-03 - Final App Client  → Chỉ chứa .enc (encrypted)
-                         Ship cho khách
-```
+### Kiến trúc
 
 ```
-data_source/             ← 🔑 CHỈ DEV GIỮ (plaintext .md, KHÔNG ship)
-├── workflows/
-│   ├── 01_Research/
-│   ├── 02_Universal/Templates/
-│   ├── 03_Advanced/
-│   └── content-video.md
+02 - CLIENT (source)         → .md plaintext — KHÔNG BAO GIỜ bị encrypt
+    core/data_loader.py      → Runtime: decrypt .enc in-memory, fallback .md (dev)
+    core/workflow_scanner.py  → Dùng data_loader.scan_data_files() + load_text()
+    core/project_builder.py  → Dùng data_loader.load_text() (5 locations)
 
-data/                    ← 🔒 SHIP cho khách (encrypted .enc)
-├── workflows/
-│   ├── 01_Research/
-│   ├── 02_Universal/Templates/
-│   │   ├── Cooking_Tips.enc
-│   │   ├── Health_PMCS.enc
-│   │   └── ...
-│   ├── 03_Advanced/
-│   └── content-video.enc
+02.1 - Script build
+    encrypt_data.py          → Build tool: Fernet AES, .md → .enc
+    build_release.py         → Step 5.8: auto-encrypt main.dist/data/
+
+03 - Final App Client
+    main.dist/data/          → Chỉ chứa .enc (0 file .md plaintext)
 ```
 
-### Quy trình cập nhật
+### Flow tự động khi build
 
 ```
-1. Sửa/thêm file .md trong data_source/
-2. Chạy: python encrypt_data.py
-   → Tự encrypt tất cả .md → .enc trong data/
-   → Tự xóa .enc orphan (nếu xóa .md source)
-3. Chạy build_release.py như bình thường
-4. Ship cho khách (data/ chỉ chứa .enc)
+python build_release.py
+  [4]   Nuitka compile (includes data_loader.py in binary)
+  [5.8] encrypt_data.py encrypts main.dist/data/**/*.md → .enc, xóa .md
+  → Ship: .enc files only, key ẩn trong compiled binary
 ```
 
-### Cần tạo khi triển khai
+### Key management
 
-#### 1. `encrypt_data.py` (Build tool)
-```python
-# Chức năng:
-# - Scan data_source/**/*.md
-# - Encrypt mỗi file → data/**/*.enc (giữ cấu trúc thư mục)
-# - Xóa .enc không còn .md source tương ứng
-# - Report: X files encrypted, Y files removed
-#
-# Key: Fernet (from cryptography library)
-# Key storage: Hardcode trong file hoặc derive từ APP_SECRET
-# Dependency: pip install cryptography
+- Key derivation: PBKDF2-HMAC-SHA256 (200k iterations)
+- Salt + passphrase hardcode trong `encrypt_data.py` và `core/data_loader.py`
+- Nuitka compile cả 2 file thành native code → khó extract key
+- Key PHẢI GIỐNG NHAU giữa `encrypt_data.py` và `data_loader.py`
+
+### Lưu ý khi sửa code
+
+- Khi thêm module mới đọc `data/workflows/*.md`:
+  → **PHẢI** dùng `from core.data_loader import load_text, scan_data_files`
+  → **KHÔNG** dùng `path.read_text()` trực tiếp
+- Khi thêm file data mới (ngoài workflows):
+  → Thêm vào `encrypt_data.py` nếu cần encrypt
+  → Hoặc thêm `--include-data-files` vào `build_release.py`
+
+---
+
+## 📌 Rule #7: One-Command Build-to-Publish
+
+> **Một lệnh duy nhất** xử lý toàn bộ từ compile → ZIP → git push → GitHub Release.
+
+### Lệnh build đầy đủ
+
+```bash
+python build_release.py
 ```
 
-#### 2. `core/data_loader.py` (Runtime module)
-```python
-# Chức năng:
-# - Decrypt .enc files in memory (KHÔNG ghi ra disk)
-# - Expose API: load_text(path) → str
-# - Dev mode: đọc .md trực tiếp (cho dev)
-#
-# Config: DATA_MODE = "dev" | "encrypted"
-# - dev: đọc từ data_source/*.md (plaintext)
-# - encrypted: đọc từ data/*.enc (decrypt in memory)
+### Pipeline tự động (9 bước)
+
+```
+[1] Check dependencies (nuitka, PySide6, C compiler)
+[2] Generate SHA-256 hashes (security files)
+[3] Save build_info.json
+[4] Nuitka standalone compile → main.dist/
+[5] Copy release files + generate version.json
+[5.8] Encrypt workflow data (.md → .enc)
+[5.5] Obfuscate extension JS
+[6] Organize dist folder (hide DLLs)
+[7] Create ZIP: VEO_Pro_Max_v{VERSION}.zip + SHA-256
+[8] Git add/commit/push → remote
+[9] GitHub Release (gh CLI) hoặc in manual instructions
 ```
 
-#### 3. Sửa `core/workflow_scanner.py`
-```python
-# Thay đổi:
-# - scan_sources() gọi data_loader.load_text() thay vì Path.read_text()
-# - _parse_template() nhận content string thay vì Path
-# - Fallback: nếu .enc không có, thử .md (backward compatible)
+### Flags tuỳ chỉnh
+
+| Flag | Mô tả |
+|---|---|
+| `--skip-compile` | Bỏ qua Nuitka (dùng khi chỉ cần re-ZIP) |
+| `--skip-publish` | Bỏ qua steps 7-9 (chỉ build, không publish) |
+| `--skip-organize` | Bỏ qua sắp xếp folder |
+| `--onefile` | Build single exe (chậm hơn khi startup) |
+
+### Prerequisites
+
+- `gh` CLI: `winget install GitHub.cli` + `gh auth login` (cho step 9)
+- Git LFS: đã cấu hình cho `.exe` files
+- `cryptography`: `pip install cryptography` (cho step 5.8)
+
+### Khi nào chạy?
+
+Mỗi khi có thay đổi code cần release:
+
+```
+1. Sửa code trong folder 02
+2. Bump APP_VERSION trong 02/config/constants.py
+3. Cập nhật CHANGELOG.txt (chỉ client-facing!)
+4. Chạy: python build_release.py    ← MỘT LỆNH DUY NHẤT
+5. Verify app chạy OK
 ```
 
-#### 4. Sửa `core/project_builder.py`
-```python
-# Thay đổi:
-# - load_workflow_data() gọi data_loader thay vì đọc file trực tiếp
-# - context_manager cũng dùng data_loader
+---
+
+## 📌 Rule #8: Dual-Repo Architecture
+
+> **2 repo riêng biệt** — KHÔNG NHẦM LẪN!
+
+| Repo | Chế độ | Nội dung | Git remote |
+|---|---|---|---|
+| `lynkvproerror/veo-pro-max` | **PRIVATE** | Source code (folder 02) | `origin` |
+| `lynkvproerror/vadveopromax` | **PUBLIC** | Exe + ZIP releases | upload manual/gh CLI |
+
+### GITHUB_REPO trong code = `vadveopromax` (public)
+
+Files chứa `GITHUB_REPO` (PHẢI trỏ tới **PUBLIC** repo):
+
+| File | Mục đích |
+|---|---|
+| `02/config/constants.py` | Client auto-update check URL |
+| `02/core/auto_updater.py` | Download update ZIP URL |
+| `02.1/build_release.py` | version.json download_url + gh release |
+
+### Flow khi release
+
+```
+1. git push → veo-pro-max (PRIVATE) — source code
+2. build_release.py tạo ZIP
+3. Upload ZIP → vadveopromax (PUBLIC) releases
+4. Client auto-update tải từ vadveopromax
 ```
 
-### Lưu ý bảo mật
-
-- **Key management**: Key nhúng trong Python code → dễ decompile
-  → Giải pháp: kết hợp Nuitka compile Python → .exe (key ẩn trong binary)
-- **Memory**: Decrypt in RAM, KHÔNG BAO GIỜ ghi plaintext ra disk
-- **Dev mode**: CHỈ enable khi dev, disable trong production build
-- **Dependency**: `cryptography` library (pip install cryptography)
-
-### Checklist triển khai
-
-- [ ] Tạo `data_source/` — copy toàn bộ từ `data/` hiện tại
-- [ ] Viết `encrypt_data.py` — encrypt tool
-- [ ] Viết `core/data_loader.py` — runtime decrypt
-- [ ] Sửa `workflow_scanner.py` — dùng data_loader
-- [ ] Sửa `project_builder.py` — dùng data_loader
-- [ ] Thêm `DATA_MODE` config (dev/encrypted)
-- [ ] Test: encrypt → run app → verify tất cả features OK
-- [ ] Thêm `data_source/` vào `.gitignore` (nếu dùng git)
-- [ ] Cập nhật `build_release.py` — auto chạy encrypt trước build
+> [!CAUTION]
+> **GITHUB_REPO PHẢI là `vadveopromax`!**
+> Nếu đổi thành `veo-pro-max` (private) → client không download được → HTTP 404!
 
 

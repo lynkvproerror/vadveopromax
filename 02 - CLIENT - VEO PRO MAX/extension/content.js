@@ -23,8 +23,9 @@ if (window.__veoContentLoaded) {
     // (reCAPTCHA execution moved to background.js via chrome.scripting.executeScript)
 
     // Maximum retries for email detection (SPA may render late)
-    const MAX_EMAIL_RETRIES = 5;
-    const EMAIL_RETRY_INTERVAL = 3000; // 3s between retries
+    // VEO SPA on labs.google/fx/ can take 20-40s to render __NEXT_DATA__
+    const MAX_EMAIL_RETRIES = 12;
+    const EMAIL_RETRY_INTERVAL = 3000; // 3s between retries → 36s total
 
     // Anti-idle intervals
     const HEARTBEAT_INTERVAL = 20000;         // 20s — report alive to background
@@ -40,6 +41,7 @@ if (window.__veoContentLoaded) {
     let _mouseSimTimer = null;
     let _scrollTimer = null;
     let _recaptchaWarmTimer = null;
+    let _emailObserver = null;  // MutationObserver for __NEXT_DATA__ fallback
 
 
     // ── Tab Registration ───────────────────────────────────────────────────
@@ -59,6 +61,8 @@ if (window.__veoContentLoaded) {
             _registeredEmail = email;
             chrome.runtime.sendMessage({ action: 'register_tab', email });
             console.log(`[VEO Bridge Content] ✅ Registered tab with email: ${email}`);
+            // Clean up observer if it was started
+            if (_emailObserver) { _emailObserver.disconnect(); _emailObserver = null; }
             // Start anti-idle systems after successful registration
             startAntiIdle();
             return;
@@ -78,16 +82,53 @@ if (window.__veoContentLoaded) {
         if (retryCount < MAX_EMAIL_RETRIES) {
             setTimeout(() => detectAndRegister(retryCount + 1), EMAIL_RETRY_INTERVAL);
         } else {
-            console.warn(`[VEO Bridge Content] ❌ Could not detect email after ${MAX_EMAIL_RETRIES} retries on ${window.location.href}`);
-            // NOTIFY background.js that this tab appears logged out
-            chrome.runtime.sendMessage({
-                action: 'tab_logout',
-                reason: 'email_not_found',
-                url: window.location.href,
-            });
+            console.warn(`[VEO Bridge Content] ⏳ Could not detect email after ${MAX_EMAIL_RETRIES} retries — starting MutationObserver fallback`);
+            // DO NOT send tab_logout here — the SPA may still render the email.
+            // False tab_logout poisons Gemini key provision for hot-added accounts.
+            // Instead, start a MutationObserver that watches for __NEXT_DATA__ to appear.
+            startEmailObserver();
             // Still start anti-idle — tab is still a VEO tab
             startAntiIdle();
         }
+    }
+
+    /**
+     * MutationObserver fallback: watches for __NEXT_DATA__ script tag or
+     * any [data-email] / aria-label changes that indicate email is available.
+     * Auto-disconnects after 120s or on success.
+     */
+    function startEmailObserver() {
+        if (_emailObserver) return; // Already watching
+
+        const startTime = Date.now();
+        const MAX_OBSERVE_MS = 120000; // 2 minutes max
+
+        _emailObserver = new MutationObserver(() => {
+            // Check timeout
+            if (Date.now() - startTime > MAX_OBSERVE_MS) {
+                console.warn('[VEO Bridge Content] ⏰ MutationObserver timeout (2min) — giving up email detection');
+                _emailObserver.disconnect();
+                _emailObserver = null;
+                return;
+            }
+
+            const email = extractEmail();
+            if (email) {
+                _registeredEmail = email;
+                chrome.runtime.sendMessage({ action: 'register_tab', email });
+                console.log(`[VEO Bridge Content] ✅ Registered tab via MutationObserver: ${email}`);
+                _emailObserver.disconnect();
+                _emailObserver = null;
+            }
+        });
+
+        _emailObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-email', 'aria-label'],
+        });
+        console.log('[VEO Bridge Content] 👁️ MutationObserver watching for email...');
     }
 
     function extractEmail() {

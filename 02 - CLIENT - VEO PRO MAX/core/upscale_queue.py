@@ -323,6 +323,11 @@ class UpscaleQueue:
         
         # Counter for active image upscale jobs (bypass 720p_priority pause)
         self._active_image_jobs: int = 0
+        
+        # Fix #4: reCAPTCHA health check for account failover
+        # Injected by engine after construction (same pattern as _burst_controller)
+        # fn(email) -> bool: True if reCAPTCHA is healthy
+        self._is_recaptcha_healthy_fn: Optional[Callable] = None
     
     def start(self):
         """Mark queue as running."""
@@ -666,13 +671,23 @@ class UpscaleQueue:
             self._job_controller.record_failure(job.account_email)
             return
         
-        # DD6: Failover — if primary account unhealthy, try other accounts
+        # DD6: Failover — if primary account unhealthy (cooldown OR reCAPTCHA dead), try others
         original_email = job.original_account or job.account_email
-        if self._is_on_cooldown(job.account_email):
+        _needs_failover = self._is_on_cooldown(job.account_email)
+        # ★ Fix #4: Also failover when reCAPTCHA is dead (extension connected but widget stuck)
+        if not _needs_failover and self._is_recaptcha_healthy_fn:
+            if not self._is_recaptcha_healthy_fn(job.account_email):
+                _needs_failover = True
+                log.warning(
+                    f"[UpscaleQueue] DD6: {job.account_email} reCAPTCHA unhealthy "
+                    f"— attempting failover to healthy account"
+                )
+        if _needs_failover:
             failover_found = False
             for alt in self._get_all_accounts():
                 if (alt.email != job.account_email 
-                    and not self._is_on_cooldown(alt.email)):
+                    and not self._is_on_cooldown(alt.email)
+                    and (not self._is_recaptcha_healthy_fn or self._is_recaptcha_healthy_fn(alt.email))):
                     log.warning(
                         f"[UpscaleQueue] DD6 Failover: {job.account_email} → {alt.email} "
                         f"(original: {original_email}, reason: cooldown)"
@@ -1535,6 +1550,20 @@ class UpscaleQueue:
             log.warning(f"[UpscaleQ-Image] Account {job.account_email} not found")
             self._total_failed += 1
             return
+        
+        # ★ Fix #4: Account failover for image upscale when reCAPTCHA is dead
+        if self._is_recaptcha_healthy_fn and not self._is_recaptcha_healthy_fn(job.account_email):
+            for alt in self._get_all_accounts():
+                if (alt.email != job.account_email
+                    and not self._is_on_cooldown(alt.email)
+                    and (self._is_recaptcha_healthy_fn(alt.email))):
+                    log.warning(
+                        f"[UpscaleQ-Image] Failover: {job.account_email} → {alt.email} "
+                        f"(reCAPTCHA unhealthy on primary)"
+                    )
+                    account = alt
+                    job.account_email = alt.email
+                    break
         
         # Auto-inject extension bridge
         if not account.extension_bridge:

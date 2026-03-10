@@ -238,13 +238,26 @@ class AppController:
         # Start Extension bridge WebSocket server
         if self._loop:
             try:
+                log.info(f"[AppController] Starting bridge... (loop={self._loop}, running={self._loop.is_running()})")
                 future = asyncio.run_coroutine_threadsafe(self._extension_bridge.start(), self._loop)
-                future.result(timeout=5.0)  # Wait and catch any startup errors
-                log.info("[AppController] Extension bridge started on ws://127.0.0.1:8765")
+                future.result(timeout=10.0)  # Wait and catch any startup errors
+                actual_port = getattr(self._extension_bridge, '_port', '???')
+                log.info(f"[AppController] ✅ Extension bridge started on ws://127.0.0.1:{actual_port}")
+                
+                # Verify port is actually LISTENING
+                import socket
+                try:
+                    test_sock = socket.create_connection(('127.0.0.1', actual_port), timeout=2)
+                    test_sock.close()
+                    log.info(f"[AppController] ✅ Port {actual_port} verified LISTENING — extension can connect")
+                except (ConnectionRefusedError, OSError) as sock_e:
+                    log.error(f"[AppController] ❌ Port {actual_port} NOT LISTENING despite start() success: {sock_e}")
+            except TimeoutError:
+                log.error("[AppController] ❌ Extension bridge start TIMED OUT (10s) — WS server not running!")
             except Exception as e:
-                log.error(f"[AppController] Extension bridge failed to start: {e}")
+                log.error(f"[AppController] ❌ Extension bridge failed to start: {type(e).__name__}: {e}", exc_info=True)
         else:
-            log.error("[AppController] Async loop not ready — bridge not started")
+            log.error("[AppController] ❌ Async loop not ready (self._loop is None) — bridge not started!")
         
         # Start session monitoring
         self._session_monitor.start_monitoring()
@@ -847,6 +860,122 @@ class AppController:
         # Run in background async loop
         if self._loop:
             asyncio.run_coroutine_threadsafe(_launch(), self._loop)
+    
+    def _hot_add_profile(self, email: str):
+        """Hot-add a single profile mid-session (no app restart needed).
+        
+        Called automatically when a new profile is added via add_profile().
+        Performs the same steps as _auto_launch_browsers but for one profile:
+        1. Sync profile to runtime (creates AccountManager)
+        2. Open debug browser
+        3. Inject extension bridge + assign email
+        4. Proactive reCAPTCHA warm-up
+        """
+        if not self._loop or not email:
+            return
+        
+        async def _launch_single():
+            try:
+                log.info(f"[HotAdd] 🔥 Hot-adding profile: {email}")
+                
+                # Step 1: Sync profile to runtime
+                self.sync_profiles_to_runtime()
+                log.info(f"[HotAdd] ✅ Profile synced to runtime: {email}")
+                
+                # Step 2: Inject bridge into new account
+                acc = self._multi_account.get_account(email)
+                if acc:
+                    self._ensure_account_bridge(acc)
+                    acc.set_profiles_controller(self._profiles_controller)
+                    acc._parent_manager = self._multi_account
+                    log.info(f"[HotAdd] ✅ Bridge + controller injected: {email}")
+                
+                # Step 3: Open debug browser
+                if self._profiles_controller:
+                    success = self._profiles_controller.open_browser_for_debug(
+                        email,
+                        on_state_change=self._on_debug_browser_state_change
+                    )
+                    if success:
+                        await asyncio.sleep(2)  # Brief wait for browser to start
+                        from config.settings import get_settings as _gs
+                        s = _gs()
+                        if getattr(s, 'smart_hide_enabled', True) or getattr(s, 'hide_all_browsers', False):
+                            self._profiles_controller.hide_debug_browser(email)
+                        log.info(f"[HotAdd] ✅ Debug browser opened: {email}")
+                    else:
+                        log.warning(f"[HotAdd] ⚠️ Failed to open browser: {email}")
+                
+                # Step 4: Connect account to browser
+                if acc:
+                    try:
+                        await acc.ensure_browser(headless=True)
+                        log.info(f"[HotAdd] ✅ Account connected to browser: {email}")
+                    except Exception as e:
+                        log.warning(f"[HotAdd] Browser connect error (non-fatal): {e}")
+                
+                # Step 5: Assign email to extension (wait for it to connect)
+                if self._extension_bridge:
+                    await asyncio.sleep(3)  # Wait for extension to load
+                    if not self._extension_bridge.is_connected(email):
+                        await self._extension_bridge.assign_email(email)
+                        log.info(f"[HotAdd] 📧 Email assigned to extension: {email}")
+                    
+                    # Ensure extension is installed
+                    try:
+                        results = self.ensure_all_extensions()
+                        if results:
+                            log.info(f"[HotAdd] ✅ Extension verified: {results}")
+                    except Exception:
+                        pass
+                
+                # Step 6: Proactive reCAPTCHA warm-up
+                if self._extension_bridge and self._extension_bridge.is_connected(email):
+                    asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+                    log.info(f"[HotAdd] 🔥 reCAPTCHA warm-up scheduled: {email}")
+                
+                # Step 6b: NOW notify Engine (browser + extension + reCAPTCHA ready)
+                # Must happen AFTER Steps 3-6 to prevent:
+                # - _account_watcher calling ensure_browser() while browser already opening
+                # - foreman starting without x-client-data/reCAPTCHA
+                acc = self._multi_account.get_account(email)  # Re-fetch in case it changed
+                if acc and hasattr(self, '_engine') and self._engine:
+                    if self._engine.is_running:
+                        self._engine.add_account_hot(acc)
+                        log.info(f"[HotAdd] ✅ Engine notified — workers will spawn for {email}")
+                
+                self._push_browser_status()
+                self._push_extension_status()
+                self._push_session_data()
+                self._notify_status(f"✅ Profile {email} added and connected!")
+                log.info(f"[HotAdd] ✅ Hot-add complete: {email}")
+                
+                # Step 7: Auto-resume Engine if stopped but tasks pending
+                if (hasattr(self, '_engine') and self._engine 
+                        and not self._engine.is_running
+                        and self._dispatcher 
+                        and self._dispatcher.ready_count > 0):
+                    pending = self._dispatcher.ready_count
+                    log.info(
+                        f"[HotAdd] 🔄 Engine stopped but {pending} tasks pending "
+                        f"— auto-resuming with {email}"
+                    )
+                    # Fix: sync stale state — engine may have stopped naturally
+                    # without calling stop_processing(), leaving is_processing=True
+                    if self.state.is_processing:
+                        log.info("[HotAdd] Resetting stale is_processing flag")
+                        self.state.is_processing = False
+                    try:
+                        self.start_processing()
+                        log.info(f"[HotAdd] ✅ Engine auto-resumed — {pending} tasks will process")
+                    except Exception as e:
+                        log.warning(f"[HotAdd] ⚠️ Auto-resume failed: {e}")
+                
+            except Exception as e:
+                log.error(f"[HotAdd] ❌ Failed to hot-add {email}: {e}")
+        
+        # Run in background async loop
+        asyncio.run_coroutine_threadsafe(_launch_single(), self._loop)
     # ── Public API for UI (Fix B: encapsulate private access) ──────
     
     @property
@@ -1413,6 +1542,7 @@ class AppController:
         """Enable or disable an account.
         
         Called from Settings UI when user toggles the account switch.
+        When re-enabling, auto-reconnects extension if disconnected.
         """
         # Update profile on disk
         if self._profiles_controller:
@@ -1423,10 +1553,86 @@ class AppController:
         if acc:
             if enabled:
                 acc.enable()
+                # ★ Auto-reconnect: check if extension is still connected
+                # If browser/extension died while disabled, restart it
+                ext_connected = (
+                    self._extension_bridge and
+                    self._extension_bridge.is_connected(email)
+                )
+                if not ext_connected:
+                    log.info(f"[AppController] Re-enable {email}: extension disconnected — triggering reconnect")
+                    import threading
+                    threading.Thread(
+                        target=self._reconnect_account_bg,
+                        args=(email,),
+                        daemon=True,
+                        name=f"reconnect-{email[:8]}",
+                    ).start()
             else:
                 acc.disable()
         
         log.info(f"[AppController] Account {email} {'enabled' if enabled else 'disabled'}")
+    
+    def _reconnect_account_bg(self, email: str):
+        """Background: reconnect browser + extension for a re-enabled account."""
+        import asyncio
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._reconnect_account_async(email))
+        except Exception as e:
+            log.error(f"[Reconnect] {email}: failed — {e}")
+        finally:
+            loop.close()
+    
+    async def _reconnect_account_async(self, email: str):
+        """Async reconnect: ensure browser + extension for account."""
+        acc = self._multi_account.get_account(email)
+        if not acc:
+            return
+        
+        # Step 1: Ensure browser is running
+        if not (acc._browser_session and acc._browser_session.is_ready):
+            log.info(f"[Reconnect] {email}: launching browser...")
+            try:
+                if self._profiles_controller:
+                    acc.set_profiles_controller(self._profiles_controller)
+                from config.settings import get_settings
+                _s = get_settings()
+                _headless = getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False)
+                await acc.ensure_browser(headless=_headless)
+                log.info(f"[Reconnect] {email}: ✅ browser launched")
+            except Exception as e:
+                log.error(f"[Reconnect] {email}: browser launch failed — {e}")
+                return
+        
+        # Step 2: Wait for extension connection
+        if self._extension_bridge:
+            if not self._extension_bridge.is_connected(email):
+                log.info(f"[Reconnect] {email}: waiting for extension...")
+                connected = await self._extension_bridge.wait_for_extension(
+                    email, timeout=15.0
+                )
+                if connected:
+                    log.info(f"[Reconnect] {email}: ✅ extension reconnected")
+                else:
+                    log.warning(f"[Reconnect] {email}: ⚠️ extension timeout (15s)")
+            
+            # Step 3: Populate session from bridge cache
+            cached = self._extension_bridge.get_cached_headers(
+                email, max_age_seconds=0
+            )
+            if cached:
+                acc._session.update_browser_headers(
+                    browser_validation=cached.get('x-browser-validation', ''),
+                    client_data=cached.get('x-client-data', ''),
+                    browser_channel=cached.get('x-browser-channel', 'stable'),
+                    browser_copyright=cached.get('x-browser-copyright', ''),
+                    browser_year=cached.get('x-browser-year', ''),
+                )
+                log.info(f"[Reconnect] {email}: ✅ headers populated")
+        
+        log.info(f"[Reconnect] {email}: ✅ account fully reconnected")
     
     def set_account_max_workers(self, email: str, value: int):
         """Set max concurrent workers for an account.
@@ -1494,15 +1700,15 @@ class AppController:
                     self._extension_bridge.is_connected(email)
                 )
                 
-                # Session status — extension-only architecture
-                if runtime_acc.is_ready:
-                    session_status = "🟢 Ready (Production)"
+                # Session status — check enabled state FIRST
+                if not runtime_acc.is_enabled:
+                    session_status = "⚫ Disabled"
+                elif runtime_acc.is_ready:
+                    session_status = "🟢 Ready"
                 elif ext_connected:
                     session_status = "🟢 Session via Extension"
-                elif runtime_acc.is_enabled:
-                    session_status = "🟡 Enabled (Waiting Extension)"
                 else:
-                    session_status = "🔴 Disabled"
+                    session_status = "🟡 Waiting Extension"
                 
                 # Access token: runtime first, fallback to tokens.json
                 rt_token = runtime_acc._session.access_token or ""
@@ -1925,8 +2131,21 @@ class AppController:
         return True
     
     def remove_account(self, email: str) -> bool:
-        """Remove an account."""
-        # remove_account is async — run via background loop
+        """Remove an account.
+        
+        Hot-remove flow:
+        1. Stop engine workers (foremen + supervisor) for this email
+        2. Remove from runtime pool (MultiAccountManager)
+        3. Unregister from session/refresh monitors
+        """
+        # Step 1: Stop engine workers BEFORE removing account
+        if hasattr(self, '_engine') and self._engine and self._engine._running:
+            try:
+                self._engine.stop_account_workers(email)
+            except Exception as e:
+                log.warning(f"[AppController] stop_account_workers error: {e}")
+        
+        # Step 2: Remove from runtime pool
         future = self._run_async(self._multi_account.remove_account(email))
         result = False
         if future:
@@ -1935,26 +2154,13 @@ class AppController:
             except Exception:
                 pass
         
+        # Step 3: Unregister from monitors
         self._session_monitor.unregister_session(email)
         self._refresh_manager.unregister_session(email)
         return result
     
-    def toggle_account(self, email: str, enabled: bool) -> bool:
-        """Enable or disable an account without removing it.
-        
-        Disabled accounts won't be selected for task dispatch.
-        """
-        account = self._multi_account.get_account(email)
-        if not account:
-            return False
-        
-        if enabled:
-            account.enable()
-            self._notify_status(f"Account enabled: {email}")
-        else:
-            account.disable()
-            self._notify_status(f"Account disabled: {email}")
-        return True
+    # toggle_account defined at L1541 — single source of truth
+    # (saves profile + updates runtime AccountManager)
     
     def get_accounts(self) -> List[Dict]:
         """Get list of accounts with status."""
@@ -3045,15 +3251,11 @@ class AppController:
             # BUG-20: UpscaleQueue.stop() already called by engine.stop()
             # (removed duplicate call that was here)
             
-            # Phase 3B: Stop ExtensionBridge (WebSocket server + heartbeat)
+            # Phase 3B: Cancel pending Extension requests (keep bridge alive for restart)
+            # bridge.stop() is only called on APP EXIT (AppController.stop, L368)
             bridge = getattr(self, '_extension_bridge', None)
             if bridge:
-                bridge_future = self._run_async(bridge.stop())
-                if bridge_future:
-                    try:
-                        bridge_future.result(timeout=5.0)
-                    except Exception:
-                        pass
+                bridge.cancel_pending_requests()
             
             # Phase 3C: Close API client session
             if hasattr(self._engine, '_api_client') and self._engine._api_client:
@@ -3446,6 +3648,11 @@ class AppController:
             "total": self._multi_account.account_count,
             "ready": len(self._multi_account.ready_accounts),
             "active": self._multi_account.total_active,
+            # ★ Fix: dispatcher._running_count tracks ALL tasks in RUNNING state
+            # (submit + download + upscale), not just acquired worker slots
+            "running_tasks": self._dispatcher.running_count,
+            # Actual session worker slots currently held (released at submit for T2I)
+            "active_workers": self._multi_account.total_active,
         }
     
     def get_queue_items(self) -> List[Dict]:
@@ -3522,6 +3729,7 @@ class AppController:
                 project_name=(first.project_name if first else ""),
                 aspect_ratio=(first.aspect_ratio if first else ""),
                 output_count=(first.output_count if first else 4),
+                download_quality=(first.download_quality if first and hasattr(first, 'download_quality') else "720p"),
                 created_at=group.created_at,
                 elapsed_seconds=_elapsed,
                 tasks=[
@@ -3610,6 +3818,8 @@ class AppController:
                 group.name = settings['project_name'] or group.name
             if 'output_count' in settings:
                 task.output_count = settings['output_count']
+            if 'download_quality' in settings:
+                task.download_quality = settings['download_quality']
         return True
     
     def cancel_task(self, task_id: str) -> bool:

@@ -14,6 +14,8 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional, Dict
 
+from core.data_loader import load_text, scan_data_files
+
 log = logging.getLogger("veo.workflow")
 
 
@@ -101,7 +103,7 @@ class WorkflowScanner:
                 continue
 
             pattern = "**/*.md" if recursive else "*.md"
-            for md_file in sorted(p.glob(pattern)):
+            for md_file in sorted(scan_data_files(p, recursive=recursive)):
                 try:
                     tmpl = self._parse_template(md_file)
                     if tmpl:
@@ -176,7 +178,7 @@ class WorkflowScanner:
 
     def _parse_template(self, path: Path) -> Optional[WorkflowTemplate]:
         """Parse a .md file into a WorkflowTemplate."""
-        content = path.read_text(encoding="utf-8", errors="ignore")
+        content = load_text(path)
 
         # Try to extract YAML frontmatter
         fm_match = self._FM_PATTERN.match(content)

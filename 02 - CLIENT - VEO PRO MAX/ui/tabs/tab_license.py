@@ -246,6 +246,7 @@ class TabLicense(QWidget):
                 t("license.features.gen_per_day").format(count=_trial_daily),
                 t("license.features.upscale_720"),
                 t("license.features.no_continuation"),
+                t("license.features.no_ai_prompt"),
                 t("license.features.no_priority"),
             ], Theme.SUBTEXT0),
             ("1M", t("license.tiers.1m"), "300,000đ", [
@@ -256,6 +257,7 @@ class TabLicense(QWidget):
                 t("license.features.anti_detect"),
                 t("license.features.smart_hide"),
                 t("license.features.auto_upscale"),
+                t("license.features.ai_prompt"),
             ], Theme.PEACH),
             ("3M", t("license.tiers.3m"), "500,000đ", [
                 t("license.features.save_44"),
@@ -265,6 +267,7 @@ class TabLicense(QWidget):
                 t("license.features.continuation"),
                 t("license.features.anti_detect_hide"),
                 t("license.features.auto_upscale"),
+                t("license.features.ai_prompt"),
             ], Theme.BLUE),
             ("6M", t("license.tiers.6m"), "800,000đ", [
                 t("license.features.save_56"),
@@ -274,6 +277,7 @@ class TabLicense(QWidget):
                 t("license.features.continuation"),
                 t("license.features.anti_detect_hide"),
                 t("license.features.priority_support"),
+                t("license.features.ai_prompt"),
             ], Theme.GREEN),
             ("1Y", t("license.tiers.1y"), "1,200,000đ", [
                 t("license.features.save_67"),
@@ -284,6 +288,7 @@ class TabLicense(QWidget):
                 t("license.features.full_security"),
                 t("license.features.priority_support"),
                 t("license.features.best_value"),
+                t("license.features.ai_prompt"),
             ], Theme.PURPLE),
             ("LIFETIME", t("license.tiers.lifetime"), "3,000,000đ", [
                 t("license.features.best_deal"),
@@ -294,6 +299,7 @@ class TabLicense(QWidget):
                 t("license.features.full_security"),
                 t("license.features.priority_vip"),
                 t("license.features.all_new_features"),
+                t("license.features.ai_prompt"),
             ], Theme.YELLOW),
         ]
         
@@ -377,7 +383,7 @@ class TabLicense(QWidget):
                 layout.addWidget(status_btn)
             elif active_tier == "LIFETIME":
                 # Lifetime user: FREE tier is included
-                status_btn = QPushButton("✅ Đã bao gồm")
+                status_btn = QPushButton(t("license_extra.included"))
                 status_btn.setStyleSheet(
                     f"background-color: {Theme.SURFACE1}; color: {Theme.SUBTEXT0}; "
                     f"border-radius: 0px; font-weight: bold; font-size: 14px;"
@@ -396,7 +402,7 @@ class TabLicense(QWidget):
                         f"border-radius: 0px; font-weight: bold; font-size: 14px;"
                     )
                 else:
-                    select_btn = QPushButton("✅ Đã bao gồm")
+                    select_btn = QPushButton(t("license_extra.included"))
                     select_btn.setStyleSheet(
                         f"background-color: {Theme.SURFACE1}; color: {Theme.SUBTEXT0}; "
                         f"border-radius: 0px; font-weight: bold; font-size: 14px;"
@@ -742,26 +748,26 @@ class TabLicense(QWidget):
         """Activate license key — wired to controller.activate_license."""
         key = self.key_entry.text().strip()
         if not key:
-            self._activation_status.setText("⚠️ Please enter a license key")
+            self._activation_status.setText(t("license_status.enter_key"))
             self._activation_status.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
             return
         
-        self._activation_status.setText("⏳ Activating...")
+        self._activation_status.setText(t("license_status.activating"))
         self._activation_status.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px;")
         
         if self.controller and hasattr(self.controller, 'activate_license'):
             result = self.controller.activate_license(key)
             if result:
-                self._activation_status.setText("✅ License activated successfully!")
+                self._activation_status.setText(t("license_status.activated"))
                 self._activation_status.setStyleSheet(f"color: {Theme.GREEN}; font-size: 11px;")
                 self.license_activated.emit(key)
                 self.key_entry.clear()
                 self._refresh_data()
             else:
-                self._activation_status.setText("❌ Activation failed — check your key")
+                self._activation_status.setText(t("license_status.failed"))
                 self._activation_status.setStyleSheet(f"color: {Theme.RED}; font-size: 11px;")
         else:
-            self._activation_status.setText("⚠️ Controller not available")
+            self._activation_status.setText(t("license_status.no_controller"))
     
     
     def _on_copy_machine_id(self):

@@ -11,7 +11,7 @@ inside the browser context where cookies are auto-attached.
 
 Endpoints:
 - project.createProject: POST /fx/api/trpc/project.createProject
-- project.getProjects: POST /fx/api/trpc/project.getProjects
+- project.getProjects: GET /fx/api/trpc/project.getProjects?input=<encoded>
 
 Architecture: This is owned by CHỦ (AccountManager), one per account.
 
@@ -121,49 +121,137 @@ class TRPCClient:
             log.error(f"TRPC createProject failed: {e}")
             return None
     
-    async def get_projects(
+    async def get_project(
         self,
+        project_id: str,
         tool_name: str = TOOL_FLOW,
-    ) -> list:
-        """List all projects via TRPC.
+    ) -> dict | None:
+        """Get a single project by ID via TRPC.
         
-        Per Protocol Analysis §3.2.1:
-          POST /fx/api/trpc/project.getProjects
-          Body: {"json": {"toolName": "PINHOLE"}}
+        Per HAR reference (0. Tao Project.har):
+          GET /fx/api/trpc/project.getProject?input=<url-encoded JSON>
+          Input: {"json": {"projectId": "...", "toolName": "PINHOLE"}}
+        
+        Note: project.getProjects (plural) was REMOVED from the API.
+        Only single-project lookup exists now.
         
         Args:
+            project_id: UUID of the project to fetch
             tool_name: "PINHOLE" or "BACKBONE"
             
         Returns:
-            List of project dicts, or empty list if failed
+            Project dict with projectId etc, or None if not found
         """
-        endpoint = f"{TRPC_BASE}/project.getProjects"
-        payload = {
-            "json": {
-                "toolName": tool_name,
-            }
-        }
+        import urllib.parse
+        input_data = json.dumps({"json": {"projectId": project_id, "toolName": tool_name}})
+        endpoint = f"{TRPC_BASE}/project.getProject?input={urllib.parse.quote(input_data)}"
         
         try:
-            result = await self._trpc_fetch(endpoint, payload)
+            result = await self._trpc_query(endpoint)
             if not result:
-                return []
+                return None
             
-            projects = (
+            project = (
                 result
                 .get("result", {})
                 .get("data", {})
                 .get("json", {})
                 .get("result", {})
-                .get("projects", [])
             )
             
-            log.info(f"TRPC: Found {len(projects)} projects")
-            return projects
+            pid = project.get("projectId")
+            if pid:
+                log.info(f"TRPC: Found project {pid}")
+                return project
+            return None
             
         except Exception as e:
-            log.error(f"TRPC getProjects failed: {e}")
-            return []
+            log.error(f"TRPC getProject failed: {e}")
+            return None
+
+    async def get_projects(
+        self,
+        tool_name: str = TOOL_FLOW,
+    ) -> list:
+        """DEPRECATED: project.getProjects endpoint was removed.
+        
+        Always returns empty list. Callers should use create_project() directly.
+        Kept for backward compatibility — will not produce 404 errors.
+        """
+        log.debug("TRPC: get_projects() skipped (endpoint removed — use create_project)")
+        return []
+    
+    async def _trpc_query(
+        self,
+        url: str,
+    ) -> Optional[Dict]:
+        """Execute a TRPC GET query via browser's fetch() API with retry.
+        
+        TRPC queries use GET with URL-encoded input params (unlike mutations which use POST).
+        Cookies are auto-attached by the browser context.
+        
+        Args:
+            url: Full TRPC endpoint URL with ?input= query parameter
+            
+        Returns:
+            Parsed JSON response, or None if failed
+        """
+        if not self._page:
+            log.error("TRPC: No page available")
+            return None
+        
+        for attempt in range(MAX_RETRIES):
+            try:
+                is_ready = await self._is_page_ready()
+                if not is_ready:
+                    log.warning(f"TRPC: Page not on labs.google domain (attempt {attempt + 1}/{MAX_RETRIES})")
+                    if attempt < MAX_RETRIES - 1:
+                        await asyncio.sleep(RETRY_DELAYS[attempt])
+                        continue
+                    return None
+                
+                result = await self._page.evaluate(
+                    _SAFE_QUERY_JS,
+                    url
+                )
+                
+                if result is None:
+                    log.warning(f"TRPC query: evaluate returned None (attempt {attempt + 1}/{MAX_RETRIES})")
+                    if attempt < MAX_RETRIES - 1:
+                        await asyncio.sleep(RETRY_DELAYS[attempt])
+                        continue
+                    return None
+                
+                if isinstance(result, dict) and "__fetch_error__" in result:
+                    error = result["__fetch_error__"]
+                    log.warning(f"TRPC query: fetch error (attempt {attempt + 1}/{MAX_RETRIES}): {error}")
+                    if attempt < MAX_RETRIES - 1:
+                        await asyncio.sleep(RETRY_DELAYS[attempt])
+                        continue
+                    return None
+                
+                if isinstance(result, dict) and "error" in result:
+                    log.error(f"TRPC: HTTP error: {result['error']}")
+                    return None
+                
+                return result
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                if ("greenlet" in error_str or 
+                    "cannot switch" in error_str or
+                    "context" in error_str or
+                    "failed to fetch" in error_str):
+                    log.warning(f"TRPC query: Thread/context error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+                else:
+                    log.error(f"TRPC query page.evaluate failed (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+                
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_DELAYS[attempt])
+                    continue
+                return None
+        
+        return None
     
     async def _trpc_fetch(
         self,
@@ -292,6 +380,32 @@ _SAFE_FETCH_JS = """
             return await response.json();
         } catch (e) {
             // Return error as data — NEVER throw from async evaluate
+            return {"__fetch_error__": e.message || String(e)};
+        }
+    }
+"""
+
+# JavaScript for safe GET query — ALL errors caught inside JS, never thrown
+_SAFE_QUERY_JS = """
+    async (url) => {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                credentials: 'include',
+                signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                return {error: `HTTP ${response.status}: ${text}`};
+            }
+            return await response.json();
+        } catch (e) {
             return {"__fetch_error__": e.message || String(e)};
         }
     }

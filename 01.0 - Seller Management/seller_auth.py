@@ -138,7 +138,7 @@ class SellerPermissions:
     })
     LEVEL_2_ACTIONS = LEVEL_1_ACTIONS | frozenset({
         'approve_paid', 'confirm_payment', 'edit_client_name',
-        'revoke_key', 'view_keys'
+        'revoke_key', 'view_keys', 'manage_server_config'
     })
     
     def __init__(self, level: int):
@@ -437,6 +437,65 @@ class SellerFirebaseManager:
             return dict(self.PRICING_FALLBACK)
         except Exception:
             return dict(self.PRICING_FALLBACK)
+    
+    # ── Client Settings (Server Config) ─────────────────
+    
+    CLIENT_SETTINGS_DEFAULTS = {
+        "trial_poll_interval_ms": 300000,
+        "trial_poll_max": 6,
+        "validate_cache_ttl_s": 3600,
+        "server_weight": 50,
+        "maintenance_mode": False,
+        "min_client_version": "1.0.0",
+        "ai_prompt_trial_enabled": False,
+    }
+    
+    def get_client_settings(self) -> dict:
+        """Read _config/client_settings from Firebase."""
+        if not self.connected:
+            return dict(self.CLIENT_SETTINGS_DEFAULTS)
+        try:
+            doc = self.db.collection("_config").document("client_settings").get()
+            if doc.exists:
+                data = doc.to_dict()
+                # Fill missing keys with defaults
+                for k, v in self.CLIENT_SETTINGS_DEFAULTS.items():
+                    if k not in data:
+                        data[k] = v
+                return data
+            return dict(self.CLIENT_SETTINGS_DEFAULTS)
+        except Exception:
+            return dict(self.CLIENT_SETTINGS_DEFAULTS)
+    
+    def update_client_settings(self, updates: dict, seller_mid: str) -> dict:
+        """Update _config/client_settings in Firebase (Level 2 only).
+        
+        Writes to both primary and backup databases.
+        Returns {"success": True} or {"success": False, "error": "..."}.
+        """
+        sv = self._verify_session()
+        if not sv.get('valid'):
+            return {"success": False, "error": sv.get('error', 'Session expired')}
+        if not self._permissions or not self._permissions.can('manage_server_config'):
+            return {"success": False, "error": "Không có quyền (cần Level 2)"}
+        if not self.connected:
+            return {"success": False, "error": "Không kết nối"}
+        
+        try:
+            ref = self.db.collection("_config").document("client_settings")
+            ref.set(updates, merge=True)
+            
+            if self.backup_db:
+                try:
+                    self.backup_db.collection("_config").document("client_settings").set(updates, merge=True)
+                except Exception:
+                    pass
+            
+            self._log_action(seller_mid, 'update_client_settings', 'client_settings',
+                             str(updates))
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": f"Lỗi cập nhật: {e}"}
     
     # ── Request Operations ─────────────────────────────
     
@@ -891,10 +950,11 @@ class SellerFirebaseManager:
     # ── Read Operations ────────────────────────────────
     
     def get_active_keys(self, app_filter: list = None) -> list:
-        """Get license keys (server-side filtered by app)."""
+        """Get license keys (server-side filtered by app). Auto-expires stale active keys."""
         if not self.connected:
             return []
         keys = []
+        now = datetime.now()
         try:
             query = self.db.collection(self.LIC_COLLECTION)
             # Server-side filter: only load matching apps
@@ -908,16 +968,47 @@ class SellerFirebaseManager:
                 if app_filter and len(app_filter) > 1:
                     if data.get('_app', 'VEO') not in app_filter:
                         continue
+                # Auto-expire: if _st='a' but _exp < now → update Firestore
+                if data.get('_st') == 'a':
+                    exp = data.get('_exp')
+                    if exp:
+                        try:
+                            if hasattr(exp, 'timestamp'):
+                                exp_dt = datetime.fromtimestamp(exp.timestamp())
+                            elif isinstance(exp, datetime):
+                                exp_dt = exp.replace(tzinfo=None) if exp.tzinfo else exp
+                            else:
+                                exp_dt = None
+                            if exp_dt and now > exp_dt:
+                                try:
+                                    doc.reference.update({
+                                        '_st': 'e',
+                                        '_expired_at': firestore.SERVER_TIMESTAMP
+                                    })
+                                    if self.backup_db:
+                                        try:
+                                            self.backup_db.collection(self.LIC_COLLECTION).document(doc.id).update({
+                                                '_st': 'e',
+                                                '_expired_at': firestore.SERVER_TIMESTAMP
+                                            })
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
+                                data['_st'] = 'e'
+                        except Exception:
+                            pass
                 keys.append(data)
         except Exception:
             pass
         return keys
     
     def get_all_trials(self, app_filter: list = None) -> list:
-        """Get trial records. Note: old trials may not have _app field."""
+        """Get trial records. Auto-expires stale 'active' trials in Firestore."""
         if not self.connected:
             return []
         trials = []
+        now = datetime.now()
         try:
             # No server-side _app filter — many trials don't have this field
             query = self.db.collection(self.TRIALS_COLLECTION)
@@ -929,6 +1020,32 @@ class SellerFirebaseManager:
                 mid = data.get('machine_id', '') or doc.id
                 if ecn and mid:
                     data['client_name'] = decrypt_with_mid(ecn, mid)
+                # Auto-expire: if status='active' but expires_at < now → update Firestore
+                if data.get('status') == 'active':
+                    expires_at = data.get('expires_at', '')
+                    if expires_at:
+                        try:
+                            exp_dt = datetime.fromisoformat(expires_at)
+                            if now > exp_dt:
+                                # Update Firestore (best-effort)
+                                try:
+                                    doc.reference.update({
+                                        'status': 'expired',
+                                        '_expired_at': now.isoformat()
+                                    })
+                                    if self.backup_db:
+                                        try:
+                                            self.backup_db.collection(self.TRIALS_COLLECTION).document(doc.id).update({
+                                                'status': 'expired',
+                                                '_expired_at': now.isoformat()
+                                            })
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
+                                data['status'] = 'expired'
+                        except (ValueError, TypeError):
+                            pass
                 # Client-side app filter (treat missing _app as match)
                 if app_filter:
                     doc_app = data.get('_app', '')
@@ -958,7 +1075,21 @@ class SellerFirebaseManager:
             trials = list(trial_query.stream())
             
             active_keys = sum(1 for d in keys if d.to_dict().get('_st') == 'a')
-            active_trials = sum(1 for d in trials if d.to_dict().get('status') == 'active')
+            active_trials = 0
+            now = datetime.now()
+            for d in trials:
+                td = d.to_dict()
+                if td.get('status') != 'active':
+                    continue
+                # Check actual expiry, not just status field
+                expires_at = td.get('expires_at', '')
+                if expires_at:
+                    try:
+                        if now > datetime.fromisoformat(expires_at):
+                            continue  # Actually expired
+                    except (ValueError, TypeError):
+                        pass
+                active_trials += 1
             
             return {
                 "total_keys": len(keys),

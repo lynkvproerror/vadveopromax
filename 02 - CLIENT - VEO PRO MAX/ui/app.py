@@ -740,10 +740,16 @@ class MainWindow(QMainWindow):
             import logging
             logging.getLogger("veo.ui").debug(f"[StatusBar] Accounts poll error: {e}")
         
-        # Workers: active / total_capacity (sum of max_workers across accounts)
+        # Workers: running_tasks / total_capacity
+        # Uses dispatcher._running_count (all tasks in RUNNING state).
+        # Safe now that HardCap in get_next_task() prevents _per_account_running
+        # from exceeding max_workers — guarantees _running_count ≤ total_capacity.
+        # Note: session.active_workers would underreport (e.g., 16/40 vs 23 processing)
+        # because T2I fire-and-forget releases workers immediately after submit.
         try:
             acc = self.controller.get_account_summary()
-            active = acc.get("active", 0)
+            running = acc.get("running_tasks", 0)
+            active_workers = acc.get("active_workers", 0)
             # Get total capacity from multi_account manager
             total_capacity = 0
             try:
@@ -753,8 +759,9 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             if "workers" in self._status_widgets:
-                self._status_widgets["workers"].setText(f"👷 {active}/{total_capacity}")
-                color = Theme.GREEN if active > 0 else Theme.SUBTEXT0
+                # 👷 = actual worker slots held | 📋 = tasks processing (incl. download/upscale with 0 workers)
+                self._status_widgets["workers"].setText(f"👷 {active_workers}/{total_capacity}  📋 {running}")
+                color = Theme.GREEN if running > 0 else Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px;")
         except Exception as e:
             import logging
@@ -863,6 +870,12 @@ class MainWindow(QMainWindow):
                 self._show_version_block(current, min_ver)
             else:
                 log.debug(f"[VersionCheck] OK: {current} >= {min_ver}")
+            
+            # Apply server-controlled feature flags (e.g., ai_prompt_trial_enabled)
+            if self.controller and hasattr(self.controller, '_permissions'):
+                full_config = client.fetch_client_config()
+                self.controller._permissions.apply_server_features(full_config)
+                log.debug(f"[FeatureFlags] Applied server features (ai_prompt_trial={full_config.get('ai_prompt_trial_enabled', False)})")
         except Exception as e:
             import logging
             logging.getLogger('veo').debug(f"Min version check failed: {e}")
@@ -874,14 +887,14 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setTextFormat(Qt.TextFormat.RichText)
         msg.setIcon(QMessageBox.Critical)
-        msg.setWindowTitle("⚠️ Cập nhật bắt buộc")
+        msg.setWindowTitle(t("app_dialogs.update_required_title"))
         msg.setText(
-            f"<b>Phiên bản hiện tại ({current}) đã quá cũ!</b><br><br>"
-            f"Phiên bản tối thiểu yêu cầu: <b>{minimum}</b><br><br>"
-            f"Vui lòng cập nhật VEO Pro Max để tiếp tục sử dụng."
+            f"<b>{t('app_dialogs.version_too_old').replace('{current}', current)}</b><br><br>"
+            f"{t('app_dialogs.min_version_required').replace('{minimum}', minimum)}<br><br>"
+            f"{t('app_dialogs.update_to_continue')}"
         )
-        update_btn = msg.addButton("🔄 Cập nhật ngay", QMessageBox.AcceptRole)
-        quit_btn = msg.addButton("❌ Thoát", QMessageBox.RejectRole)
+        update_btn = msg.addButton(t("app_dialogs.update_now"), QMessageBox.AcceptRole)
+        quit_btn = msg.addButton(t("app_dialogs.exit"), QMessageBox.RejectRole)
         msg.exec()
         
         if msg.clickedButton() == update_btn:
@@ -902,13 +915,13 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setTextFormat(Qt.TextFormat.RichText)
         msg.setIcon(QMessageBox.Warning)
-        msg.setWindowTitle("🔧 Bảo trì hệ thống")
+        msg.setWindowTitle(t("app_dialogs.maintenance_title"))
         msg.setText(
-            "<b>Hệ thống đang trong quá trình bảo trì.</b><br><br>"
-            "Vui lòng thử lại sau ít phút.<br>"
-            "Xin lỗi vì sự bất tiện này!"
+            f"<b>{t('app_dialogs.maintenance_msg')}</b><br><br>"
+            f"{t('app_dialogs.maintenance_retry')}<br>"
+            f"{t('app_dialogs.maintenance_sorry')}"
         )
-        msg.addButton("OK", QMessageBox.AcceptRole)
+        msg.addButton(t("popups.ok"), QMessageBox.AcceptRole)
         msg.exec()
         
         # Force quit — server maintenance

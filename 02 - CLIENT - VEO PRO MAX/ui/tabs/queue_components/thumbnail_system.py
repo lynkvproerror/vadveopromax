@@ -196,8 +196,9 @@ class QueueThumbnailMixin:
         """
         # Disconnect any existing context menu handler to prevent stacking
         try:
-            slot.customContextMenuRequested.disconnect()
-        except (RuntimeError, TypeError, RuntimeWarning):
+            if slot.receivers(slot.customContextMenuRequested) > 0:
+                slot.customContextMenuRequested.disconnect()
+        except (RuntimeError, TypeError):
             pass  # No previous connection — safe to ignore
         slot.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         slot.customContextMenuRequested.connect(

@@ -159,8 +159,7 @@ class QueueContextMenuMixin:
                     self._update_stats()
                     mw = self.window()
                     if mw and hasattr(mw, 'show_toast'):
-                        mw.show_toast(f"♻️ Retrying {retried} failed video(s)", "info")
-                    self._auto_start_if_idle()
+                        mw.show_toast(f"♻️ {retried} failed video(s) queued for retry", "info")
                     return
         
         if self.controller and hasattr(self.controller, 'force_retry_task'):
@@ -171,8 +170,7 @@ class QueueContextMenuMixin:
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
                 mw.show_toast(msg, "info" if success else "warning")
-            if success:
-                self._auto_start_if_idle()
+
     
     def _on_force_retry_full(self, item_id):
         """Force retry entire task (re-generate ALL videos), skipping smart per-video logic."""
@@ -185,8 +183,7 @@ class QueueContextMenuMixin:
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
                 mw.show_toast(msg, "info" if success else "warning")
-            if success:
-                self._auto_start_if_idle()
+
     
     def _on_delete_item(self, item_id):
         """Delete a specific task."""

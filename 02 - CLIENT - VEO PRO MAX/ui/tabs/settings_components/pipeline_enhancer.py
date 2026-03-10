@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 class SettingsPipelineEnhancerMixin:
@@ -61,7 +62,7 @@ class SettingsPipelineEnhancerMixin:
 
         # Burst Min Delay
         bmin_row = QHBoxLayout()
-        bmin_label = QLabel("Min Delay:")
+        bmin_label = QLabel(t("pipeline.min_delay"))
         bmin_label.setFixedWidth(150)
         bmin_label.setStyleSheet(f"color: {Theme.TEXT};")
         bmin_row.addWidget(bmin_label)
@@ -79,7 +80,7 @@ class SettingsPipelineEnhancerMixin:
 
         # Burst Max Delay
         bmax_row = QHBoxLayout()
-        bmax_label = QLabel("Max Delay:")
+        bmax_label = QLabel(t("pipeline.max_delay"))
         bmax_label.setFixedWidth(150)
         bmax_label.setStyleSheet(f"color: {Theme.TEXT};")
         bmax_row.addWidget(bmax_label)
@@ -112,7 +113,7 @@ class SettingsPipelineEnhancerMixin:
         layout.addLayout(self.pool_switch._row_layout)
 
         pool_row = QHBoxLayout()
-        pool_label = QLabel("Pool Size:")
+        pool_label = QLabel(t("pipeline.pool_size"))
         pool_label.setFixedWidth(150)
         pool_label.setStyleSheet(f"color: {Theme.TEXT};")
         pool_row.addWidget(pool_label)
@@ -127,7 +128,7 @@ class SettingsPipelineEnhancerMixin:
 
         # --- Watchdog ---
         wd_row = QHBoxLayout()
-        wd_label = QLabel("🐕 Watchdog Timeout:")
+        wd_label = QLabel(t("pipeline.watchdog"))
         wd_label.setFixedWidth(150)
         wd_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         wd_row.addWidget(wd_label)
@@ -143,7 +144,7 @@ class SettingsPipelineEnhancerMixin:
 
         # --- Journal ---
         jr_row = QHBoxLayout()
-        jr_label = QLabel("📓 Journal Auto-save:")
+        jr_label = QLabel(t("pipeline.journal"))
         jr_label.setFixedWidth(150)
         jr_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         jr_row.addWidget(jr_label)
@@ -159,7 +160,7 @@ class SettingsPipelineEnhancerMixin:
 
         # --- Workload Priority ---
         wp_row = QHBoxLayout()
-        wp_label = QLabel("⚡ Workload Priority:")
+        wp_label = QLabel(t("pipeline.workload_priority"))
         wp_label.setFixedWidth(150)
         wp_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         wp_row.addWidget(wp_label)
@@ -181,7 +182,7 @@ class SettingsPipelineEnhancerMixin:
             lambda idx: _update('workload_priority')(self._wp_map.get(idx, '720p_priority'))
         )
         wp_row.addWidget(self.workload_priority)
-        wp_hint = QLabel("Controls resource allocation")
+        wp_hint = QLabel(t("pipeline.workload_hint"))
         wp_hint.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; margin-left: 8px;")
         wp_row.addWidget(wp_hint)
         wp_row.addStretch()
@@ -199,7 +200,7 @@ class SettingsPipelineEnhancerMixin:
         retry_dl_layout.setContentsMargins(0, 0, 0, 0)
 
         max_retry_row = QHBoxLayout()
-        max_retry_label = QLabel("Max Retries:")
+        max_retry_label = QLabel(t("pipeline.max_retries"))
         max_retry_label.setFixedWidth(150)
         max_retry_label.setStyleSheet(f"color: {Theme.TEXT};")
         max_retry_row.addWidget(max_retry_label)
@@ -211,7 +212,7 @@ class SettingsPipelineEnhancerMixin:
         self.dl_retry_max.valueChanged.connect(self._save_pipeline_settings)
         max_retry_row.addWidget(self.dl_retry_max)
 
-        retry_hint = QLabel("Failed downloads re-generate then retry")
+        retry_hint = QLabel(t("pipeline.retry_hint"))
         retry_hint.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; margin-left: 8px;")
         max_retry_row.addWidget(retry_hint)
         max_retry_row.addStretch()
@@ -234,7 +235,7 @@ class SettingsPipelineEnhancerMixin:
         prewarm_layout.setContentsMargins(0, 0, 0, 0)
 
         pw_row = QHBoxLayout()
-        pw_label = QLabel("Idle Threshold:")
+        pw_label = QLabel(t("pipeline.idle_threshold"))
         pw_label.setFixedWidth(150)
         pw_label.setStyleSheet(f"color: {Theme.TEXT};")
         pw_row.addWidget(pw_label)
@@ -246,7 +247,7 @@ class SettingsPipelineEnhancerMixin:
         self.prewarm_threshold.valueChanged.connect(_update('prewarm_idle_threshold'))
         pw_row.addWidget(self.prewarm_threshold)
 
-        pw_hint = QLabel("Trigger soft recovery if idle longer than this")
+        pw_hint = QLabel(t("pipeline.idle_hint"))
         pw_hint.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; margin-left: 8px;")
         pw_row.addWidget(pw_hint)
         pw_row.addStretch()
@@ -306,12 +307,12 @@ class SettingsPipelineEnhancerMixin:
 
         # GPU Status row
         gpu_row = QHBoxLayout()
-        gpu_label = QLabel("GPU Status:")
+        gpu_label = QLabel(t("pipeline.gpu_status"))
         gpu_label.setFixedWidth(150)
         gpu_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         gpu_row.addWidget(gpu_label)
 
-        self._enhance_gpu_status = QLabel("🔍 Detecting GPU...")
+        self._enhance_gpu_status = QLabel(t("pipeline.detecting_gpu"))
         self._enhance_gpu_status.setStyleSheet(f"color: {Theme.SUBTEXT0};")
         gpu_row.addWidget(self._enhance_gpu_status)
         gpu_row.addStretch()
@@ -319,16 +320,16 @@ class SettingsPipelineEnhancerMixin:
 
         # Model Status row
         model_row = QHBoxLayout()
-        model_label = QLabel("AI Models:")
+        model_label = QLabel(t("pipeline.ai_models"))
         model_label.setFixedWidth(150)
         model_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         model_row.addWidget(model_label)
 
-        self._enhance_model_status = QLabel("⏳ Checking...")
+        self._enhance_model_status = QLabel(t("pipeline.checking"))
         self._enhance_model_status.setStyleSheet(f"color: {Theme.SUBTEXT0};")
         model_row.addWidget(self._enhance_model_status)
 
-        self._enhance_download_btn = QPushButton("⬇️ Download Models")
+        self._enhance_download_btn = QPushButton(t("pipeline.download_models"))
         self._enhance_download_btn.setFixedHeight(28)
         self._enhance_download_btn.setStyleSheet(
             f"background-color: {Theme.BLUE}; font-size: 11px; padding: 2px 12px;"
@@ -416,7 +417,7 @@ class SettingsPipelineEnhancerMixin:
         self._enhance_auto_toggle.toggled_signal.connect(self._save_enhancer_settings)
 
         # PyTorch install button (shown only if torch not installed)
-        self._enhance_install_btn = QPushButton("📦 Install PyTorch (CUDA)")
+        self._enhance_install_btn = QPushButton(t("pipeline.install_pytorch"))
         self._enhance_install_btn.setFixedHeight(28)
         self._enhance_install_btn.setStyleSheet(
             f"background-color: {Theme.YELLOW}; color: {Theme.BASE}; "
@@ -448,7 +449,7 @@ class SettingsPipelineEnhancerMixin:
                 self._enhance_gpu_status.setStyleSheet(f"color: {Theme.GREEN};")
                 self._enhance_install_btn.setVisible(False)
             else:
-                self._enhance_gpu_status.setText("⚠️ PyTorch installed but no CUDA GPU detected")
+                self._enhance_gpu_status.setText(t("pipeline_status.no_cuda"))
                 self._enhance_gpu_status.setStyleSheet(f"color: {Theme.YELLOW};")
                 self._enhance_install_btn.setVisible(False)
                 # Disable toggles — CPU mode too slow for real-time
@@ -456,7 +457,7 @@ class SettingsPipelineEnhancerMixin:
                 self._enhance_library_toggle.setEnabled(False)
                 self._enhance_auto_toggle.setEnabled(False)
         except ImportError:
-            self._enhance_gpu_status.setText("❌ PyTorch not installed")
+            self._enhance_gpu_status.setText(t("pipeline_status.no_pytorch"))
             self._enhance_gpu_status.setStyleSheet(f"color: {Theme.RED};")
             self._enhance_install_btn.setVisible(True)
             self._enhance_context_toggle.setEnabled(False)
@@ -524,12 +525,12 @@ class SettingsPipelineEnhancerMixin:
         # Filter already downloaded
         to_download = [(name, url) for name, url in MODELS if not (models_dir / name).exists()]
         if not to_download:
-            self._enhance_model_status.setText("✅ All models already installed")
+            self._enhance_model_status.setText(t("pipeline_status.models_installed"))
             self._enhance_model_status.setStyleSheet(f"color: {Theme.GREEN};")
             return
 
         self._enhance_download_btn.setEnabled(False)
-        self._enhance_download_btn.setText("⏳ Downloading...")
+        self._enhance_download_btn.setText(t("pipeline_status.downloading"))
         if self._enhance_progress:
             self._enhance_progress.setVisible(True)
             self._enhance_progress.setValue(0)
@@ -561,13 +562,13 @@ class SettingsPipelineEnhancerMixin:
         self._enhance_download_btn.setEnabled(True)
 
         if success:
-            self._enhance_model_status.setText("✅ All models installed")
+            self._enhance_model_status.setText(t("pipeline_status.all_installed"))
             self._enhance_model_status.setStyleSheet(f"color: {Theme.GREEN};")
             self._enhance_download_btn.setVisible(False)
         else:
-            self._enhance_model_status.setText("❌ Download failed — retry?")
+            self._enhance_model_status.setText(t("pipeline_status.download_failed"))
             self._enhance_model_status.setStyleSheet(f"color: {Theme.RED};")
-            self._enhance_download_btn.setText("🔄 Retry Download")
+            self._enhance_download_btn.setText(t("pipeline_status.retry_download"))
 
     def _on_install_pytorch(self):
         """Install PyTorch with CUDA via pip — auto-detect Python version for correct index."""
@@ -585,13 +586,13 @@ class SettingsPipelineEnhancerMixin:
 
         pip_cmd = f"pip install torch torchvision torchaudio --index-url {cuda_index}"
 
-        if show_confirm(self, "Install PyTorch (CUDA)",
+        if show_confirm(self, t("pipeline.confirm_install"),
                 f"Python {py_ver.major}.{py_ver.minor} detected → using {cuda_label}\n\n"
                 f"This will install PyTorch with CUDA support (~2.5GB).\n\n"
                 f"Command:\n{pip_cmd}\n\n"
                 f"Continue?"):
             self._enhance_install_btn.setEnabled(False)
-            self._enhance_install_btn.setText("⏳ Installing PyTorch...")
+            self._enhance_install_btn.setText(t("pipeline_status.installing_pytorch"))
             log.info(f"Starting PyTorch installation (Python {py_ver.major}.{py_ver.minor}, {cuda_label})...")
 
             import subprocess, threading
@@ -622,7 +623,7 @@ class SettingsPipelineEnhancerMixin:
         self._enhance_install_btn.setEnabled(True)
         if success:
             self._enhance_install_btn.setVisible(False)
-            self._enhance_gpu_status.setText("🔄 Restart app to detect GPU")
+            self._enhance_gpu_status.setText(t("pipeline_status.restart_detect"))
             self._enhance_gpu_status.setStyleSheet(f"color: {Theme.YELLOW};")
             show_info(
                 self, "PyTorch Installed",
@@ -632,7 +633,7 @@ class SettingsPipelineEnhancerMixin:
         else:
             import sys as _sys
             _idx = "cu124" if _sys.version_info >= (3, 13) else "cu121"
-            self._enhance_install_btn.setText("❌ Install Failed — Retry")
+            self._enhance_install_btn.setText(t("pipeline_status.install_failed"))
             show_warning(
                 self, "Install Failed",
                 f"PyTorch installation failed.\n\n"

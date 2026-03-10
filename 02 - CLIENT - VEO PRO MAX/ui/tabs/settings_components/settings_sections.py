@@ -126,6 +126,68 @@ class SettingsSectionsMixin:
         for key, cb in self.setting_combos.items():
             cb.currentTextChanged.connect(self._save_default_settings)
 
+        # ─── 📂 Output Settings (merged from standalone section) ───
+        out_sep = QFrame()
+        out_sep.setFixedHeight(1)
+        out_sep.setStyleSheet(f"background-color: {Theme.SURFACE2}; margin: 8px 0;")
+        layout.addWidget(out_sep)
+
+        out_label = QLabel(t("settings.sections.output"))
+        out_label.setStyleSheet(f"color: {Theme.YELLOW}; font-weight: bold; padding-top: 4px;")
+        layout.addWidget(out_label)
+
+        # Default output folder
+        folder_layout = QHBoxLayout()
+        folder_label = QLabel(t("settings_extra.save_folder_label"))
+        folder_label.setFixedWidth(120)
+        folder_label.setStyleSheet(f"color: {Theme.TEXT};")
+        folder_layout.addWidget(folder_label)
+
+        self.output_folder_entry = QLineEdit()
+        self.output_folder_entry.setPlaceholderText("D:/Projects/VEO")
+        self.output_folder_entry.setMinimumWidth(200)
+        if _s and getattr(_s, 'output_folder', ''):
+            self.output_folder_entry.setText(_s.output_folder)
+        folder_layout.addWidget(self.output_folder_entry)
+
+        browse_btn = QPushButton(t("settings_extra.browse_select"))
+        browse_btn.setFixedSize(90, 35)
+        browse_btn.setToolTip(t("settings_extra.browse_tooltip"))
+        browse_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; font-weight: bold; font-size: 12px; border-radius: 4px;")
+        browse_btn.clicked.connect(self._browse_output_folder)
+        folder_layout.addWidget(browse_btn)
+        layout.addLayout(folder_layout)
+
+        # Toggles with saved state
+        _ts = getattr(_s, 'include_timestamp', True) if _s else True
+        _qs = getattr(_s, 'include_quality', True) if _s else True
+        _as = getattr(_s, 'auto_start_queue', False) if _s else False
+        _ps = getattr(_s, 'pause_on_error', True) if _s else True
+
+        toggles = [
+            (t("settings.output_toggles.include_timestamp"), _ts),
+            (t("settings.output_toggles.include_quality"), _qs),
+            (t("settings.output_toggles.auto_start_queue"), _as),
+            (t("settings.output_toggles.pause_on_error"), _ps),
+        ]
+
+        opts_label = QLabel(t("settings.output_toggles.filename_options"))
+        opts_label.setStyleSheet(f"color: {Theme.BLUE}; font-weight: bold; padding-top: 6px;")
+        layout.addWidget(opts_label)
+
+        self.output_toggles = {}
+        for label, default in toggles:
+            checkbox = QCheckBox(label)
+            checkbox.setChecked(default)
+            checkbox.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+            checkbox.setToolTip(t("tooltips.auto_saved"))
+            checkbox.toggled.connect(self._save_output_settings)
+            layout.addWidget(checkbox)
+            self.output_toggles[label] = checkbox
+
+        # Wire folder save
+        self.output_folder_entry.textChanged.connect(self._save_output_settings)
+
         return section
 
     def _save_default_settings(self, *args):
@@ -168,7 +230,7 @@ class SettingsSectionsMixin:
         # Default output folder
         folder_layout = QHBoxLayout()
 
-        folder_label = QLabel("Thư mục lưu:")
+        folder_label = QLabel(t("settings_extra.save_folder_label"))
         folder_label.setFixedWidth(120)
         folder_label.setStyleSheet(f"color: {Theme.TEXT};")
         folder_layout.addWidget(folder_label)
@@ -180,9 +242,9 @@ class SettingsSectionsMixin:
             self.output_folder_entry.setText(_s.output_folder)
         folder_layout.addWidget(self.output_folder_entry)
 
-        browse_btn = QPushButton("📁 Chọn")
+        browse_btn = QPushButton(t("settings_extra.browse_select"))
         browse_btn.setFixedSize(90, 35)
-        browse_btn.setToolTip("Chọn thư mục lưu video")
+        browse_btn.setToolTip(t("settings_extra.browse_tooltip"))
         browse_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; font-weight: bold; font-size: 12px; border-radius: 4px;")
         browse_btn.clicked.connect(self._browse_output_folder)
         folder_layout.addWidget(browse_btn)
@@ -212,7 +274,7 @@ class SettingsSectionsMixin:
             checkbox = QCheckBox(label)
             checkbox.setChecked(default)
             checkbox.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
-            checkbox.setToolTip("Auto-saved — changes take effect immediately")
+            checkbox.setToolTip(t("tooltips.auto_saved"))
             checkbox.toggled.connect(self._save_output_settings)
             layout.addWidget(checkbox)
             self.output_toggles[label] = checkbox
@@ -224,7 +286,7 @@ class SettingsSectionsMixin:
 
     def _browse_output_folder(self):
         """Open folder picker for default output folder."""
-        folder = QFileDialog.getExistingDirectory(self, "Select Default Output Folder")
+        folder = QFileDialog.getExistingDirectory(self, t("settings_extra.select_output_folder"))
         if folder:
             self.output_folder_entry.setText(folder)
 
@@ -237,17 +299,12 @@ class SettingsSectionsMixin:
             import logging
             settings = _gs()
             settings.output_folder = self.output_folder_entry.text()
-            # B1 fix: match toggle keys by substring (i18n-safe)
-            for key, toggle in self.output_toggles.items():
-                k_lower = key.lower()
-                if "timestamp" in k_lower:
-                    settings.include_timestamp = toggle.isChecked()
-                elif "quality" in k_lower:
-                    settings.include_quality = toggle.isChecked()
-                elif "auto" in k_lower and "start" in k_lower:
-                    settings.auto_start_queue = toggle.isChecked()
-                elif "pause" in k_lower:
-                    settings.pause_on_error = toggle.isChecked()
+            # Map toggles by position (language-independent) — order matches creation:
+            # [0] include_timestamp, [1] include_quality, [2] auto_start_queue, [3] pause_on_error
+            attr_map = ['include_timestamp', 'include_quality', 'auto_start_queue', 'pause_on_error']
+            for idx, (key, toggle) in enumerate(self.output_toggles.items()):
+                if idx < len(attr_map):
+                    setattr(settings, attr_map[idx], toggle.isChecked())
             settings.save()
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save output settings: {e}')
@@ -277,13 +334,13 @@ class SettingsSectionsMixin:
         initial_checked = False if is_trial else saved_enabled
 
         # Enable toggle — loaded from saved (forced OFF for Trial)
-        self.cont_switch = self._create_enable_row("Smooth Continuation:", checked=initial_checked)
+        self.cont_switch = self._create_enable_row(t("settings_extra.smooth_continuation"), checked=initial_checked)
         layout.addLayout(self.cont_switch._row_layout)
 
         # Description
         desc = QLabel(
-            "ON = Cắt cảnh mượt hơn.\n"
-            "OFF = Mặc định."
+            f"{t('settings_extra.smooth_continuation_on')}\n"
+            f"{t('settings_extra.smooth_continuation_off')}"
         )
         desc.setWordWrap(True)
         desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px;")
@@ -291,7 +348,7 @@ class SettingsSectionsMixin:
 
         # Trial badge
         if is_trial:
-            trial_badge = QLabel("🔒 Premium Only — Nâng cấp để sử dụng")
+            trial_badge = QLabel(t("settings_extra.premium_only_badge"))
             trial_badge.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px; margin-left: 16px;")
             layout.addWidget(trial_badge)
 
@@ -358,7 +415,7 @@ class SettingsSectionsMixin:
 
         # === Anti-Detect Spam — bold + emoji ===
         self.anti_detect_switch = self._create_enable_row(
-            "🛡️ Anti-Detect Spam:", checked=saved.get('anti_detect_enabled', True),
+            t("settings_extra.anti_detect_spam"), checked=saved.get('anti_detect_enabled', True),
             bold=True, color=Theme.YELLOW
         )
         layout.addLayout(self.anti_detect_switch._row_layout)
@@ -451,19 +508,19 @@ class SettingsSectionsMixin:
 
         # Toggle: Restore Queue
         self.restore_queue_switch = self._create_enable_row(
-            "Restore Queue:", checked=saved_restore_queue
+            t("settings_extra.restore_queue"), checked=saved_restore_queue
         )
         layout.addLayout(self.restore_queue_switch._row_layout)
 
         # Description for restore queue
-        queue_desc = QLabel("⚠️ When ON, tasks from previous session are reloaded. Turn OFF to prevent stale/broken tasks.")
+        queue_desc = QLabel(t("settings_extra.queue_restore_desc"))
         queue_desc.setWordWrap(True)
         queue_desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px; margin-bottom: 4px;")
         layout.addWidget(queue_desc)
 
         # Toggle: Restore Tabs
         self.restore_tabs_switch = self._create_enable_row(
-            "Restore Tabs:", checked=saved_restore_tabs
+            t("settings_extra.restore_tabs"), checked=saved_restore_tabs
         )
         layout.addLayout(self.restore_tabs_switch._row_layout)
 
@@ -478,7 +535,7 @@ class SettingsSectionsMixin:
         sub_outer.setContentsMargins(0, 4, 0, 4)
         sub_outer.setSpacing(4)
 
-        sub_label = QLabel("Choose what to restore:")
+        sub_label = QLabel(t("settings_extra.restore_label"))
         sub_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-style: italic;")
         sub_outer.addWidget(sub_label)
 
@@ -571,7 +628,7 @@ class SettingsSectionsMixin:
         btn_layout.setSpacing(8)
 
         # Clear Cache button (YELLOW)
-        clear_cache_btn = QPushButton("🧹 Clear Cache")
+        clear_cache_btn = QPushButton(t("settings_extra.clear_cache"))
         clear_cache_btn.setFixedHeight(32)
         clear_cache_btn.setStyleSheet(f"""
             QPushButton {{
@@ -585,7 +642,7 @@ class SettingsSectionsMixin:
                 background-color: #FCE8C0;
             }}
         """)
-        clear_cache_btn.setToolTip("Delete cached files (downloaded videos, temp data)")
+        clear_cache_btn.setToolTip(t("tooltips.cache_tooltip"))
         clear_cache_btn.clicked.connect(self._on_clear_cache)
         btn_layout.addWidget(clear_cache_btn)
 
@@ -608,15 +665,14 @@ class SettingsSectionsMixin:
 
     def _on_clear_cache(self):
         """Clear cache files with confirmation."""
-        if show_confirm(self, "Clear Cache",
-                "🧹 This will delete ALL cached files.\n\n"
-                "Are you sure?", danger=True):
+        if show_confirm(self, t("settings_extra.clear_cache_title"),
+                t("settings_extra.clear_cache_confirm"), danger=True):
             if self.controller and hasattr(self.controller, 'clear_cache'):
                 result = self.controller.clear_cache()
                 deleted = result.get("deleted_count", 0)
                 freed = result.get("freed_mb", 0)
                 show_info(
-                    self, "Cache Cleared",
+                    self, t("settings_extra.cache_cleared"),
                     f"✅ {deleted} files removed ({freed:.1f} MB freed)."
                 )
                 # Refresh cache stats
@@ -1100,7 +1156,7 @@ class SettingsSectionsMixin:
 
         # Row 1: Master toggle
         self.post_queue_switch = self._create_enable_row(
-            "Auto action after queue completes:", checked=saved_enabled
+            t("settings_extra.post_queue_action"), checked=saved_enabled
         )
         layout.addLayout(self.post_queue_switch._row_layout)
 
@@ -1109,18 +1165,40 @@ class SettingsSectionsMixin:
         action_layout = QHBoxLayout(self._post_queue_action_container)
         action_layout.setContentsMargins(0, 0, 0, 0)
 
-        action_label = QLabel("Action:")
+        action_label = QLabel(t("settings_extra.action_label"))
         action_label.setFixedWidth(150)
         action_label.setStyleSheet(f"color: {Theme.TEXT};")
         action_layout.addWidget(action_label)
 
         self.post_queue_action_combo = QComboBox()
-        self.post_queue_action_combo.addItems(["🔌 Do Nothing", "⚡ Shutdown", "💤 Sleep"])
+        self.post_queue_action_combo.addItems([t("queue_extra.do_nothing"), t("queue_extra.shutdown"), t("queue_extra.sleep")])
         # Map saved value to display text
         _action_map = {"nothing": "🔌 Do Nothing", "shutdown": "⚡ Shutdown", "sleep": "💤 Sleep"}
         self.post_queue_action_combo.setCurrentText(_action_map.get(saved_action, "🔌 Do Nothing"))
         self.post_queue_action_combo.setFixedWidth(160)
         action_layout.addWidget(self.post_queue_action_combo)
+
+        # Separator
+        sep = QFrame()
+        sep.setFixedSize(1, 24)
+        sep.setStyleSheet(f"background-color: {Theme.BORDER};")
+        action_layout.addWidget(sep)
+
+        # Auto-sweep max rounds
+        sweep_label = QLabel(t("settings_extra.auto_sweep"))
+        sweep_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        action_layout.addWidget(sweep_label)
+
+        from PySide6.QtWidgets import QSpinBox
+        self.sweep_rounds_spin = QSpinBox()
+        self.sweep_rounds_spin.setRange(1, 20)
+        self.sweep_rounds_spin.setValue(getattr(settings, 'auto_sweep_max_rounds', 5))
+        self.sweep_rounds_spin.setFixedWidth(60)
+        self.sweep_rounds_spin.setToolTip(
+            "Max retry rounds before allowing shutdown/sleep.\n"
+            "Each round retries all failed tasks and videos."
+        )
+        action_layout.addWidget(self.sweep_rounds_spin)
 
         action_layout.addStretch()
         layout.addWidget(self._post_queue_action_container)
@@ -1132,7 +1210,7 @@ class SettingsSectionsMixin:
         )
 
         # Description
-        desc = QLabel("⚠️ When enabled, the selected action runs automatically after all tasks complete (failed tasks are ignored).")
+        desc = QLabel(t("settings_extra.post_queue_desc"))
         desc.setWordWrap(True)
         desc.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; margin-left: 16px;")
         layout.addWidget(desc)
@@ -1140,6 +1218,9 @@ class SettingsSectionsMixin:
         # Auto-save
         self.post_queue_switch.toggled_signal.connect(self._save_post_queue_settings)
         self.post_queue_action_combo.currentIndexChanged.connect(
+            lambda: self._save_post_queue_settings()
+        )
+        self.sweep_rounds_spin.valueChanged.connect(
             lambda: self._save_post_queue_settings()
         )
 
@@ -1157,6 +1238,7 @@ class SettingsSectionsMixin:
         settings.post_queue_action = _reverse_map.get(
             self.post_queue_action_combo.currentText(), "nothing"
         )
+        settings.auto_sweep_max_rounds = self.sweep_rounds_spin.value()
         save_settings()
 
     # ── Browser Visibility Section ─────────────────────────────────

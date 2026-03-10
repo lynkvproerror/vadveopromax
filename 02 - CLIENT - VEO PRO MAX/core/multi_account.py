@@ -87,14 +87,22 @@ class MultiAccountManager:
     async def remove_account(self, email: str) -> bool:
         """Remove an account from the pool.
         
+        Force-removes even if workers are active — engine.stop_account_workers()
+        should be called BEFORE this to cleanly abort foremen.
+        
         Closes browser before removing.
         Returns True if removed successfully.
         """
         async with self._lock:
             for i, acc in enumerate(self._accounts):
                 if acc.email == email:
+                    # Force reset active workers (engine already aborted foremen)
                     if acc.active_workers > 0:
-                        return False
+                        log.warning(
+                            f"[MultiAccount] Force-removing {email} with "
+                            f"{acc.active_workers} active workers"
+                        )
+                        acc._active_workers = 0
                     await acc.close_browser()
                     self._accounts.pop(i)
                     return True

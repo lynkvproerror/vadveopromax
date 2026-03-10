@@ -100,6 +100,7 @@ class GroupDTO:
     project_name: str = ""
     aspect_ratio: str = ""
     output_count: int = 4
+    download_quality: str = "720p"
     created_at: Any = None  # datetime or str
     elapsed_seconds: float = 0.0  # computed: total processing time for this group
     tasks: List[TaskDTO] = field(default_factory=list)
@@ -118,6 +119,7 @@ class GroupDTO:
             "project_name": self.project_name,
             "aspect_ratio": self.aspect_ratio,
             "output_count": self.output_count,
+            "download_quality": self.download_quality,
             "created_at": self.created_at,
             "elapsed_seconds": self.elapsed_seconds,
             "tasks": [t.to_dict() for t in self.tasks],

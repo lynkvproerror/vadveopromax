@@ -97,6 +97,9 @@ class TabQueue(
         self._input_pulse_thumbs: List[QLabel] = []  # Thumbnails with pulsing border
         self._input_pulse_phase = False  # Toggle for pulse animation
         self._post_queue_triggered = False  # Guard: prevent double-trigger
+        self._sweep_count = 0           # Auto-sweep rounds executed
+        self._max_sweep_rounds = 5      # Safety limit: max retry rounds
+        self._sweep_in_progress = False  # Prevent concurrent sweeps
         
         # ── Phase 1 Performance Caches ──
         self._pixmap_cache: OrderedDict = OrderedDict()  # path → scaled QPixmap
@@ -248,10 +251,10 @@ class TabQueue(
                                 retrying_count += 1
                     if retrying_count > 0:
                         total = len(widget.thumb_slots) if hasattr(widget, 'thumb_slots') else '?'
-                        widget.status_label.setText(f"♻️ RETRYING {retrying_count}/{total}")
+                        widget.status_label.setText(t("queue_extra.retrying").replace("{count}", str(retrying_count)).replace("{total}", str(total)))
                         widget.status_label.setStyleSheet(f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;")
                     else:
-                        widget.status_label.setText("✅ COMPLETED")
+                        widget.status_label.setText(t("queue_extra.completed"))
                         widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
                     # Phase 2: Trigger completion glow
                     self._trigger_completion_glow(task_id)
@@ -418,7 +421,7 @@ class TabQueue(
         layout.setSpacing(12)
         
         # Filter label
-        filter_label = QLabel("🔍 Filter:")
+        filter_label = QLabel(t("queue_extra.filter"))
         filter_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         layout.addWidget(filter_label)
         
@@ -432,14 +435,14 @@ class TabQueue(
         # Status dropdown
         self.status_filter = QComboBox()
         self.status_filter.setFixedWidth(100)
-        self.status_filter.addItems(["All Status", "Pending", "Processing", "Completed", "Failed", "Cancelled"])
+        self.status_filter.addItems([t("queue_extra.all_status"), t("queue_extra.status_pending"), t("queue_extra.status_processing"), t("queue_extra.status_completed"), t("queue_extra.status_failed"), t("queue_extra.status_cancelled")])
         self.status_filter.currentTextChanged.connect(self._on_filter_changed)
         layout.addWidget(self.status_filter)
         
         # Mode dropdown
         self.mode_filter = QComboBox()
         self.mode_filter.setFixedWidth(100)
-        self.mode_filter.addItems(["All Modes", "T2V", "I2V", "R2V", "T2I", "I2I"])
+        self.mode_filter.addItems([t("queue_extra.all_modes"), "T2V", "I2V", "R2V", "T2I", "I2I"])
         self.mode_filter.currentTextChanged.connect(self._on_filter_changed)
         layout.addWidget(self.mode_filter)
         
@@ -448,7 +451,7 @@ class TabQueue(
         # Search input (no separate button - textChanged is enough)
         self.search_input = QLineEdit()
         self.search_input.setFixedWidth(200)
-        self.search_input.setPlaceholderText("Search prompts...")
+        self.search_input.setPlaceholderText(t("queue_extra.search_placeholder"))
         self.search_input.textChanged.connect(self._on_filter_changed)
         layout.addWidget(self.search_input)
         
@@ -477,8 +480,12 @@ class TabQueue(
     
     def _apply_filters(self):
         """Apply all filters to queue view."""
+        # ── FIX: Use index-based checks instead of hardcoded English strings ──
+        # Index 0 = "All" option for each filter, works regardless of language
+        project_idx = self.project_filter.currentIndex()
         project = self.project_filter.currentText()
         status = self.status_filter.currentText().lower()
+        mode_idx = self.mode_filter.currentIndex()
         mode = self.mode_filter.currentText()
         search = self.search_input.text().lower()
         
@@ -502,16 +509,17 @@ class TabQueue(
             # Check all filter conditions
             show = True
             
-            # Project filter
-            if project != "All Projects" and getattr(item, 'project', '') != project:
+            # Project filter: index 0 = All Projects
+            if project_idx != 0 and getattr(item, 'project', '') != project:
                 show = False
             
             # Status filter (using status groups for correct matching)
+            # index 0 = All Statuses → allowed_statuses will be None → show all
             if allowed_statuses is not None and item.status not in allowed_statuses:
                 show = False
             
-            # Mode filter
-            if mode != "All Modes" and item.mode != mode:
+            # Mode filter: index 0 = All Modes
+            if mode_idx != 0 and item.mode != mode:
                 show = False
             
             # Search filter
@@ -539,7 +547,7 @@ class TabQueue(
         # Stop button — always separate
         self.stop_btn = QPushButton(t("queue.stop"))
         self.stop_btn.setStyleSheet(f"background-color: {Theme.RED};")
-        self.stop_btn.setToolTip("Stop all processing immediately")
+        self.stop_btn.setToolTip(t("queue_extra.stop_tooltip"))
         self.stop_btn.clicked.connect(self._on_stop_all)
         self.stop_btn.setEnabled(False)
         layout.addWidget(self.stop_btn)
@@ -551,10 +559,10 @@ class TabQueue(
         saved_action = _action_map.get(getattr(_s, 'post_queue_action', 'nothing'), "🔌 Do Nothing")
         
         self.post_queue_combo = QComboBox()
-        self.post_queue_combo.addItems(["🔌 Do Nothing", "⚡ Shutdown", "💤 Sleep"])
+        self.post_queue_combo.addItems([t("queue_extra.do_nothing"), t("queue_extra.shutdown"), t("queue_extra.sleep")])
         self.post_queue_combo.setCurrentText(saved_action)
         self.post_queue_combo.setFixedWidth(140)
-        self.post_queue_combo.setToolTip("Action after all tasks complete")
+        self.post_queue_combo.setToolTip(t("queue_extra.post_queue_tooltip"))
         self.post_queue_combo.currentIndexChanged.connect(self._post_queue_combo_changed)
         layout.addWidget(self.post_queue_combo)
         
@@ -563,37 +571,45 @@ class TabQueue(
         # Retry Failed button
         self.retry_failed_btn = QPushButton(t("queue.retry_failed"))
         self.retry_failed_btn.setStyleSheet(f"background-color: {Theme.PEACH};")
-        self.retry_failed_btn.setToolTip("Retry all failed prompts")
+        self.retry_failed_btn.setToolTip(t("queue_extra.retry_failed_tooltip"))
         self.retry_failed_btn.clicked.connect(self._on_retry_failed)
         layout.addWidget(self.retry_failed_btn)
 
         # Retry Failed Videos button — retry only failed video slots (partial failures)
-        self.retry_videos_btn = QPushButton("♻️ Videos")
+        self.retry_videos_btn = QPushButton(t("queue_extra.retry_videos"))
         self.retry_videos_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE};")
-        self.retry_videos_btn.setToolTip("Retry all failed video slots across all tasks\n(includes partially-failed completed tasks)")
+        self.retry_videos_btn.setToolTip(t("queue_extra.retry_videos_tooltip"))
         self.retry_videos_btn.clicked.connect(self._on_retry_failed_videos)
         layout.addWidget(self.retry_videos_btn)
 
         # Force Retry All button — force re-generate ALL tasks
-        self.force_all_btn = QPushButton("Force All")
+        self.force_all_btn = QPushButton(t("queue_extra.force_all"))
         self.force_all_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.PEACH};")
-        self.force_all_btn.setToolTip("Force retry ALL prompts (re-generate everything)")
+        self.force_all_btn.setToolTip(t("queue_extra.force_all_tooltip"))
         self.force_all_btn.clicked.connect(self._on_force_retry_all)
         layout.addWidget(self.force_all_btn)
 
         # Reset All
         self.reset_btn = QPushButton(t("queue.reset_all"))
         self.reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.YELLOW};")
-        self.reset_btn.setToolTip("Clear entire queue and start fresh")
+        self.reset_btn.setToolTip(t("queue_extra.reset_tooltip"))
         self.reset_btn.clicked.connect(self._on_reset_all)
         layout.addWidget(self.reset_btn)
         
         # Delete All
         self.delete_all_btn = QPushButton(t("queue.delete_all"))
         self.delete_all_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.RED};")
-        self.delete_all_btn.setToolTip("Delete all groups and tasks from queue")
+        self.delete_all_btn.setToolTip(t("queue_extra.delete_all_tooltip"))
         self.delete_all_btn.clicked.connect(self._on_delete_all)
         layout.addWidget(self.delete_all_btn)
+
+        # 🔍 Debug Queue (temporary diagnostic)
+        self._debug_btn = QPushButton("🔍 Debug")
+        self._debug_btn.setFixedWidth(70)
+        self._debug_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.YELLOW};")
+        self._debug_btn.setToolTip("Dump queue state for diagnostics")
+        self._debug_btn.clicked.connect(self._on_debug_dump)
+        layout.addWidget(self._debug_btn)
         
         return bar
     
@@ -637,7 +653,7 @@ class TabQueue(
                 # Toggle All expand/collapse button
                 self._toggle_all_btn = QPushButton("▼")
                 self._toggle_all_btn.setFixedSize(40, 24)
-                self._toggle_all_btn.setToolTip("Expand / Collapse all groups")
+                self._toggle_all_btn.setToolTip(t("queue_extra.toggle_all_tooltip"))
                 self._toggle_all_btn.setCursor(Qt.PointingHandCursor)
                 self._toggle_all_btn.setStyleSheet(f"""
                     QPushButton {{
@@ -688,19 +704,19 @@ class TabQueue(
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 0, 12, 0)
         
-        self.stats_label = QLabel("Pending: 0 | Processing: 0 | Completed: 0 | Failed: 0")
+        self.stats_label = QLabel(t("queue_extra.stats").replace("{pending}", "0").replace("{processing}", "0").replace("{completed}", "0").replace("{failed}", "0"))
         self.stats_label.setStyleSheet(f"color: {Theme.TEXT};")
         layout.addWidget(self.stats_label)
         
         layout.addStretch()
         
-        self.eta_label = QLabel("ETA: --:--")
+        self.eta_label = QLabel(t("queue_extra.eta_default"))
         self.eta_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
         layout.addWidget(self.eta_label)
         
-        self.total_time_label = QLabel("⏱ Total: --:--")
+        self.total_time_label = QLabel(t("queue_extra.total_time"))
         self.total_time_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
-        self.total_time_label.setToolTip("Total processing time across all groups")
+        self.total_time_label.setToolTip(t("queue_extra.total_time_tooltip"))
         layout.addWidget(self.total_time_label)
         
         return bar
@@ -1004,7 +1020,7 @@ class TabQueue(
         # Retry button
         retry_btn = QPushButton("\u27f3")
         retry_btn.setFixedSize(30, 24)
-        retry_btn.setToolTip("Retry this prompt")
+        retry_btn.setToolTip(t("queue_extra.retry_prompt_tooltip"))
         retry_btn.setStyleSheet(_RETRY_BTN_STYLE)
         retry_btn.clicked.connect(lambda checked, _id=item.id: self._on_retry_item(_id))
         if item.status not in ("failed", "cancelled"):
@@ -1015,7 +1031,7 @@ class TabQueue(
         # Delete button
         delete_btn = QPushButton("\u2715")
         delete_btn.setFixedSize(30, 24)
-        delete_btn.setToolTip("Remove this prompt")
+        delete_btn.setToolTip(t("queue_extra.remove_prompt_tooltip"))
         delete_btn.setStyleSheet(_DELETE_BTN_STYLE)
         delete_btn.clicked.connect(lambda checked, _id=item.id: self._on_delete_item(_id))
         aw_layout.addWidget(delete_btn)
@@ -1031,6 +1047,85 @@ class TabQueue(
         
         return widget
     
+    # ── Debug ─────────────────────────────────────────────────────
+
+    def _on_debug_dump(self):
+        """Dump queue state for diagnostics — shows controller data + widget tree."""
+        lines = ["═══ QUEUE DEBUG DUMP ═══\n"]
+
+        # 1. Controller data
+        if self.controller and hasattr(self.controller, 'get_queue_groups'):
+            groups = self.controller.get_queue_groups()
+            lines.append(f"📊 Controller: {len(groups)} groups")
+            for g in groups:
+                tasks = g.get('tasks', [])
+                lines.append(f"  📁 {g.get('name', '?')} (id={g.get('id', '?')}) — {len(tasks)} tasks")
+                for t in tasks[:3]:  # Show first 3 prompts
+                    prompt_short = t.get('prompt', '')[:60]
+                    lines.append(f"    #{t.get('index','?')} [{t.get('status','?')}] {prompt_short}...")
+                if len(tasks) > 3:
+                    lines.append(f"    ... +{len(tasks)-3} more")
+        else:
+            lines.append("❌ No controller or get_queue_groups")
+
+        # 2. Widget tree
+        lines.append(f"\n🧩 Widget tree: {len(self._group_widgets)} group widgets, {len(self._task_widgets)} task widgets")
+        for gid, gw in self._group_widgets.items():
+            content = gw.get('content')
+            container = gw.get('container')
+            expanded = self._group_expanded.get(gid, 'NOT SET')
+            name_label = gw.get('name_label')
+            name_text = name_label.text() if name_label else '?'
+            child_count = content.layout().count() if content and content.layout() else 0
+            content_visible = content.isVisible() if content else 'N/A'
+            container_visible = container.isVisible() if container else 'N/A'
+            content_height = content.height() if content else 0
+            lines.append(f"  📁 {name_text}")
+            lines.append(f"     gid={gid}")
+            lines.append(f"     expanded={expanded} | content_visible={content_visible} | container_visible={container_visible}")
+            lines.append(f"     children={child_count} | content_height={content_height}px")
+
+            # Check child widgets
+            if content and content.layout():
+                for ci in range(min(child_count, 3)):
+                    item = content.layout().itemAt(ci)
+                    w = item.widget() if item else None
+                    if w:
+                        tid = getattr(w, '_task_id', '?')
+                        vis = w.isVisible()
+                        h = w.height()
+                        lines.append(f"       child[{ci}] tid={tid} visible={vis} height={h}px")
+                if child_count > 3:
+                    lines.append(f"       ... +{child_count-3} more children")
+
+        # 3. Queue items
+        lines.append(f"\n📋 QueueItems tracked: {len(self._queue_items)}")
+        for qi in self._queue_items[:5]:
+            lines.append(f"  id={qi.id} status={qi.status} prompt={qi.prompt[:40]}...")
+        if len(self._queue_items) > 5:
+            lines.append(f"  ... +{len(self._queue_items)-5} more")
+
+        # 4. Filters
+        lines.append(f"\n🔧 Filters: project='{self.project_filter.currentText()}' status='{self.status_filter.currentText()}' mode='{self.mode_filter.currentText()}' search='{self.search_input.text()}'")
+
+        dump_text = "\n".join(lines)
+
+        # Show in scrollable dialog
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
+        dlg = QDialog(self)
+        dlg.setWindowTitle("🔍 Queue Debug Dump")
+        dlg.resize(700, 500)
+        lay = QVBoxLayout(dlg)
+        te = QTextEdit()
+        te.setReadOnly(True)
+        te.setPlainText(dump_text)
+        te.setStyleSheet(f"background: {Theme.CRUST}; color: {Theme.TEXT}; font-family: Consolas; font-size: 12px;")
+        lay.addWidget(te)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok)
+        bb.accepted.connect(dlg.accept)
+        lay.addWidget(bb)
+        dlg.exec()
+
     # ── Queue Refresh ────────────────────────────────────────────
     
     def _refresh_queue_from_controller(self):
@@ -1058,6 +1153,10 @@ class TabQueue(
         # Try group-based data first (preferred)
         if hasattr(self.controller, 'get_queue_groups'):
             groups_data = self.controller.get_queue_groups()
+            import logging
+            _qlog = logging.getLogger("veo.tab_queue")
+            total_tasks = sum(len(g.get('tasks', [])) for g in groups_data)
+            _qlog.info(f"[QueueRefresh] {len(groups_data)} groups, {total_tasks} total tasks, existing_groups={list(self._group_widgets.keys())}")
             self._refresh_groups(groups_data)
         elif hasattr(self.controller, 'get_queue_items'):
             # Fallback to flat items
@@ -1160,7 +1259,7 @@ class TabQueue(
                 time_text = f"⏱ Total: {te // 60:02d}:{te % 60:02d}"
             self.total_time_label.setText(time_text)
         else:
-            self.total_time_label.setText("⏱ Total: --:--")
+            self.total_time_label.setText(t("queue_extra.total_time"))
     
     def _refresh_flat_items(self):
         """Fallback: refresh using flat item list (no groups)."""
@@ -1234,7 +1333,7 @@ class TabQueue(
         completed = sum(1 for i in self._queue_items if i.status == "completed")
         failed = sum(1 for i in self._queue_items if i.status in ("failed", "cancelled"))
         
-        self.stats_label.setText(f"Pending: {pending} | Processing: {processing} | Completed: {completed} | Failed: {failed}")
+        self.stats_label.setText(t("queue_extra.stats").replace("{pending}", str(pending)).replace("{processing}", str(processing)).replace("{completed}", str(completed)).replace("{failed}", str(failed)))
         
         # Calculate ETA based on processing rate
         self._update_eta(pending, processing)
@@ -1242,20 +1341,20 @@ class TabQueue(
     def _update_eta(self, pending: int, processing: int):
         """Calculate and update ETA."""
         if pending == 0 and processing == 0:
-            self.eta_label.setText("ETA: Done!")
+            self.eta_label.setText(t("queue_extra.eta_done"))
         elif processing == 0:
-            self.eta_label.setText(f"ETA: {pending} items queued")
+            self.eta_label.setText(t("queue_extra.eta_queued").replace("{count}", str(pending)))
         else:
             # ~90 seconds average per VEO generation
             estimated_seconds = (pending + processing) * 90
             if estimated_seconds >= 3600:
                 hours = estimated_seconds // 3600
                 minutes = (estimated_seconds % 3600) // 60
-                self.eta_label.setText(f"ETA: {hours}h {minutes:02d}m")
+                self.eta_label.setText(t("queue_extra.eta_hours").replace("{hours}", str(hours)).replace("{minutes}", f"{minutes:02d}"))
             else:
                 minutes = estimated_seconds // 60
                 seconds = estimated_seconds % 60
-                self.eta_label.setText(f"ETA: {minutes:02d}:{seconds:02d}")
+                self.eta_label.setText(t("queue_extra.eta_minutes").replace("{minutes}", f"{minutes:02d}").replace("{seconds}", f"{seconds:02d}"))
     
     # ── Engine Controls ──────────────────────────────────────────
     
@@ -1287,9 +1386,35 @@ class TabQueue(
     def _on_toggle_engine(self):
         """Unified Start/Pause/Resume toggle."""
         if not self._is_processing:
-            # Idle → Start
-            if self.controller and hasattr(self.controller, 'dispatcher'):
-                if self.controller.ready_count == 0:
+            # Idle → Start (reset sweep counter for fresh run)
+            self._sweep_count = 0
+            self._sweep_in_progress = False
+            self._post_queue_triggered = False
+            if self.controller:
+                ready = getattr(self.controller, 'ready_count', 0)
+                if ready == 0:
+                    # Check if there's incomplete work (failed tasks, failed upscale, etc.)
+                    import logging
+                    _log = logging.getLogger("queue")
+                    has_work = False
+                    try:
+                        dispatcher = getattr(self.controller, '_dispatcher', None)
+                        if dispatcher:
+                            has_work = self._has_incomplete_work(dispatcher)
+                            _log.info(f"[StartAll] ready_count=0, has_incomplete_work={has_work}")
+                        else:
+                            _log.warning("[StartAll] No _dispatcher on controller")
+                    except Exception as e:
+                        _log.error(f"[StartAll] Error checking incomplete work: {e}")
+                    
+                    if has_work:
+                        # Trigger auto-sweep for re-upscale / retry
+                        from config.settings import get_settings
+                        s = get_settings()
+                        action = getattr(s, 'post_queue_action', 'nothing')
+                        self._run_auto_sweep(action or 'nothing')
+                        return
+                    
                     main_window = self.window()
                     if main_window and hasattr(main_window, 'show_toast'):
                         main_window.show_toast(
@@ -1314,18 +1439,11 @@ class TabQueue(
                     return
                 
                 elif any(acc["warnings"] for acc in check["accounts"]):
-                    warns = []
-                    for acc in check["accounts"]:
-                        if acc["warnings"]:
-                            warns.append(f"{acc['email']}: {', '.join(acc['warnings'])}")
-                    if main_window and hasattr(main_window, 'show_toast'):
-                        main_window.show_toast(
-                            f"{check['summary']}\n" + "\n".join(warns),
-                            "warning", duration=5000
-                        )
+                    # Warnings are auto-resolving — don't show toast
+                    # (Token, reCAPTCHA will auto-fetch on first task)
+                    pass
                 else:
-                    if main_window and hasattr(main_window, 'show_toast'):
-                        main_window.show_toast(check["summary"], "success", duration=3000)
+                    pass  # All OK — engine start below will show feedback
             
             # ── G0: Daily generation limit gate ──────────────────────
             # Check BEFORE engine starts — block if limit exceeded.
@@ -1482,9 +1600,8 @@ class TabQueue(
         original_items = [i for i in all_items if '_retry_v' not in str(i.id)]
         display_count = len(original_items) if original_items else len(all_items)
 
-        if not show_confirm(self, "Force Retry All",
-                f"Force re-generate ALL {display_count} prompts?\n\n"
-                "This will delete existing outputs and re-queue everything.",
+        if not show_confirm(self, t("queue_extra.confirm_force_retry"),
+                t("queue_extra.confirm_force_retry_msg"),
                 danger=True):
             return
 
@@ -1560,10 +1677,8 @@ class TabQueue(
         if group_count == 0:
             return
         
-        if not show_confirm(self, "Delete All",
-                f"Delete all {group_count} group(s) and their tasks?\n\n"
-                f"This will permanently remove everything from the queue\n"
-                f"and delete the session file.", danger=True):
+        if not show_confirm(self, t("queue_extra.confirm_delete_all"),
+                t("queue_extra.confirm_delete_all_msg"), danger=True):
             return
         
         count = 0
@@ -1592,10 +1707,8 @@ class TabQueue(
         if total == 0:
             return
         
-        if not show_confirm(self, "Reset All",
-                f"Reset incomplete/failed prompts?\n\n"
-                f"Completed tasks will be PRESERVED.\n"
-                f"Only pending, failed, and errored tasks will be reset and re-queued.",
+        if not show_confirm(self, t("queue_extra.confirm_reset_all"),
+                t("queue_extra.confirm_reset_all_msg"),
                 danger=True):
             return
         
@@ -1687,8 +1800,14 @@ class TabQueue(
             pass
     
     def _check_post_queue_action(self):
-        """Check if ALL queue groups are done (including upscale) → trigger action."""
+        """Check if ALL queue groups are done (including upscale) → trigger action.
+        
+        Auto-sweep gate: if incomplete tasks/videos exist, auto-retry
+        up to _max_sweep_rounds before allowing sleep/shutdown.
+        """
         if self._post_queue_triggered:
+            return
+        if self._sweep_in_progress:
             return
         if not self.controller:
             return
@@ -1698,6 +1817,9 @@ class TabQueue(
         action = getattr(s, 'post_queue_action', 'nothing')
         if action == 'nothing':
             return
+        
+        # Sync max sweep rounds from settings (user can change at runtime)
+        self._max_sweep_rounds = getattr(s, 'auto_sweep_max_rounds', 5)
         
         # Use dispatcher task states (source of truth, not UI widgets)
         try:
@@ -1710,15 +1832,19 @@ class TabQueue(
             pending = 0
             processing = 0
             completed = 0
+            failed = 0
             for group in groups.values():
                 for task in group.tasks:
+                    if task.replace_target:
+                        continue  # Skip replacement tasks
                     if task.state in (TaskState.PENDING, TaskState.READY, TaskState.WAITING):
                         pending += 1
                     elif task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
                         processing += 1
                     elif task.state == TaskState.COMPLETED:
                         completed += 1
-                    # FAILED/CANCELLED are ignored (don't block shutdown)
+                    elif task.state in (TaskState.FAILED, TaskState.CANCELLED):
+                        failed += 1
             
             if pending > 0 or processing > 0 or completed == 0:
                 return
@@ -1731,11 +1857,189 @@ class TabQueue(
                     stats = uq.get_stats()
                     if stats.get('pending_jobs', 0) > 0 or stats.get('active_workers', 0) > 0:
                         return  # Upscale still running
+            
+            # ── Auto-Sweep Gate ──────────────────────────────────
+            # Check for incomplete work before allowing sleep/shutdown
+            has_incomplete = self._has_incomplete_work(dispatcher)
+            
+            if has_incomplete and self._sweep_count < self._max_sweep_rounds:
+                self._run_auto_sweep(action)
+                return  # Don't trigger sleep/shutdown yet
+            
+            # If max sweeps exhausted but still incomplete → proceed anyway
+            if has_incomplete and self._sweep_count >= self._max_sweep_rounds:
+                import logging
+                logging.getLogger("queue").warning(
+                    f"[AutoSweep] Max {self._max_sweep_rounds} rounds exhausted, "
+                    f"proceeding with {action} despite incomplete tasks"
+                )
         except Exception:
             return  # Safe fallback — don't trigger on error
         
         self._post_queue_triggered = True
         self._execute_post_queue_action(action)
+    
+    def _has_incomplete_work(self, dispatcher) -> bool:
+        """Check if any original task has incomplete work (video + image modes)."""
+        from core.dispatcher import TaskState
+        for task in dispatcher._all_tasks.values():
+            if task.replace_target:
+                continue
+            # Failed/cancelled tasks = incomplete
+            if task.state in (TaskState.FAILED, TaskState.CANCELLED):
+                return True
+            if task.state != TaskState.COMPLETED:
+                continue
+            # Check video outputs for failures or missing upscale
+            is_image = getattr(task, 'workflow_type', '') in ('T2I', 'I2I')
+            needs_upscale = getattr(task, 'download_quality', '720p') in ('1080p', '4K', '2K')
+            # Base quality for each mode
+            base_quality = '1K' if is_image else '720p'
+            for vo in (task.video_outputs or []):
+                if vo.quality == "failed":
+                    return True
+                if vo.upscale_status == "failed":
+                    return True
+                if vo.quality not in ("failed", "retrying") and not vo.file_720p:
+                    return True
+                # Upscale pending/skipped: task wants higher quality but output still at base
+                if needs_upscale and vo.quality == base_quality and not vo.file_upscaled:
+                    if vo.upscale_status not in ("submitting", "polling", "success"):
+                        return True
+        return False
+    
+    def _run_auto_sweep(self, action: str):
+        """Execute one auto-sweep round: retry incomplete work, restart engine."""
+        import logging
+        log = logging.getLogger("queue")
+        
+        self._sweep_in_progress = True
+        self._sweep_count += 1
+        
+        try:
+            # Phase 1+2: Retry failed tasks + failed video slots
+            result = {"retried_tasks": 0, "retried_videos": 0, "still_incomplete": 0}
+            if hasattr(self.controller, 'auto_sweep'):
+                result = self.controller.auto_sweep()
+            
+            total_retried = result["retried_tasks"] + result["retried_videos"]
+            
+            # Phase 3: Re-upscale videos that need upscaling
+            reupscale_count = 0
+            needs_retry_ids = []  # Tasks needing re-generate (no media_id)
+            if self.controller and hasattr(self.controller, 're_upscale_task'):
+                try:
+                    from core.dispatcher import TaskState
+                    dispatcher = self.controller._dispatcher
+                    for task in dispatcher._all_tasks.values():
+                        if task.replace_target:
+                            continue
+                        if task.state != TaskState.COMPLETED:
+                            continue
+                        
+                        wants_upscale = getattr(task, 'download_quality', '720p') in ('1080p', '4K', '2K')
+                        if not wants_upscale:
+                            continue
+                        
+                        is_image = getattr(task, 'workflow_type', '') in ('T2I', 'I2I')
+                        base_quality = '1K' if is_image else '720p'
+                        needs_reupscale = False
+                        has_missing_media = False
+                        
+                        for vo in (task.video_outputs or []):
+                            # Case 1: Explicit upscale failure
+                            if vo.upscale_status == "failed":
+                                if vo.media_id:
+                                    needs_reupscale = True
+                                else:
+                                    has_missing_media = True
+                            # Case 2: Output at base quality, not yet upscaled
+                            elif vo.quality == base_quality and not vo.file_upscaled:
+                                if vo.upscale_status not in ("submitting", "polling", "success"):
+                                    if vo.media_id:
+                                        needs_reupscale = True
+                                    else:
+                                        has_missing_media = True
+                        
+                        if has_missing_media and not needs_reupscale:
+                            # Video never generated → need task retry, not re-upscale
+                            log.warning(
+                                f"[AutoSweep] Task {task.id}: video(s) missing media_id "
+                                f"— needs re-generation, not re-upscale"
+                            )
+                            needs_retry_ids.append(task.id)
+                        elif needs_reupscale:
+                            self.controller.re_upscale_task(task.id, failed_only=True)
+                            reupscale_count += 1
+                except Exception as e:
+                    log.error(f"[AutoSweep] Re-upscale phase error: {e}")
+            
+            # Phase 4: Force-retry tasks with missing media_ids (re-generate)
+            retry_regen = 0
+            if needs_retry_ids and hasattr(self.controller, '_dispatcher'):
+                try:
+                    dispatcher = self.controller._dispatcher
+                    for tid in needs_retry_ids:
+                        task = dispatcher.get_task(tid)
+                        if task:
+                            from core.dispatcher import TaskState
+                            task.state = TaskState.READY
+                            task.progress = 0
+                            task.status_text = "🔄 Auto-sweep: re-generating missing video(s)"
+                            dispatcher._ready_queue.put(task)
+                            retry_regen += 1
+                            log.info(f"[AutoSweep] Task {tid}: reset to READY for re-generation")
+                except Exception as e:
+                    log.error(f"[AutoSweep] Re-generate phase error: {e}")
+            
+            total_retried += reupscale_count + retry_regen
+            
+            log.info(
+                f"[AutoSweep] Round {self._sweep_count}/{self._max_sweep_rounds}: "
+                f"retried {result['retried_tasks']} task(s), "
+                f"{result['retried_videos']} video(s), "
+                f"{reupscale_count} re-upscale(s), "
+                f"{retry_regen} re-gen(s), "
+                f"{result['still_incomplete']} still incomplete"
+            )
+            
+            # Show toast to user
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                if total_retried > 0:
+                    parts = []
+                    if result["retried_tasks"] > 0:
+                        parts.append(f"{result['retried_tasks']} task(s)")
+                    if result["retried_videos"] > 0:
+                        parts.append(f"{result['retried_videos']} video(s)")
+                    if reupscale_count > 0:
+                        parts.append(f"{reupscale_count} re-upscale(s)")
+                    if retry_regen > 0:
+                        parts.append(f"{retry_regen} re-gen(s)")
+                    mw.show_toast(
+                        f"🔄 Auto-sweep #{self._sweep_count}: "
+                        f"retrying {', '.join(parts)}... "
+                        f"({action} deferred)",
+                        "warning", duration=5000
+                    )
+                elif result["still_incomplete"] > 0:
+                    mw.show_toast(
+                        f"⚠️ Sweep #{self._sweep_count}: "
+                        f"{result['still_incomplete']} still incomplete "
+                        f"(no retryable items found)",
+                        "warning", duration=5000
+                    )
+            
+            # Auto-start engine if we retried tasks/videos or re-gen'd
+            if result["retried_tasks"] + result["retried_videos"] + retry_regen > 0:
+                self._auto_start_if_idle()
+            elif result["still_incomplete"] == 0 and reupscale_count == 0:
+                # Everything actually complete → allow action next tick
+                pass  # Will be caught next _check_post_queue_action cycle
+        except Exception as e:
+            log.error(f"[AutoSweep] Error: {e}")
+        finally:
+            self._sweep_in_progress = False
     
     def _execute_post_queue_action(self, action: str):
         """Execute shutdown or sleep with countdown toast."""

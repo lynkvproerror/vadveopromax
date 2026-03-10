@@ -1,11 +1,10 @@
 """
 VEO Pro Max — Parsed Projects Panel for Project Builder
 
-Displays generated projects with:
-- Horizontal file tabs per project (Bible, Master, Prompts, Dubbing, SEO)
-- Adaptive file viewer (markdown / prompt table / text / structured)
+Compact layout with inline collapsible viewer per project:
+- Click file tab (Bi/Ma/Pr/Du/SE) → expand/collapse inline viewer below that row
 - Queue status badges (⏳ Generating, ❌ Not queued, ✅ Queued, ⚠️ Error)
-- Add to Queue / Add All buttons
+- Compact Add to Queue buttons
 """
 
 import sys
@@ -15,12 +14,13 @@ from typing import Dict, List, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QScrollArea, QTextEdit,
-    QSplitter, QStackedWidget,
+    QCheckBox, QComboBox,
 )
 from PySide6.QtCore import Qt, Signal
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -47,12 +47,14 @@ class FileTabButton(QPushButton):
     clicked_file = Signal(int, str)  # (project_index, file_type)
 
     def __init__(self, project_idx: int, file_type: str, parent=None):
-        super().__init__(file_type[:2], parent)  # "Bi", "Ma", "Pr", "Du", "SE"
+        super().__init__(file_type, parent)  # Full text: "Bible", "Master", etc.
         self.project_idx = project_idx
         self.file_type = file_type
         self._active = False
 
-        self.setFixedSize(32, 24)
+        # Use objectName for QSS specificity (override global QPushButton)
+        self.setObjectName("fileTab")
+        self.setFixedHeight(22)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(file_type)
         self._apply_style()
@@ -61,22 +63,24 @@ class FileTabButton(QPushButton):
     def _apply_style(self):
         if self._active:
             self.setStyleSheet(f"""
-                QPushButton {{
+                QPushButton#fileTab {{
                     background-color: {Theme.BLUE};
                     color: {Theme.CRUST};
                     border: none; border-radius: 3px;
+                    padding: 0px 4px; margin: 0px;
                     font-size: 10px; font-weight: bold;
                 }}
             """)
         else:
             self.setStyleSheet(f"""
-                QPushButton {{
+                QPushButton#fileTab {{
                     background-color: {Theme.SURFACE2};
                     color: {Theme.TEXT};
                     border: 1px solid {Theme.BORDER}; border-radius: 3px;
+                    padding: 0px 4px; margin: 0px;
                     font-size: 10px;
                 }}
-                QPushButton:hover {{
+                QPushButton#fileTab:hover {{
                     background-color: {Theme.BLUE};
                     color: {Theme.CRUST};
                 }}
@@ -88,11 +92,19 @@ class FileTabButton(QPushButton):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# ProjectRow: One project row with file tabs + status
+# ProjectRow: One project row with file tabs + inline viewer
 # ═══════════════════════════════════════════════════════════════════
 
 class ProjectRow(QFrame):
-    """A single project row: [#] [Name] [Bi][Ma][Pr][Du][SE] [Status]"""
+    """A single project row with inline collapsible viewer.
+
+    Layout:
+      ┌──────────────────────────────────────────────┐
+      │ 01. Topic name  │Bi│Ma│Pr│Du│SE│ [✅]        │
+      ├──────────────────────────────────────────────┤
+      │ (inline viewer — shown when file tab active) │
+      └──────────────────────────────────────────────┘
+    """
 
     file_selected = Signal(int, str)  # (project_index, file_type)
     add_to_queue = Signal(int)        # project_index
@@ -110,49 +122,111 @@ class ProjectRow(QFrame):
                 background-color: {Theme.SURFACE0};
                 border: 1px solid {Theme.BORDER};
                 border-radius: 4px;
-                padding: 2px;
             }}
         """)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
-        layout.setSpacing(4)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # ── Header row ──
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(6, 3, 6, 3)
+        header_layout.setSpacing(4)
+
+        # Checkbox for selection
+        self._checkbox = QCheckBox()
+        self._checkbox.setChecked(True)
+        self._checkbox.setFixedWidth(18)
+        self._checkbox.setStyleSheet(f"""
+            QCheckBox::indicator {{
+                width: 14px; height: 14px; border-radius: 3px;
+                border: 1px solid {Theme.BORDER};
+                background-color: {Theme.SURFACE0};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {Theme.BLUE};
+                border-color: {Theme.BLUE};
+            }}
+        """)
+        header_layout.addWidget(self._checkbox)
 
         # Number + Name
         idx_label = QLabel(f"{index + 1:02d}.")
         idx_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-weight: bold; border: none;")
         idx_label.setFixedWidth(24)
-        layout.addWidget(idx_label)
+        header_layout.addWidget(idx_label)
 
         name_label = QLabel(name)
         name_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 11px; border: none;")
-        name_label.setMinimumWidth(80)
-        layout.addWidget(name_label, stretch=1)
+        name_label.setMinimumWidth(60)
+        header_layout.addWidget(name_label, stretch=1)
 
         # File tabs
         for ft in FILE_TYPES:
             btn = FileTabButton(index, ft)
             btn.clicked_file.connect(self._on_file_click)
             self._file_tabs[ft] = btn
-            layout.addWidget(btn)
+            header_layout.addWidget(btn)
 
         # Status badge
         self._status_label = QLabel()
-        self._status_label.setFixedWidth(28)
+        self._status_label.setFixedWidth(24)
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setStyleSheet("border: none;")
-        layout.addWidget(self._status_label)
+        header_layout.addWidget(self._status_label)
+
+        main_layout.addWidget(header_widget)
+
+        # ── Inline viewer (hidden by default) ──
+        self._inline_viewer = QTextEdit()
+        self._inline_viewer.setReadOnly(True)
+        self._inline_viewer.setVisible(False)
+        self._inline_viewer.setMinimumHeight(450)
+        self._inline_viewer.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.TEXT};
+                border: none;
+                border-top: 1px solid {Theme.BORDER};
+                padding: 6px;
+                font-size: 11px;
+                font-family: 'Consolas', 'Courier New', monospace;
+            }}
+        """)
+        main_layout.addWidget(self._inline_viewer)
 
         self._update_status_badge()
 
     def _on_file_click(self, proj_idx: int, file_type: str):
-        # Deactivate old
+        # Toggle: click same tab → collapse; click different → switch
+        if self._active_file == file_type:
+            # Collapse
+            self._file_tabs[file_type].set_active(False)
+            self._active_file = None
+            self._inline_viewer.setVisible(False)
+        else:
+            # Deactivate old
+            if self._active_file and self._active_file in self._file_tabs:
+                self._file_tabs[self._active_file].set_active(False)
+            # Activate new
+            self._active_file = file_type
+            self._file_tabs[file_type].set_active(True)
+            self._inline_viewer.setVisible(True)
+            self.file_selected.emit(proj_idx, file_type)
+
+    def show_file_content(self, content: str):
+        """Update inline viewer content."""
+        self._inline_viewer.setPlainText(content)
+        self._inline_viewer.setVisible(True)
+
+    def collapse_viewer(self):
+        """Collapse inline viewer."""
         if self._active_file and self._active_file in self._file_tabs:
             self._file_tabs[self._active_file].set_active(False)
-        # Activate new
-        self._active_file = file_type
-        self._file_tabs[file_type].set_active(True)
-        self.file_selected.emit(proj_idx, file_type)
+        self._active_file = None
+        self._inline_viewer.setVisible(False)
 
     def set_status(self, status: str):
         self._status = status
@@ -166,145 +240,39 @@ class ProjectRow(QFrame):
     def get_status(self) -> str:
         return self._status
 
+    def is_checked(self) -> bool:
+        return self._checkbox.isChecked()
 
-# ═══════════════════════════════════════════════════════════════════
-# FileViewer: Adaptive viewer based on file type
-# ═══════════════════════════════════════════════════════════════════
-
-class FileViewer(QFrame):
-    """Adaptive file viewer that changes display based on file type.
-
-    - Bible (.md):   Markdown text viewer with Edit/Save
-    - Master (.txt): Text viewer (will upgrade to PromptTable later)
-    - Prompts (.txt): Text viewer (will upgrade to PromptTable later)
-    - Dubbing (.txt): Text viewer with Edit/Save
-    - SEO (.txt):    Structured viewer with Edit/Save
-    """
-
-    content_changed = Signal(int, str, str)  # (project_idx, file_type, new_content)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {Theme.SURFACE0};
-                border: 1px solid {Theme.BORDER};
-                border-radius: 6px;
-            }}
-        """)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(4)
-
-        # Header
-        header_row = QHBoxLayout()
-        self._header = QLabel("👁️ File Viewer")
-        self._header.setStyleSheet(
-            f"color: {Theme.TEXT}; font-size: 12px; font-weight: bold; border: none;"
-        )
-        header_row.addWidget(self._header)
-        header_row.addStretch()
-
-        self._edit_btn = QPushButton("✏️ Edit")
-        self._edit_btn.setFixedSize(60, 24)
-        self._edit_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"border-radius: 4px; font-size: 10px; border: none;"
-        )
-        self._edit_btn.clicked.connect(self._toggle_edit)
-        header_row.addWidget(self._edit_btn)
-
-        self._save_btn = QPushButton("💾 Save")
-        self._save_btn.setFixedSize(60, 24)
-        self._save_btn.setStyleSheet(
-            f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-            f"border-radius: 4px; font-size: 10px; font-weight: bold; border: none;"
-        )
-        self._save_btn.clicked.connect(self._save)
-        self._save_btn.setVisible(False)
-        header_row.addWidget(self._save_btn)
-
-        layout.addLayout(header_row)
-
-        # Content area
-        self._text_view = QTextEdit()
-        self._text_view.setReadOnly(True)
-        self._text_view.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {Theme.SURFACE1};
-                color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER};
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 12px;
-                font-family: 'Consolas', 'Courier New', monospace;
-            }}
-        """)
-        layout.addWidget(self._text_view, stretch=1)
-
-        self._current_project_idx = -1
-        self._current_file_type = ""
-        self._editing = False
-
-    def show_content(self, project_idx: int, file_type: str, content: str):
-        """Display file content."""
-        self._current_project_idx = project_idx
-        self._current_file_type = file_type
-        self._editing = False
-        self._edit_btn.setVisible(True)
-        self._save_btn.setVisible(False)
-        self._text_view.setReadOnly(True)
-
-        self._header.setText(f"👁️ {file_type}")
-        self._text_view.setPlainText(content)
-
-    def show_empty(self):
-        """Show empty state."""
-        self._header.setText("👁️ File Viewer")
-        self._text_view.setPlainText("Select a file tab above to view content.")
-        self._text_view.setReadOnly(True)
-        self._edit_btn.setVisible(False)
-        self._save_btn.setVisible(False)
-
-    def _toggle_edit(self):
-        self._editing = not self._editing
-        self._text_view.setReadOnly(not self._editing)
-        self._edit_btn.setVisible(not self._editing)
-        self._save_btn.setVisible(self._editing)
-
-    def _save(self):
-        content = self._text_view.toPlainText()
-        self.content_changed.emit(
-            self._current_project_idx, self._current_file_type, content
-        )
-        self._editing = False
-        self._text_view.setReadOnly(True)
-        self._edit_btn.setVisible(True)
-        self._save_btn.setVisible(False)
+    def set_checked(self, checked: bool):
+        self._checkbox.setChecked(checked)
 
 
 # ═══════════════════════════════════════════════════════════════════
-# ParsedProjectsPanel: Main panel
+# ParsedProjectsPanel: Main panel (no separate viewer)
 # ═══════════════════════════════════════════════════════════════════
 
 class ParsedProjectsPanel(QFrame):
-    """Panel displaying parsed projects with file tabs and viewer.
+    """Panel displaying parsed projects with inline collapsible viewers.
 
     Layout:
       ┌─────────────────────────────────────────────┐
-      │ 01. Topic name  │Bi│Ma│Pr│Du│SE│ [✅ Q]    │
-      │ 02. Topic name  │Bi│Ma│Pr│Du│SE│ [❌  ]    │
+      │ 📊 PARSED PROJECTS (3)                       │
       ├─────────────────────────────────────────────┤
-      │ 👁️ FILE VIEWER                              │
-      │ (content based on selected file)             │
+      │ 01. Topic A  │Bi│Ma│Pr│Du│SE│ [✅]          │
+      │ 02. Topic B  │Bi│Ma│Pr│Du│SE│ [❌]          │
+      │   ┌── inline viewer (Prompts) ──┐           │
+      │   │ 1. prompt text...           │           │
+      │   └─────────────────────────────┘           │
+      │ 03. Topic C  │Bi│Ma│Pr│Du│SE│ [⏳]          │
+      ├─────────────────────────────────────────────┤
+      │ [📤 Add Ready] [📤 Add All] 1/3 queued      │
       └─────────────────────────────────────────────┘
-      [📤 Add Selected] [📤 Add All] 2/3 queued
     """
 
     add_project_to_queue = Signal(int)         # project_index
     add_all_to_queue = Signal()
     file_content_changed = Signal(int, str, str)  # proj_idx, file_type, content
+    output_type_changed = Signal(str)              # "T2V" or "T2I"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -313,71 +281,85 @@ class ParsedProjectsPanel(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
 
-        # Color header (matches GenerationTabBase)
+        # Color header
         header = QFrame()
-        header.setFixedHeight(32)
+        header.setFixedHeight(28)
         header.setStyleSheet(f"background-color: {Theme.GREEN};")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 0, 12, 0)
-        self._header_title = QLabel("📊 PARSED PROJECTS (0)")
-        self._header_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
+        header_layout.setContentsMargins(10, 0, 10, 0)
+        self._header_title = QLabel(f"{t('project_builder.parsed_header')} (0)")
+        self._header_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold; font-size: 11px;")
         header_layout.addWidget(self._header_title)
         header_layout.addStretch()
         layout.addWidget(header)
 
-        # Splitter: project list (top) | file viewer (bottom)
-        splitter = QSplitter(Qt.Orientation.Vertical)
-
-        # ── Project list (scrollable) ──
+        # ── Project list (scrollable — no splitter) ──
         self._project_scroll = QScrollArea()
         self._project_scroll.setWidgetResizable(True)
-        # No maxHeight — let splitter/stretching manage
         self._project_scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
         )
 
         self._project_container = QWidget()
         self._project_list_layout = QVBoxLayout(self._project_container)
-        self._project_list_layout.setContentsMargins(0, 0, 0, 0)
+        self._project_list_layout.setContentsMargins(4, 4, 4, 4)
         self._project_list_layout.setSpacing(3)
         self._project_list_layout.addStretch()
 
         self._project_scroll.setWidget(self._project_container)
-        splitter.addWidget(self._project_scroll)
+        layout.addWidget(self._project_scroll, stretch=1)
 
-        # ── File viewer ──
-        self._viewer = FileViewer()
-        self._viewer.content_changed.connect(self._on_content_changed)
-        self._viewer.show_empty()
-        splitter.addWidget(self._viewer)
-
-        splitter.setSizes([150, 300])
-        layout.addWidget(splitter, stretch=1)
-
-        # ── Bottom buttons ──
+        # ── Bottom bar (compact) ──
         btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(4, 2, 4, 4)
+        btn_row.setSpacing(4)
 
-        self._add_selected_btn = QPushButton("📤 Add Selected")
+        # T2V / T2I selector
+        self._output_combo = QComboBox()
+        self._output_combo.setObjectName("outputCombo")
+        self._output_combo.addItems(["📹 T2V", "🎯 T2I"])
+        self._output_combo.setFixedHeight(24)
+        self._output_combo.setFixedWidth(80)
+        self._output_combo.setStyleSheet(f"""
+            QComboBox#outputCombo {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 0 6px; font-size: 11px; font-weight: bold;
+            }}
+            QComboBox#outputCombo::drop-down {{
+                border: none; width: 16px;
+            }}
+            QComboBox#outputCombo QAbstractItemView {{
+                background-color: {Theme.SURFACE0}; color: {Theme.TEXT};
+                selection-background-color: {Theme.SURFACE2};
+                border: 1px solid {Theme.BORDER};
+            }}
+        """)
+        btn_row.addWidget(self._output_combo)
+
+        self._add_selected_btn = QPushButton(t("project_builder.add_selected"))
+        self._add_selected_btn.setObjectName("addSelectedBtn")
         self._add_selected_btn.setStyleSheet(
-            f"background-color: {Theme.BLUE}; color: {Theme.CRUST}; "
-            f"height: 32px; border-radius: 6px; font-weight: bold; font-size: 12px;"
+            f"QPushButton#addSelectedBtn {{ background-color: {Theme.BLUE}; color: {Theme.CRUST}; "
+            f"height: 24px; border-radius: 4px; font-weight: bold; font-size: 11px; padding: 0 8px; }}"
         )
         self._add_selected_btn.clicked.connect(self._on_add_selected)
         btn_row.addWidget(self._add_selected_btn)
 
-        self._add_all_btn = QPushButton("📤 Add All")
+        self._add_all_btn = QPushButton(t("project_builder.add_all"))
+        self._add_all_btn.setObjectName("addAllBtn")
         self._add_all_btn.setStyleSheet(
-            f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-            f"height: 32px; border-radius: 6px; font-weight: bold; font-size: 12px;"
+            f"QPushButton#addAllBtn {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+            f"height: 24px; border-radius: 4px; font-weight: bold; font-size: 11px; padding: 0 8px; }}"
         )
-        self._add_all_btn.clicked.connect(lambda: self.add_all_to_queue.emit())
+        self._add_all_btn.clicked.connect(self._on_add_all)
         btn_row.addWidget(self._add_all_btn)
 
-        self._queue_summary = QLabel("0/0 queued")
+        self._queue_summary = QLabel(t("project_sidebar.queued_summary").replace("{done}", "0").replace("{total}", "0"))
         self._queue_summary.setStyleSheet(
-            f"color: {Theme.SUBTEXT0}; font-size: 11px;"
+            f"color: {Theme.SUBTEXT0}; font-size: 10px;"
         )
         btn_row.addWidget(self._queue_summary)
         btn_row.addStretch()
@@ -393,7 +375,6 @@ class ParsedProjectsPanel(QFrame):
             row.deleteLater()
         self._projects.clear()
         self._project_data.clear()
-        self._viewer.show_empty()
         self._update_summary()
 
     def add_project(self, name: str, files: dict, status: str = "ready"):
@@ -438,30 +419,58 @@ class ParsedProjectsPanel(QFrame):
     # ── Internal ──────────────────────────────────────────────
 
     def _on_file_selected(self, project_idx: int, file_type: str):
-        """Show file content in viewer."""
-        # Deactivate other project rows' file tabs
+        """Show file content in inline viewer of that project row."""
+        # Collapse other project rows' viewers
         for i, row in enumerate(self._projects):
             if i != project_idx:
-                for ft, btn in row._file_tabs.items():
-                    btn.set_active(False)
+                row.collapse_viewer()
 
         content = self._project_data[project_idx].get(file_type, "(No content)")
-        self._viewer.show_content(project_idx, file_type, content)
-
-    def _on_content_changed(self, proj_idx: int, file_type: str, content: str):
-        """Handle edit+save from viewer."""
-        if 0 <= proj_idx < len(self._project_data):
-            self._project_data[proj_idx][file_type] = content
-        self.file_content_changed.emit(proj_idx, file_type, content)
+        self._projects[project_idx].show_file_content(content)
 
     def _on_add_selected(self):
-        """Add projects that haven't been queued yet."""
+        """Add checked projects to queue."""
+        import logging
+        _log = logging.getLogger("veo.parsed_projects")
+        added = 0
         for i, row in enumerate(self._projects):
-            if row.get_status() == "ready":
+            checked = row.is_checked()
+            status = row.get_status()
+            _log.info(f"[ParsedProjects] _on_add_selected: row {i} checked={checked} status={status}")
+            # Allow any status except 'generating' — user explicitly clicked Add
+            if checked and status != "generating":
+                _log.info(f"[ParsedProjects] Emitting add_project_to_queue for index {i}")
                 self.add_project_to_queue.emit(i)
+                added += 1
+        _log.info(f"[ParsedProjects] _on_add_selected: emitted {added} projects")
+
+    def _on_add_all(self):
+        """Add ALL projects to queue (ignore checkbox state)."""
+        import logging
+        _log = logging.getLogger("veo.parsed_projects")
+        added = 0
+        for i, row in enumerate(self._projects):
+            status = row.get_status()
+            _log.info(f"[ParsedProjects] _on_add_all: row {i} status={status}")
+            # Allow any status except 'generating' — user explicitly clicked Add All
+            if status != "generating":
+                _log.info(f"[ParsedProjects] Emitting add_project_to_queue for index {i}")
+                self.add_project_to_queue.emit(i)
+                added += 1
+        _log.info(f"[ParsedProjects] _on_add_all: emitted {added} projects")
+
+    def get_output_type(self) -> str:
+        """Return 'T2V' or 'T2I' based on combo selection."""
+        text = self._output_combo.currentText()
+        return "T2I" if "T2I" in text else "T2V"
+
+    def get_checked_indices(self) -> List[int]:
+        """Return indices of checked projects."""
+        return [i for i, row in enumerate(self._projects) if row.is_checked()]
 
     def _update_summary(self):
         queued = self.get_queued_count()
         total = len(self._projects)
-        self._queue_summary.setText(f"{queued}/{total} queued")
-        self._header_title.setText(f"📊 PARSED PROJECTS ({total})")
+        checked = sum(1 for r in self._projects if r.is_checked())
+        self._queue_summary.setText(f"{queued}/{total} queued · {checked} selected")
+        self._header_title.setText(f"{t('project_builder.parsed_header')} ({total})")

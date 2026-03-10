@@ -215,8 +215,8 @@ class AccountSupervisor:
         initializes on the correct project page context.
         
         Escalation:
-        1. Try to reuse existing project
-        2. Create new project via TRPC
+        1. Try to reuse existing project (TRPC or Extension bridge)
+        2. Create new project (TRPC or Extension bridge)
         3. Retry once on failure
         """
         account = self.account
@@ -228,33 +228,61 @@ class AccountSupervisor:
             if account._browser_session and account._browser_session.is_ready:
                 trpc_client = TRPCClient(account._browser_session._page)
             
+            # Extension bridge fallback for extension-only accounts
+            bridge = getattr(account, 'extension_bridge', None)
+            use_bridge = (
+                not trpc_client and bridge
+                and bridge.is_connected(email)
+            )
+            
             project_id = None
             
-            # Step 1: Try to reuse existing project
-            if trpc_client:
-                try:
-                    projects = await trpc_client.get_projects()
-                    if projects:
-                        project_id = projects[0].get("projectId")
-                        if project_id:
-                            log.info(
-                                f"[Supervisor:{email}] ♻️ Reusing existing project: "
-                                f"{project_id}"
-                            )
-                except Exception:
-                    pass  # Fall through to create
+            # NOTE: project.getProjects endpoint was REMOVED from the API.
+            # Per HAR reference, only project.getProject (singular, requires projectId)
+            # and project.createProject exist now. Skip directly to create.
             
             # Step 2: Create new project if no existing one
             if not project_id:
                 for attempt in range(2):
                     try:
-                        project_id = await account.project_manager.get_or_create_project(
-                            email=email,
-                            access_token=account.get_access_token(),
-                            api_client=self.engine._api_client,
-                            trpc_client=trpc_client,
-                            title="My Video Project",
-                        )
+                        if trpc_client:
+                            project_id = await account.project_manager.get_or_create_project(
+                                email=email,
+                                access_token=account.get_access_token(),
+                                api_client=self.engine._api_client,
+                                trpc_client=trpc_client,
+                                title="My Video Project",
+                            )
+                        elif use_bridge:
+                            # Extension bridge path: create project via TRPC relay
+                            result = await bridge.relay_fetch(
+                                email=email,
+                                url="https://labs.google/fx/api/trpc/project.createProject",
+                                method="POST",
+                                body={
+                                    "json": {
+                                        "projectTitle": "My Video Project",
+                                        "toolName": "PINHOLE",
+                                    }
+                                },
+                                headers={"Content-Type": "application/json"},
+                                timeout=10.0,
+                            )
+                            if result and result.get("success") and result.get("data"):
+                                data = result["data"]
+                                project_id = (
+                                    data.get("result", {})
+                                    .get("data", {})
+                                    .get("json", {})
+                                    .get("result", {})
+                                    .get("projectId")
+                                )
+                                if project_id:
+                                    # Cache in ProjectManager
+                                    account.project_manager._project_cache[
+                                        f"{email}|My Video Project"
+                                    ] = project_id
+                        
                         if project_id:
                             break
                         
@@ -290,6 +318,7 @@ class AccountSupervisor:
         # Project ready — tab stays on main flow page.
         # submit_prompt uses executeScript with absolute API URLs,
         # so page URL is irrelevant (reCAPTCHA + fetch work from any VEO page).
+
 
     async def _probe_submit(self) -> bool:
         """Probe: verify reCAPTCHA pipeline is functional before unblocking foremen.
@@ -659,6 +688,14 @@ class Engine:
         # Fix G6: Inject burst_controller into upscale queue for anti-detect delay
         self._upscale_queue._burst_controller = self._burst_controller
         
+        # Fix #4: Inject reCAPTCHA health check for upscale failover
+        def _uq_recaptcha_health(email: str) -> bool:
+            bridge = self._extension_bridge
+            if bridge:
+                return bridge.is_recaptcha_healthy(email)
+            return True
+        self._upscale_queue._is_recaptcha_healthy_fn = _uq_recaptcha_health
+        
         # Wire force-retry → cancel upscale queue jobs (prevent orphan corruption)
         self._dispatcher._on_cancel_upscale = self._upscale_queue.cancel_task_jobs
         
@@ -735,12 +772,25 @@ class Engine:
         """Auto-enhance prompt via Gemini API before VEO submit.
         
         Uses per-profile key with rotation fallback.
+        Falls back to custom API key from Settings when no profile key.
         Returns enhanced prompt or None (original prompt used).
         """
         email = account.email
         api_key = self._gemini_key_mgr.get_key(email)
         if not api_key:
             api_key = self._gemini_key_mgr.get_rotation_key(email)
+        if not api_key:
+            # ★ Fallback to custom key from Settings (source="custom")
+            # Without this, users who add keys ONLY in Settings → Custom Key
+            # would never get enhance/fix prompt functionality.
+            try:
+                from services.ai_client_factory import get_ai_config
+                cfg = get_ai_config()
+                if cfg.get("api_key"):
+                    api_key = cfg["api_key"]
+                    log.debug(f"[Enhance] Using custom API key from Settings for {email}")
+            except Exception:
+                pass
         if not api_key:
             log.debug(f"[Enhance] No Gemini API key for {email} — skipping")
             return None
@@ -798,6 +848,16 @@ class Engine:
                         log.info(f"[Fix] ✅ Auto-provisioned Gemini key for {email}: {api_key[:10]}...")
                 except Exception as prov_err:
                     log.warning(f"[Fix] Auto-provision failed for {email}: {prov_err}")
+        if not api_key:
+            # ★ Fallback to custom key from Settings (source="custom")
+            try:
+                from services.ai_client_factory import get_ai_config
+                cfg = get_ai_config()
+                if cfg.get("api_key"):
+                    api_key = cfg["api_key"]
+                    log.debug(f"[Fix] Using custom API key from Settings for {email}")
+            except Exception:
+                pass
         if not api_key:
             log.warning(f"[Fix] No Gemini API key for {email} — cannot auto-fix policy prompt")
             return None
@@ -1099,10 +1159,37 @@ class Engine:
             await self._interruptible_sleep(1.0)
         
         xcd = _get_xcd()
+        if len(xcd) >= MIN_GOOD:
+            return
+        
+        # BUG-B: Try borrowing x-client-data from other accounts
+        # instead of proceeding with guaranteed 403
         log.warning(
             f"[Foreman:{email}] ⚠️ Readiness timeout ({timeout:.0f}s) — "
-            f"x-client-data still {len(xcd)} chars. First submit may 403."
+            f"x-client-data still {len(xcd)} chars. Trying borrow from other accounts..."
         )
+        try:
+            self._account_manager.fix_short_client_data()
+            xcd = _get_xcd()
+            if len(xcd) >= MIN_GOOD:
+                log.info(f"[Foreman:{email}] ✅ Borrowed x-client-data from another account ({len(xcd)} chars)")
+                return
+        except Exception as borrow_err:
+            log.debug(f"[Foreman:{email}] Borrow failed: {borrow_err}")
+        
+        # Still invalid — wait one more cycle (30s) before giving up
+        log.warning(
+            f"[Foreman:{email}] ⚠️ x-client-data still {len(xcd)} chars after borrow attempt. "
+            f"Waiting 30s cooldown before proceeding..."
+        )
+        for _ in range(30):
+            if self._stop_event.is_set():
+                return
+            await self._interruptible_sleep(1.0)
+            xcd = _get_xcd()
+            if len(xcd) >= MIN_GOOD:
+                log.info(f"[Foreman:{email}] ✅ x-client-data recovered ({len(xcd)} chars)")
+                return
     
     def _execute_js_on_account(self, account, js_expression: str, timeout: float = 10.0):
         """Execute JS on account's debug browser page (thread-safe).
@@ -1136,7 +1223,7 @@ class Engine:
         """Ensure account has a project — shared by Supervisor startup + foreman runtime.
         
         Steps:
-        1. Try to reuse existing project via get_projects()
+        1. Try to reuse existing project via get_projects() (TRPC or Extension bridge)
         2. Create new project with retry if no existing one
         3. Navigate to project page if newly created
         
@@ -1149,18 +1236,18 @@ class Engine:
         if account._browser_session and account._browser_session.is_ready:
             trpc_client = TRPCClient(account._browser_session._page)
         
+        # Extension bridge fallback for extension-only accounts
+        bridge = getattr(account, 'extension_bridge', None)
+        use_bridge = (
+            not trpc_client and bridge
+            and bridge.is_connected(email)
+        )
+        
         project_id = None
         
-        # Step 1: Reuse existing project
-        if trpc_client:
-            try:
-                projects = await trpc_client.get_projects()
-                if projects:
-                    project_id = projects[0].get("projectId")
-                    if project_id:
-                        log.info(f"[Engine:{email}] ♻️ Reusing existing project: {project_id}")
-            except Exception:
-                pass
+        # NOTE: project.getProjects endpoint was REMOVED from the API.
+        # Per HAR reference, only project.getProject (singular, requires projectId)
+        # and project.createProject exist. Skip directly to create.
         
         # Step 2: Create new with retry
         if not project_id:
@@ -1169,13 +1256,44 @@ class Engine:
                 if self._stop_event.is_set():
                     break
                 try:
-                    project_id = await account.project_manager.get_or_create_project(
-                        email=email,
-                        access_token=account.get_access_token(),
-                        api_client=self._api_client,
-                        trpc_client=trpc_client,
-                        title=title,
-                    )
+                    if trpc_client:
+                        project_id = await account.project_manager.get_or_create_project(
+                            email=email,
+                            access_token=account.get_access_token(),
+                            api_client=self._api_client,
+                            trpc_client=trpc_client,
+                            title=title,
+                        )
+                    elif use_bridge:
+                        # Extension bridge path: create project via TRPC relay
+                        result = await bridge.relay_fetch(
+                            email=email,
+                            url="https://labs.google/fx/api/trpc/project.createProject",
+                            method="POST",
+                            body={
+                                "json": {
+                                    "projectTitle": title,
+                                    "toolName": "PINHOLE",
+                                }
+                            },
+                            headers={"Content-Type": "application/json"},
+                            timeout=10.0,
+                        )
+                        if result and result.get("success") and result.get("data"):
+                            data = result["data"]
+                            project_id = (
+                                data.get("result", {})
+                                .get("data", {})
+                                .get("json", {})
+                                .get("result", {})
+                                .get("projectId")
+                            )
+                            if project_id:
+                                # Cache in ProjectManager
+                                account.project_manager._project_cache[
+                                    f"{email}|{title}"
+                                ] = project_id
+                    
                     if project_id:
                         break
                     if attempt == 0:
@@ -1208,6 +1326,9 @@ class Engine:
         - x-goog-api-key header required (NOT in URL)
         - NO credentials:'include' (cross-site → CORS error)
         - Only called once on page load, NOT in heartbeat
+        
+        Extension bridge fallback: If no browser page (extension-only mode),
+        uses relay_fetch to call the same endpoint from the VEO tab.
         """
         email = account.email
         try:
@@ -1222,7 +1343,33 @@ class Engine:
                 }).then(r => r.json()).catch(e => ({error: e.message}))
             """)
             if result is None:
-                log.warning(f"[Foreman:{email}] checkAppAvailability: no browser page available")
+                # Fallback: try via Extension bridge relay_fetch
+                bridge = getattr(account, 'extension_bridge', None)
+                if bridge and bridge.is_connected(email):
+                    log.info(f"[Foreman:{email}] checkAppAvailability: trying via Extension bridge")
+                    relay_result = await bridge.relay_fetch(
+                        email=email,
+                        url="https://aisandbox-pa.googleapis.com/v1:checkAppAvailability",
+                        method="POST",
+                        body={"clientContext": {"tool": "PINHOLE"}},
+                        headers={
+                            "Content-Type": "text/plain;charset=UTF-8",
+                            "x-goog-api-key": "AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY",
+                        },
+                        credentials="omit",  # cross-site → no credentials
+                        timeout=10.0,
+                    )
+                    if relay_result and relay_result.get("success"):
+                        data = relay_result.get("data", {})
+                        state = data.get("availabilityState", "UNKNOWN") if isinstance(data, dict) else "UNKNOWN"
+                        if state == "AVAILABLE":
+                            log.info(f"[Foreman:{email}] ✅ checkAppAvailability via Extension: AVAILABLE")
+                        else:
+                            log.warning(f"[Foreman:{email}] checkAppAvailability via Extension: {data}")
+                    else:
+                        log.warning(f"[Foreman:{email}] checkAppAvailability via Extension failed")
+                else:
+                    log.warning(f"[Foreman:{email}] checkAppAvailability: no browser page available")
                 return
             state = result.get('availabilityState', 'UNKNOWN') if isinstance(result, dict) else 'UNKNOWN'
             if state == 'AVAILABLE':
@@ -1501,6 +1648,53 @@ class Engine:
                     elif not healthy and state == "closed":
                         # Extension just disconnected — trip immediately
                         self._trip_circuit_breaker(email, "extension disconnected")
+                    
+                    # ★ reCAPTCHA health monitor: detect stuck widget on connected extension
+                    # Scenario: extension alive & breaker closed, but reCAPTCHA generates
+                    # garbage 538-char tokens → extension is "connected" but functionally dead.
+                    if healthy and state == "closed":
+                        bridge = getattr(account, 'extension_bridge', None) or self._extension_bridge
+                        if bridge and not bridge.is_recaptcha_healthy(email):
+                            if not hasattr(self, '_recaptcha_unhealthy_since'):
+                                self._recaptcha_unhealthy_since = {}
+                            
+                            if email not in self._recaptcha_unhealthy_since:
+                                self._recaptcha_unhealthy_since[email] = time.time()
+                                log.warning(
+                                    f"[CircuitBreaker] {email}: reCAPTCHA unhealthy detected "
+                                    f"(consecutive failures={bridge.get_consecutive_recaptcha_failures(email)}) "
+                                    f"— monitoring for 60s before intervention"
+                                )
+                            else:
+                                unhealthy_duration = time.time() - self._recaptcha_unhealthy_since[email]
+                                if unhealthy_duration >= 60:
+                                    # Check cooldown: don't trigger more than once per 120s
+                                    last_nav = getattr(self, '_last_hard_nav_time', {}).get(email, 0)
+                                    if time.time() - last_nav >= 120:
+                                        log.warning(
+                                            f"🔄 [CircuitBreaker] {email}: reCAPTCHA unhealthy for "
+                                            f"{unhealthy_duration:.0f}s — triggering hard navigation"
+                                        )
+                                        if not hasattr(self, '_last_hard_nav_time'):
+                                            self._last_hard_nav_time = {}
+                                        self._last_hard_nav_time[email] = time.time()
+                                        try:
+                                            nav_ok = await bridge.trigger_hard_navigation(email)
+                                            if nav_ok:
+                                                log.info(
+                                                    f"✅ [CircuitBreaker] {email}: hard navigation sent, "
+                                                    f"waiting 25s for reCAPTCHA widget..."
+                                                )
+                                                await asyncio.sleep(25)
+                                                self._recaptcha_unhealthy_since.pop(email, None)
+                                        except Exception as e:
+                                            log.error(
+                                                f"❌ [CircuitBreaker] {email}: hard navigation error: {e}"
+                                            )
+                        else:
+                            # reCAPTCHA healthy — clear tracker
+                            if hasattr(self, '_recaptcha_unhealthy_since'):
+                                self._recaptcha_unhealthy_since.pop(email, None)
             except Exception as e:
                 log.debug(f"[CircuitBreaker] Monitor error: {e}")
             
@@ -2109,6 +2303,71 @@ class Engine:
         # the TaskGroup completes (all pipelines finished/cancelled).
         log.info("Engine stop signal sent — waiting for pipelines to finish")
     
+    def stop_account_workers(self, email: str):
+        """Stop all workers (foremen + supervisor) for a specific account.
+        
+        Called during profile deletion (hot-remove) to cleanly shut down
+        an account's workers without stopping the entire engine.
+        
+        Steps:
+        1. Abort supervisor's foreman gate → foremen exit their loops
+        2. Stop supervisor's running flag
+        3. Remove workers from self._workers list
+        4. Remove from self._active_account_emails
+        5. Clean up supervisor reference
+        6. Requeue orphaned tasks for other accounts to pick up
+        """
+        # Step 1: Abort supervisor → foremen exit
+        supervisor = self._supervisors.get(email)
+        if supervisor:
+            supervisor.abort_foreman()   # Sets _foreman_abort event
+            supervisor._running = False  # Stop supervisor loop
+            log.info(f"[Engine] 🛑 Aborted supervisor for {email}")
+        
+        # Step 2: Remove workers (foremen) for this account from tracking
+        email_prefix = f"foreman-{email[:8]}-"
+        before = len(self._workers)
+        self._workers = [
+            w for w in self._workers
+            if not w.worker_id.startswith(email_prefix)
+        ]
+        removed_count = before - len(self._workers)
+        
+        # Step 3: Remove from active emails
+        self._active_account_emails.discard(email)
+        
+        # Step 4: Clean up supervisor reference
+        self._supervisors.pop(email, None)
+        
+        # Step 5: Clean up per-account state
+        self._smart_hide_rehide_countdown.pop(email, None)
+        
+        # Step 6: Requeue orphaned tasks assigned to this account
+        # Tasks in RUNNING/WAITING_POLL state assigned to deleted account
+        # need to be returned to the global queue for other accounts.
+        requeued = 0
+        try:
+            from core.dispatcher import TaskState
+            for task in self._dispatcher._tasks:
+                if (task.assigned_account == email and 
+                    task.state in (TaskState.RUNNING, TaskState.WAITING_POLL, TaskState.READY)):
+                    # Clear account affinity so any account can pick it up
+                    task.required_account = None
+                    self._dispatcher.requeue_task(task)
+                    requeued += 1
+        except Exception as e:
+            log.warning(f"[Engine] Task requeue error: {e}")
+        
+        # Wake up remaining foremen to pick up requeued tasks
+        if requeued > 0:
+            self._task_available.set()
+        
+        log.info(
+            f"[Engine] ✅ Stopped account {email}: "
+            f"removed {removed_count} foremen, requeued {requeued} tasks"
+        )
+
+
     async def start(self):
         """Start the engine main loop.
         
@@ -2131,6 +2390,25 @@ class Engine:
         
         # Smart Recovery: Wire CreditWindow to dispatcher for credit-based routing
         self._dispatcher.set_credit_window(self._credit_window)
+        
+        # Fix #2: Wire reCAPTCHA health check to dispatcher for PA3 fair-share
+        # PA3 needs to exclude accounts with dead reCAPTCHA from average calculation
+        def _check_recaptcha_health(email: str) -> bool:
+            bridge = self._extension_bridge
+            if bridge:
+                return bridge.is_recaptcha_healthy(email)
+            return True  # Assume healthy if no bridge
+        self._dispatcher.set_recaptcha_health_fn(_check_recaptcha_health)
+        
+        # Hard cap: Wire max_workers lookup so dispatcher can cap _per_account_running
+        # Without this, T2I fire-and-forget releases session workers immediately,
+        # allowing unbounded task dispatch (e.g., 54 tasks for max_workers=20)
+        def _get_max_workers(email: str) -> int:
+            for acc in self._account_manager._accounts:
+                if acc.email == email:
+                    return acc.session.max_workers
+            return 20  # Fallback default
+        self._dispatcher.set_max_workers_fn(_get_max_workers)
         
         # Inject profiles_controller into accounts for debug browser sharing
         if self._profiles_controller:
@@ -2278,11 +2556,14 @@ class Engine:
             if requeued:
                 log.info(f"Re-queued {requeued} tasks that were RUNNING/WAITING_POLL")
             
-            # Disconnect Playwright from persistent Chrome (Chrome keeps running)
-            try:
-                await self._account_manager.shutdown_browsers()
-            except Exception as e:
-                log.error(f"Browser disconnect error: {e}")
+            # Cancel pending extension requests (server + connections stay alive)
+            for acc in self._account_manager._accounts:
+                bridge = getattr(acc, 'extension_bridge', None)
+                if bridge:
+                    bridge.cancel_pending_requests()
+            # Also cancel on engine-level bridge reference
+            if hasattr(self, '_extension_bridge') and self._extension_bridge:
+                self._extension_bridge.cancel_pending_requests()
             
             # BUG-03 fix: Clear tracking AFTER pipelines done (not in stop())
             self._running = False
@@ -2435,15 +2716,50 @@ class Engine:
                     log.debug(f"Hot-reload: {account.email} already has workers")
                     continue
                 
-                # Start browser for new account
-                try:
-                    if self._profiles_controller:
-                        account.set_profiles_controller(self._profiles_controller)
-                    from config.settings import get_settings as _get_settings
-                    _headless = getattr(_get_settings(), 'smart_hide_enabled', True) or getattr(_get_settings(), 'hide_all_browsers', False)
-                    await account.ensure_browser(headless=_headless)
-                except Exception as e:
-                    log.warning(f"Hot-reload: browser start failed for {account.email}: {e}")
+                # Start browser for new account (skip if already ready from hot-add)
+                if not (account._browser_session and account._browser_session.is_ready):
+                    try:
+                        if self._profiles_controller:
+                            account.set_profiles_controller(self._profiles_controller)
+                        from config.settings import get_settings as _get_settings
+                        _headless = getattr(_get_settings(), 'smart_hide_enabled', True) or getattr(_get_settings(), 'hide_all_browsers', False)
+                        await account.ensure_browser(headless=_headless)
+                    except Exception as e:
+                        log.warning(f"Hot-reload: browser start failed for {account.email}: {e}")
+                else:
+                    log.info(f"Hot-reload: {account.email} browser already ready (hot-add)")
+                
+                # Wait for extension bridge connection (critical for tokens + reCAPTCHA)
+                if self._extension_bridge:
+                    if not self._extension_bridge.is_connected(account.email):
+                        log.info(f"Hot-reload: waiting for extension connection: {account.email}")
+                        connected = await self._extension_bridge.wait_for_extension(
+                            account.email, timeout=15.0
+                        )
+                        if connected:
+                            log.info(f"Hot-reload: ✅ extension connected: {account.email}")
+                        else:
+                            log.warning(f"Hot-reload: ⚠️ extension not connected after 15s: {account.email}")
+                    
+                    # Populate session from bridge cache (tokens, headers)
+                    cached = self._extension_bridge.get_cached_headers(
+                        account.email, max_age_seconds=0
+                    )
+                    if cached:
+                        account._session.update_browser_headers(
+                            browser_validation=cached.get('x-browser-validation', ''),
+                            client_data=cached.get('x-client-data', ''),
+                            browser_channel=cached.get('x-browser-channel', 'stable'),
+                            browser_copyright=cached.get('x-browser-copyright', ''),
+                            browser_year=cached.get('x-browser-year', ''),
+                        )
+                        xcd = cached.get('x-client-data', '')
+                        if len(xcd) >= 20:
+                            log.info(f"Hot-reload: {account.email} headers populated (xcd={len(xcd)})")
+                    
+                    # Ensure bridge ref is set on account
+                    if not account.extension_bridge:
+                        account.extension_bridge = self._extension_bridge
                 
                 # Spawn foreman
                 self._spawn_account_supervisor(tg, account)
@@ -2583,7 +2899,6 @@ class Engine:
             from config.settings import get_settings as _get_stagger_settings
             _s = _get_stagger_settings()
             if getattr(_s, 'anti_detect_enabled', True):
-                import random
                 startup_delay = random.uniform(
                     _s.anti_detect_delay_min, _s.anti_detect_delay_max
                 )
@@ -2608,16 +2923,32 @@ class Engine:
                     if self._stop_event.is_set():
                         break
                 
-                # DD4: Check supervisor abort signal (circuit breaker tripped)
+                # ★ Hot-disable: idle foreman when account is disabled
+                # Running pipelines complete normally, but no NEW tasks picked.
+                # When re-enabled, foreman resumes instantly (next loop).
+                if not account.is_enabled:
+                    await asyncio.sleep(2.0)
+                    continue
+                
+                # DD4: Check supervisor abort signal (circuit breaker OR account deleted)
                 if supervisor and supervisor.is_aborted:
+                    # Account deleted: supervisor._running is False → exit loop
+                    if not supervisor._running:
+                        log.info(
+                            f"[{fid}] 🛑 Account removed — exiting foreman loop"
+                        )
+                        break
+                    
+                    # Circuit breaker: wait for abort to clear
                     log.warning(
                         f"[{fid}] ⚡ Supervisor ABORT — "
                         f"circuit breaker tripped, pausing foreman"
                     )
                     while (supervisor.is_aborted 
+                           and supervisor._running
                            and not self._stop_event.is_set()):
                         await asyncio.sleep(1.0)
-                    if self._stop_event.is_set():
+                    if self._stop_event.is_set() or not supervisor._running:
                         break
                     log.info(f"[{fid}] ✅ Abort cleared, resuming")
                     # Fix #2: Staggered resume — random delay per foreman
@@ -3211,10 +3542,16 @@ class Engine:
                                 # M1 fix: Use AdaptiveBurstController for intelligent pacing
                                 # Tightens delay after 10 successes, backs off on 403s
                                 _wt = (task.workflow_type or "").upper()
+                                _delay_s = self._burst_controller.get_delay(account.email)
                                 if _wt in ("T2I", "I2I"):
                                     self._dispatcher.update_progress(
                                         task.id, 15,
-                                        f"⏳ Waiting ({self._burst_controller.get_delay(account.email):.0f}s)"
+                                        f"⏳ Waiting ({_delay_s:.0f}s)"
+                                    )
+                                else:
+                                    self._dispatcher.update_progress(
+                                        task.id, 5,
+                                        f"⏳ Waiting ({_delay_s:.0f}s)"
                                     )
                                 log.info(
                                     f"[Foreman:{account.email}] Task {task.id}: adaptive delay "
@@ -3239,7 +3576,12 @@ class Engine:
                                     if _wt_sub in ("T2I", "I2I"):
                                         self._dispatcher.update_progress(
                                             task.id, 30,
-                                            f"🎨 Submitting {_wt_sub}..."
+                                            f"🎨 Generating images..."
+                                        )
+                                    else:
+                                        self._dispatcher.update_progress(
+                                            task.id, 10,
+                                            f"📤 Submitting..."
                                         )
                                     # ★ Gemini AI: Auto-enhance prompt (if enabled)
                                     if (getattr(self._settings, 'prompt_enhance_enabled', False)
@@ -3640,6 +3982,10 @@ class Engine:
                             task.scene_ids = list(result.scene_ids)
                             task.stage = TaskStage.SUBMITTED  # ★ Checkpoint: prompt submitted
                             task.state = TaskState.WAITING_POLL
+                            self._dispatcher.update_progress(
+                                task.id, 20,
+                                f"✅ Submitted, polling..."
+                            )
                             
                             # ★ PARTIAL RESPONSE DETECTION: server returned fewer ops
                             expected = getattr(task, 'output_count', 0) or 0
@@ -3741,7 +4087,8 @@ class Engine:
                                 # Set task to FAILED first — retry_chain() requires FAILED state
                                 task.state = TaskState.FAILED
                                 task.error = final_error
-                                self._dispatcher.decrement_running()
+                                self._dispatcher.decrement_running(account.email)
+                                task._counter_decremented = True  # Prevent double-decrement in complete_task/fail_task
                                 if await self._interruptible_sleep(delay): break
                                 # Use retry_chain to properly restore dependency tree
                                 self._dispatcher.retry_chain(task.id)
@@ -4034,7 +4381,8 @@ class Engine:
                         aspect_ratio=task.aspect_ratio,
                     ))
                     # G4: CRITICAL — decrement running to unblock UpscaleQueue
-                    self._dispatcher.decrement_running()
+                    self._dispatcher.decrement_running(email)
+                    task._counter_decremented = True  # Prevent double-decrement in complete_task
                     log.info(f"{log_prefix} Delegated upscale → UpscaleQueue")
                     # Worker returns early with 720p quality
                 else:
@@ -4494,28 +4842,39 @@ class Engine:
         max_retries: int = 10, timeout: int = 120,
         pipeline_sem: asyncio.Semaphore = None,
     ):
-        """Gate T2I pipeline with window semaphore for accurate UI.
+        """Gate T2I pipeline — sem released AFTER submit (30%), not full pipeline.
         
-        Wraps the ENTIRE pipeline (submit+download+upscale) in a semaphore.
-        When task exits all 3 stages, semaphore releases → next task enters.
-        Window=5 allows 3-stage overlap: 1 submitting + 1-2 downloading + 1-2 upscaling.
+        The semaphore slot is acquired here, then released inside
+        _run_t2i_submit_pipeline_bg right after submit succeeds (~30-60%).
+        Download + upscale run WITHOUT holding the window slot, so the
+        next task can enter submit phase immediately.
         """
+        _sem_released = False
         try:
             if pipeline_sem:
-                async with pipeline_sem:
-                    await self._run_t2i_submit_pipeline_bg(
-                        task, account, worker_count, supervisor,
-                        max_retries, timeout,
-                    )
-            else:
-                # Fallback: no window (legacy behavior)
-                await self._run_t2i_submit_pipeline_bg(
-                    task, account, worker_count, supervisor,
-                    max_retries, timeout,
-                )
+                await pipeline_sem.acquire()
+            await self._run_t2i_submit_pipeline_bg(
+                task, account, worker_count, supervisor,
+                max_retries, timeout,
+                _pipeline_sem=pipeline_sem,  # ← so it can release after submit
+            )
+            _sem_released = True  # pipeline_bg released it after submit
         finally:
-            # ★ Decrement active count — releases window slot
-            if hasattr(self, '_t2i_active_count'):
+            # Safety: if pipeline_bg didn't release (error before submit), release here
+            if not _sem_released and pipeline_sem:
+                try:
+                    pipeline_sem.release()
+                except ValueError:
+                    pass  # Already released by pipeline_bg
+            # ★ Decrement active count — ONLY if not already released at submit (30%)
+            _released_set = getattr(self, '_t2i_submit_released', set())
+            if task.id in _released_set:
+                _released_set.discard(task.id)  # Clean up
+                log.debug(
+                    f"[T2I-Window:{account.email}] Task {task.id} exited — "
+                    f"already released at submit (skip decrement)"
+                )
+            elif hasattr(self, '_t2i_active_count'):
                 email = account.email
                 if email in self._t2i_active_count:
                     self._t2i_active_count[email] = max(
@@ -4534,6 +4893,7 @@ class Engine:
         self, task: Task, account: AccountManager,
         worker_count: int, supervisor=None,
         max_retries: int = 10, timeout: int = 120,
+        _pipeline_sem: "asyncio.Semaphore | None" = None,
     ):
         """Background T2I submit pipeline — decoupled from foreman.
         
@@ -4620,235 +4980,252 @@ class Engine:
                             f"adaptive delay → submit attempt {attempt+1}/{max_retries+1}"
                         )
                         await self._burst_controller.wait(account.email)
-                    
-                    # T2I submit (30-60s synchronous — under rate lock for sequential)
-                    try:
-                        # ── XCD pre-check (first attempt only) ──
-                        # Extension's webRequest only captures xcd when tab makes
-                        # requests. If tab is idle, xcd stays at 8 chars forever.
-                        # Fix: trigger lightweight_refresh → extension fires fetch()
-                        # → Chrome injects real x-client-data → webRequest captures it.
-                        _xcd_proven = getattr(self, '_t2i_xcd_proven', {}).get(account.email, False)
-                        if attempt == 0 and not _xcd_proven:
-                            from config.constants import MIN_VALID_XCD
-                            hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
-                            xcd_val = hdrs.get('x-client-data', '') or ''
-                            if len(xcd_val) < MIN_VALID_XCD:
-                                # Trigger header refresh to wake Chrome Variations
-                                ext_bridge = getattr(account, 'extension_bridge', None)
-                                if ext_bridge and ext_bridge.is_connected(account.email):
+                
+                # ═══ OUTSIDE rate lock: XCD + submit + parse ═══
+                # Rate lock released after burst delay — next task can start spacing
+                try:
+                    # ── XCD pre-check (first attempt only) ──
+                    _xcd_proven = getattr(self, '_t2i_xcd_proven', {}).get(account.email, False)
+                    if attempt == 0 and not _xcd_proven:
+                        from config.constants import MIN_VALID_XCD
+                        hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
+                        xcd_val = hdrs.get('x-client-data', '') or ''
+                        if len(xcd_val) < MIN_VALID_XCD:
+                            ext_bridge = getattr(account, 'extension_bridge', None)
+                            if ext_bridge and ext_bridge.is_connected(account.email):
+                                log.info(
+                                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                                    f"xcd={len(xcd_val)} chars — triggering header refresh"
+                                )
+                                try:
+                                    await ext_bridge.refresh_headers_lightweight(account.email, timeout=5.0)
+                                    await asyncio.sleep(2.0)
+                                    await ext_bridge.probe_browser_headers(account.email, timeout=5.0)
+                                    await asyncio.sleep(1.0)
+                                except Exception as _e:
+                                    log.debug(f"[T2I-BG:{account.email}] header refresh error: {_e}")
+                            
+                            for _xcd_wait in range(10):
+                                hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
+                                xcd_val = hdrs.get('x-client-data', '') or ''
+                                if len(xcd_val) >= MIN_VALID_XCD:
                                     log.info(
                                         f"[T2I-BG:{account.email}] Task {task.id}: "
-                                        f"xcd={len(xcd_val)} chars — triggering header refresh"
+                                        f"xcd ready after refresh ({len(xcd_val)} chars)"
                                     )
-                                    try:
-                                        await ext_bridge.refresh_headers_lightweight(account.email, timeout=5.0)
-                                        await asyncio.sleep(2.0)  # wait for headers_update callback
-                                        # Also probe for x-browser-validation
-                                        await ext_bridge.probe_browser_headers(account.email, timeout=5.0)
-                                        await asyncio.sleep(1.0)
-                                    except Exception as _e:
-                                        log.debug(f"[T2I-BG:{account.email}] header refresh error: {_e}")
-                                
-                                # Poll for up to 10s after refresh
-                                for _xcd_wait in range(10):
-                                    hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
-                                    xcd_val = hdrs.get('x-client-data', '') or ''
-                                    if len(xcd_val) >= MIN_VALID_XCD:
-                                        log.info(
-                                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                                            f"xcd ready after refresh ({len(xcd_val)} chars)"
-                                        )
-                                        break
-                                    await asyncio.sleep(1.0)
-                                else:
-                                    hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
-                                    xcd_val = hdrs.get('x-client-data', '') or ''
-                                    if len(xcd_val) < MIN_VALID_XCD:
-                                        log.warning(
-                                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                                            f"x-client-data still {len(xcd_val)} chars after refresh+10s — skipping to retry"
-                                        )
-                                        continue  # retry with next attempt
-                        
-                        ext_bridge = getattr(account, 'extension_bridge', None)
-                        if not ext_bridge or not ext_bridge.is_connected(account.email):
-                            log.warning(
-                                f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"extension not connected — retrying..."
-                            )
-                            continue
-                        
-                        _wt_sub = (task.workflow_type or "").upper()
-                        self._dispatcher.update_progress(
-                            task.id, 20,
-                            f"🔧 Preparing {_wt_sub} submit"
-                        )
-                        self._dispatcher.update_progress(
-                            task.id, 30,
-                            f"🎨 Submitting {_wt_sub}..."
-                        )
-                        
-                        endpoint_key, body = self._api_client.build_request_body(
-                            workflow_type=task.workflow_type,
-                            prompt=task.prompt or "",
-                            project_id=account.project_id or "",
-                            aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
-                            model=task.model or "imagen_3_5",
-                            output_count=task.output_count or 4,
-                            seed=task.seed,
-                            paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
-                            image_uris=task.image_uris,
-                        )
-                        
-                        log.info(
+                                    break
+                                await asyncio.sleep(1.0)
+                            else:
+                                hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
+                                xcd_val = hdrs.get('x-client-data', '') or ''
+                                if len(xcd_val) < MIN_VALID_XCD:
+                                    log.warning(
+                                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                                        f"x-client-data still {len(xcd_val)} chars after refresh+10s — skipping to retry"
+                                    )
+                                    continue
+                    
+                    ext_bridge = getattr(account, 'extension_bridge', None)
+                    if not ext_bridge or not ext_bridge.is_connected(account.email):
+                        log.warning(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"📦 submitting {endpoint_key} ({task.output_count or 4} images)"
+                            f"extension not connected — retrying..."
                         )
-                        
-                        ext_result = await asyncio.wait_for(
-                            ext_bridge.submit_prompt(
-                                email=account.email,
-                                endpoint=endpoint_key,
-                                body=body,
-                                needs_recaptcha=True,
-                                timeout=timeout,
-                            ),
-                            timeout=timeout + 5,
+                        continue
+                    
+                    _wt_sub = (task.workflow_type or "").upper()
+                    self._dispatcher.update_progress(
+                        task.id, 20,
+                        f"🔧 Preparing {_wt_sub} submit"
+                    )
+                    self._dispatcher.update_progress(
+                        task.id, 30,
+                        f"🎨 Generating images..."
+                    )
+                    
+                    # ★ Release pipeline sem + active count + workers NOW
+                    # Submit started (30%) — download/upscale are I/O, don't need worker slots.
+                    # This frees workers for foreman to dispatch new tasks.
+                    if _pipeline_sem:
+                        try:
+                            _pipeline_sem.release()
+                            _pipeline_sem = None
+                        except ValueError:
+                            pass
+                    if hasattr(self, '_t2i_active_count'):
+                        email = account.email
+                        if self._t2i_active_count.get(email, 0) > 0:
+                            self._t2i_active_count[email] -= 1
+                            self._t2i_submit_released = getattr(self, '_t2i_submit_released', set())
+                            self._t2i_submit_released.add(task.id)
+                    # Release workers — they're no longer needed after submit
+                    if worker_count > 0:
+                        account.release_workers(worker_count)
+                        log.debug(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"released {worker_count} workers at submit (30%) — "
+                            f"active_count={self._t2i_active_count.get(account.email, 0)}"
                         )
+                        worker_count = 0
+                    
+                    endpoint_key, body = self._api_client.build_request_body(
+                        workflow_type=task.workflow_type,
+                        prompt=task.prompt or "",
+                        project_id=account.project_id or "",
+                        aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
+                        model=task.model or "imagen_3_5",
+                        output_count=task.output_count or 4,
+                        seed=task.seed,
+                        paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                        image_uris=task.image_uris,
+                    )
+                    
+                    log.info(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"📦 submitting {endpoint_key} ({task.output_count or 4} images)"
+                    )
+                    
+                    ext_result = await asyncio.wait_for(
+                        ext_bridge.submit_prompt(
+                            email=account.email,
+                            endpoint=endpoint_key,
+                            body=body,
+                            needs_recaptcha=True,
+                            timeout=timeout,
+                        ),
+                        timeout=timeout + 5,
+                    )
+                    
+                    # Parse response
+                    if ext_result and ext_result.get('success'):
+                        self._dispatcher.update_progress(
+                            task.id, 60,
+                            f"✅ {_wt_sub} response received"
+                        )
+                        self._dispatcher.update_progress(
+                            task.id, 70,
+                            f"📷 Parsing {task.output_count or 4} image(s)..."
+                        )
+                        data = ext_result.get('data', {})
+                        output_uris = []
+                        t2i_media_ids = []
                         
-                        # Parse response
-                        if ext_result and ext_result.get('success'):
-                            self._dispatcher.update_progress(
-                                task.id, 60,
-                                f"✅ {_wt_sub} response received"
+                        if 'media' in data:
+                            for item in data['media']:
+                                gen_img = (item.get('image') or {}).get('generatedImage', {})
+                                fife_url = gen_img.get('fifeUrl', '')
+                                mid = item.get('mediaId', '') or item.get('name', '')
+                                if fife_url:
+                                    output_uris.append(fife_url)
+                                    t2i_media_ids.append(mid)
+                            log.info(
+                                f"[T2I-BG:{account.email}] "
+                                f"[T2I-Parse] {len(output_uris)} image(s), "
+                                f"mediaIds={[m[:20] for m in t2i_media_ids]}"
                             )
-                            self._dispatcher.update_progress(
-                                task.id, 70,
-                                f"📷 Parsing {task.output_count or 4} image(s)..."
-                            )
-                            data = ext_result.get('data', {})
-                            output_uris = []
-                            t2i_media_ids = []
-                            
-                            if 'media' in data:
-                                for item in data['media']:
-                                    gen_img = (item.get('image') or {}).get('generatedImage', {})
-                                    fife_url = gen_img.get('fifeUrl', '')
-                                    mid = item.get('mediaId', '') or item.get('name', '')
-                                    if fife_url:
-                                        output_uris.append(fife_url)
-                                        t2i_media_ids.append(mid)
+                        
+                        # Record success
+                        self._burst_controller.record_success(account.email)
+                        self.record_circuit_success(account.email)
+                        
+                        # ★ Signal first-success gate
+                        if hasattr(self, '_t2i_first_success'):
+                            ev = self._t2i_first_success.get(account.email)
+                            if ev and not ev.is_set():
+                                ev.set()
                                 log.info(
                                     f"[T2I-BG:{account.email}] "
-                                    f"[T2I-Parse] {len(output_uris)} image(s), "
-                                    f"mediaIds={[m[:20] for m in t2i_media_ids]}"
+                                    f"🎯 First T2I success — unlocking pipeline"
                                 )
-                            
-                            # Record success
-                            self._burst_controller.record_success(account.email)
-                            self.record_circuit_success(account.email)
-                            
-                            # ★ Signal first-success gate — unlocks all waiting foremen
-                            if hasattr(self, '_t2i_first_success'):
-                                ev = self._t2i_first_success.get(account.email)
-                                if ev and not ev.is_set():
-                                    ev.set()
-                                    log.info(
-                                        f"[T2I-BG:{account.email}] "
-                                        f"🎯 First T2I success — unlocking pipeline"
-                                    )
-                            # ★ Mark xcd as proven — skip pre-check for subsequent tasks
-                            if not hasattr(self, '_t2i_xcd_proven'):
-                                self._t2i_xcd_proven = {}
-                            self._t2i_xcd_proven[account.email] = True
-                            
-                            if output_uris:
-                                # Save results — download pipeline runs OUTSIDE rate lock
-                                _submit_output_uris = output_uris
-                                _submit_media_ids = t2i_media_ids
-                                break  # ← Exit retry loop + rate lock scope
-                            else:
-                                log.warning(
-                                    f"[T2I-BG:{account.email}] Task {task.id}: "
-                                    f"0 output URIs in response"
-                                )
-                                self._dispatcher.complete_task(task.id, output_uris=[])
-                                return
+                        if not hasattr(self, '_t2i_xcd_proven'):
+                            self._t2i_xcd_proven = {}
+                        self._t2i_xcd_proven[account.email] = True
                         
-                        elif ext_result:
-                            error = ext_result.get('error', 'unknown')
-                            status_code = ext_result.get('status', 0)
-                            error_lower = (error or "").lower()
-                            
-                            log.warning(
-                                f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"submit failed (attempt {attempt+1}): {error}"
-                            )
-                            
-                            if "403" in str(error) or "recaptcha" in error_lower:
-                                self._burst_controller.record_error(
-                                    account.email, status_code or 403
-                                )
-                                self.record_circuit_403(account.email)
-                                self.set_account_cooldown(
-                                    account.email, f"403/{error}"
-                                )
-                                
-                                ext_br = getattr(account, 'extension_bridge', None)
-                                recovery_ctx = {
-                                    "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
-                                }
-                                recovery_result = await execute_recovery(
-                                    account=account,
-                                    error_msg=error or "",
-                                    context=recovery_ctx,
-                                    ext_bridge=ext_br,
-                                    dispatcher=self._dispatcher,
-                                    credit_window=self._credit_window,
-                                    multi_account=self._account_manager,
-                                )
-                                
-                                if recovery_result.failover:
-                                    log.warning(
-                                        f"[T2I-BG:{account.email}] FAILOVER — requeuing"
-                                    )
-                                    self._dispatcher.requeue_task(task)
-                                    account.release_workers(worker_count)
-                                    worker_count = 0
-                                    return
-                                
-                                continue
-                            
-                            if attempt < max_retries:
-                                await asyncio.sleep(5)
-                                continue
+                        if output_uris:
+                            _submit_output_uris = output_uris
+                            _submit_media_ids = t2i_media_ids
+                            break  # ← Exit retry loop
                         else:
                             log.warning(
                                 f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"no response from extension"
+                                f"0 output URIs in response"
                             )
-                            if attempt < max_retries:
-                                await asyncio.sleep(5)
-                                continue
+                            self._dispatcher.complete_task(task.id, output_uris=[])
+                            return
                     
-                    except asyncio.TimeoutError:
+                    elif ext_result:
+                        error = ext_result.get('error', 'unknown')
+                        status_code = ext_result.get('status', 0)
+                        error_lower = (error or "").lower()
+                        
                         log.warning(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"submit timeout (attempt {attempt+1})"
+                            f"submit failed (attempt {attempt+1}): {error}"
                         )
+                        
+                        if "403" in str(error) or "recaptcha" in error_lower:
+                            self._burst_controller.record_error(
+                                account.email, status_code or 403
+                            )
+                            self.record_circuit_403(account.email)
+                            self.set_account_cooldown(
+                                account.email, f"403/{error}"
+                            )
+                            
+                            ext_br = getattr(account, 'extension_bridge', None)
+                            recovery_ctx = {
+                                "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
+                            }
+                            recovery_result = await execute_recovery(
+                                account=account,
+                                error_msg=error or "",
+                                context=recovery_ctx,
+                                ext_bridge=ext_br,
+                                dispatcher=self._dispatcher,
+                                credit_window=self._credit_window,
+                                multi_account=self._account_manager,
+                            )
+                            
+                            if recovery_result.failover:
+                                log.warning(
+                                    f"[T2I-BG:{account.email}] FAILOVER — requeuing"
+                                )
+                                self._dispatcher.requeue_task(task)
+                                account.release_workers(worker_count)
+                                worker_count = 0
+                                return
+                            
+                            continue
+                        
                         if attempt < max_retries:
                             await asyncio.sleep(5)
                             continue
-                    except Exception as e:
-                        log.error(
+                    else:
+                        log.warning(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"submit error: {e}",
-                            exc_info=True,
+                            f"no response from extension"
                         )
                         if attempt < max_retries:
                             await asyncio.sleep(5)
                             continue
+                
+                except asyncio.TimeoutError:
+                    log.warning(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"submit timeout (attempt {attempt+1})"
+                    )
+                    if attempt < max_retries:
+                        await asyncio.sleep(5)
+                        continue
+                except Exception as e:
+                    log.error(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"submit error: {e}",
+                        exc_info=True,
+                    )
+                    if attempt < max_retries:
+                        await asyncio.sleep(5)
+                        continue
             
             # ═══ OUTSIDE rate lock: download + upscale pipeline ═══
             # Rate lock is released — next T2I task starts burst delay now
@@ -5509,7 +5886,8 @@ class Engine:
                         f"re-enqueued to UpscaleQueue, worker releasing slot"
                     )
                     # Release worker slot — upscale continues in background
-                    self._dispatcher.decrement_running()
+                    self._dispatcher.decrement_running(account.email)
+                    task._counter_decremented = True  # Prevent double-decrement in complete_task
                     return
                 elif task.stage == TaskStage.DOWNLOADED_720 and task.download_quality != "720p" and media_ids:
                     # BUG-18: Skip inline upscale if stop is active
@@ -6005,7 +6383,8 @@ class Engine:
                                 # ★ CRITICAL: Decrement running_count so should_upscale_wait()
                                 # returns False when all prompts are done. Without this,
                                 # running_count stays >0 forever → upscale deadlock.
-                                self._dispatcher.decrement_running()
+                                self._dispatcher.decrement_running(account.email)
+                                task._counter_decremented = True  # Prevent double-decrement in complete_task
                                 log.info(
                                     f"[Engine] Task {task.id}: worker releasing slot → "
                                     f"upscale continues in background"
@@ -6637,6 +7016,55 @@ class Engine:
                     f"[Foreman:{account.email}] ⚠️ reCAPTCHA still not ready "
                     f"after reload + {post_reload_wait:.0f}s wait + 3 verify attempts"
                 )
+                
+                # ★ ESCALATION: Hard navigate to VEO URL (nuclear recovery)
+                # refresh_headers() only refreshes XHR — doesn't reload the page.
+                # When reCAPTCHA widget is stuck (538-char garbage token),
+                # only a FULL PAGE NAVIGATION forces Chrome to re-download
+                # and re-initialize grecaptcha Enterprise.
+                if not self._stop_event.is_set():
+                    log.warning(
+                        f"[Foreman:{account.email}] 🔄 Escalating to HARD NAVIGATION "
+                        f"(full page reload failed — forcing VEO URL navigation)"
+                    )
+                    try:
+                        nav_ok = await bridge.trigger_hard_navigation(account.email)
+                        if nav_ok:
+                            # Wait for reCAPTCHA widget to initialize after navigation
+                            nav_wait = 20.0
+                            log.info(
+                                f"[Foreman:{account.email}] ⏳ Waiting {nav_wait:.0f}s "
+                                f"for reCAPTCHA widget after hard navigation..."
+                            )
+                            await asyncio.sleep(nav_wait)
+                            
+                            # Verify widget is ready after navigation
+                            for nav_verify in range(3):
+                                try:
+                                    nav_ready = await bridge.check_recaptcha_ready(
+                                        account.email, timeout=8.0
+                                    )
+                                    if nav_ready:
+                                        log.info(
+                                            f"[Foreman:{account.email}] ✅ reCAPTCHA recovered "
+                                            f"after hard navigation (verify #{nav_verify + 1})"
+                                        )
+                                        self._account_recovery_phase[account.email] = 0
+                                        self._account_phase_403_count[account.email] = 0
+                                        return True
+                                except Exception:
+                                    pass
+                                if nav_verify < 2:
+                                    await asyncio.sleep(3.0)
+                            
+                            log.warning(
+                                f"[Foreman:{account.email}] ⚠️ reCAPTCHA still dead "
+                                f"after hard navigation + {nav_wait:.0f}s + 3 verify attempts"
+                            )
+                    except Exception as e:
+                        log.error(
+                            f"[Foreman:{account.email}] Hard navigation error: {e}"
+                        )
             except Exception as e:
                 log.debug(f"[Foreman:{account.email}] Recovery reload failed: {e}")
         
@@ -7094,6 +7522,14 @@ class Engine:
                     # BUG-14: Stop check in inner retry loop
                     if self._stop_event.is_set():
                         break
+                    # BUG-A: Circuit breaker check — skip upscale retries
+                    # when account is suspended (guaranteed 403)
+                    if self._circuit_state.get(account.email, 'closed') == 'open':
+                        log.warning(
+                            f"Upscale {video_label}: circuit breaker OPEN "
+                            f"for {account.email} — skipping retries"
+                        )
+                        break
                     # Risk 5 fix: Serialize upscale submits per account (prevents burst)
                     if account.email not in self._account_rate_locks:
                         self._account_rate_locks[account.email] = asyncio.Lock()
@@ -7222,7 +7658,22 @@ class Engine:
                                 if soft_ok:
                                     log.info(f"✅ Upscale: Soft recovery OK for {account.email}")
                                 else:
-                                    log.warning(f"⚠️ Upscale: Soft recovery returned False")
+                                    # BUG-D: Extension-only accounts have no browser
+                                    # → reload VEO tab via Extension bridge instead
+                                    _ext = getattr(account, 'extension_bridge', None)
+                                    if _ext and _ext.is_connected(account.email):
+                                        log.info(f"🔄 Upscale: Trying Extension tab reload for {account.email}")
+                                        try:
+                                            await _ext.send_and_wait(
+                                                {'action': 'reload_tab', 'email': account.email},
+                                                timeout=15.0,
+                                            )
+                                            await asyncio.sleep(3.0)  # Wait for page reload
+                                            log.info(f"✅ Upscale: Extension tab reloaded")
+                                        except Exception:
+                                            log.warning(f"⚠️ Upscale: Extension tab reload failed")
+                                    else:
+                                        log.warning(f"⚠️ Upscale: No recovery path available")
                             except Exception as soft_err:
                                 log.error(f"❌ Upscale soft recovery failed: {soft_err}")
                                 
@@ -7496,8 +7947,8 @@ class Engine:
             log.warning(f"Re-upscale {task_id}: task not found")
             return False
         
-        # Fallback: rebuild upscale_media_ids from video_outputs if missing
-        if not task.upscale_media_ids and task.video_outputs:
+        # Fallback: rebuild upscale_media_ids from video_outputs if missing/all-empty
+        if (not task.upscale_media_ids or not any(task.upscale_media_ids)) and task.video_outputs:
             rebuilt = [vo.media_id or "" for vo in task.video_outputs]
             if any(rebuilt):
                 task.upscale_media_ids = rebuilt
@@ -7514,7 +7965,11 @@ class Engine:
             if failed_only:
                 failed_indices = [
                     vo.index for vo in task.video_outputs
-                    if vo.upscale_status == "failed"
+                    if (
+                        vo.upscale_status in ("failed", "skipped", "")
+                        and not vo.file_upscaled
+                        and vo.quality not in ("1080p", "4K", "2K")
+                    )
                 ]
             else:
                 for vo in task.video_outputs:

@@ -137,6 +137,86 @@ class QueueController:
         """
         return self._dispatcher.retry_all_failed()
     
+    def auto_sweep(self) -> dict:
+        """Auto-sweep: scan ALL tasks for incomplete work and retry.
+        
+        Checks:
+        1. FAILED tasks → retry_all_failed()
+        2. COMPLETED tasks with video quality='failed' → force_retry_all_failed_videos()
+        3. COMPLETED tasks with missing 720p files → flag as incomplete
+        4. COMPLETED tasks with upscale_status='failed' → flag as incomplete
+        
+        Returns:
+            {"retried_tasks": N, "retried_videos": M, "still_incomplete": K}
+        """
+        import logging
+        log = logging.getLogger("queue_controller")
+        
+        retried_tasks = 0
+        retried_videos = 0
+        still_incomplete = 0
+        
+        # Phase 1: Retry all FAILED tasks
+        retried_tasks = self._dispatcher.retry_all_failed()
+        
+        # Phase 2: Retry failed video slots (within COMPLETED tasks)
+        retried_videos = self._dispatcher.force_retry_all_failed_videos()
+        
+        # Phase 3: Count remaining incomplete items
+        for task in self._dispatcher._all_tasks.values():
+            if task.replace_target:
+                continue  # Skip replacement tasks
+            
+            if task.state == TaskState.FAILED:
+                still_incomplete += 1
+                continue
+            
+            if task.state != TaskState.COMPLETED:
+                continue  # Only check completed tasks
+            
+            if not task.video_outputs:
+                continue
+            
+            for vo in task.video_outputs:
+                # Missing base file download (720p for video, 1K for image)
+                if vo.quality not in ("failed", "retrying") and not vo.file_720p:
+                    still_incomplete += 1
+                    break
+                # Failed upscale (when upscale was expected)
+                if vo.upscale_status == "failed":
+                    still_incomplete += 1
+                    break
+                # Generation failed
+                if vo.quality == "failed":
+                    still_incomplete += 1
+                    break
+                # ★ Image upscale incomplete: task wants 2K but image still at 1K
+                is_image = getattr(task, 'workflow_type', '') in ('T2I', 'I2I')
+                wants_upscale = getattr(task, 'download_quality', '720p') in ('1080p', '4K', '2K')
+                if is_image and wants_upscale and vo.quality == "1K" and not vo.file_upscaled:
+                    if vo.upscale_status not in ("submitting", "polling", "success"):
+                        still_incomplete += 1
+                        break
+                # ★ Video upscale incomplete: task wants 1080p/4K but video still at 720p
+                if not is_image and wants_upscale and vo.quality == "720p" and not vo.file_upscaled:
+                    if vo.upscale_status not in ("submitting", "polling", "success"):
+                        still_incomplete += 1
+                        break
+        
+        total_retried = retried_tasks + retried_videos
+        if total_retried > 0:
+            log.info(
+                f"[AutoSweep] Retried {retried_tasks} task(s), "
+                f"{retried_videos} video(s), "
+                f"{still_incomplete} still incomplete"
+            )
+        
+        return {
+            "retried_tasks": retried_tasks,
+            "retried_videos": retried_videos,
+            "still_incomplete": still_incomplete,
+        }
+    
     def set_priority(self, task_id: str, priority: int) -> bool:
         """Set task priority (higher = sooner)."""
         return self._dispatcher.set_priority(task_id, priority)

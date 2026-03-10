@@ -217,7 +217,7 @@ class CheckableComboBox(QComboBox):
         self._max_select = max_select
         self.setEditable(True)
         self.lineEdit().setReadOnly(True)
-        self.lineEdit().setPlaceholderText("Select...")
+        self.lineEdit().setText("---")
         self._model = QStandardItemModel(self)
         self.setModel(self._model)
         self._model.itemChanged.connect(self._on_item_changed)
@@ -258,8 +258,8 @@ class CheckableComboBox(QComboBox):
             it = self._model.item(i)
             if it.checkState() == Qt.CheckState.Checked:
                 labels.append(it.text())
-        self.setCurrentText(", ".join(labels) if labels else "Select...")
-        self.setEditText(", ".join(labels) if labels else "Select...")
+        self.setCurrentText(", ".join(labels) if labels else "---")
+        self.setEditText(", ".join(labels) if labels else "---")
         self.selection_changed.emit(selected)
 
     def get_selected(self) -> list:
@@ -315,7 +315,7 @@ class SetupMatrixPanel(QFrame):
         mode_header.setStyleSheet(f"background-color: {Theme.GREEN};")
         mode_layout = QHBoxLayout(mode_header)
         mode_layout.setContentsMargins(12, 0, 12, 0)
-        mode_title = QLabel("🎯 PROJECT BUILDER")
+        mode_title = QLabel(t("project_builder.title"))
         mode_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
         mode_layout.addWidget(mode_title)
         mode_layout.addStretch()
@@ -370,8 +370,12 @@ class SetupMatrixPanel(QFrame):
                 combo = CheckableComboBox(max_select=max_select)
                 for oid, olabel in options:
                     combo.addCheckItem(olabel, oid)
+                # QComboBox auto-selects index 0 when items are added — reset
+                combo.setCurrentIndex(-1)
+                combo.lineEdit().setText("---")
             else:
                 combo = QComboBox()
+                combo.addItem("---", None)  # Placeholder — no pre-selection
                 for oid, olabel in options:
                     combo.addItem(olabel, oid)
 
@@ -392,15 +396,15 @@ class SetupMatrixPanel(QFrame):
             return combo
 
         # All 8 dimensions — stacked label/combo, full width
-        self.d1_category  = _dim_combo("Category", CATEGORIES,
+        self.d1_category  = _dim_combo(t("project_builder.sidebar.category"), CATEGORIES,
                                        self._on_category_changed, multi=True, max_select=3)
-        self.d2_structure = _dim_combo("Structure", STRUCTURES)
-        self.d3_style     = _dim_combo("Visual Style", VISUAL_STYLES)
-        self.d4_character = _dim_combo("Character", CHARACTER_TYPES)
-        self.d5_audience  = _dim_combo("Audience", AUDIENCES, self._on_audience_changed)
-        self.d6_persona   = _dim_combo("Persona", PERSONAS, self._on_persona_changed)
-        self.d7_tone      = _dim_combo("Tone", TONES)
-        self.d8_voice     = _dim_combo("Voice Region", VOICE_REGIONS,
+        self.d2_structure = _dim_combo(t("project_builder.sidebar.structure"), STRUCTURES)
+        self.d3_style     = _dim_combo(t("project_builder.sidebar.visual_style"), VISUAL_STYLES)
+        self.d4_character = _dim_combo(t("project_builder.sidebar.character"), CHARACTER_TYPES)
+        self.d5_audience  = _dim_combo(t("project_builder.sidebar.audience"), AUDIENCES, self._on_audience_changed)
+        self.d6_persona   = _dim_combo(t("project_builder.sidebar.persona"), PERSONAS, self._on_persona_changed)
+        self.d7_tone      = _dim_combo(t("project_builder.sidebar.tone"), TONES)
+        self.d8_voice     = _dim_combo(t("project_builder.sidebar.voice_region"), VOICE_REGIONS,
                                        multi=True, max_select=4)
 
     # ── Production Section ────────────────────────────────────
@@ -409,11 +413,11 @@ class SetupMatrixPanel(QFrame):
         self._separator()
 
         # Collapsible production header
-        prod_header = QPushButton("── ⚙️ PRODUCTION ── ▼")
+        prod_header = QPushButton(f"{t('project_builder.production.header')} ▼")
         prod_header.setStyleSheet(
             f"color: {Theme.TEXT}; font-size: 12px; font-weight: bold; "
             f"background: transparent; border: none; text-align: left; "
-            f"padding: 6px 0 2px 0; cursor: pointer;"
+            f"padding: 6px 0 2px 0;"
         )
         prod_header.setCursor(Qt.CursorShape.PointingHandCursor)
         self._layout.addWidget(prod_header)
@@ -428,7 +432,7 @@ class SetupMatrixPanel(QFrame):
         def _toggle_production():
             vis = self._prod_container.isVisible()
             self._prod_container.setVisible(not vis)
-            prod_header.setText("── ⚙️ PRODUCTION ── ▶" if vis else "── ⚙️ PRODUCTION ── ▼")
+            prod_header.setText(f"{t('project_builder.production.header')} ▶" if vis else f"{t('project_builder.production.header')} ▼")
 
         prod_header.clicked.connect(_toggle_production)
 
@@ -439,14 +443,15 @@ class SetupMatrixPanel(QFrame):
             prod_layout.addWidget(lbl)
 
         # ── Output Folder ──
-        _section_lbl("📂 Output Folder")
+        _section_lbl(t("project_builder.production.output_folder"))
         self.output_folder = QLineEdit()
-        self.output_folder.setPlaceholderText("D:/Projects/VEO (or drag folder)")
-        self.output_folder.setMinimumHeight(32)
+        self.output_folder.setPlaceholderText(t("project_sidebar.output_placeholder"))
+        self.output_folder.setFixedHeight(32)
         prod_layout.addWidget(self.output_folder)
 
-        browse_btn = QPushButton("📁 Browse")
-        browse_btn.setMinimumHeight(28)
+        browse_btn = QPushButton(t("project_builder.production.browse"))
+        browse_btn.setFixedHeight(30)
+        browse_btn.setMinimumWidth(100)
         browse_btn.setProperty("variant", "secondary")
         browse_btn.clicked.connect(self._browse_output)
         prod_layout.addWidget(browse_btn)
@@ -460,35 +465,43 @@ class SetupMatrixPanel(QFrame):
         except Exception:
             pass
 
+        # ── Separator ──
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"background-color: {Theme.BORDER};")
+        sep.setFixedHeight(1)
+        prod_layout.addSpacing(4)
+        prod_layout.addWidget(sep)
+
         # ── Image Settings ──
-        _section_lbl("🖼️ Image Model")
+        _section_lbl(t("project_builder.production.image_model"))
         self.image_model = QComboBox()
         for display, api_key in IMAGE_MODELS:
             self.image_model.addItem(display, api_key)
         self.image_model.setMinimumHeight(32)
         prod_layout.addWidget(self.image_model)
 
-        _section_lbl("Image Aspect Ratio")
+        _section_lbl(t("project_builder.production.image_aspect"))
         self.image_aspect = QComboBox()
-        self.image_aspect.addItems(["16:9 (Landscape)", "9:16 (Portrait)"])
+        self.image_aspect.addItems([t("project_sidebar.landscape"), t("project_sidebar.portrait")])
         self.image_aspect.setMinimumHeight(32)
         prod_layout.addWidget(self.image_aspect)
 
-        _section_lbl("Image Count")
+        _section_lbl(t("project_builder.production.image_count"))
         self.image_count = QSpinBox()
         self.image_count.setRange(1, 50)
         self.image_count.setValue(10)
         self.image_count.setMinimumHeight(32)
         prod_layout.addWidget(self.image_count)
 
-        _section_lbl("Image Quality")
+        _section_lbl(t("project_builder.production.image_quality"))
         self.image_quality = QComboBox()
         self.image_quality.addItems(["1k", "2k", "4k"])
         self.image_quality.setCurrentText("2k")
         self.image_quality.setMinimumHeight(32)
         prod_layout.addWidget(self.image_quality)
 
-        _section_lbl("Outputs/Request")
+        _section_lbl(t("project_builder.production.image_outputs"))
         self.image_outputs = QSpinBox()
         self.image_outputs.setRange(1, 4)
         self.image_outputs.setValue(4)
@@ -496,43 +509,78 @@ class SetupMatrixPanel(QFrame):
         prod_layout.addWidget(self.image_outputs)
 
         # ── Video Settings ──
-        _section_lbl("🎬 Video Model")
+        _section_lbl(t("project_builder.production.video_model"))
         self.video_model = QComboBox()
         self.video_model.addItems(VIDEO_MODELS)
         self.video_model.setMinimumHeight(32)
         prod_layout.addWidget(self.video_model)
 
-        _section_lbl("Video Quality")
+        _section_lbl(t("project_builder.production.video_quality"))
         self.video_quality = QComboBox()
         self.video_quality.addItems(["720p", "1080p", "4K"])
         self.video_quality.setCurrentText("1080p")
         self.video_quality.setMinimumHeight(32)
         prod_layout.addWidget(self.video_quality)
 
-        _section_lbl("Video Aspect Ratio")
+        _section_lbl(t("project_builder.production.video_aspect"))
         self.video_aspect = QComboBox()
         self.video_aspect.addItems(["16:9", "9:16"])
         self.video_aspect.setMinimumHeight(32)
         prod_layout.addWidget(self.video_aspect)
 
-        _section_lbl("Video Count")
+        _section_lbl(t("project_builder.production.video_count"))
         self.video_count = QSpinBox()
         self.video_count.setRange(1, 50)
         self.video_count.setValue(8)
         self.video_count.setMinimumHeight(32)
         prod_layout.addWidget(self.video_count)
 
-        _section_lbl("Video Outputs/Prompt")
+        _section_lbl(t("project_builder.production.video_outputs"))
         self.video_outputs = QSpinBox()
         self.video_outputs.setRange(1, 4)
         self.video_outputs.setValue(4)
         self.video_outputs.setMinimumHeight(32)
         prod_layout.addWidget(self.video_outputs)
 
+        # ── Load defaults from AppSettings ──
+        try:
+            from config.settings import get_settings
+            s = get_settings()
+            if s:
+                # Video defaults
+                _vm = getattr(s, 'default_model', '')
+                idx = self.video_model.findText(_vm)
+                if idx >= 0:
+                    self.video_model.setCurrentIndex(idx)
+                _vq = getattr(s, 'default_download_quality', '1080p')
+                idx = self.video_quality.findText(_vq)
+                if idx >= 0:
+                    self.video_quality.setCurrentIndex(idx)
+                _ar = getattr(s, 'default_aspect_ratio', 'LANDSCAPE')
+                self.video_aspect.setCurrentText("9:16" if "PORTRAIT" in _ar.upper() else "16:9")
+                _oc = getattr(s, 'default_output_count', 4)
+                self.video_outputs.setValue(min(max(_oc, 1), 4))
+
+                # Image defaults
+                _im = getattr(s, 'default_image_model', '')
+                idx = self.image_model.findText(_im)
+                if idx >= 0:
+                    self.image_model.setCurrentIndex(idx)
+                _iq = getattr(s, 'default_image_quality', '1k')
+                idx = self.image_quality.findText(_iq)
+                if idx >= 0:
+                    self.image_quality.setCurrentIndex(idx)
+                self.image_aspect.setCurrentText(
+                    t("project_sidebar.portrait") if "PORTRAIT" in _ar.upper()
+                    else t("project_sidebar.landscape")
+                )
+                self.image_outputs.setValue(min(max(_oc, 1), 4))
+        except Exception:
+            pass
 
 
     def _browse_output(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        folder = QFileDialog.getExistingDirectory(self, t("project_builder.production.select_folder"))
         if folder:
             self.output_folder.setText(folder)
 

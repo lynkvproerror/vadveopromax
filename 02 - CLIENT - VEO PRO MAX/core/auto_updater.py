@@ -230,14 +230,16 @@ class AutoUpdater(QObject):
         self._download_worker.start()
     
     def apply_update(self, zip_path: str):
-        """Extract update ZIP and replace app files, then restart.
+        """Extract update ZIP and CLEAN-replace app files, then restart.
         
-        Strategy:
+        Strategy (CLEAN UPDATE):
         1. Extract ZIP to temp folder
-        2. Write a small batch script that:
+        2. Write a PowerShell script that:
            a. Waits for this process to exit
-           b. Copies new files over old ones
-           c. Restarts the app
+           b. DELETES entire app folder (all user data is in ~/.veoauto/)
+           c. Copies new files from extracted ZIP
+           d. Re-hides runtime DLLs for clean Explorer view
+           e. Restarts the app
         3. Exit current app
         """
         try:
@@ -276,7 +278,7 @@ function Log($msg) {{
     Write-Host $msg
 }}
 
-Log '=== VEO Pro Max Updater ==='
+Log '=== VEO Pro Max Clean Updater ==='
 Log 'Waiting for app to exit...'
 
 # Wait for the running app process to exit (by PID, max 30s)
@@ -296,15 +298,34 @@ $exePath  = '{exe_full.replace(chr(39), chr(39)+chr(39))}'
 $zipPath  = '{zip_path.replace(chr(39), chr(39)+chr(39))}'
 $extrDir  = '{extract_dir.replace(chr(39), chr(39)+chr(39))}'
 
-# Remove Hidden+System attributes so we can overwrite
+# ═══════════════════════════════════════════
+# CLEAN UPDATE: Delete old app → Copy new
+# All user data is in ~/.veoauto/ (safe!)
+# ═══════════════════════════════════════════
+
+# 1. Remove Hidden+System attributes so we can delete
 Log 'Removing file protections...'
 Get-ChildItem -Path $appDir -Recurse -Force -ErrorAction SilentlyContinue |
     ForEach-Object {{
         try {{ $_.Attributes = 'Normal' }} catch {{}}
     }}
 
-# Copy new files over old ones
-Log "Copying files from $srcDir to $appDir ..."
+# 2. Delete entire old app folder
+Log 'Deleting old app folder...'
+try {{
+    Remove-Item -Path $appDir -Recurse -Force -ErrorAction Stop
+    Log 'Old app folder deleted.'
+}} catch {{
+    Log "Delete failed: $_ — trying item-by-item..."
+    Get-ChildItem -Path $appDir -Recurse -Force -ErrorAction SilentlyContinue |
+        Sort-Object {{ $_.FullName.Length }} -Descending |
+        ForEach-Object {{ try {{ Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }} catch {{}} }}
+    try {{ Remove-Item -Path $appDir -Force -ErrorAction SilentlyContinue }} catch {{}}
+}}
+
+# 3. Recreate app directory and copy new files
+Log "Copying new files from $srcDir to $appDir ..."
+New-Item -Path $appDir -ItemType Directory -Force | Out-Null
 try {{
     Copy-Item -Path (Join-Path $srcDir '*') -Destination $appDir -Recurse -Force -ErrorAction Stop
     Log 'Copy completed successfully.'
@@ -316,8 +337,8 @@ try {{
     Log 'Robocopy fallback done.'
 }}
 
-# Re-hide runtime files (keep Explorer clean)
-Log 'Restoring file protections...'
+# 4. Re-hide runtime files (keep Explorer clean)
+Log 'Hiding runtime files...'
 $hidePatterns = @('*.dll', '*.pyd')
 $hideDirs = @('PySide6', 'certifi', 'aiohttp', 'playwright', 'charset_normalizer',
               'multidict', 'yarl', 'frozenlist', 'aiosignal', 'markupsafe')
@@ -335,15 +356,15 @@ foreach ($d in $hideDirs) {{
     }}
 }}
 
-# Cleanup temp files
+# 5. Cleanup temp files
 Log 'Cleaning up temp files...'
 Remove-Item -Path $extrDir -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
 
-# Restart the app
+# 6. Restart the app
 Log "Starting: $exePath"
 Start-Process -FilePath $exePath -WorkingDirectory $appDir
-Log 'App restarted. Update complete!'
+Log 'App restarted. Clean update complete!'
 
 # Self-delete
 Start-Sleep -Seconds 2

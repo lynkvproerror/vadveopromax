@@ -95,6 +95,10 @@ class ExtensionBridge:
         self._pending_request_conns: Dict[str, ExtensionConnection] = {}  # GAP #9: requestId → connection owner
         self._recaptcha_locks: Dict[str, asyncio.Lock] = {}  # email → Lock (serialize per-account)
         self._heartbeat_task: Optional[asyncio.Task] = None  # Fix 5: heartbeat loop
+        self._watchdog_task: Optional[asyncio.Task] = None    # Auto-restart watchdog
+        self._restart_count: int = 0                          # Consecutive restart attempts
+        self._MAX_RESTARTS = 5                                # Max consecutive restarts before giving up
+        self._stopping = False                                # True when stop() is called
         self._preserved_headers: Dict[str, Dict[str, str]] = {}  # Survive disconnects
         self._headers_debounce_timers: Dict[str, asyncio.TimerHandle] = {}  # email → pending timer
         self._headers_debounce_latest: Dict[str, tuple] = {}  # email → (headers, access_token)
@@ -157,6 +161,49 @@ class ExtensionBridge:
             email in conn.registered_emails and self._is_ws_open(conn.ws)
             for conn in self._connections
         )
+    
+    def is_recaptcha_healthy(self, email: str) -> bool:
+        """Check if reCAPTCHA is currently healthy for this account.
+        
+        Unhealthy = consecutive short token count >= threshold.
+        Used by PA3 fair-share to exclude dead accounts from average,
+        and by upscale queue for failover decisions.
+        """
+        return self._short_token_counts.get(email, 0) < self._SHORT_TOKEN_RELOAD_THRESHOLD
+    
+    def get_consecutive_recaptcha_failures(self, email: str) -> int:
+        """Get number of consecutive reCAPTCHA short-token failures."""
+        return self._short_token_counts.get(email, 0)
+    
+    async def trigger_hard_navigation(self, email: str) -> bool:
+        """Force navigate tab to VEO URL — nuclear recovery for stuck reCAPTCHA.
+        
+        Used when lightweight refresh (refresh_headers) fails to recover the
+        reCAPTCHA widget. Full page navigation forces Chrome to re-download
+        and re-initialize the grecaptcha Enterprise widget.
+        
+        Returns True if navigation succeeded.
+        """
+        VEO_URL = "https://labs.google.com/fx/tools/video-fx"
+        log.warning(
+            f"[ExtensionBridge] 🔄 Hard navigation for {email} → {VEO_URL} "
+            f"(reCAPTCHA recovery)"
+        )
+        result = await self.navigate_to_url(email, VEO_URL, timeout=35.0)
+        if result and result.get('success'):
+            # Reset short token counter — give the new page a fresh start
+            self._short_token_counts[email] = 0
+            log.info(
+                f"[ExtensionBridge] ✅ Hard navigation complete for {email} "
+                f"(load time: {result.get('loadTime', '?')}s)"
+            )
+            return True
+        else:
+            log.error(
+                f"[ExtensionBridge] ❌ Hard navigation failed for {email}: "
+                f"{(result or {}).get('error', 'no response')}"
+            )
+            return False
     
     async def wait_for_extension(self, email: str, timeout: float = 30.0) -> bool:
         """Wait for Extension to connect/reconnect for a specific email.
@@ -350,9 +397,10 @@ class ExtensionBridge:
             log.error("[ExtensionBridge] websockets library not installed! pip install websockets")
             return
 
-        # Suppress verbose websockets frame-level logging (raw TEXT/PONG/HTTP dumps)
-        logging.getLogger("websockets").setLevel(logging.WARNING)
-        logging.getLogger("websockets.server").setLevel(logging.WARNING)
+        # Suppress verbose websockets logs including harmless handshake probe errors
+        # (Extension sometimes probes the port before completing HTTP handshake)
+        logging.getLogger("websockets").setLevel(logging.CRITICAL)
+        logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
 
         # Try ports in order until one works
         last_error = None
@@ -389,9 +437,24 @@ class ExtensionBridge:
         
         # Start app-level heartbeat loop
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        # Start server watchdog (auto-restart on crash/port loss)
+        self._watchdog_task = asyncio.create_task(self._server_watchdog())
+        self._restart_count = 0
+        self._stopping = False
 
     async def stop(self):
         """Stop WebSocket server and close all connections."""
+        self._stopping = True
+        
+        # Stop watchdog
+        if self._watchdog_task and not self._watchdog_task.done():
+            self._watchdog_task.cancel()
+            try:
+                await self._watchdog_task
+            except asyncio.CancelledError:
+                pass
+            self._watchdog_task = None
+        
         # Fix 5: Stop heartbeat (properly await to avoid 'Task destroyed' warning)
         if self._heartbeat_task and not self._heartbeat_task.done():
             self._heartbeat_task.cancel()
@@ -412,6 +475,25 @@ class ExtensionBridge:
                 pass
         self._connections.clear()
         log.info("[ExtensionBridge] Server stopped")
+
+    def cancel_pending_requests(self):
+        """Cancel all pending requests without stopping the server or connections.
+        
+        Called when engine stops (Dừng button) to flush in-flight requests.
+        Extension + WebSocket server stay alive for instant restart.
+        """
+        cancelled = 0
+        for request_id, future in list(self._pending_requests.items()):
+            if not future.done():
+                future.cancel()
+                cancelled += 1
+        self._pending_requests.clear()
+        self._pending_request_conns.clear()
+        self._pending_request_times.clear()
+        self._pending_request_actions.clear()
+        self._pending_request_emails.clear()
+        if cancelled:
+            log.info(f"[ExtensionBridge] Cancelled {cancelled} pending request(s) (server still running)")
 
     async def request_recaptcha(self, email: str, timeout: float = 25.0) -> Optional[str]:
         """Request reCAPTCHA token from Extension for a specific email.
@@ -889,6 +971,89 @@ class ExtensionBridge:
         except asyncio.TimeoutError:
             log.debug(
                 f"[ExtensionBridge] submit_status_check timed out for {email} ({timeout}s)"
+            )
+            return None
+        finally:
+            self._cleanup_request_timing(request_id)
+            self._pending_requests.pop(request_id, None)
+            self._pending_request_conns.pop(request_id, None)
+
+    async def relay_fetch(
+        self,
+        email: str,
+        url: str,
+        method: str = 'POST',
+        body: dict = None,
+        headers: dict = None,
+        credentials: str = 'include',
+        timeout: float = 15.0,
+    ) -> Optional[dict]:
+        """Relay a generic fetch() through Extension's page context.
+        
+        Executes fetch() in the VEO tab via chrome.scripting.executeScript.
+        Cookies are auto-attached by the browser (same origin for labs.google).
+        
+        Use cases:
+        - TRPC calls (project.createProject, project.getProjects)
+        - checkAppAvailability (aisandbox-pa)
+        - Any API that requires browser cookies/headers
+        
+        Args:
+            email: Account email to identify the tab
+            url: Full URL to fetch
+            method: HTTP method (GET, POST, etc.)
+            body: Request body dict (will be JSON.stringify'd)
+            headers: Additional headers dict
+            credentials: Fetch credentials mode ('include' for cookies)
+            timeout: Max seconds to wait for response
+            
+        Returns:
+            dict with {success, status, data, error} or None on timeout
+        """
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] relay_fetch: no connection for {email}")
+            return None
+        
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        self._pending_requests[request_id] = future
+        self._pending_request_conns[request_id] = conn
+        
+        try:
+            await self._ws_send(conn, {
+                'action': 'relay_fetch',
+                'requestId': request_id,
+                'email': email,
+                'url': url,
+                'method': method,
+                'body': body,
+                'headers': headers or {},
+                'credentials': credentials,
+            })
+            
+            result = await asyncio.wait_for(future, timeout=timeout)
+            
+            success = result.get('success', False)
+            status = result.get('status', 0)
+            
+            if success:
+                log.debug(
+                    f"[ExtensionBridge] ✅ relay_fetch for {email}: "
+                    f"HTTP {status} → {url[:80]}"
+                )
+            else:
+                error = result.get('error', '')
+                log.warning(
+                    f"[ExtensionBridge] ❌ relay_fetch for {email}: "
+                    f"HTTP {status} — {error} → {url[:80]}"
+                )
+            return result
+            
+        except asyncio.TimeoutError:
+            log.error(
+                f"[ExtensionBridge] relay_fetch timed out for {email} "
+                f"({timeout}s) → {url[:80]}"
             )
             return None
         finally:
@@ -1606,6 +1771,14 @@ class ExtensionBridge:
                 if not future.done():
                     future.set_result(msg)
 
+        elif action == 'relay_fetch_result':
+            # Response to relay_fetch — generic fetch from page context
+            request_id = msg.get('requestId')
+            if request_id and request_id in self._pending_requests:
+                future = self._pending_requests[request_id]
+                if not future.done():
+                    future.set_result(msg)
+
         elif action == 'headers_refreshed':
             # Response to refresh_headers request
             request_id = msg.get('requestId')
@@ -1795,12 +1968,12 @@ class ExtensionBridge:
         email = self._pending_request_emails.pop(request_id, '?')
         if sent_at:
             elapsed = time.time() - sent_at
-            if elapsed > 5.0:
+            if elapsed > 10.0:
                 log.warning(
                     f"[ExtBridge] ⏱️ SLOW response: {action} for {email} "
                     f"took {elapsed:.1f}s (requestId={request_id[:8]})"
                 )
-            elif elapsed > 2.0:
+            elif elapsed > 5.0:
                 log.info(
                     f"[ExtBridge] ⏱️ Response: {action} for {email} "
                     f"took {elapsed:.1f}s"
@@ -2122,6 +2295,177 @@ class ExtensionBridge:
             'severity': 'ok',
         }
     
+    # ── Server Watchdog (auto-restart on crash/port loss) ────────────────
+    
+    async def _server_watchdog(self):
+        """Background task: check server health every 15s, auto-restart if dead.
+        
+        Detects:
+        - Server object gone (crash)
+        - Server port no longer bound (stolen by another process)
+        - Server .sockets empty (closed unexpectedly)
+        
+        Recovery:
+        1. Try to kill the process occupying our port
+        2. Restart server on same port or fallback
+        3. Extension auto-reconnects via fast port scan (offscreen.js)
+        """
+        WATCHDOG_INTERVAL = 15  # seconds
+        log.info("[ExtensionBridge] 🐕 Server watchdog started")
+        
+        while not self._stopping:
+            try:
+                await asyncio.sleep(WATCHDOG_INTERVAL)
+                if self._stopping:
+                    break
+                
+                # Check server health
+                if self._server is None:
+                    log.warning("[ExtensionBridge] 🐕 Watchdog: server is None — restarting...")
+                    await self._restart_server()
+                    continue
+                
+                # Check if server is still serving (sockets bound)
+                server_alive = False
+                try:
+                    sockets = self._server.sockets
+                    server_alive = sockets is not None and len(sockets) > 0
+                except Exception:
+                    server_alive = False
+                
+                if not server_alive:
+                    log.warning(
+                        f"[ExtensionBridge] 🐕 Watchdog: server sockets dead "
+                        f"(port {self._port}) — restarting..."
+                    )
+                    await self._restart_server()
+                    continue
+                
+                # Server healthy — reset restart counter
+                if self._restart_count > 0:
+                    self._restart_count = 0
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f"[ExtensionBridge] 🐕 Watchdog error: {e}")
+                await asyncio.sleep(WATCHDOG_INTERVAL)
+        
+        log.info("[ExtensionBridge] 🐕 Server watchdog stopped")
+    
+    async def _restart_server(self):
+        """Restart the WebSocket server after a crash or port loss.
+        
+        Steps:
+        1. Close old server gracefully
+        2. Try to kill process occupying our preferred port
+        3. Re-bind using port fallback logic (same as start())
+        4. Extension reconnects automatically via fast port scan
+        
+        Preserves: callbacks, _preserved_headers, all state except _server.
+        """
+        self._restart_count += 1
+        
+        if self._restart_count > self._MAX_RESTARTS:
+            log.error(
+                f"[ExtensionBridge] ❌ Max restarts ({self._MAX_RESTARTS}) reached — "
+                f"giving up. Manual restart required."
+            )
+            return
+        
+        log.warning(
+            f"[ExtensionBridge] 🔄 Restarting WebSocket server "
+            f"(attempt {self._restart_count}/{self._MAX_RESTARTS})..."
+        )
+        
+        # Step 1: Close old server
+        old_port = self._port
+        if self._server:
+            try:
+                self._server.close()
+                await asyncio.wait_for(self._server.wait_closed(), timeout=3.0)
+            except Exception:
+                pass
+            self._server = None
+        
+        # Step 2: Try to reclaim our port by killing the occupying process
+        self._kill_port_holder(old_port)
+        await asyncio.sleep(1)  # Give OS time to release the port
+        
+        # Step 3: Re-bind using port fallback
+        # Suppress verbose websockets logs
+        logging.getLogger("websockets").setLevel(logging.CRITICAL)
+        logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
+        
+        # Try preferred port first, then fallbacks
+        ports_to_try = [old_port] + [p for p in self.FALLBACK_PORTS if p != old_port]
+        
+        last_error = None
+        for port in ports_to_try:
+            try:
+                self._server = await ws_serve(
+                    self._handle_connection,
+                    '127.0.0.1',
+                    port,
+                    ping_interval=20,
+                    ping_timeout=10,
+                    close_timeout=5,
+                    max_size=50 * 1024 * 1024,
+                )
+                self._port = port
+                log.info(
+                    f"[ExtensionBridge] ✅ WebSocket server restarted on "
+                    f"ws://127.0.0.1:{port} (attempt {self._restart_count})"
+                )
+                # Extension will auto-reconnect via fast port scan
+                return
+            except OSError as e:
+                last_error = e
+                log.warning(f"[ExtensionBridge] Port {port} still unavailable: {e}")
+                continue
+        
+        # All ports failed — will retry on next watchdog cycle
+        log.error(
+            f"[ExtensionBridge] ❌ All ports failed during restart. "
+            f"Will retry in 15s. Last error: {last_error}"
+        )
+    
+    @staticmethod
+    def _kill_port_holder(port: int):
+        """Try to kill the process occupying a specific port (Windows only).
+        
+        Best-effort: logs warning if unable to kill. Does NOT kill our own process.
+        """
+        import os
+        import subprocess
+        try:
+            # Find PID using netstat
+            result = subprocess.run(
+                ['netstat', '-ano', '-p', 'TCP'],
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+            )
+            my_pid = os.getpid()
+            for line in result.stdout.splitlines():
+                if f'127.0.0.1:{port}' in line and 'LISTENING' in line:
+                    parts = line.split()
+                    pid = int(parts[-1])
+                    if pid == my_pid:
+                        continue  # Don't kill ourselves
+                    log.warning(
+                        f"[ExtensionBridge] 🔪 Killing process PID={pid} "
+                        f"occupying port {port}..."
+                    )
+                    subprocess.run(
+                        ['taskkill', '/F', '/PID', str(pid)],
+                        capture_output=True, timeout=5,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                    )
+                    log.info(f"[ExtensionBridge] ✅ Killed PID={pid}")
+                    return
+        except Exception as e:
+            log.debug(f"[ExtensionBridge] Could not kill port holder: {e}")
+
     def _check_ports_available(self) -> dict:
         """Check which ports are available/occupied."""
         import socket

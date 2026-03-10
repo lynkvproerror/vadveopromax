@@ -1113,6 +1113,157 @@ async function handleAppMessage(msg) {
       break;
     }
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // relay_fetch — GENERIC FETCH FROM PAGE CONTEXT
+    //
+    // Allows Python to make arbitrary HTTP requests from the VEO tab's
+    // browser context. Cookies are auto-attached (same-origin for labs.google).
+    // Used for: TRPC project creation/listing, checkAppAvailability, etc.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    case 'relay_fetch': {
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'relay_fetch_result',
+          requestId: msg.requestId,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      try {
+        console.log(
+          `[VEO Bridge] 🔄 relay_fetch for ${msg.email} → ${msg.method || 'POST'} ` +
+          `${(msg.url || '').substring(0, 100)} (tab ${tabId})`
+        );
+
+        // Domain check: TRPC endpoints require tab on labs.google domain
+        // (same-origin cookies). If tab is on myaccount.google.com or other
+        // domain, navigate to VEO flow page first.
+        const requestUrl = msg.url || '';
+        if (requestUrl.includes('labs.google')) {
+          try {
+            const tab = await chrome.tabs.get(tabId);
+            if (tab && tab.url && !tab.url.includes('labs.google')) {
+              console.log(
+                `[VEO Bridge] 🔄 relay_fetch: tab on ${new URL(tab.url).hostname} — ` +
+                `navigating to labs.google first`
+              );
+              await chrome.tabs.update(tabId, { url: VEO_URL });
+              // Wait for navigation to complete (up to 15s)
+              await new Promise((resolve) => {
+                const onUpdated = (updatedTabId, changeInfo) => {
+                  if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                    chrome.tabs.onUpdated.removeListener(onUpdated);
+                    resolve();
+                  }
+                };
+                chrome.tabs.onUpdated.addListener(onUpdated);
+                setTimeout(() => {
+                  chrome.tabs.onUpdated.removeListener(onUpdated);
+                  resolve(); // Proceed anyway after timeout
+                }, 15000);
+              });
+              // Extra settle time for page scripts to initialize
+              await new Promise(r => setTimeout(r, 2000));
+              console.log(`[VEO Bridge] ✅ Tab navigated to labs.google — proceeding with fetch`);
+            }
+          } catch (navErr) {
+            console.warn(`[VEO Bridge] ⚠️ Domain check failed: ${navErr.message}`);
+          }
+        }
+
+        const scriptResult = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: async (url, method, body, headers, credentials) => {
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+              const fetchOpts = {
+                method: method || 'POST',
+                signal: controller.signal,
+              };
+
+              // Add credentials if specified
+              if (credentials) fetchOpts.credentials = credentials;
+
+              // Add headers
+              if (headers && Object.keys(headers).length > 0) {
+                fetchOpts.headers = headers;
+              } else {
+                fetchOpts.headers = { 'Content-Type': 'application/json' };
+              }
+
+              // Add body for non-GET methods
+              if (body && method !== 'GET') {
+                fetchOpts.body = JSON.stringify(body);
+              }
+
+              const resp = await fetch(url, fetchOpts);
+              clearTimeout(timeoutId);
+
+              let data = null;
+              const contentType = resp.headers.get('content-type') || '';
+              if (contentType.includes('json')) {
+                data = await resp.json().catch(() => null);
+              } else {
+                const text = await resp.text().catch(() => '');
+                try { data = JSON.parse(text); } catch { data = { text }; }
+              }
+
+              return {
+                success: resp.ok,
+                status: resp.status,
+                statusText: resp.statusText,
+                data,
+              };
+            } catch (e) {
+              return {
+                success: false,
+                status: 0,
+                error: e.message || String(e),
+              };
+            }
+          },
+          args: [
+            msg.url,
+            msg.method || 'POST',
+            msg.body || null,
+            msg.headers || {},
+            msg.credentials || 'include',
+          ],
+        });
+
+        const result = scriptResult?.[0]?.result || {
+          success: false,
+          error: 'executeScript returned no result',
+        };
+
+        console.log(
+          `[VEO Bridge] ${result.success ? '✅' : '❌'} relay_fetch result: ` +
+          `status=${result.status} for ${msg.email}`
+        );
+
+        wsSend({
+          action: 'relay_fetch_result',
+          requestId: msg.requestId,
+          ...result,
+        });
+      } catch (e) {
+        console.error(`[VEO Bridge] ❌ relay_fetch failed for ${msg.email}: ${e.message}`);
+        wsSend({
+          action: 'relay_fetch_result',
+          requestId: msg.requestId,
+          success: false,
+          error: e.message,
+        });
+      }
+      break;
+    }
+
     case 'navigate_tab': {
       // Navigate VEO tab to a specific URL (e.g. project page)
       // Uses chrome.tabs.update — cleaner than window.location.href
@@ -1214,6 +1365,59 @@ async function handleAppMessage(msg) {
         });
       } catch (e) {
         wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: e.message });
+      }
+      break;
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // reload_tab: Reload VEO tab for soft recovery (extension-only accounts)
+    // Used when soft_recover_browser() fails (no Playwright page).
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    case 'reload_tab': {
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'reload_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      try {
+        console.log(`[VEO Bridge] 🔄 Reloading tab ${tabId} for ${msg.email} (soft recovery)`);
+        await chrome.tabs.reload(tabId);
+
+        // Wait for tab to finish loading (up to 15s)
+        await new Promise((resolve) => {
+          const onUpdated = (updatedTabId, changeInfo) => {
+            if (updatedTabId === tabId && changeInfo.status === 'complete') {
+              chrome.tabs.onUpdated.removeListener(onUpdated);
+              resolve();
+            }
+          };
+          chrome.tabs.onUpdated.addListener(onUpdated);
+          setTimeout(() => {
+            chrome.tabs.onUpdated.removeListener(onUpdated);
+            resolve();
+          }, 15000);
+        });
+
+        console.log(`[VEO Bridge] ✅ Tab ${tabId} reloaded successfully`);
+        wsSend({
+          action: 'reload_tab_result',
+          requestId: msg.requestId,
+          success: true,
+        });
+      } catch (e) {
+        console.warn(`[VEO Bridge] ❌ Tab reload failed: ${e.message}`);
+        wsSend({
+          action: 'reload_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: e.message,
+        });
       }
       break;
     }

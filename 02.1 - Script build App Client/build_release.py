@@ -183,7 +183,8 @@ def run_nuitka_build(onefile: bool = False):
         "--nofollow-import-to=matplotlib",
         "--nofollow-import-to=pandas",
         "--nofollow-import-to=cv2",
-        "--nofollow-import-to=PIL",
+        # NOTE: Pillow (PIL) IS used by engine.py, media_handler.py, image_library.py
+        # Do NOT exclude it!
         "--nofollow-import-to=sklearn",
 
         # Exclude unused packages (installed in env but not used by app)
@@ -195,6 +196,8 @@ def run_nuitka_build(onefile: bool = False):
         "--nofollow-import-to=google.cloud",
         "--nofollow-import-to=google.auth",
         "--nofollow-import-to=grpc",
+        "--nofollow-import-to=unittest",
+        "--nofollow-import-to=test",
 
         # Include packages that may not be auto-detected
         "--include-package=security",
@@ -204,10 +207,12 @@ def run_nuitka_build(onefile: bool = False):
         "--include-package=services",
         "--include-package=utils",
 
-        # Include data files
+        # Include data files (non-Python resources)
         "--include-data-dir=config/locales=config/locales",
         "--include-data-dir=assets=assets",
         "--include-data-dir=data=data",
+        "--include-data-dir=ui/img=ui/img",
+        "--include-data-dir=extension=extension",
 
         # Output name
         "--output-filename=VEO_Pro_Max.exe",
@@ -383,6 +388,7 @@ def main():
     parser.add_argument("--skip-compile", action="store_true", help="Skip Nuitka compilation")
     parser.add_argument("--onefile", action="store_true", help="Build single exe (slower startup)")
     parser.add_argument("--skip-organize", action="store_true", help="Skip post-build folder cleanup")
+    parser.add_argument("--skip-publish", action="store_true", help="Skip ZIP + Git + GitHub release")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -443,6 +449,24 @@ def main():
     print("\n[5.1] Generating version.json (from APP_VERSION)...")
     generate_version_json(build_info)
 
+    # Step 5.8: Encrypt workflow data (replace .md → .enc in dist)
+    print("\n[5.8] Encrypting workflow data...")
+    try:
+        from encrypt_data import encrypt_directory
+        data_dir = OUTPUT_DIR / "main.dist" / "data"
+        if data_dir.exists():
+            count = encrypt_directory(data_dir)
+            if count > 0:
+                print(f"  [OK] {count} workflow files encrypted")
+            else:
+                print("  [SKIP] No .md files found in data/")
+        else:
+            print("  [SKIP] data/ directory not found in dist")
+    except ImportError:
+        print("  [WARN] encrypt_data.py not found — shipping plaintext!")
+    except Exception as e:
+        print(f"  [ERR] Encryption failed: {e}")
+
     # Step 5.5: Obfuscate and deploy extension
     print("\n[5.5] Obfuscating and deploying extension...")
     try:
@@ -466,10 +490,162 @@ def main():
     elif args.onefile:
         print("\n[6] Onefile mode -- no cleanup needed")
 
+    # ── Steps 7-9: ZIP + Git + GitHub Release ──
+    if not args.skip_publish:
+        version = build_info["app_version"]
+
+        # Step 7: Create ZIP
+        print(f"\n[7] Creating release ZIP...")
+        zip_path = create_release_zip(version)
+        if zip_path:
+            # Update version.json with SHA-256 of ZIP
+            sha256 = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+            version_path = OUTPUT_DIR / "version.json"
+            if version_path.exists():
+                vdata = json.loads(version_path.read_text(encoding="utf-8"))
+                vdata["sha256"] = sha256
+                version_path.write_text(
+                    json.dumps(vdata, indent=4, ensure_ascii=False), encoding="utf-8"
+                )
+                print(f"  [OK] version.json sha256: {sha256[:16]}...")
+
+        # Step 8: Git push
+        print(f"\n[8] Git push to remote...")
+        git_push_release(version)
+
+        # Step 9: GitHub Release
+        print(f"\n[9] Creating GitHub Release...")
+        if zip_path and zip_path.exists():
+            github_create_release(version, zip_path)
+        else:
+            print("  [SKIP] No ZIP file to upload")
+    else:
+        print("\n[SKIP] Steps 7-9 skipped (--skip-publish)")
+
     print("\n" + "=" * 60)
-    print(f"  [DONE] BUILD COMPLETE -- Output: {OUTPUT_DIR}")
+    print(f"  [DONE] BUILD + PUBLISH COMPLETE -- Output: {OUTPUT_DIR}")
     print("=" * 60)
+
+
+# ═══════════════════════════════════════════════════════════
+#  7) ZIP creation
+# ═══════════════════════════════════════════════════════════
+
+def create_release_zip(version: str):
+    """Create release ZIP from main.dist/ with VEO_Pro_Max/ root structure."""
+    import zipfile
+
+    dist_dir = OUTPUT_DIR / "main.dist"
+    if not dist_dir.exists():
+        print("  [ERR] main.dist/ not found")
+        return None
+
+    zip_path = OUTPUT_DIR / f"VEO_Pro_Max_v{version}.zip"
+    if zip_path.exists():
+        zip_path.unlink()
+
+    file_count = 0
+    with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root_str, dirs, files in os.walk(str(dist_dir)):
+            for f in files:
+                fp = os.path.join(root_str, f)
+                arcname = 'VEO_Pro_Max/' + os.path.relpath(fp, str(dist_dir))
+                zf.write(fp, arcname)
+                file_count += 1
+
+    size_mb = zip_path.stat().st_size / (1024 * 1024)
+    print(f"  [OK] {zip_path.name}: {size_mb:.1f} MB ({file_count} files)")
+    return zip_path
+
+
+# ═══════════════════════════════════════════════════════════
+#  8) Git push
+# ═══════════════════════════════════════════════════════════
+
+def git_push_release(version: str):
+    """Git add, commit, push the output folder."""
+    output_rel = "03 - Final App Client"
+
+    if not shutil.which("git"):
+        print("  [SKIP] git not found in PATH")
+        return
+
+    try:
+        subprocess.run(
+            ["git", "add", output_rel],
+            cwd=str(BASE_DIR), check=True, capture_output=True
+        )
+        result = subprocess.run(
+            ["git", "status", "--porcelain", output_rel],
+            cwd=str(BASE_DIR), capture_output=True, text=True
+        )
+        if not result.stdout.strip():
+            print("  [SKIP] No changes to commit")
+            return
+
+        subprocess.run(
+            ["git", "commit", "-m", f"Release v{version}"],
+            cwd=str(BASE_DIR), check=True, capture_output=True
+        )
+        print(f"  [OK] Committed: Release v{version}")
+
+        print("  Pushing to remote...")
+        result = subprocess.run(
+            ["git", "push"],
+            cwd=str(BASE_DIR), capture_output=True, text=True, timeout=600
+        )
+        if result.returncode == 0:
+            print("  [OK] Pushed to remote")
+        else:
+            print(f"  [WARN] Push issue: {result.stderr[:200]}")
+    except Exception as e:
+        print(f"  [ERR] Git error: {e}")
+
+
+# ═══════════════════════════════════════════════════════════
+#  9) GitHub Release
+# ═══════════════════════════════════════════════════════════
+
+def github_create_release(version: str, zip_path: Path):
+    """Create GitHub release via gh CLI or print manual instructions."""
+    tag = f"v{version}"
+    changelog = ""
+    changelog_file = SCRIPT_DIR / "CHANGELOG.txt"
+    if changelog_file.exists():
+        changelog = changelog_file.read_text(encoding="utf-8").strip()
+
+    if shutil.which("gh"):
+        try:
+            cmd = [
+                "gh", "release", "create", tag,
+                "--title", f"VEO Pro Max {tag}",
+                "--notes", changelog or f"VEO Pro Max {tag}",
+                str(zip_path),
+            ]
+            result = subprocess.run(
+                cmd, cwd=str(BASE_DIR),
+                capture_output=True, text=True, timeout=300
+            )
+            if result.returncode == 0:
+                print(f"  [OK] Release {tag} created + ZIP uploaded")
+                return
+            else:
+                print(f"  [WARN] gh failed: {result.stderr[:200]}")
+        except Exception as e:
+            print(f"  [WARN] gh error: {e}")
+
+    # Fallback: manual instructions
+    print(f"\n  ┌─────────────────────────────────────────┐")
+    print(f"  │  MANUAL: gh CLI not found                │")
+    print(f"  │  Install: winget install GitHub.cli       │")
+    print(f"  │  Login:   gh auth login                   │")
+    print(f"  └─────────────────────────────────────────┘")
+    print(f"  gh release create {tag} --title \"VEO Pro Max {tag}\" \\")
+    print(f"    --notes-file \"{changelog_file}\" \"{zip_path}\"")
+    print(f"")
+    print(f"  Or: https://github.com/{GITHUB_REPO}/releases/new?tag={tag}")
 
 
 if __name__ == "__main__":
     main()
+

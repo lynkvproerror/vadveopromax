@@ -350,6 +350,7 @@ class FirebaseRESTClient:
         "server_weight": 50,                # 50% primary, 50% backup
         "maintenance_mode": False,
         "min_client_version": "1.0.0",
+        "ai_prompt_trial_enabled": False,   # Admin toggle: Trial users AI prompt
     }
     
     def fetch_client_config(self) -> dict:
@@ -663,7 +664,10 @@ class FirebaseRESTClient:
         
         # Case 3: Both have data - CROSS VALIDATE!
         # Compare critical fields (support both naming conventions)
-        critical_fields = ["key", "tier", "_t", "machine_id", "_mid", "revoked", "expires", "_exp"]
+        # NOTE: expires/_exp excluded — time-based fields can differ between
+        # primary/backup due to replication latency (especially 12h packages).
+        # Expiry is still independently checked below.
+        critical_fields = ["key", "tier", "_t", "machine_id", "_mid", "revoked"]
         
         for field in critical_fields:
             p_val = primary.get(field)
@@ -721,7 +725,7 @@ class FirebaseRESTClient:
         return f"{ts_bucket}:{sig}"
     
     @classmethod
-    def verify_request_token(cls, machine_id: str, token: str, max_age_minutes: int = 30) -> bool:
+    def verify_request_token(cls, machine_id: str, token: str, max_age_minutes: int = 1440) -> bool:
         """
         Verify HMAC request token (for admin-side validation).
         Accepts tokens within max_age_minutes window.
@@ -780,6 +784,7 @@ class FirebaseRESTClient:
         tier_duration = {
             "1M": "30 days", "3M": "90 days", "6M": "180 days",
             "1Y": "365 days", "LIFETIME": "Lifetime",
+            "12H": "12 hours", "1D": "1 day",
         }
         role = "PREMIUM" if tier != "LIFETIME" else "PREMIUM_LIFETIME"
         duration = tier_duration.get(tier, "30 days")
@@ -1173,7 +1178,9 @@ class FirebaseRESTClient:
             try:
                 exp_dt = datetime.fromisoformat(expires_at)
                 if datetime.now() > exp_dt:
-                    return {"exists": True, "status": "expired", "error": "Trial đã hết hạn (3 ngày)"}
+                    # Write-back expired status to Firestore (best-effort)
+                    self._writeback_trial_expired(machine_id)
+                    return {"exists": True, "status": "expired", "error": "Trial đã hết hạn"}
             except Exception:
                 pass
         
@@ -1205,6 +1212,51 @@ class FirebaseRESTClient:
             "client_name": client_name,
             "_lim": trial_lim,  # Trial dynamic limits
         }
+    
+    def _writeback_trial_expired(self, machine_id: str):
+        """Write-back expired status to Firestore _trials/{machine_id}.
+        
+        Best-effort, non-blocking — never raises exceptions.
+        Keeps server data in sync with actual expiry state.
+        """
+        try:
+            primary_config = self.config.get_primary_config()
+            api_key = primary_config.get("api_key")
+            project_id = primary_config.get("project_id")
+            if not api_key or not project_id:
+                return
+            
+            base = _ConfigParts._get_api_base()
+            url = f"{base}/projects/{project_id}/databases/(default)/documents/_trials/{machine_id}"
+            
+            payload = {
+                "fields": {
+                    "status": {"stringValue": "expired"},
+                    "_expired_at": {"stringValue": datetime.now().isoformat()},
+                }
+            }
+            
+            # PATCH with updateMask — only update status + _expired_at fields
+            params = {
+                "key": api_key,
+                "updateMask.fieldPaths": ["status", "_expired_at"],
+            }
+            self._session.patch(url, params=params, json=payload, timeout=5)
+            
+            # Replicate to backup (best-effort)
+            try:
+                backup_config = self.config.get_backup_config()
+                if backup_config:
+                    b_key = backup_config.get("api_key")
+                    b_pid = backup_config.get("project_id")
+                    if b_key and b_pid:
+                        b_url = f"{base}/projects/{b_pid}/databases/(default)/documents/_trials/{machine_id}"
+                        b_params = {"key": b_key, "updateMask.fieldPaths": ["status", "_expired_at"]}
+                        self._session.patch(b_url, params=b_params, json=payload, timeout=5)
+            except Exception:
+                pass
+        except Exception:
+            pass  # Never block client on write-back failure
     
     def read_tier_defaults(self) -> dict:
         """

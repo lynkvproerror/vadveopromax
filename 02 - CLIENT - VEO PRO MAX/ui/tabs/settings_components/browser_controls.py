@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+from config.i18n import t
 
 
 class SettingsBrowserControlsMixin:
@@ -105,7 +106,7 @@ class SettingsBrowserControlsMixin:
 
             if is_closed:
                 toggle_btn.setText("⬛")
-                toggle_btn.setToolTip("Browser not running")
+                toggle_btn.setToolTip(t("tooltips.browser_not_running"))
                 toggle_btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: {Theme.SURFACE2};
@@ -120,7 +121,7 @@ class SettingsBrowserControlsMixin:
                 """)
             elif is_visible:
                 toggle_btn.setText("👁️")
-                toggle_btn.setToolTip("Browser VISIBLE — click to HIDE")
+                toggle_btn.setToolTip(t("tooltips.browser_visible"))
                 toggle_btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: {Theme.GREEN};
@@ -135,7 +136,7 @@ class SettingsBrowserControlsMixin:
                 """)
             else:  # hidden
                 toggle_btn.setText("🌐")
-                toggle_btn.setToolTip("Browser HIDDEN — click to SHOW")
+                toggle_btn.setToolTip(t("tooltips.browser_hidden"))
                 toggle_btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: {Theme.YELLOW};
@@ -153,9 +154,9 @@ class SettingsBrowserControlsMixin:
 
     def _push_dev_console_status(self):
         """Push browser status and session data to DevConsole via controller."""
-        if self.controller and hasattr(self.controller, 'push_status_updates'):
+        if self.controller and hasattr(self.controller, 'push_browser_status'):
             self.controller.push_browser_status()
-        if self.controller and hasattr(self.controller, 'push_status_updates'):
+        if self.controller and hasattr(self.controller, 'push_session_data'):
             self.controller.push_session_data()
 
     def _refresh_status_bar(self):
@@ -194,14 +195,14 @@ class SettingsBrowserControlsMixin:
         self.setEnabled(True)  # Re-enable tab
         self._refresh_profiles_table()
         self._refresh_status_bar()
-        show_info(self, "Success", "✅ Profile added successfully!")
+        show_info(self, t("dialogs.success"), t("dialogs.profile_added"))
 
     @Slot()
     def _on_oauth_failed(self):
         """Called when login fails or is cancelled."""
         self.setEnabled(True)  # Re-enable tab
         self._refresh_profiles_table()
-        show_warning(self, "Login", "Login cancelled or failed.")
+        show_warning(self, t("browser.login_title"), t("browser.login_cancelled"))
 
     def _on_add_profile_browser(self):
         """Auto-login with email/password credentials."""
@@ -230,7 +231,7 @@ class SettingsBrowserControlsMixin:
             from core.credentials_manager import get_credentials_manager
             creds_manager = get_credentials_manager()
         except ImportError as e:
-            show_warning(self, "Error", f"Credentials manager not available: {e}")
+            show_warning(self, t("popups.error"), t("browser.cred_manager_error").replace("{error}", str(e)))
             return
 
         # Check if credentials already exist
@@ -289,12 +290,12 @@ class SettingsBrowserControlsMixin:
         password = password_input.text()
 
         if not email or not password:
-            show_warning(self, "Error", "Please enter both email and password.")
+            show_warning(self, t("popups.error"), t("browser.enter_email_pw"))
             return
 
         # Save credentials (encrypted)
         if not creds_manager.save_credentials(email, password):
-            show_warning(self, "Error", "Failed to save credentials.")
+            show_warning(self, t("popups.error"), t("browser.save_cred_failed"))
             return
 
         # Always show browser — login often needs 2FA/CAPTCHA interaction
@@ -351,6 +352,165 @@ class SettingsBrowserControlsMixin:
         thread = threading.Thread(target=run_auto_login, daemon=True)
         thread.start()
 
+    def _on_bulk_add_profiles(self):
+        """Bulk Add: paste email|password list, launch all browsers in parallel."""
+        import threading
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QPlainTextEdit, QDialogButtonBox, QLabel,
+        )
+
+        # ── Trial guard ──
+        try:
+            if self.controller and hasattr(self.controller, '_permissions'):
+                from services.permissions import Role
+                if self.controller._permissions.role == Role.TRIAL:
+                    accounts = self.profiles_controller.get_all_profiles()
+                    if len(accounts) >= 1:
+                        show_warning(
+                            self, "🔒 Trial Limit",
+                            "Gói Trial chỉ cho phép 1 tài khoản.\n\n"
+                            "Nâng cấp lên Premium để thêm không giới hạn tài khoản."
+                        )
+                        return
+        except Exception:
+            pass
+
+        # ── Dialog ──
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("bulk_add.title"))
+        dialog.setMinimumWidth(550)
+        dialog.setMinimumHeight(420)
+
+        layout = QVBoxLayout(dialog)
+
+        info = QLabel(t("bulk_add.info"))
+        info.setWordWrap(True)
+        info.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 4px;")
+        layout.addWidget(info)
+
+        text_edit = QPlainTextEdit()
+        text_edit.setPlaceholderText(t("bulk_add.placeholder"))
+        text_edit.setMinimumHeight(280)
+        text_edit.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background-color: {Theme.SURFACE0};
+                color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 6px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 12px;
+                padding: 8px;
+            }}
+        """)
+        layout.addWidget(text_edit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        # ── Parse lines ──
+        raw = text_edit.toPlainText().strip()
+        if not raw:
+            return
+
+        pairs = []
+        seen_emails = set()
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or "|" not in line:
+                continue
+            parts = line.split("|", 1)
+            email = parts[0].strip()
+            password = parts[1].strip()
+            if not email or not password:
+                continue
+            email_lower = email.lower()
+            if email_lower in seen_emails:
+                continue
+            seen_emails.add(email_lower)
+            pairs.append((email, password))
+
+        if not pairs:
+            show_warning(self, t("popups.error"), t("bulk_add.no_accounts"))
+            return
+
+        # ── Skip existing profiles ──
+        existing_emails = set()
+        for p in self.profiles_controller.get_all_profiles():
+            existing_emails.add(p.get("email", "").lower())
+
+        new_pairs = [(e, p) for e, p in pairs if e.lower() not in existing_emails]
+        skipped = len(pairs) - len(new_pairs)
+
+        if skipped > 0:
+            print(f"[BulkAdd] Skipped {skipped} existing account(s)")
+
+        if not new_pairs:
+            show_warning(
+                self, t("popups.error"),
+                t("bulk_add.skipped_existing").replace("{count}", str(skipped))
+                + "\n" + t("bulk_add.no_accounts")
+            )
+            return
+
+        # ── Save credentials for each ──
+        try:
+            from core.credentials_manager import get_credentials_manager
+            creds_manager = get_credentials_manager()
+            for email, password in new_pairs:
+                creds_manager.save_credentials(email, password)
+        except Exception as e:
+            print(f"[BulkAdd] Credentials save warning: {e}")
+
+        # ── Fire-and-forget: launch in batches (max 5 concurrent) ──
+        MAX_CONCURRENT = 5
+        semaphore = threading.Semaphore(MAX_CONCURRENT)
+        print(f"[BulkAdd] 🚀 Launching {len(new_pairs)} browser(s) (max {MAX_CONCURRENT} concurrent)...")
+
+        def _run_single(email, password):
+            """Background thread for one account — guarded by semaphore."""
+            semaphore.acquire()
+            try:
+                result = self.profiles_controller.add_profile_single_browser(
+                    email=email,
+                    password=password,
+                    timeout_seconds=120,
+                    headless=False,
+                )
+                if result:
+                    print(f"[BulkAdd] ✅ {email} — profile added")
+                else:
+                    print(f"[BulkAdd] ❌ {email} — add failed")
+            except Exception as e:
+                print(f"[BulkAdd] ❌ {email} — error: {e}")
+            finally:
+                semaphore.release()
+
+            # Refresh UI from main thread
+            from PySide6.QtCore import QMetaObject, Qt
+            QMetaObject.invokeMethod(
+                self, "_on_browser_login_complete",
+                Qt.ConnectionType.QueuedConnection
+            )
+
+        for email, password in new_pairs:
+            t_thread = threading.Thread(
+                target=_run_single, args=(email, password), daemon=True
+            )
+            t_thread.start()
+
+        # Show confirmation
+        msg = t("bulk_add.started_msg").replace("{count}", str(len(new_pairs)))
+        if skipped > 0:
+            msg += "\n" + t("bulk_add.skipped_existing").replace("{count}", str(skipped))
+        show_info(self, t("bulk_add.started"), msg)
+
     @Slot()
     def _on_browser_login_complete(self):
         """Called when browser login completes successfully.
@@ -384,7 +544,7 @@ class SettingsBrowserControlsMixin:
         """Called when browser login fails or times out."""
         self.setEnabled(True)
         self._refresh_profiles_table()
-        show_warning(self, "Browser Login", "Login cancelled or timed out.")
+        show_warning(self, t("browser.login_title"), t("browser.login_timeout"))
 
     def _on_paste_gemini_key(self, email: str):
         """Show dialog to manually paste Gemini API key for a specific profile."""
@@ -450,7 +610,7 @@ class SettingsBrowserControlsMixin:
             return
 
         if not key.startswith("AIza"):
-            show_warning(self, "Invalid Key", "Key phải bắt đầu bằng 'AIza...'")
+            show_warning(self, t("browser.invalid_key_title"), t("browser.invalid_key"))
             return
 
         try:
@@ -460,7 +620,7 @@ class SettingsBrowserControlsMixin:
             self._refresh_profiles_table()
             show_info(self, "Saved", f"✅ Gemini API key đã lưu cho {email}")
         except Exception as e:
-            show_warning(self, "Error", f"Không thể lưu key: {e}")
+            show_warning(self, t("popups.error"), t("browser.save_key_failed").replace("{error}", str(e)))
 
     def _on_refresh_session(self, email: str):
         """Refresh session via browser — fetch subscription real-time."""
@@ -468,7 +628,7 @@ class SettingsBrowserControlsMixin:
 
         profile = self.profiles_controller.get_profile(email)
         if not profile:
-            show_warning(self, "Error", f"Profile not found: {email}")
+            show_warning(self, t("popups.error"), t("browser.profile_not_found").replace("{email}", email))
             return
 
         print(f"[Settings] Refreshing session for: {email}")
@@ -538,7 +698,7 @@ class SettingsBrowserControlsMixin:
 
     def _on_reload_app(self):
         """Restart the entire Python application process."""
-        if not show_confirm(self, "Reload App",
+        if not show_confirm(self, t("dialogs.reload_app"),
                 "Restart application with latest code?\n\n"
                 "• All running tasks will stop\n"
                 "• Chrome browsers will keep running\n"
@@ -605,7 +765,7 @@ class SettingsBrowserControlsMixin:
             from core.credentials_manager import get_credentials_manager
             creds_manager = get_credentials_manager()
         except ImportError as e:
-            show_warning(self, "Error", f"Credentials manager not available: {e}")
+            show_warning(self, t("popups.error"), t("browser.cred_manager_error").replace("{error}", str(e)))
             return
 
         # Check existing credentials
@@ -652,33 +812,32 @@ class SettingsBrowserControlsMixin:
 
         password = password_input.text()
         if not password:
-            show_warning(self, "Error", "Password cannot be empty.")
+            show_warning(self, t("popups.error"), t("browser.pw_empty"))
             return
 
         if creds_manager.save_credentials(email, password):
             show_info(self, "Saved", f"✅ Password saved for {email}")
             self._refresh_profiles_table()  # Update 🔑/🔓 icon
         else:
-            show_warning(self, "Error", "Failed to save credentials.")
+            show_warning(self, t("popups.error"), t("browser.save_cred_failed"))
 
 
     def _on_toggle_account(self, email: str, enabled: bool):
-        """Handle toggle switch change - enable/disable account for generation.
+        """Handle toggle switch change — enable/disable account for generation.
 
         Args:
             email: Account email
             enabled: New enabled state
         """
-        # Issue A fix: correct update_profile signature (email, **kwargs)
-        if self.profiles_controller:
-            self.profiles_controller.update_profile(email, is_enabled=enabled)
-
-        # Issue C fix: propagate to runtime AccountManager._enabled
+        # toggle_account handles BOTH profile save AND runtime AccountManager
         if self.controller and hasattr(self.controller, 'toggle_account'):
             self.controller.toggle_account(email, enabled)
 
         state_str = "enabled ✅" if enabled else "disabled ⚫"
         print(f"[Settings] Account {email} {state_str}")
+
+        # Refresh table row to reflect new status immediately
+        self._refresh_profiles_table()
 
     def _on_slots_changed(self, email: str, value: int):
         """Handle Workers SpinBox change — per-account concurrent worker limit.
@@ -734,7 +893,7 @@ class SettingsBrowserControlsMixin:
            unregisters from session_monitor and refresh_manager
         3. Push updated data to Dev Console (session + browser panels)
         """
-        if show_confirm(self, "Delete Profile",
+        if show_confirm(self, t("dialogs.delete_profile"),
                 f"Are you sure you want to delete profile '{email}'?", danger=True):
             print(f"[Settings] Deleting profile: {email}")
 

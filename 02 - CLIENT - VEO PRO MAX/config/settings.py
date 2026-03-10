@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 10
+SETTINGS_VERSION = 11
 
 
 @dataclass
@@ -130,6 +130,7 @@ class AppSettings:
     # === POST-QUEUE ACTION ===
     post_queue_action_enabled: bool = False  # Master toggle
     post_queue_action: str = "nothing"       # "nothing" | "shutdown" | "sleep"
+    auto_sweep_max_rounds: int = 5           # Max retry rounds before giving up
     
     # === AUTO-UPDATE ===
     auto_update_enabled: bool = True         # Check for updates on startup + every 30min
@@ -245,6 +246,10 @@ class AppSettings:
                 'workflow_rules_sources': [],
                 'project_default_scenes': 10,
                 'project_output_base': '',
+            },
+            # 10 → 11: Add auto-sweep max rounds
+            10: lambda d: {**d,
+                'auto_sweep_max_rounds': 5,
             },
         }
         

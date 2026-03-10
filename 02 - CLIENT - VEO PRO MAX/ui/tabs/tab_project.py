@@ -55,6 +55,7 @@ class _GenerationWorker(QObject):
     # Signals for thread-safe UI updates
     step_update = Signal(str, str, int, int)   # step, topic, step_num, topic_index
     topic_done = Signal(int, str, str)          # topic_index, status, error
+    topic_result = Signal(int, str, dict, str)  # idx, topic_name, files_dict, status
     all_done = Signal(list)                     # List[TopicResult]
     error = Signal(str)                         # Fatal error message
     log_msg = Signal(str)                       # Debug log line
@@ -111,6 +112,10 @@ class _GenerationWorker(QObject):
                 else:
                     self.log_msg.emit(f"[Topic {topic_idx[0]+1}] ❌ Error: {err}")
                 self.topic_done.emit(topic_idx[0], status, err)
+                # Emit full result data for incremental UI update
+                files = dict(result.files) if hasattr(result, 'files') and result.files else {}
+                self.log_msg.emit(f"[Topic {topic_idx[0]+1}] Files keys: {list(files.keys())}")
+                self.topic_result.emit(topic_idx[0], result.topic, files, status)
                 topic_idx[0] += 1
             builder.on_topic_done = on_topic
 
@@ -272,20 +277,20 @@ class TabProject(QWidget):
         layout.setSpacing(8)
 
         # ── WORKFLOW Section ──
-        wf_header = QLabel("── WORKFLOW ──")
+        wf_header = QLabel(t("project_sidebar.workflow_header"))
         wf_header.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-weight: bold; border: none;")
         layout.addWidget(wf_header)
 
-        self._sources_label = QLabel("Sources: 0")
+        self._sources_label = QLabel(t("project_sidebar.sources").replace("{count}", "0"))
         self._sources_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; border: none;")
         layout.addWidget(self._sources_label)
 
-        self._templates_label = QLabel("Templates: 0")
+        self._templates_label = QLabel(t("project_sidebar.templates").replace("{count}", "0"))
         self._templates_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; border: none;")
         layout.addWidget(self._templates_label)
 
         # Rescan button
-        rescan_btn = QPushButton("🔄 Rescan")
+        rescan_btn = QPushButton(t("project_sidebar.rescan"))
         rescan_btn.setStyleSheet(
             f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
             f"height: 28px; border-radius: 4px; border: none;"
@@ -294,7 +299,7 @@ class TabProject(QWidget):
         layout.addWidget(rescan_btn)
 
         # Template dropdown
-        tmpl_label = QLabel("Template:")
+        tmpl_label = QLabel(t("project_sidebar.template_label"))
         tmpl_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
         layout.addWidget(tmpl_label)
 
@@ -312,16 +317,16 @@ class TabProject(QWidget):
 
         # ── VEO Section ──
         layout.addSpacing(16)
-        veo_header = QLabel("── VEO ──")
+        veo_header = QLabel(t("project_sidebar.veo_header"))
         veo_header.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-weight: bold; border: none;")
         layout.addWidget(veo_header)
 
         # Aspect ratio
-        ar_label = QLabel("Aspect:")
+        ar_label = QLabel(t("project_sidebar.aspect_label"))
         ar_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
         layout.addWidget(ar_label)
         self._aspect_combo = QComboBox()
-        self._aspect_combo.addItems(["16:9 (Landscape)", "9:16 (Portrait)"])
+        self._aspect_combo.addItems([t("project_sidebar.landscape"), t("project_sidebar.portrait")])
         self._aspect_combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: {Theme.SURFACE1};
@@ -334,17 +339,17 @@ class TabProject(QWidget):
         layout.addWidget(self._aspect_combo)
 
         # Output folder
-        out_label = QLabel("📂 Output:")
+        out_label = QLabel(t("project_sidebar.output_label"))
         out_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
         layout.addWidget(out_label)
-        out_btn = QPushButton("Browse...")
+        out_btn = QPushButton(t("project_sidebar.browse"))
         out_btn.setStyleSheet(
             f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
             f"height: 28px; border-radius: 4px; border: none;"
         )
         out_btn.clicked.connect(self._browse_output)
         layout.addWidget(out_btn)
-        self._output_label = QLabel("Not set")
+        self._output_label = QLabel(t("project_sidebar.not_set"))
         self._output_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; border: none;")
         self._output_label.setWordWrap(True)
         layout.addWidget(self._output_label)
@@ -369,13 +374,13 @@ class TabProject(QWidget):
         # SECTION 1: Topics Input (collapsible)
         # ═══════════════════════════════════════════════════
         topics_section = QFrame()
-        topics_section.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        topics_section.setStyleSheet(f"background-color: {Theme.SURFACE0}; border-radius: 0px;")
         topics_layout = QVBoxLayout(topics_section)
         topics_layout.setContentsMargins(0, 0, 0, 0)
         topics_layout.setSpacing(0)
 
         # Color header (clickable — collapse/expand)
-        self._topics_header = QPushButton("📝 TOPICS INPUT ▼")
+        self._topics_header = QPushButton(f"{t('project_builder.topics_header')} ▼")
         self._topics_header.setFixedHeight(32)
         self._topics_header.setStyleSheet(f"""
             QPushButton {{
@@ -401,19 +406,14 @@ class TabProject(QWidget):
 
         self._topic_input = QTextEdit()
         self._topic_input.setAcceptRichText(False)  # ★ Force plain-text paste (Google Sheets sends HTML <table>)
-        self._topic_input.setPlaceholderText(
-            "Enter topics, one per line:\n"
-            "Tác hại ăn mì tôm\n"
-            "10 loại trái cây tốt cho sức khỏe\n"
-            "Cách tiết kiệm tiền hiệu quả"
-        )
+        self._topic_input.setPlaceholderText(t("project_builder.topics_placeholder"))
         self._topic_input.setMaximumHeight(120)
         self._topic_input.setStyleSheet(f"""
             QTextEdit {{
                 background-color: {Theme.SURFACE1};
                 color: {Theme.TEXT};
                 border: 1px solid {Theme.BORDER};
-                border-radius: 6px;
+                border-radius: 0px;
                 padding: 8px;
                 font-size: 13px;
             }}
@@ -437,23 +437,34 @@ class TabProject(QWidget):
         # Action buttons row
         btn_row = QHBoxLayout()
 
-        self._generate_btn = QPushButton("🚀 Generate (Full Auto)")
+        self._generate_btn = QPushButton(t("project_builder.generate"))
+        self._generate_btn.setObjectName("generateBtn")
         self._generate_btn.setStyleSheet(
-            f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-            f"height: 36px; font-weight: bold; border-radius: 6px;"
+            f"QPushButton#generateBtn {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+            f"height: 26px; font-weight: bold; border-radius: 4px; font-size: 11px; padding: 0 10px; }}"
         )
         self._generate_btn.clicked.connect(self._on_generate)
         btn_row.addWidget(self._generate_btn)
 
-        import_btn = QPushButton("📋 Import Prompts")
+        import_btn = QPushButton(t("project_builder.import"))
+        import_btn.setObjectName("importBtn")
         import_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"height: 36px; border-radius: 6px;"
+            f"QPushButton#importBtn {{ background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
+            f"height: 26px; border-radius: 4px; font-size: 11px; padding: 0 10px; }}"
         )
         import_btn.clicked.connect(self._on_import_prompts)
         btn_row.addWidget(import_btn)
 
-        self._auto_add_cb = QCheckBox("Auto-add to Queue")
+        clear_btn = QPushButton(t("project_builder.clear"))
+        clear_btn.setObjectName("clearBtn")
+        clear_btn.setStyleSheet(
+            f"QPushButton#clearBtn {{ background-color: {Theme.RED}; color: {Theme.CRUST}; "
+            f"height: 26px; border-radius: 4px; font-size: 11px; padding: 0 10px; }}"
+        )
+        clear_btn.clicked.connect(self._on_clear)
+        btn_row.addWidget(clear_btn)
+
+        self._auto_add_cb = QCheckBox(t("project_builder.auto_add_queue"))
         self._auto_add_cb.setStyleSheet(f"""
             QCheckBox {{ color: {Theme.TEXT}; font-size: 12px; spacing: 6px; }}
             QCheckBox::indicator {{
@@ -485,7 +496,7 @@ class TabProject(QWidget):
                 border: none;
             }}
             QProgressBar::chunk {{
-                background-color: {Theme.GREEN};
+                background-color: {Theme.RED};
             }}
         """)
         self._progress_bar.setVisible(False)
@@ -501,7 +512,7 @@ class TabProject(QWidget):
             arrow = "▼" if self._topics_expanded else "▶"
             count = len([ln for ln in self._topic_input.toPlainText().strip().split("\n") if ln.strip()])
             if self._topics_expanded:
-                self._topics_header.setText(f"📝 TOPICS INPUT {arrow}")
+                self._topics_header.setText(f"{t('project_builder.topics_header')} {arrow}")
             else:
                 self._topics_header.setText(f"📝 TOPICS ({count} topics) {arrow}")
         self._topics_header.clicked.connect(_toggle_topics)
@@ -517,7 +528,7 @@ class TabProject(QWidget):
         else:
             # Fallback: old flat table
             self._parsed_panel = None
-            table_header = QLabel("📊 Parsed Prompts")
+            table_header = QLabel(t("project_builder.fallback.parsed_prompts"))
             table_header.setStyleSheet(f"color: {Theme.TEXT}; font-size: 14px; font-weight: bold;")
             layout.addWidget(table_header)
 
@@ -544,7 +555,7 @@ class TabProject(QWidget):
             """)
             layout.addWidget(self._prompts_table, stretch=1)
 
-            queue_btn = QPushButton("📤 Add All to Queue")
+            queue_btn = QPushButton(t("project_builder.fallback.add_all_queue"))
             queue_btn.setStyleSheet(
                 f"background-color: {Theme.BLUE}; color: white; "
                 f"height: 36px; font-weight: bold; border-radius: 6px;"
@@ -692,8 +703,15 @@ class TabProject(QWidget):
                     "Chưa có Custom API key!\n"
                     "Vào Settings → AI Prompt Processing → Project Builder để nhập key."
                 )
-            # Round-robin: use first key (could implement rotation later)
-            api_key = keys[0].strip()
+            # Smart rotation: pick first available key via KeyQuotaManager
+            api_key = None
+            try:
+                from services.key_quota_manager import get_quota_manager
+                api_key = get_quota_manager().get_available_key(keys)
+            except Exception:
+                pass
+            if not api_key:
+                api_key = keys[0].strip()  # Fallback (auto-unblock in 60s)
             if not api_key:
                 raise ValueError("Custom API key trống!")
             return api_key, model, base_url, provider
@@ -721,6 +739,7 @@ class TabProject(QWidget):
         """Phase transition: INPUT → GENERATING.
         
         Auto-collapse Topics, show progress bar.
+        Pre-populate ParsedProjectsPanel with placeholder rows.
         """
         self._total_topics = len(topics)
         self._done_topics = 0
@@ -735,6 +754,12 @@ class TabProject(QWidget):
         self._progress_bar.setMaximum(self._total_topics)
         self._progress_bar.setValue(0)
         self._progress_bar.setVisible(True)
+
+        # Pre-populate ParsedProjectsPanel with placeholder rows (⏳ Generating)
+        if self._parsed_panel:
+            self._parsed_panel.clear_projects()
+            for topic_name in topics:
+                self._parsed_panel.add_project(topic_name, {}, "generating")
 
     def _update_topic_step(self, step, topic, step_num, topic_idx):
         """Update progress bar during generation."""
@@ -751,31 +776,67 @@ class TabProject(QWidget):
         )
 
     def _update_topic_done(self, topic_idx, status, error):
-        """Update per-topic completion — update progress bar + ProjectRow status."""
+        """Update per-topic completion — update progress bar."""
         self._done_topics = topic_idx + 1
         self._progress_bar.setMaximum(self._total_topics)
         self._progress_bar.setValue(self._done_topics)
 
-        # Update ProjectRow status badge (if panel exists)
-        if self._parsed_panel and hasattr(self._parsed_panel, 'set_project_status'):
-            proj_status = "queued" if status == "done" else "error"
-            if topic_idx < self._parsed_panel.get_project_count():
-                self._parsed_panel.set_project_status(topic_idx, proj_status)
+    def _on_topic_result(self, topic_idx: int, topic_name: str,
+                         files: dict, status: str):
+        """Stream project data into ParsedProjectsPanel as each topic completes."""
+        if not self._parsed_panel:
+            return
+
+        log.info(f"[TabProject] _on_topic_result idx={topic_idx} status={status} files_keys={list(files.keys()) if files else []}")
+
+        if topic_idx < self._parsed_panel.get_project_count():
+            # Update existing placeholder row with actual file data
+            if files:
+                self._parsed_panel.update_project_files(topic_idx, files)
+                log.info(f"[TabProject] Updated project_data[{topic_idx}] with {len(files)} files")
+            else:
+                log.warning(f"[TabProject] Empty files dict for topic {topic_idx}!")
+
+            # Always set 'ready' — actual queue-add happens in _on_generation_done
+            proj_status = "ready" if status == "done" else "error"
+            self._parsed_panel.set_project_status(topic_idx, proj_status)
 
     # ── Actions ────────────────────────────────────────────────
 
+    def _on_clear(self):
+        """Clear topics input + parsed projects panel."""
+        self._topic_input.clear()
+        if self._parsed_panel:
+            self._parsed_panel.clear_projects()
+        self._progress_bar.setValue(0)
+        self._progress_bar.setVisible(False)
+        self._topics_header.setText(t("project_extra.topics_collapsed"))
+        self._topics_expanded = True
+        self._topics_body.setVisible(True)
+
     def _on_generate(self):
         """Start full auto generation (Fix 1: runs in background thread)."""
+        # ── Permission check: AI Prompt Processing ──
+        if self.controller and hasattr(self.controller, '_permissions'):
+            from services.permissions import Feature
+            if not self.controller._permissions.has_feature(Feature.AI_PROMPT_PROCESSING):
+                from ui.popups import show_warning
+                show_warning(
+                    self, t("popups.premium_feature_title"),
+                    t("popups.ai_prompt_premium_only")
+                )
+                return
+        
         topics = self._topic_input.toPlainText().strip()
         if not topics:
             from ui.popups import show_warning
-            show_warning(self, "No Topics", "Nhập ít nhất 1 topic!")
+            show_warning(self, t("project.no_topics_title"), t("project.no_topics_msg"))
             return
 
         template = self._get_selected_template()
         if not template:
             from ui.popups import show_warning
-            show_warning(self, "No Template", "Chọn template trước!")
+            show_warning(self, t("project.no_template_title"), t("project.no_template_msg"))
             return
 
         # ── Validate Setup Matrix (required dimensions) ──
@@ -785,11 +846,7 @@ class TabProject(QWidget):
             missing = []
             required_dims = [
                 ("category",  "Category (D1)"),
-                ("structure", "Structure (D2)"),
-                ("style",     "Visual Style (D3)"),
-                ("character", "Character (D4)"),
-                ("audience",  "Audience (D5)"),
-                ("tone",      "Tone (D7)"),
+                # D2-D7 are optional — AI will freely choose if left as "---"
             ]
             for key, label in required_dims:
                 val = matrix_config.get(key, [])
@@ -803,8 +860,8 @@ class TabProject(QWidget):
             
             if missing:
                 from ui.popups import show_warning
-                msg = "Vui lòng chọn đủ thông tin:\n\n• " + "\n• ".join(missing)
-                show_warning(self, "Thiếu thông tin", msg)
+                msg = t("project.missing_info_msg") + "\n• ".join(missing)
+                show_warning(self, t("project.missing_info_title"), msg)
                 return
 
         # Get API config from Settings (Fix 6)
@@ -812,7 +869,7 @@ class TabProject(QWidget):
             api_key, model_name, base_url, provider = self._get_ai_config()
         except ValueError as e:
             from ui.popups import show_warning
-            show_warning(self, "API Error", str(e))
+            show_warning(self, t("project.api_error"), str(e))
             return
 
         # Extract topic names from lines (handle tab-separated columns)
@@ -835,7 +892,7 @@ class TabProject(QWidget):
 
         # Disable generate button during generation
         self._generate_btn.setEnabled(False)
-        self._generate_btn.setText("⏳ Generating...")
+        self._generate_btn.setText(t("project_extra.generating"))
 
         output_base = ""
         if self._setup_matrix:
@@ -865,6 +922,7 @@ class TabProject(QWidget):
         self._worker_thread.started.connect(self._worker.run)
         self._worker.step_update.connect(self._update_topic_step)
         self._worker.topic_done.connect(self._update_topic_done)
+        self._worker.topic_result.connect(self._on_topic_result)
         self._worker.all_done.connect(self._on_generation_done)
         self._worker.error.connect(self._on_generation_error)
         self._worker.log_msg.connect(self._route_worker_log)
@@ -876,14 +934,17 @@ class TabProject(QWidget):
         self._worker_thread.start()
 
     def _on_generation_done(self, results):
-        """Handle generation completion (runs on main thread via signal)."""
+        """Handle generation completion (runs on main thread via signal).
+
+        Projects already streamed via topic_result signal — just finalize.
+        """
         self._generate_btn.setEnabled(True)
-        self._generate_btn.setText("🚀 Generate (Full Auto)")
+        self._generate_btn.setText(t("project_builder.generate"))
 
         # Complete progress bar
         self._progress_bar.setValue(self._progress_bar.maximum())
 
-        # Display results in parsed projects panel
+        # Count results (projects already displayed via _on_topic_result)
         all_prompts = []
         done_count = 0
         for r in results:
@@ -891,17 +952,16 @@ class TabProject(QWidget):
                 all_prompts.extend(r.prompts)
                 done_count += 1
 
-                # Add to parsed panel if available
-                if self._parsed_panel:
-                    files = {}
-                    if hasattr(r, 'files'):
-                        files = r.files  # {"Bible": content, "Master": content, ...}
-                    status = "queued" if self._auto_add_cb.isChecked() else "ready"
-                    self._parsed_panel.add_project(r.topic, files, status)
-            elif self._parsed_panel and hasattr(r, 'topic'):
-                self._parsed_panel.add_project(
-                    r.topic, {}, "error"
-                )
+        # ── Fallback: ensure _project_data is populated from results ──
+        # In case topic_result signal lost data crossing thread boundary
+        if self._parsed_panel:
+            for i, r in enumerate(results):
+                if r.status == "done" and hasattr(r, 'files') and r.files:
+                    if i < len(self._parsed_panel._project_data):
+                        existing = self._parsed_panel._project_data[i]
+                        if not existing.get("Prompts") and not existing.get("Master"):
+                            self._parsed_panel._project_data[i].update(r.files)
+                            log.info(f"[TabProject] Fallback: populated project_data[{i}] from all_done results")
 
         # Legacy fallback: populate old table
         if not self._parsed_panel:
@@ -913,14 +973,16 @@ class TabProject(QWidget):
             f"✅ Done: {done_count}/{total} topics, {len(all_prompts)} prompts ▶"
         )
 
-        # Auto-add to Queue
-        if self._auto_add_cb.isChecked() and all_prompts:
-            self._on_add_to_queue()
+        # Auto-add to Queue: add each ready project individually
+        if self._auto_add_cb.isChecked() and self._parsed_panel:
+            for i, row in enumerate(self._parsed_panel._projects):
+                if row.get_status() == "ready":
+                    self._on_add_project_to_queue(i)
 
     def _on_generation_error(self, error_msg):
         """Handle fatal generation error."""
         self._generate_btn.setEnabled(True)
-        self._generate_btn.setText("🚀 Generate (Full Auto)")
+        self._generate_btn.setText(t("project_builder.generate"))
         self._status_summary.setText(f"❌ Fatal Error: {error_msg}")
         self._status_summary.setStyleSheet(
             f"color: {Theme.RED}; font-size: 12px; font-weight: bold; border: none;"
@@ -952,7 +1014,7 @@ class TabProject(QWidget):
                 for i, p in enumerate(prompts):
                     self._parsed_panel.add_project(
                         f"Imported Prompt {i+1}",
-                        {"Master": p.prompt}, # Store prompt in 'Master' file for display
+                        {"Prompts": p.prompt, "Master": p.prompt},
                         "ready"
                     )
             else:
@@ -986,7 +1048,7 @@ class TabProject(QWidget):
         row_count = self._prompts_table.rowCount()
         if row_count == 0:
             from ui.popups import show_warning
-            show_warning(self, "Empty", "Chưa có prompts để thêm!")
+            show_warning(self, t("project.empty_prompts_title"), t("project.empty_prompts_msg"))
             return
 
         prompts = []
@@ -999,56 +1061,123 @@ class TabProject(QWidget):
 
     def _on_add_project_to_queue(self, project_idx: int):
         """Add a single project's prompts to queue."""
+        import re
         if not self._parsed_panel:
             return
         data = self._parsed_panel._project_data
         if project_idx < len(data):
-            prompts_text = data[project_idx].get("Prompts", "")
-            prompts = [ln.strip() for ln in prompts_text.split("\n") if ln.strip()]
+            project_files = data[project_idx]
+            log.info(f"[TabProject] Adding project {project_idx} to queue. Data keys: {list(project_files.keys())}")
+
+            # Try 'Prompts' key first, fallback to 'Master'
+            prompts_text = project_files.get("Prompts", "") or project_files.get("Master", "")
+
+            if not prompts_text:
+                log.warning(f"[TabProject] project_data[{project_idx}] has NO Prompts/Master content. Full keys: {list(project_files.keys())}")
+
+            prompts = []
+            for ln in prompts_text.split("\n"):
+                ln = ln.strip()
+                if not ln:
+                    continue
+                # Strip numbering: "1. ", "2) ", "Scene 1: "
+                cleaned = re.sub(r'^(\d+[\.\)]\s*|Scene\s+\d+:\s*)', '', ln).strip()
+                if cleaned:
+                    prompts.append(cleaned)
             name = self._parsed_panel._projects[project_idx].name
-            self._do_queue_add(prompts, name)
-            self._parsed_panel.set_project_status(project_idx, "queued")
+            log.info(f"[TabProject] Extracted {len(prompts)} prompts for '{name}'")
+            if prompts:
+                self._do_queue_add(prompts, name)
+                self._parsed_panel.set_project_status(project_idx, "queued")
+            else:
+                log.warning(f"[TabProject] No prompts found for project '{name}' (idx={project_idx})")
+                from ui.popups import show_warning
+                show_warning(self, "No Prompts", f"Project '{name}' has no prompt content to queue.")
 
     def _on_add_all_to_queue(self):
-        """Add all ready projects to queue."""
+        """Add all non-generating projects to queue."""
         if not self._parsed_panel:
             return
+        added = 0
         for i, row in enumerate(self._parsed_panel._projects):
-            if row.get_status() == "ready":
+            if row.get_status() != "generating":
                 self._on_add_project_to_queue(i)
+                added += 1
+        log.info(f"[TabProject] _on_add_all_to_queue: processed {added} projects")
 
     def _do_queue_add(self, prompts: list, project_name: str):
-        """Common queue-add logic."""
+        """Common queue-add logic — routes to T2V or T2I based on combo."""
         if not prompts:
+            log.warning(f"[TabProject] _do_queue_add called with empty prompts for '{project_name}'")
             return
+
+        log.info(f"[TabProject] _do_queue_add: {len(prompts)} prompts for '{project_name}'")
+
+        # Determine output type from ParsedProjectsPanel combo
+        output_type = "T2V"
+        if self._parsed_panel and hasattr(self._parsed_panel, 'get_output_type'):
+            output_type = self._parsed_panel.get_output_type()
 
         # Build settings dict from SetupMatrixPanel or legacy
         settings = {"project_name": project_name}
         if self._setup_matrix:
             config = self._setup_matrix.get_config()
-            settings["aspect_ratio"] = config.get("video_aspect", "LANDSCAPE")
             settings["output_folder"] = config.get("output_folder", "")
-            settings["model"] = config.get("video_model", "Veo 3.1 - Fast")
-            settings["download_quality"] = config.get("video_quality", "1080p")
-            settings["outputs_per_prompt"] = config.get("video_outputs", 4)
+            if output_type == "T2I":
+                # Image settings
+                settings["model"] = config.get("image_model", "GEM_PIX_2")
+                settings["aspect_ratio"] = config.get("image_aspect", "LANDSCAPE")
+                settings["download_quality"] = config.get("image_quality", "2k")
+                settings["outputs_per_prompt"] = config.get("image_outputs", 4)
+            else:
+                # Video settings
+                settings["model"] = config.get("video_model", "Veo 3.1 - Fast")
+                settings["aspect_ratio"] = config.get("video_aspect", "LANDSCAPE")
+                settings["download_quality"] = config.get("video_quality", "1080p")
+                settings["outputs_per_prompt"] = config.get("video_outputs", 4)
         elif hasattr(self, '_aspect_combo'):
             settings["aspect_ratio"] = "LANDSCAPE" if "Landscape" in self._aspect_combo.currentText() else "PORTRAIT"
 
-        if self.controller and hasattr(self.controller, 'add_t2v_batch'):
-            self.controller.add_t2v_batch(
+        # Route to correct controller method
+        method_name = "add_t2i_batch" if output_type == "T2I" else "add_t2v_batch"
+        log.info(f"[TabProject] Calling controller.{method_name}() with {len(prompts)} prompts, controller={self.controller is not None}")
+        if self.controller and hasattr(self.controller, method_name):
+            getattr(self.controller, method_name)(
                 prompts=prompts,
                 settings=settings,
             )
+            log.info(f"[TabProject] ✅ Successfully added {len(prompts)} prompts to queue as {output_type}")
             from ui.popups import show_info
-            show_info(self, "Added", f"✅ {len(prompts)} prompts added to queue!")
+            show_info(self, t("dialogs.added"), t("project_sidebar.added_queue").replace("{count}", str(len(prompts))).replace("{type}", output_type))
+
+            # ── Force Queue tab refresh + switch ──
+            # show_info blocks the main thread, so queue signals may be lost.
+            # Explicitly refresh Queue tab and switch to it after popup.
+            try:
+                main_window = self.window()
+                if main_window and hasattr(main_window, 'tab_instances'):
+                    queue_tab = main_window.tab_instances.get('queue')
+                    if queue_tab and hasattr(queue_tab, '_refresh_queue_from_controller'):
+                        queue_tab._refresh_queue_from_controller()
+                        log.info("[TabProject] ✅ Queue tab force-refreshed after add")
+                    # Switch to Queue tab
+                    if hasattr(main_window, 'tabview'):
+                        for i in range(main_window.tabview.count()):
+                            if main_window.tabview.widget(i) is queue_tab:
+                                main_window.tabview.setCurrentIndex(i)
+                                log.info(f"[TabProject] ✅ Switched to Queue tab (index {i})")
+                                break
+            except Exception as e:
+                log.warning(f"[TabProject] Queue refresh/switch failed: {e}")
         else:
+            log.warning(f"[TabProject] ⚠️ Controller missing or no {method_name} method! controller={self.controller}")
             from ui.popups import show_info
-            show_info(self, "Ready", f"📋 {len(prompts)} prompts ready (controller not connected)")
+            show_info(self, "Ready", t("project_sidebar.ready").replace("{count}", str(len(prompts))))
 
     def _browse_output(self):
         """Browse for output folder."""
         from PySide6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        folder = QFileDialog.getExistingDirectory(self, t("project_sidebar.select_output"))
         if folder:
             if hasattr(self, '_output_label'):
                 self._output_label.setText(folder)
@@ -1056,5 +1185,20 @@ class TabProject(QWidget):
                 self._setup_matrix.output_folder.setText(folder)
 
     def retranslate_ui(self):
-        """Hot-reload UI text on language change."""
-        pass  # Tab labels managed by app.py
+        """Hot-reload UI text on language change — rebuild entire tab."""
+        # Remove old layout
+        old_layout = self.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+            QWidget().setLayout(old_layout)
+
+        # Reset references
+        self._setup_matrix = None
+        self._parsed_panel = None
+
+        # Rebuild
+        self._setup_ui()

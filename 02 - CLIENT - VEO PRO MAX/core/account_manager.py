@@ -864,7 +864,18 @@ class AccountManager:
                         ext_headers = {**ext_headers, 'x-client-data': session_xcd}
                         log.debug(f"[{self.email}] get_browser_headers: bridge xcd={xcd_len} chars → substituted session xcd={len(session_xcd)} chars")
                     else:
-                        log.debug(f"[{self.email}] get_browser_headers: bridge xcd={xcd_len} chars, session xcd={len(session_xcd)} chars (both short)")
+                        # Fallback: CDP-captured headers from ProfilesController
+                        # Extension's onBeforeSendHeaders may have stale 8-char xcd,
+                        # but CDP Network.requestWillBeSentExtraInfo captures the full value.
+                        cdp_xcd = self._get_cdp_client_data()
+                        if cdp_xcd and len(cdp_xcd) >= MIN_XCD:
+                            ext_headers = {**ext_headers, 'x-client-data': cdp_xcd}
+                            # Also update session so future calls don't need CDP lookup
+                            if self._session:
+                                self._session.client_data = cdp_xcd
+                            log.info(f"[{self.email}] get_browser_headers: bridge xcd={xcd_len} → CDP xcd={len(cdp_xcd)} chars")
+                        else:
+                            log.debug(f"[{self.email}] get_browser_headers: bridge xcd={xcd_len} chars, session xcd={len(session_xcd)} chars (both short)")
                 return ext_headers
             else:
                 log.debug(f"[{self.email}] get_browser_headers: bridge returned None (cache miss or stale)")
@@ -886,6 +897,24 @@ class AccountManager:
             if session_headers:
                 return session_headers
         return {}
+    
+    def _get_cdp_client_data(self) -> str:
+        """Get x-client-data from ProfilesController's CDP-captured headers.
+        
+        CDP (Network.requestWillBeSentExtraInfo) captures the REAL x-client-data
+        that Chrome sends, while Extension's webRequest API may have a stale value.
+        This bridges the gap between the two independent header capture systems.
+        
+        Rate-limited to avoid excessive ProfilesController lookups.
+        """
+        try:
+            pc = getattr(self, '_profiles_controller', None)
+            if not pc:
+                return ''
+            cdp_headers = pc.get_debug_browser_headers(self.email)
+            return cdp_headers.get('x-client-data', '')
+        except Exception:
+            return ''
     
     def update_access_token(self, token: str, expires_in: int = TokenLifetime.ACCESS_TOKEN):
         """Update access token.
