@@ -1,5 +1,5 @@
 {
-  "build_time": "2026-03-10T20:02:07.609293",
+  "build_time": "2026-03-10T21:24:33.731967",
   "app_version": "2.3.1",
   "python_version": "3.13.6",
   "platform": "win32",
@@ -13,5 +13,5 @@
     "security/integrity_check.py": "9092cb3524f57155015074c9f8cbbd08b2fc88463da3f1739b53fc228aeecd29",
     "security/anti_tamper.py": "67d92b1ae5b39747285f608c463425154b6e4f419dd19f969356f255b25b5a1c"
   },
-  "build_number": 1773147727
+  "build_number": 1773152673
 }
