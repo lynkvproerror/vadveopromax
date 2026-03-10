@@ -8459,18 +8459,22 @@ class Engine:
         settings = get_settings()
         
         # Prefer task-level output_folder (from sidebar), fallback to global settings
-        output_folder = getattr(task, 'output_folder', '') or settings.output_folder
+        output_folder = (getattr(task, 'output_folder', '') or settings.output_folder or '').strip()
         if not output_folder:
             log.debug("No output_folder configured, skipping download")
             return []
         
         # Create project subfolder + quality subfolder
-        project_name = getattr(task, 'project_name', '') or "Untitled"
+        # Strip trailing/leading spaces — Windows cannot handle trailing-space dirs
+        project_name = (getattr(task, 'project_name', '') or "Untitled").strip()
         if quality_subfolder:
-            output_path = Path(output_folder) / project_name / quality_subfolder
+            output_path = Path(output_folder) / project_name / quality_subfolder.strip()
         else:
             output_path = Path(output_folder) / project_name
-        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Ensure directory exists (explicit str() for Windows Unicode path safety)
+        import os
+        os.makedirs(str(output_path), exist_ok=True)
         
         local_paths = []
         import aiohttp

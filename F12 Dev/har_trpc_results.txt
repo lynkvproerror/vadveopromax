@@ -1,0 +1,58 @@
+=== Entry 1: POST 200 ===
+URL: https://labs.google/fx/api/trpc/general.submitBatchLog
+Body: {"json":{"appEvents":[{"event":"PINHOLE_CREATE_NEW_PROJECT","eventMetadata":{"sessionId":";1769888782642"},"eventProperties":[{"key":"TOOL_NAME","stringValue":"PINHOLE"},{"key":"G1_PAYGATE_TIER","stringValue":"PAYGATE_TIER_TWO"},{"key":"PINHOLE_PROMPT_BOX_MODE","stringValue":"TEXT_TO_VIDEO"},{"key":"USER_AGENT","stringValue":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},{"key":"IS_DESKTOP"}],"activeExperiments":[],"eventTime":"
+Response: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+=== Entry 2: POST 200 ===
+URL: https://labs.google/fx/api/trpc/project.createProject
+Body: {"json":{"projectTitle":"Feb 01 - 02:49","toolName":"PINHOLE"}}
+Response: {"result":{"data":{"json":{"result":{"projectId":"daba1978-e588-4d76-a4fd-6c3126074187","projectInfo":{"projectTitle":"Feb 01 - 02:49"}},"status":200,"statusText":"OK"}}}}
+
+=== Entry 5: GET 200 ===
+URL: https://labs.google/fx/api/trpc/project.getProject?input=%7B%22json%22%3A%7B%22projectId%22%3A%22daba1978-e588-4d76-a4fd-6c3126074187%22%2C%22toolName%22%3A%22PINHOLE%22%7D%7D
+Response: {"result":{"data":{"json":{"result":{"projectId":"daba1978-e588-4d76-a4fd-6c3126074187","projectInfo":{"projectTitle":"Feb 01 - 02:49"}},"status":200,"statusText":"OK"}}}}
+
+=== Entry 6: GET 200 ===
+URL: https://labs.google/fx/api/trpc/project.searchProjectScenes?input=%7B%22json%22%3A%7B%22projectId%22%3A%22daba1978-e588-4d76-a4fd-6c3126074187%22%2C%22toolName%22%3A%22PINHOLE%22%2C%22pageSize%22%3A10%7D%7D
+Response: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+=== Entry 7: POST 200 ===
+URL: https://labs.google/fx/api/trpc/general.submitBatchLog
+Body: {"json":{"appEvents":[{"event":"PAGE_VIEW","eventProperties":[{"key":"URL","stringValue":"https://labs.google/fx/tools/flow/project/daba1978-e588-4d76-a4fd-6c3126074187"},{"key":"USER_AGENT","stringValue":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},{"key":"IS_DESKTOP"}],"activeExperiments":[],"eventMetadata":{"sessionId":";1769888782642"},"eventTime":"2026-01-31T19:49:06.513Z"}]}}
+Response: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+=== Entry 8: GET 200 ===
+URL: https://labs.google/fx/api/trpc/media.fetchUserHistoryDirectly?input=%7B%22json%22%3A%7B%22type%22%3A%22ASSET_MANAGER%22%2C%22pageSize%22%3A18%2C%22responseScope%22%3A%22RESPONSE_SCOPE_UNSPECIFIED%22%2C%22cursor%22%3A%22qgGSAQqPATAsVElNRVNUQU1QICIyMDI2LTAxLTI5IDEyOjA4OjEzLjI1ODg4MyswMCIsODcyMDIxOTkxMjQyLCIiLCI0NmMwYzFlMi01Mzk5LTQ2OTEtOTcwZS0xYWQ5MGEzYmNjZTQiLCJDQUUiLCI5NmZjZmM4Yy0xNTc4LTQ1YzAtYTQ3OS04YjdhYWU2YmE4Njki%22%7D%7D
+Response: {"result":{"data":{"json":{"result":{"userWorkflows":[{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","media":{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","userUploadedImage":{"aspectRatio":"IMAGE_ASPECT_RATIO_PORTRAIT"},"mediaGenerationId":{"mediaType":"IMAGE","workflowId":"f661b53a-4bf2-4b6e-ada1-5fcbfb751583","workflowStepId":"CAE","mediaKey":"a9eefb5b-3f32-44b4-9c7d-edc786557151"}},"createTime":"2026-01-29T12:07:30.251348Z"},{"name":"CAMaJDg2YmQ4ZGRhLTVlZmMtNGJmYy1iMWZkLTY2Y2U3ZmUxODk1OCIDQ0FFKiRlZWYyZjZiNC01Nzc2LTQwYjYtOTdhOS02YTcxMTlhMGFjNzE","media":{"name":"CAMaJDg2YmQ4ZGRhLTVlZmMtNGJmYy1iMWZkLTY2Y2U3ZmUxODk1OCIDQ0FFKiRlZWYyZjZiNC01N
+
+=== Entry 9: GET 200 ===
+URL: https://labs.google/fx/api/trpc/media.fetchUserHistoryDirectly?input=%7B%22json%22%3A%7B%22type%22%3A%22ASSET_MANAGER%22%2C%22pageSize%22%3A18%2C%22responseScope%22%3A%22RESPONSE_SCOPE_UNSPECIFIED%22%2C%22cursor%22%3A%22qgGSAQqPATAsVElNRVNUQU1QICIyMDI2LTAxLTI5IDEyOjA4OjEzLjI1ODg4MyswMCIsODcyMDIxOTkxMjQyLCIiLCI0NmMwYzFlMi01Mzk5LTQ2OTEtOTcwZS0xYWQ5MGEzYmNjZTQiLCJDQUUiLCI5NmZjZmM4Yy0xNTc4LTQ1YzAtYTQ3OS04YjdhYWU2YmE4Njki%22%7D%7D
+Response: {"result":{"data":{"json":{"result":{"userWorkflows":[{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","media":{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","userUploadedImage":{"aspectRatio":"IMAGE_ASPECT_RATIO_PORTRAIT"},"mediaGenerationId":{"mediaType":"IMAGE","workflowId":"f661b53a-4bf2-4b6e-ada1-5fcbfb751583","workflowStepId":"CAE","mediaKey":"a9eefb5b-3f32-44b4-9c7d-edc786557151"}},"createTime":"2026-01-29T12:07:30.251348Z"},{"name":"CAMaJDg2YmQ4ZGRhLTVlZmMtNGJmYy1iMWZkLTY2Y2U3ZmUxODk1OCIDQ0FFKiRlZWYyZjZiNC01Nzc2LTQwYjYtOTdhOS02YTcxMTlhMGFjNzE","media":{"name":"CAMaJDg2YmQ4ZGRhLTVlZmMtNGJmYy1iMWZkLTY2Y2U3ZmUxODk1OCIDQ0FFKiRlZWYyZjZiNC01N
+
+=== Entry 10: GET 200 ===
+URL: https://labs.google/fx/api/trpc/videoFx.getUserSettings?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+Response: {"result":{"data":{"json":{"result":{"lastSelectedVideoModelKey":"veo_2_0_t2v","lastAcknowledgedChangeLogId":"2025-12-18-v0-e2054626-1ac3-4d64-81ec-3134a94549a4","dismissedBannerIds":["e40fc7a7-aea8-4ec7-8250-89c5d266c177","8dbcafbe-bd31-4de1-b9f8-b64d06015b2c","d7011273-f85f-4da5-829a-8feadef78fa7","94d90f50-4ec6-4e73-8c42-d3e709105da7","cd266941-aba8-484c-b74f-64f8f39a49f6","165ea8a4-91d4-4011-b46a-f522b1fd310c"],"lastSelectedVideoAspectRatio":"VIDEO_ASPECT_RATIO_LANDSCAPE"},"status":200,"statusText":"OK"}}}}
+
+=== Entry 11: GET 200 ===
+URL: https://labs.google/fx/api/trpc/videoFx.getVideoModelConfig?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+Response: {"result":{"data":{"json":{"result":{"videoModels":[{"key":"veo_3_0_t2v_fast_portrait_ultra","supportedAspectRatios":["VIDEO_ASPECT_RATIO_PORTRAIT"],"accessType":"MODEL_ACCESS_TYPE_GENERAL","capabilities":["VIDEO_MODEL_CAPABILITY_TEXT","VIDEO_MODEL_CAPABILITY_AUDIO"],"videoLengthSeconds":8,"videoGenerationTimeSeconds":100,"displayName":"Veo 3 - Fast","framesPerSecond":24,"paygateTier":"PAYGATE_TIER_TWO","modelAccessInfo":{},"modelMetadata":{"veoModelName":"Beta Audio"},"modelStatus":"MODEL_STATUS_DEPRECATED","shareCardDisplayName":"Veo 3 - Fast - Text to Video"},{"key":"veo_3_1_t2v_fast_portrait_ultra","supportedAspectRatios":["VIDEO_ASPECT_RATIO_PORTRAIT"],"accessType":"MODEL_ACCESS_TYPE_GENERAL","capabilities":["VIDEO_MODEL_CAPABILITY_TEXT","VIDEO_MODEL_CAPABILITY_AUDIO"],"videoLengthSec
+
+=== Entry 12: GET 200 ===
+URL: https://labs.google/fx/api/trpc/media.fetchUserHistoryDirectly?input=%7B%22json%22%3A%7B%22type%22%3A%22ASSET_MANAGER%22%2C%22pageSize%22%3A18%2C%22responseScope%22%3A%22RESPONSE_SCOPE_UNSPECIFIED%22%2C%22cursor%22%3A%22qgGSAQqPATAsVElNRVNUQU1QICIyMDI2LTAxLTI5IDEyOjA4OjEzLjI1ODg4MyswMCIsODcyMDIxOTkxMjQyLCIiLCI0NmMwYzFlMi01Mzk5LTQ2OTEtOTcwZS0xYWQ5MGEzYmNjZTQiLCJDQUUiLCI5NmZjZmM4Yy0xNTc4LTQ1YzAtYTQ3OS04YjdhYWU2YmE4Njki%22%7D%7D
+Response: {"result":{"data":{"json":{"result":{"userWorkflows":[{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","media":{"name":"CAMaJGY2NjFiNTNhLTRiZjItNGI2ZS1hZGExLTVmY2JmYjc1MTU4MyIDQ0FFKiRhOWVlZmI1Yi0zZjMyLTQ0YjQtOWM3ZC1lZGM3ODY1NTcxNTE","userUploadedImage":{"aspectRatio":"IMAGE_ASPECT_RATIO_PORTRAIT"},"mediaGenerationId":{"mediaType":"IMAGE","workflowId":"f661b53a-4bf2-4b6e-ada1-5fcbfb751583","workflowStepId":"CAE","mediaKey":"a9eefb5b-3f32-44b4-9c7d-edc786557151"}},"createTime":"2026-01-29T12:07:30.251348Z"},{"name":"CAMaJDg2YmQ4ZGRhLTVlZmMtNGJmYy1iMWZkLTY2Y2U3ZmUxODk1OCIDQ0FFKiRlZWYyZjZiNC01Nzc2LTQwYjYtOTdhOS02YTcxMTlhMGFjNzE","media":{"name":"CAMaJDg2YmQ4ZGRhLTVlZmMtNGJmYy1iMWZkLTY2Y2U3ZmUxODk1OCIDQ0FFKiRlZWYyZjZiNC01N
+
+=== Entry 13: GET 200 ===
+URL: https://labs.google/fx/api/trpc/general.fetchUserPreferences?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+Response: {"result":{"data":{"json":{"result":{"enableHistory":true},"status":200,"statusText":"OK"}}}}
+
+=== Entry 14: GET 200 ===
+URL: https://labs.google/fx/api/trpc/project.searchProjectWorkflows?input=%7B%22json%22%3A%7B%22pageSize%22%3A4%2C%22projectId%22%3A%22daba1978-e588-4d76-a4fd-6c3126074187%22%2C%22toolName%22%3A%22PINHOLE%22%2C%22fetchBookmarked%22%3Afalse%2C%22rawQuery%22%3A%22%22%2C%22mediaType%22%3A%22MEDIA_TYPE_VIDEO%22%2C%22cursor%22%3Anull%7D%2C%22meta%22%3A%7B%22values%22%3A%7B%22cursor%22%3A%5B%22undefined%22%5D%7D%7D%7D
+Response: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+=== Entry 15: GET 200 ===
+URL: https://labs.google/fx/api/trpc/project.searchProjectScenes?input=%7B%22json%22%3A%7B%22projectId%22%3A%22daba1978-e588-4d76-a4fd-6c3126074187%22%2C%22toolName%22%3A%22PINHOLE%22%2C%22pageSize%22%3A10%7D%7D
+Response: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}
+
+=== Entry 16: GET 200 ===
+URL: https://labs.google/fx/api/trpc/videoFx.listPreambles?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D
+Response: {"result":{"data":{"json":{"result":{},"status":200,"statusText":"OK"}}}}

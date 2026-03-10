@@ -99,11 +99,28 @@ class FrameExtractor:
         import zipfile
         import urllib.request
         import urllib.error
+        import ssl
         import io
         import time
         log = logging.getLogger(__name__)
         
         install_dir.mkdir(parents=True, exist_ok=True)
+        
+        # SSL context with certifi fallback (for Nuitka-compiled apps)
+        ssl_ctx = None
+        try:
+            ssl_ctx = ssl.create_default_context()
+            if not ssl_ctx.get_ca_certs():
+                raise RuntimeError("No CA certs")
+        except Exception:
+            try:
+                import certifi
+                ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            except ImportError:
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+                log.warning("[FFmpeg] SSL: Using unverified context")
         
         # Primary + fallback URLs
         URLS = [
@@ -136,10 +153,10 @@ class FrameExtractor:
                     
                     # — Chunked download with progress —
                     req = urllib.request.Request(url, headers={
-                        "User-Agent": "VEO-Pro-Max/2.3.0"
+                        "User-Agent": "VEO-Pro-Max/2.3.1"
                     })
                     
-                    with urllib.request.urlopen(req, timeout=120) as resp:
+                    with urllib.request.urlopen(req, timeout=120, context=ssl_ctx) as resp:
                         total = int(resp.headers.get("Content-Length", 0))
                         total_mb = total / 1024 / 1024 if total else 0
                         log.info(
