@@ -23,6 +23,30 @@ from PySide6.QtCore import QObject, Signal, QTimer, QThread
 log = logging.getLogger(__name__)
 
 
+def _create_ssl_context():
+    """Create SSL context with certifi fallback for Nuitka-compiled apps."""
+    import ssl
+    try:
+        ctx = ssl.create_default_context()
+        # Test if default context works by checking cafile
+        if ctx.get_ca_certs():
+            return ctx
+    except Exception:
+        pass
+    # Fallback: use certifi's bundled CA certs
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+    # Last resort: no verification (better than complete failure)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    log.warning("SSL: Using unverified context (certifi not available)")
+    return ctx
+
+
 # GitHub raw URL for version manifest
 GITHUB_REPO = "lynkvproerror/vadveopromax"
 VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json"
@@ -78,9 +102,8 @@ class UpdateCheckWorker(QThread):
     def run(self):
         try:
             import urllib.request
-            import ssl
             
-            ctx = ssl.create_default_context()
+            ctx = _create_ssl_context()
             req = urllib.request.Request(
                 VERSION_URL,
                 headers={"User-Agent": "VEO-Pro-Max-Updater/1.0"}
@@ -112,10 +135,9 @@ class UpdateDownloadWorker(QThread):
     def run(self):
         try:
             import urllib.request
-            import ssl
             import hashlib
             
-            ctx = ssl.create_default_context()
+            ctx = _create_ssl_context()
             req = urllib.request.Request(
                 self.url,
                 headers={"User-Agent": "VEO-Pro-Max-Updater/1.0"}
