@@ -803,6 +803,114 @@ clearInterval(keepaliveTimer);
 }
 break;
 }
+case 'relay_fetch': {
+const tabId = findTabForEmail(msg.email);
+if (!tabId) {
+wsSend({
+action: 'relay_fetch_result',
+requestId: msg.requestId,
+success: false,
+error: `No tab found for ${msg.email}`,
+});
+return;
+}
+try {
+const requestUrl = msg.url || '';
+if (requestUrl.includes('labs.google')) {
+try {
+const tab = await chrome.tabs.get(tabId);
+if (tab && tab.url && !tab.url.includes('labs.google')) {
+await chrome.tabs.update(tabId, { url: VEO_URL });
+await new Promise((resolve) => {
+const onUpdated = (updatedTabId, changeInfo) => {
+if (updatedTabId === tabId && changeInfo.status === 'complete') {
+chrome.tabs.onUpdated.removeListener(onUpdated);
+resolve();
+}
+};
+chrome.tabs.onUpdated.addListener(onUpdated);
+setTimeout(() => {
+chrome.tabs.onUpdated.removeListener(onUpdated);
+resolve();
+}, 15000);
+});
+await new Promise(r => setTimeout(r, 2000));
+}
+} catch (navErr) {
+}
+}
+const scriptResult = await chrome.scripting.executeScript({
+target: { tabId },
+world: 'MAIN',
+func: async (url, method, body, headers, credentials) => {
+try {
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 15000);
+const fetchOpts = {
+method: method || 'POST',
+signal: controller.signal,
+};
+if (credentials) fetchOpts.credentials = credentials;
+if (headers && Object.keys(headers).length > 0) {
+fetchOpts.headers = headers;
+} else {
+fetchOpts.headers = { 'Content-Type': 'application/json' };
+}
+if (body && method !== 'GET') {
+fetchOpts.body = JSON.stringify(body);
+}
+const resp = await fetch(url, fetchOpts);
+clearTimeout(timeoutId);
+let data = null;
+const contentType = resp.headers.get('content-type') || '';
+if (contentType.includes('json')) {
+data = await resp.json().catch(() => null);
+} else {
+const text = await resp.text().catch(() => '');
+try { data = JSON.parse(text); } catch { data = { text }; }
+}
+return {
+success: resp.ok,
+status: resp.status,
+statusText: resp.statusText,
+data,
+};
+} catch (e) {
+return {
+success: false,
+status: 0,
+error: e.message || String(e),
+};
+}
+},
+args: [
+msg.url,
+msg.method || 'POST',
+msg.body || null,
+msg.headers || {},
+msg.credentials || 'include',
+],
+});
+const result = scriptResult?.[0]?.result || {
+success: false,
+error: 'executeScript returned no result',
+};
+wsSend({
+action: 'relay_fetch_result',
+requestId: msg.requestId,
+...result,
+});
+} catch (e) {
+console.error(`[VEO Bridge] ❌ relay_fetch failed for ${msg.email}: ${e.message}`);
+wsSend({
+action: 'relay_fetch_result',
+requestId: msg.requestId,
+success: false,
+error: e.message,
+});
+}
+break;
+}
 case 'navigate_tab': {
 const tabId = findTabForEmail(msg.email);
 if (!tabId) {
@@ -883,6 +991,47 @@ tabState: results?.[0]?.result,
 });
 } catch (e) {
 wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: e.message });
+}
+break;
+}
+case 'reload_tab': {
+const tabId = findTabForEmail(msg.email);
+if (!tabId) {
+wsSend({
+action: 'reload_tab_result',
+requestId: msg.requestId,
+success: false,
+error: `No tab found for ${msg.email}`,
+});
+return;
+}
+try {
+await chrome.tabs.reload(tabId);
+await new Promise((resolve) => {
+const onUpdated = (updatedTabId, changeInfo) => {
+if (updatedTabId === tabId && changeInfo.status === 'complete') {
+chrome.tabs.onUpdated.removeListener(onUpdated);
+resolve();
+}
+};
+chrome.tabs.onUpdated.addListener(onUpdated);
+setTimeout(() => {
+chrome.tabs.onUpdated.removeListener(onUpdated);
+resolve();
+}, 15000);
+});
+wsSend({
+action: 'reload_tab_result',
+requestId: msg.requestId,
+success: true,
+});
+} catch (e) {
+wsSend({
+action: 'reload_tab_result',
+requestId: msg.requestId,
+success: false,
+error: e.message,
+});
 }
 break;
 }
