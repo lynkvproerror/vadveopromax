@@ -1,11 +1,11 @@
 {
-    "version": "2.3.1",
+    "version": "2.3.2",
     "release_date": "2026-03-11",
-    "changelog": "v2.3.1 — Tăng cường tính năng + Cập nhật sạch\n\n🚀 Project Builder\n• Hiển thị kết quả từng project realtime (không cần đợi hoàn tất toàn bộ)\n• Cải thiện giao diện sidebar rõ ràng, dễ thao tác hơn\n• Parsed Projects panel hiển thị chi tiết file đã tạo\n• Áp dụng cài đặt mặc định chính xác cho các tab tạo video/ảnh\n\n🔌 Extension & Kết nối\n• Đảm bảo kết nối extension ổn định, tự phục hồi khi mất liên lạc\n• Cải thiện logic chờ extension sau khi khởi động browser\n\n✨ Enhancer & Fix Prompt\n• Tăng cường logic xử lý Enhancer/Fix prompt chính xác hơn\n• Đa ngôn ngữ hóa giao diện Pipeline Enhancer\n• Cải thiện trải nghiệm workflow cho người dùng\n\n⚙️ Settings & Giao diện\n• Gộp phần Output Settings vào giao diện chính, tiện hơn\n• Hiển thị đầy đủ text thay vì thu gọn\n• Tuỳ chọn tên file xuất lưu chính xác sau khi khởi động lại\n• Cài đặt vùng giọng mặc định hoạt động đúng\n\n🔄 Cập nhật tự động\n• Cập nhật sạch: xóa hoàn toàn bản cũ trước khi cài mới, tránh lỗi do file cũ xung đột\n\n🔒 Bảo mật\n• Tăng cường bảo mật dữ liệu người dùng",
-    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.1/VEO_Pro_Max_v2.3.1.zip",
-    "sha256": "03a64b6dc16074b8d9519c37abd962037ca2f48a9a4a0ce6cd4284949dad4714",
+    "changelog": "v2.3.2 — Sửa lỗi Auto-Sweep + Cải thiện Upscale\n\n🔧 Auto-Sweep\n• Sửa lỗi auto-sweep không xử lý được video upscale bị kẹt\n• Video có trạng thái \"pending\" sau khi restart app giờ được tự động xử lý lại\n• Đảm bảo 100% video hoàn thành upscale sau mỗi lần chạy\n\n📥 Download\n• Bật mặc định tính năng Download Non-Watermark\n\n🔌 Extension & Kết nối\n• Nâng cấp thuật toán giải reCAPTCHA\n\n🔒 Bảo mật\n• Tăng cường bảo mật ứng dụng",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.2/VEO_Pro_Max_v2.3.2.zip",
+    "sha256": "c7729eff03241c59c847b1dd4ba3caee459ceb2cd46ef719a0c9b909d89d82ea",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1773203265,
-    "build_time": "2026-03-11T11:27:45.300950"
+    "build_number": 1773206950,
+    "build_time": "2026-03-11T12:29:10.115798"
 }
