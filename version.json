@@ -1,11 +1,11 @@
 {
     "version": "2.3.1",
-    "release_date": "2026-03-10",
+    "release_date": "2026-03-11",
     "changelog": "v2.3.1 — Tăng cường tính năng + Cập nhật sạch\n\n🚀 Project Builder\n• Hiển thị kết quả từng project realtime (không cần đợi hoàn tất toàn bộ)\n• Cải thiện giao diện sidebar rõ ràng, dễ thao tác hơn\n• Parsed Projects panel hiển thị chi tiết file đã tạo\n• Áp dụng cài đặt mặc định chính xác cho các tab tạo video/ảnh\n\n🔌 Extension & Kết nối\n• Đảm bảo kết nối extension ổn định, tự phục hồi khi mất liên lạc\n• Cải thiện logic chờ extension sau khi khởi động browser\n\n✨ Enhancer & Fix Prompt\n• Tăng cường logic xử lý Enhancer/Fix prompt chính xác hơn\n• Đa ngôn ngữ hóa giao diện Pipeline Enhancer\n• Cải thiện trải nghiệm workflow cho người dùng\n\n⚙️ Settings & Giao diện\n• Gộp phần Output Settings vào giao diện chính, tiện hơn\n• Hiển thị đầy đủ text thay vì thu gọn\n• Tuỳ chọn tên file xuất lưu chính xác sau khi khởi động lại\n• Cài đặt vùng giọng mặc định hoạt động đúng\n\n🔄 Cập nhật tự động\n• Cập nhật sạch: xóa hoàn toàn bản cũ trước khi cài mới, tránh lỗi do file cũ xung đột\n\n🔒 Bảo mật\n• Tăng cường bảo mật dữ liệu người dùng",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.1/VEO_Pro_Max_v2.3.1.zip",
-    "sha256": "b52288a0e60c48ae9072c97a88ec774abca294b0d2e34025e1b23743a8e16257",
+    "sha256": "03a64b6dc16074b8d9519c37abd962037ca2f48a9a4a0ce6cd4284949dad4714",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1773155361,
-    "build_time": "2026-03-10T22:09:21.285482"
+    "build_number": 1773203265,
+    "build_time": "2026-03-11T11:27:45.300950"
 }

@@ -76,7 +76,8 @@
             "include_timestamp": "Include timestamp in filename",
             "include_quality": "Include quality in filename",
             "auto_start_queue": "Auto-start queue when adding",
-            "pause_on_error": "Pause on error"
+            "pause_on_error": "Pause on error",
+            "download_non_watermark": "Download Non-Watermark"
         },
         "notification_sub": {
             "in_app_toast": "In-App Toast:",

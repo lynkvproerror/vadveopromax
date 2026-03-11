@@ -76,7 +76,8 @@
             "include_timestamp": "Đính kèm thời gian vào tên file",
             "include_quality": "Đính kèm chất lượng vào tên file",
             "auto_start_queue": "Tự động bắt đầu hàng đợi khi thêm",
-            "pause_on_error": "Tạm dừng khi lỗi"
+            "pause_on_error": "Tạm dừng khi lỗi",
+            "download_non_watermark": "Download Non-Watermark"
         },
         "notification_sub": {
             "in_app_toast": "Thông báo ứng dụng:",
