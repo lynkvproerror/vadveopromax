@@ -8081,8 +8081,16 @@ class Engine:
                 valid_count = sum(1 for m in rebuilt if m)
                 log.info(f"Re-upscale {task_id}: rebuilt media_ids from video_outputs ({valid_count}/{len(rebuilt)} valid)")
         
-        if not task.upscale_media_ids:
-            log.warning(f"Re-upscale {task_id}: no media_ids (video_outputs also empty)")
+        # Diagnostic: log upscale_media_ids state for debugging
+        if task.upscale_media_ids:
+            _diag = [(i, bool(mid)) for i, mid in enumerate(task.upscale_media_ids)]
+            log.info(f"Re-upscale {task_id}: upscale_media_ids state = {_diag}")
+        if task.video_outputs:
+            _vo_diag = [(vo.index, vo.quality, vo.upscale_status, bool(vo.media_id), bool(vo.file_upscaled)) for vo in task.video_outputs]
+            log.info(f"Re-upscale {task_id}: video_outputs state = {_vo_diag}")
+        
+        if not task.upscale_media_ids and not any(vo.media_id for vo in (task.video_outputs or [])):
+            log.warning(f"Re-upscale {task_id}: no media_ids (upscale_media_ids and video_outputs both empty)")
             return False
         
         # Determine which videos need re-upscale
@@ -8094,9 +8102,9 @@ class Engine:
                     if (
                         vo.upscale_status in ("failed", "skipped", "", "pending")
                         and not vo.file_upscaled
-                        and vo.quality not in ("1080p", "4K", "2K")
                     )
                 ]
+                log.info(f"Re-upscale {task_id}: failed_indices = {failed_indices}")
             else:
                 for vo in task.video_outputs:
                     vo.upscale_status = ""
@@ -8112,10 +8120,20 @@ class Engine:
         
         # Build UpscaleJob with retry_indices pointing to specific videos
         from core.upscale_queue import UpscaleJob
-        media_ids = [
-            task.upscale_media_ids[i] if i < len(task.upscale_media_ids) else ""
-            for i in failed_indices
-        ]
+        media_ids = []
+        for i in failed_indices:
+            mid = ""
+            # Primary: from upscale_media_ids
+            if task.upscale_media_ids and i < len(task.upscale_media_ids):
+                mid = task.upscale_media_ids[i] or ""
+            # Fallback: from video_outputs[i].media_id
+            if not mid and task.video_outputs and i < len(task.video_outputs):
+                mid = task.video_outputs[i].media_id or ""
+                if mid:
+                    log.info(f"Re-upscale {task_id}: V{i} using fallback media_id from video_outputs")
+            media_ids.append(mid)
+        
+        log.info(f"Re-upscale {task_id}: media_ids validity = {[(i, bool(m)) for i, m in zip(failed_indices, media_ids)]}")
         
         job = UpscaleJob(
             task_id=task_id,
