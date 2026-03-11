@@ -3,9 +3,9 @@
     "release_date": "2026-03-11",
     "changelog": "v2.3.2 — Sửa lỗi Auto-Sweep + Cải thiện Upscale\n\n🔧 Auto-Sweep\n• Sửa lỗi auto-sweep không xử lý được video upscale bị kẹt\n• Video có trạng thái \"pending\" sau khi restart app giờ được tự động xử lý lại\n• Đảm bảo 100% video hoàn thành upscale sau mỗi lần chạy\n\n📥 Download\n• Bật mặc định tính năng Download Non-Watermark\n\n🔌 Extension & Kết nối\n• Nâng cấp thuật toán giải reCAPTCHA\n\n🔒 Bảo mật\n• Tăng cường bảo mật ứng dụng",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.2/VEO_Pro_Max_v2.3.2.zip",
-    "sha256": "c7729eff03241c59c847b1dd4ba3caee459ceb2cd46ef719a0c9b909d89d82ea",
+    "sha256": "91f5d9ae280a5e0fb7b042496190a20319f7272b6596d6f776048126c3b69596",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1773206950,
-    "build_time": "2026-03-11T12:29:10.115798"
+    "build_number": 1773222160,
+    "build_time": "2026-03-11T16:42:40.194227"
 }
