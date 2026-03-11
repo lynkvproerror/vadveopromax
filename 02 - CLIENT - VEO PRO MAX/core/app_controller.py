@@ -277,13 +277,27 @@ class AppController:
         except ImportError:
             pass  # Module not available — dev environment
         
-        # Anti-tamper runtime guards (6 layers: monkey-patch, extraction, process, proxy, VM, sandbox)
+        # Anti-tamper runtime guards (7 layers: monkey-patch, extraction, debugger, process, proxy, VM, sandbox)
+        self._tamper_detected = False
         try:
             from security.anti_tamper import register_critical_modules, run_all_guards
             register_critical_modules()
             guards = run_all_guards()
             if not guards['passed']:
-                log.critical(f"[Security] ❌ Anti-tamper guards FAILED: {guards['failures']}")
+                log.critical(f"[Security] ❌ Anti-tamper CRITICAL guards FAILED: {guards['failures']}")
+                self._tamper_detected = True
+                self._license_valid = False  # Soft-block: disable premium features
+                # Propagate tamper flag to PermissionsSystem
+                if hasattr(self, '_permissions') and self._permissions:
+                    self._permissions._tamper_detected = True
+                # Invalidate cached license to force TRIAL limitations
+                try:
+                    self._license_client.storage.clear()
+                    self._license_client._invalidate_validate_cache()
+                except Exception:
+                    pass
+            if guards.get('warnings'):
+                log.warning(f"[Security] ⚠️ Anti-tamper warnings: {guards['warnings']}")
         except ImportError:
             pass
         

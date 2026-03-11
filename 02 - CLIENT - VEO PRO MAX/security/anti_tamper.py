@@ -310,6 +310,80 @@ class SandboxDetector:
 
 
 # ============================================================
+# GUARD 7: Debugger / Reverse Engineering Detector
+# ============================================================
+
+class DebuggerDetector:
+    """Detect debuggers and reverse engineering tools."""
+
+    # Known RE tool process names (lowercase)
+    RE_TOOLS = {
+        "x64dbg.exe", "x32dbg.exe", "ollydbg.exe",
+        "ida.exe", "ida64.exe", "idag.exe", "idag64.exe",
+        "ghidra.exe", "ghidrarun.exe",
+        "windbg.exe", "ntsd.exe", "cdb.exe",
+        "dnspy.exe", "de4dot.exe", "ilspy.exe",
+        "fiddler.exe", "wireshark.exe",
+        "processhacker.exe", "procmon.exe", "procmon64.exe",
+        "httpdebuggerpro.exe", "httpdebuggerui.exe",
+        "cheatengine-x86_64.exe", "cheatengine.exe",
+        "hxd.exe",  # hex editor
+    }
+
+    @staticmethod
+    def check() -> dict:
+        """
+        Returns:
+            {'safe': bool, 'flags': list[str]}
+        """
+        flags = []
+
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+
+            # Check 1: IsDebuggerPresent (user-mode debugger)
+            if kernel32.IsDebuggerPresent():
+                flags.append("debugger_attached")
+
+            # Check 2: CheckRemoteDebuggerPresent (remote/kernel debugger)
+            is_remote = ctypes.c_int(0)
+            kernel32.CheckRemoteDebuggerPresent(
+                kernel32.GetCurrentProcess(),
+                ctypes.byref(is_remote)
+            )
+            if is_remote.value:
+                flags.append("remote_debugger")
+
+        except Exception:
+            pass
+
+        # Check 3: Scan for RE tool processes (only in production)
+        if getattr(sys, 'frozen', False):
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['wmic', 'process', 'get', 'Name'],
+                    capture_output=True, text=True, timeout=5
+                )
+                running = {
+                    l.strip().lower()
+                    for l in result.stdout.split('\n')
+                    if l.strip()
+                }
+                detected = running & DebuggerDetector.RE_TOOLS
+                if detected:
+                    flags.extend(f"re_tool_{p}" for p in detected)
+            except Exception:
+                pass
+
+        return {
+            'safe': len(flags) == 0,
+            'flags': flags,
+        }
+
+
+# ============================================================
 # ORCHESTRATOR
 # ============================================================
 
@@ -362,30 +436,38 @@ def run_all_guards(production_mode: bool = False) -> dict:
     is_frozen = getattr(sys, 'frozen', False)
     effective_production = production_mode or is_frozen
 
+    # severity: 'critical' → hard-block, 'warning' → log only
     guards = [
-        ("anti_monkey_patch", lambda: {
+        ("anti_monkey_patch", "critical", lambda: {
             'safe': len(AntiMonkeyPatch.verify()) == 0,
             'flags': AntiMonkeyPatch.verify(),
         }),
-        ("anti_extraction", AntiExtraction.check),
-        ("process_verifier", ProcessVerifier.check),
-        ("proxy_detector", ProxyDetector.check),
-        ("vm_snapshot", VMSnapshotDetector.check),
-        ("sandbox_detector", SandboxDetector.check),
+        ("anti_extraction", "critical", AntiExtraction.check),
+        ("debugger_detector", "critical", DebuggerDetector.check),
+        ("process_verifier", "warning", ProcessVerifier.check),
+        ("proxy_detector", "warning", ProxyDetector.check),
+        ("vm_snapshot", "warning", VMSnapshotDetector.check),
+        ("sandbox_detector", "warning", SandboxDetector.check),
     ]
 
-    for name, check_fn in guards:
+    for name, severity, check_fn in guards:
         result['total_guards'] += 1
         try:
             guard_result = check_fn()
+            guard_result['severity'] = severity
             result['details'][name] = guard_result
 
             if not guard_result.get('safe', True):
                 flags = guard_result.get('flags', [])
                 if effective_production:
-                    result['passed'] = False
-                    result['failures'].extend([f"{name}:{f}" for f in flags])
-                    log.warning(f"[AntiTamper] ⚠️ {name} FAILED: {flags}")
+                    if severity == 'critical':
+                        result['passed'] = False
+                        result['failures'].extend([f"{name}:{f}" for f in flags])
+                        log.warning(f"[AntiTamper] 🔴 {name} CRITICAL: {flags}")
+                    else:
+                        result['warnings'] = result.get('warnings', [])
+                        result['warnings'].extend([f"{name}:{f}" for f in flags])
+                        log.warning(f"[AntiTamper] ⚠️ {name} WARNING: {flags}")
                 else:
                     log.debug(f"[AntiTamper] {name} flagged (dev mode, ignored): {flags}")
         except Exception as e:

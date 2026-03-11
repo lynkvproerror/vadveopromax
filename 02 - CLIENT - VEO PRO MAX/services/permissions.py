@@ -142,6 +142,7 @@ class PermissionsSystem:
     def __init__(self, default_role: Role = Role.TRIAL):
         self._current_role = default_role
         self._custom_features: Set[Feature] = set()
+        self._tamper_detected = False  # Set by AppController when anti-tamper guards fail
     
     @property
     def role(self) -> Role:
@@ -149,6 +150,8 @@ class PermissionsSystem:
     
     @property
     def limits(self) -> RoleLimits:
+        if self._tamper_detected:
+            return self.ROLE_LIMITS[Role.TRIAL]
         return self.ROLE_LIMITS.get(self._current_role, self.ROLE_LIMITS[Role.TRIAL])
     
     def is_trial(self) -> bool:
@@ -165,6 +168,9 @@ class PermissionsSystem:
     
     def set_role(self, role: Role):
         """Set current role."""
+        if self._tamper_detected:
+            self._current_role = Role.TRIAL  # Ignore role changes when tampered
+            return
         self._current_role = role
     
     def set_role_from_tier(self, tier: LicenseTier):
@@ -180,6 +186,9 @@ class PermissionsSystem:
     
     def has_feature(self, feature: Feature) -> bool:
         """Check if current role has a feature."""
+        if self._tamper_detected:
+            # Tamper detected: only allow TRIAL features
+            return feature in self.ROLE_LIMITS[Role.TRIAL].features
         if feature in self._custom_features:
             return True
         return feature in self.limits.features
