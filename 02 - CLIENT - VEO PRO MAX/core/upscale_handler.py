@@ -60,7 +60,7 @@ class UpscaleHandler:
         self,
         access_token: str,
         recaptcha_token: str,
-        video_uri: str,
+        video_media_id: str,
         target_resolution: str = "1080p",
     ) -> UpscaleResult:
         """Upscale a video and wait for completion.
@@ -68,7 +68,7 @@ class UpscaleHandler:
         Args:
             access_token: Bearer token
             recaptcha_token: reCAPTCHA token
-            video_uri: URI of video to upscale
+            video_media_id: Media ID (metadata.name) of video to upscale
             target_resolution: Target resolution (1080p, 4K)
         
         Returns:
@@ -76,12 +76,19 @@ class UpscaleHandler:
         """
         start_time = datetime.now()
         
+        # Map string resolution to API enum
+        resolution_map = {
+            "1080p": "VIDEO_RESOLUTION_1080P",
+            "4K": "VIDEO_RESOLUTION_4K",
+        }
+        api_resolution = resolution_map.get(target_resolution, "VIDEO_RESOLUTION_1080P")
+        
         # Start upscale
         response = await self._api_client.upscale_video(
             access_token=access_token,
             recaptcha_token=recaptcha_token,
-            video_uri=video_uri,
-            target_resolution=target_resolution,
+            video_media_id=video_media_id,
+            target_resolution=api_resolution,
         )
         
         if not response.success:

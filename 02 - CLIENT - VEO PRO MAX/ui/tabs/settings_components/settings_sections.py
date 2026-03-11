@@ -163,17 +163,15 @@ class SettingsSectionsMixin:
         _qs = getattr(_s, 'include_quality', True) if _s else True
         _as = getattr(_s, 'auto_start_queue', False) if _s else False
         _ps = getattr(_s, 'pause_on_error', True) if _s else True
+        _nw = getattr(_s, 'download_non_watermark', False) if _s else False
 
         toggles = [
             (t("settings.output_toggles.include_timestamp"), _ts),
             (t("settings.output_toggles.include_quality"), _qs),
             (t("settings.output_toggles.auto_start_queue"), _as),
             (t("settings.output_toggles.pause_on_error"), _ps),
+            (t("settings.output_toggles.download_non_watermark"), _nw),
         ]
-
-        opts_label = QLabel(t("settings.output_toggles.filename_options"))
-        opts_label.setStyleSheet(f"color: {Theme.BLUE}; font-weight: bold; padding-top: 6px;")
-        layout.addWidget(opts_label)
 
         self.output_toggles = {}
         for label, default in toggles:
@@ -256,18 +254,15 @@ class SettingsSectionsMixin:
         _qs = getattr(_s, 'include_quality', True) if _s else True
         _as = getattr(_s, 'auto_start_queue', False) if _s else False
         _ps = getattr(_s, 'pause_on_error', True) if _s else True
+        _nw = getattr(_s, 'download_non_watermark', False) if _s else False
 
         toggles = [
             (t("settings.output_toggles.include_timestamp"), _ts),
             (t("settings.output_toggles.include_quality"), _qs),
             (t("settings.output_toggles.auto_start_queue"), _as),
             (t("settings.output_toggles.pause_on_error"), _ps),
+            (t("settings.output_toggles.download_non_watermark"), _nw),
         ]
-
-        # Filename & behavior options — grouped under sub-label
-        opts_label = QLabel(t("settings.output_toggles.filename_options"))
-        opts_label.setStyleSheet(f"color: {Theme.BLUE}; font-weight: bold; padding-top: 6px;")
-        layout.addWidget(opts_label)
 
         self.output_toggles = {}
         for label, default in toggles:
@@ -301,7 +296,7 @@ class SettingsSectionsMixin:
             settings.output_folder = self.output_folder_entry.text()
             # Map toggles by position (language-independent) — order matches creation:
             # [0] include_timestamp, [1] include_quality, [2] auto_start_queue, [3] pause_on_error
-            attr_map = ['include_timestamp', 'include_quality', 'auto_start_queue', 'pause_on_error']
+            attr_map = ['include_timestamp', 'include_quality', 'auto_start_queue', 'pause_on_error', 'download_non_watermark']
             for idx, (key, toggle) in enumerate(self.output_toggles.items()):
                 if idx < len(attr_map):
                     setattr(settings, attr_map[idx], toggle.isChecked())
@@ -1015,13 +1010,33 @@ class SettingsSectionsMixin:
         return self._updater
 
     def _save_update_settings(self, *args):
-        """Persist auto-update toggle."""
+        """Persist auto-update toggle and start/stop periodic checker."""
         if getattr(self, '_initializing', False):
             return
         from config.settings import get_settings, save_settings
         settings = get_settings()
-        settings.auto_update_enabled = self.auto_update_toggle.isToggled()
+        enabled = self.auto_update_toggle.isToggled()
+        settings.auto_update_enabled = enabled
         save_settings()
+
+        # Control the app-level periodic checker
+        main_window = self.window()
+        if hasattr(main_window, '_auto_updater'):
+            if enabled:
+                if main_window._auto_updater is None:
+                    try:
+                        from core.auto_updater import AutoUpdater
+                        main_window._auto_updater = AutoUpdater(main_window)
+                        main_window._auto_updater.update_available.connect(
+                            main_window._on_update_available
+                        )
+                    except Exception:
+                        pass
+                if main_window._auto_updater:
+                    main_window._auto_updater.start_periodic_check()
+            else:
+                if main_window._auto_updater:
+                    main_window._auto_updater.stop_periodic_check()
 
     def _on_check_update(self):
         """Manual check for updates."""

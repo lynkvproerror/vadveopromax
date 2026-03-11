@@ -61,6 +61,8 @@ class PromptRow:
     start_frame: Optional[str] = None
     end_frame: Optional[str] = None
     image_tags: List[str] = field(default_factory=list)  # Extracted [tag] references
+    duration: Optional[int] = None                       # Per-scene duration (from JSON)
+    metadata: dict = field(default_factory=dict)          # Extra fields (description_vi, narration_vi)
     
     @property
     def is_continuation(self) -> bool:

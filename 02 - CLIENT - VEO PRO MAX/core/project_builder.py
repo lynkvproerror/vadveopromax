@@ -234,6 +234,7 @@ class ContextManager:
         rules_text: str,
         previous_output: str = "",
         matrix_config: Optional[Dict] = None,
+        prompt_format: str = "text",
     ) -> str:
         """Build system prompt for a processing step.
 
@@ -343,6 +344,26 @@ class ContextManager:
                 "SUFFIX: no text, no subtitles, no labels, no watermarks\n\n"
                 "Use TEXT descriptions ONLY (NO HEX colors in prompts)."
             ),
+            "Prompts_json": (
+                f"Generate VEO video prompts for topic: \"{topic}\"\n\n"
+                "OUTPUT FORMAT: JSON ARRAY\n"
+                "Output ONLY a valid JSON array. Each element must have:\n"
+                '{"scene_number": N, "duration": "8s", '
+                '"prompt_en": "full VEO prompt in English", '
+                '"description_vi": "mô tả tiếng Việt", '
+                '"narration_vi": "lời thuyết minh tiếng Việt"}\n\n'
+                "RULES:\n"
+                "- 10-12 scenes preferred\n"
+                "- prompt_en must be the FULL VEO video prompt\n"
+                "- description_vi: brief scene description in Vietnamese\n"
+                "- narration_vi: voiceover narration in Vietnamese\n"
+                "- duration: '5s' or '8s'\n"
+                "- Output ONLY the JSON array, no markdown fences, no explanation\n\n"
+                "NEGATIVE PROMPTS — append to EVERY prompt_en:\n"
+                "no deformed limbs, no mutated faces, no extra fingers, "
+                "no melting geometry, no color shifts, no texture distortion\n"
+                "SUFFIX: no text, no subtitles, no labels, no watermarks"
+            ),
             "Fix": (
                 "The following prompts were BLOCKED by safety filters.\n"
                 "Rewrite them to convey the same visual concept without any "
@@ -360,7 +381,12 @@ class ContextManager:
             ),
         }
 
-        return system, instructions.get(step, f"Process: {topic}")
+        # For Prompts step, select text or JSON variant
+        step_key = step
+        if step == "Prompts" and prompt_format == "json":
+            step_key = "Prompts_json"
+
+        return system, instructions.get(step_key, instructions.get(step, f"Process: {topic}"))
 
     def _extract_phase(self, full_workflow: str, phase_key: str) -> str:
         """Extract a specific phase section + compliance checklist from workflow."""
@@ -429,6 +455,7 @@ class ProjectBuilder:
         skip_seo: bool = False,
         matrix_config: Optional[Dict] = None,
         model: str = "",
+        prompt_format: str = "text",
     ) -> TopicResult:
         """Process a single topic through the full pipeline.
 
@@ -504,6 +531,7 @@ class ProjectBuilder:
                 "Prompts", topic, template.body, rules_text,
                 previous_output=bible,
                 matrix_config=matrix_config,
+                prompt_format=prompt_format,
             )
             raw_prompts = await self._safe_generate(
                 prompt=user_prompt,
@@ -513,7 +541,8 @@ class ProjectBuilder:
                 temperature=step_cfg["temperature"],
                 model=self._model,
             )
-            result.prompts = self._parse_prompts(raw_prompts, template)
+            result.prompts = self._parse_prompts(raw_prompts, template,
+                                                  prompt_format=prompt_format)
             result.steps_completed = 3
 
             # ── Step 3b: Validate & Auto-Fix ──
@@ -540,7 +569,8 @@ class ProjectBuilder:
                     temperature=fix_cfg["temperature"],
                     model=self._model,
                 )
-                fixed_prompts = self._parse_prompts(fixed_raw, template)
+                fixed_prompts = self._parse_prompts(fixed_raw, template,
+                                                  prompt_format=prompt_format)
                 # Merge fixed prompts back (replace violated ones)
                 fixed_map = {p.index: p for p in fixed_prompts}
                 for p in result.prompts:
@@ -576,10 +606,25 @@ class ProjectBuilder:
             result.files = {
                 "Bible":   result.bible,
                 "Master":  result.master,
-                "Prompts": "\n".join(f"{p.index}. {p.prompt}" for p in result.prompts),
                 "Dubbing": result.dubbing,
                 "SEO":     result.seo,
             }
+
+            # ── Step 5: Format prompts for files dict ──
+            if prompt_format == "json":
+                # JSON output: full structured data
+                json_prompts = []
+                for p in result.prompts:
+                    try:
+                        scene = json.loads(p.prompt)
+                        json_prompts.append(scene)
+                    except (json.JSONDecodeError, ValueError):
+                        json_prompts.append({"scene_number": p.index, "prompt_en": p.prompt})
+                result.files["Prompts"] = json.dumps(json_prompts, ensure_ascii=False, indent=2)
+            else:
+                result.files["Prompts"] = "\n".join(
+                    f"{p.index}. {p.prompt}" for p in result.prompts
+                )
 
             # Save to history
             self.dedup.save_to_history(topic, template.template_id, output_dir)
@@ -609,6 +654,7 @@ class ProjectBuilder:
         skip_seo: bool = False,
         model: str = "",
         matrix_config: Optional[Dict] = None,
+        prompt_format: str = "text",
     ) -> List[TopicResult]:
         """Process multiple topics sequentially with fresh context per topic."""
         results = []
@@ -649,6 +695,7 @@ class ProjectBuilder:
                 topic, template, api_key, output_dir, skip_seo,
                 model=model,
                 matrix_config=matrix_config,
+                prompt_format=prompt_format,
             )
             results.append(result)
 
@@ -670,8 +717,16 @@ class ProjectBuilder:
 
     # ── Prompt Parsing & Post-processing ───────────────────────
 
-    def _parse_prompts(self, raw: str, template) -> List[PromptRow]:
+    def _parse_prompts(self, raw: str, template,
+                        prompt_format: str = "text") -> List[PromptRow]:
         """Parse raw text into PromptRow list with post-processing."""
+        # JSON format: try parsing as JSON array first
+        if prompt_format == "json":
+            parsed = self._try_parse_json_prompts(raw, template)
+            if parsed:
+                return parsed
+            log.warning("[Builder] JSON parse failed, falling back to text mode")
+
         lines = raw.strip().split("\n")
         prompts = []
         idx = 0
@@ -713,6 +768,40 @@ class ProjectBuilder:
             prompts.append(row)
 
         return prompts
+
+    def _try_parse_json_prompts(self, raw: str, template) -> Optional[List[PromptRow]]:
+        """Try parsing AI output as JSON array into PromptRow list."""
+        try:
+            # Strip markdown fences if AI wrapped in ```json ... ```
+            text = raw.strip()
+            if text.startswith('```'):
+                text = re.sub(r'^```(?:json)?\s*', '', text)
+                text = re.sub(r'```\s*$', '', text)
+                text = text.strip()
+
+            data = json.loads(text)
+            if not isinstance(data, list):
+                return None
+
+            prompts = []
+            for i, item in enumerate(data):
+                if not isinstance(item, dict):
+                    continue
+                # Store the full JSON object as the prompt text
+                prompt_text = json.dumps(item, ensure_ascii=False)
+                row = PromptRow(
+                    index=item.get('scene_number', i + 1),
+                    prompt=prompt_text,
+                    scene_description=item.get('description_vi', ''),
+                )
+                prompts.append(row)
+
+            if prompts:
+                log.info(f"[Builder] Parsed {len(prompts)} JSON prompts")
+                return prompts
+        except (json.JSONDecodeError, ValueError) as e:
+            log.debug(f"[Builder] JSON parse error: {e}")
+        return None
 
     def _validate_prompts(self, prompts: List[PromptRow]) -> None:
         """Validate prompts against sensitive words (Fix 3).
@@ -768,16 +857,20 @@ class ProjectBuilder:
             lines.append("")
         return "\n".join(lines)
 
-    def _save_outputs(self, result: TopicResult, output_dir: str) -> None:
+    def _save_outputs(self, result: TopicResult, output_dir: str,
+                       prompt_format: str = "text") -> None:
         """Save generated content to output files."""
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
+
+        # Determine prompts filename based on format
+        prompts_filename = "Prompts.json" if prompt_format == "json" else "Prompts.txt"
 
         # Write all files from the files dict
         file_map = {
             "Bible":   ("Bible.md",   result.bible),
             "Master":  ("Master.txt", result.master),
-            "Prompts": ("Prompts.txt", result.files.get("Prompts", "")),
+            "Prompts": (prompts_filename, result.files.get("Prompts", "")),
             "Dubbing": ("Dubbing.txt", result.dubbing),
             "SEO":     ("SEO.txt",    result.seo),
         }

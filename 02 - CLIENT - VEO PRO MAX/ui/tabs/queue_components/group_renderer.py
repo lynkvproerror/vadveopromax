@@ -655,7 +655,18 @@ class QueueGroupMixin:
         folder_input.setText(group_data.get('output_folder', ''))
         folder_row.addWidget(folder_input)
         browse_btn = QPushButton("📂")
-        browse_btn.setFixedSize(36, 28)
+        browse_btn.setFixedSize(40, 34)
+        browse_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Theme.SURFACE2}; color: {Theme.TEXT};
+                border: 1px solid {Theme.SURFACE2}; border-radius: 6px;
+                font-size: 16px; padding: 0px;
+            }}
+            QPushButton:hover {{
+                background-color: {Theme.BLUE}; border-color: {Theme.BLUE};
+            }}
+        """)
+        browse_btn.setToolTip("Browse output folder")
         browse_btn.clicked.connect(
             lambda: folder_input.setText(QFileDialog.getExistingDirectory(dialog, "Select Output Folder") or folder_input.text())
         )

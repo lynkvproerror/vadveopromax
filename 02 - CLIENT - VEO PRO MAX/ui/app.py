@@ -401,8 +401,6 @@ class MainWindow(QMainWindow):
             queue_tab = self.tab_instances['queue']
             if hasattr(queue_tab, 'start_all'):
                 queue_tab.start_all.connect(self.controller.start_processing)
-            if hasattr(queue_tab, 'pause_all'):
-                queue_tab.pause_all.connect(self.controller.stop_processing)
             if hasattr(queue_tab, 'stop_all'):
                 queue_tab.stop_all.connect(self.controller.stop_processing)
         

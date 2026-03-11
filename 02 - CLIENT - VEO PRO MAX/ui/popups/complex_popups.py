@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QFrame, QTextEdit, QLineEdit, QScrollArea, QGridLayout,
-    QFileDialog
+    QFileDialog, QComboBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -76,7 +76,21 @@ class EditPromptPopup(BasePopup):
         
         self.footer_layout.addStretch()
         
-        # Gemini AI buttons (left side)
+        # Prompt format toggle
+        self._format_combo = QComboBox()
+        self._format_combo.addItems(["Text", "JSON"])
+        self._format_combo.setFixedWidth(70)
+        self._format_combo.setStyleSheet(
+            f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
+            f"border: 1px solid {Theme.BORDER}; border-radius: 4px; padding: 2px 4px;"
+        )
+        self._format_combo.setToolTip("Output format: Text (plain) or JSON ({...})")
+        # Auto-detect: if prompt starts with {, select JSON
+        if self.prompt_text.strip().startswith('{'):
+            self._format_combo.setCurrentIndex(1)
+        self.footer_layout.addWidget(self._format_combo)
+
+        # Gemini AI buttons
         self.enhance_btn = QPushButton("✨ Enhance")
         self.enhance_btn.setStyleSheet(
             f"background-color: {Theme.PURPLE}; color: #1e1e2e; font-weight: bold;"
@@ -152,13 +166,14 @@ class EditPromptPopup(BasePopup):
         self._ai_status.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 11px;")
         
         import threading
+        output_format = "json" if self._format_combo.currentText() == "JSON" else "text"
         threading.Thread(
             target=self._gemini_worker,
-            args=(prompt, mode),
+            args=(prompt, mode, output_format),
             daemon=True,
         ).start()
     
-    def _gemini_worker(self, prompt: str, mode: str):
+    def _gemini_worker(self, prompt: str, mode: str, output_format: str = "text"):
         """Background worker: call Gemini API."""
         import asyncio
         result = None
@@ -171,8 +186,19 @@ class EditPromptPopup(BasePopup):
             mgr = GeminiKeyManager()
             enhancer = PromptEnhancer()
             
-            # Find any available key
+            # Find any available key (auto-provisioned per-account)
             api_key = mgr.get_rotation_key()
+            
+            # ★ Fallback: custom key from Settings (same as engine.py L808-816)
+            if not api_key:
+                try:
+                    from services.ai_client_factory import get_ai_config
+                    cfg = get_ai_config()
+                    if cfg.get("api_key"):
+                        api_key = cfg["api_key"]
+                except Exception:
+                    pass
+            
             if not api_key:
                 error = "No Gemini API key available"
             else:
@@ -180,7 +206,8 @@ class EditPromptPopup(BasePopup):
                 try:
                     if mode == "enhance":
                         result = loop.run_until_complete(
-                            enhancer.enhance(prompt, api_key)
+                            enhancer.enhance(prompt, api_key,
+                                             output_format=output_format)
                         )
                     elif mode == "fix":
                         result = loop.run_until_complete(
@@ -188,6 +215,7 @@ class EditPromptPopup(BasePopup):
                                 prompt,
                                 "Preemptive cleanup — replace only words that may trigger Google content policy while keeping everything else exactly the same",
                                 api_key,
+                                output_format=output_format,
                             )
                         )
                 finally:

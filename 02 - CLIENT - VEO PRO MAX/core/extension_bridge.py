@@ -135,6 +135,11 @@ class ExtensionBridge:
         self._last_health_log: float = 0  # timestamp of last health summary log
         self._HEALTH_LOG_INTERVAL = 60  # Log health summary every 60s
 
+        # ── Fix B: Request dedup for check_recaptcha_ready ──
+        # Prevents N foremen × M checks = N*M concurrent WebSocket requests
+        self._check_ready_inflight: Dict[str, asyncio.Task] = {}  # email → running Task
+        self._check_ready_cache: Dict[str, tuple] = {}  # email → (result: bool, timestamp)
+
         # Callbacks (set by AccountManager/AppController)
         self.on_headers_update: Optional[Callable] = None    # (email, headers, access_token)
         self.on_extension_connect: Optional[Callable] = None  # (email)
@@ -175,6 +180,35 @@ class ExtensionBridge:
         """Get number of consecutive reCAPTCHA short-token failures."""
         return self._short_token_counts.get(email, 0)
     
+    def is_submit_ready(self, email: str) -> tuple:
+        """Instant real-time readiness check. No WebSocket call.
+        
+        Uses cached data from content heartbeats + header auto-push.
+        Returns (ready: bool, reason: str).
+        
+        Checks:
+        1. Extension connected (WebSocket alive)
+        2. x-client-data ≥ MIN_VALID_XCD (Chrome Variations ready)
+        3. reCAPTCHA warm (content heartbeat reports ready)
+        """
+        from config.constants import MIN_VALID_XCD
+        
+        # Check 1: Extension connected?
+        if not self.is_connected(email):
+            return (False, "extension_disconnected")
+        
+        # Check 2: x-client-data ≥ 50?
+        headers = self.get_cached_headers(email, max_age_seconds=0)  # any age OK
+        xcd = (headers or {}).get('x-client-data', '') or ''
+        if len(xcd) < MIN_VALID_XCD:
+            return (False, f"xcd_short ({len(xcd)} chars)")
+        
+        # Check 3: reCAPTCHA warm? (from content heartbeat)
+        if not self._recaptcha_readiness.get(email, False):
+            return (False, "recaptcha_cold")
+        
+        return (True, "ok")
+    
     async def trigger_hard_navigation(self, email: str) -> bool:
         """Force navigate tab to VEO URL — nuclear recovery for stuck reCAPTCHA.
         
@@ -184,7 +218,7 @@ class ExtensionBridge:
         
         Returns True if navigation succeeded.
         """
-        VEO_URL = "https://labs.google.com/fx/tools/video-fx"
+        VEO_URL = "https://labs.google/fx/vi/tools/flow"
         log.warning(
             f"[ExtensionBridge] 🔄 Hard navigation for {email} → {VEO_URL} "
             f"(reCAPTCHA recovery)"
@@ -1158,17 +1192,41 @@ class ExtensionBridge:
     async def check_recaptcha_ready(self, email: str, timeout: float = 10.0) -> bool:
         """Layer 1: Ask Extension if grecaptcha is ready on the VEO page.
         
-        Extension checks:
-        - typeof grecaptcha !== 'undefined'
-        - grecaptcha.execute is a function
-        - page is fully loaded (document.readyState === 'complete')
-        
-        This is deterministic — we get a real answer from the page
-        instead of waiting a fixed timeout.
-        
-        Returns:
-            True if grecaptcha is ready, False if not ready or timeout.
+        Deduplicated: concurrent calls for same email share one WebSocket request.
+        Cached: results valid for 3 seconds to avoid redundant checks.
         """
+        import time as _time
+        _CACHE_TTL = 3.0  # seconds
+        
+        # ── Cache hit: return recent result without WebSocket call ──
+        cached = self._check_ready_cache.get(email)
+        if cached and (_time.time() - cached[1]) < _CACHE_TTL:
+            return cached[0]
+        
+        # ── In-flight dedup: if another caller is already checking, piggyback ──
+        inflight = self._check_ready_inflight.get(email)
+        if inflight and not inflight.done():
+            try:
+                return await asyncio.wait_for(asyncio.shield(inflight), timeout=timeout)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                return False
+        
+        # ── No inflight: create the actual check task ──
+        task = asyncio.ensure_future(self._do_check_recaptcha_ready(email, timeout))
+        self._check_ready_inflight[email] = task
+        try:
+            result = await task
+            # Cache the result
+            self._check_ready_cache[email] = (result, _time.time())
+            return result
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            self._check_ready_cache[email] = (False, _time.time())
+            return False
+        finally:
+            self._check_ready_inflight.pop(email, None)
+    
+    async def _do_check_recaptcha_ready(self, email: str, timeout: float = 10.0) -> bool:
+        """Internal: actual WebSocket check for reCAPTCHA readiness."""
         conn = self._find_connection(email)
         if not conn:
             log.info(f"[ExtensionBridge] reCAPTCHA check: no connection for {email}")
@@ -1193,10 +1251,6 @@ class ExtensionBridge:
                 details = result.get('details', {})
                 token_len = details.get('tokenLength', 0)
                 
-                # Sanity check: if extension says "ready" but trial token is
-                # 0 or below MIN_TOKEN_LENGTH, the widget is NOT actually ready.
-                # HAR: valid tokens are 1742-2169 chars; 538-char garbage tokens
-                # passed old threshold (500) but got rejected by Google (403).
                 if token_len == 0 or (token and len(token) < self.MIN_TOKEN_LENGTH):
                     log.warning(
                         f"[ExtensionBridge] ⚠️ grecaptcha reports ready but trial token "
@@ -1208,7 +1262,6 @@ class ExtensionBridge:
                     f"[ExtensionBridge] ✅ grecaptcha ready for {email} "
                     f"(trial token: {token_len} chars)"
                 )
-                # Pass token to callback for caching in reCAPTCHA pool
                 if token and len(token) > self.MIN_TOKEN_LENGTH:
                     if self.on_readiness_token:
                         try:

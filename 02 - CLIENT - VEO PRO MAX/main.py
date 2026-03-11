@@ -50,8 +50,52 @@ if getattr(sys, 'frozen', False) or '__compiled__' in dir():
     logging.getLogger().addHandler(_file_handler)
 
 
+def _hide_runtime_files():
+    """Hide runtime DLLs/pyds/packages in Explorer (compiled mode only).
+    
+    Sets Windows hidden+system attribute on all files/folders that the user
+    doesn't need to see. Only keeps exe + user-facing folders visible.
+    Safe: does NOT move files — Nuitka DLL loading works unchanged.
+    """
+    import os
+    import subprocess as sp
+    
+    exe_dir = Path(os.path.dirname(sys.executable))
+    
+    KEEP_VISIBLE = {
+        "VEO_Pro_Max.exe",
+        "config",
+        "assets",
+        "data",
+        "extension",
+    }
+    
+    hidden = 0
+    for item in exe_dir.iterdir():
+        if item.name in KEEP_VISIBLE:
+            continue
+        try:
+            sp.run(["attrib", "+H", "+S", str(item)],
+                   capture_output=True, check=False, timeout=5)
+            hidden += 1
+        except Exception:
+            pass
+    
+    if hidden > 0:
+        logging.getLogger(__name__).debug(
+            f"[Startup] Hidden {hidden} runtime files in Explorer"
+        )
+
+
 def main():
     """Main entry point for VEO Pro Max application."""
+    # ── Hide runtime files in compiled mode (clean Explorer view) ──
+    if getattr(sys, 'frozen', False) or '__compiled__' in dir():
+        try:
+            _hide_runtime_files()
+        except Exception:
+            pass  # Non-critical — don't block startup
+    
     # ── Single Instance Lock: block duplicate app windows ──
     from core.single_instance import SingleInstanceLock, show_already_running_dialog
     instance_lock = SingleInstanceLock()

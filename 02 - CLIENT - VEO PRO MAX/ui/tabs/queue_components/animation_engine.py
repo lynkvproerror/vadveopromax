@@ -173,7 +173,18 @@ class QueueAnimationMixin:
             return
         
         if has_pixmap and not is_upscaling:
-            return  # Has real thumbnail, upscale done — don't override
+            # ★ FIX: Apply correct border when thumbnail exists but upscale not active
+            # Previously returned without touching stylesheet → old shimmer gradient remained
+            # Now applies proper border (green for 720p, blue for upscaled, etc.)
+            self._unregister_shimmer_slot(slot)
+            bc = self._slot_border(slot, Theme.GREEN)
+            slot.setText('')
+            slot.setStyleSheet(
+                f"QLabel {{ border: 2px solid {bc}; border-radius: 4px;"
+                f"background-color: {Theme.BASE}; padding: 1px; }}"
+                f"QLabel:hover {{ border-color: {Theme.LAVENDER}; }}"
+            )
+            return
         
         # ── Per-video upscale status (no thumbnail yet) ──
         # Border-only status indication — no emoji text inside slots

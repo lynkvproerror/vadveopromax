@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 11
+SETTINGS_VERSION = 12
 
 
 @dataclass
@@ -22,6 +22,7 @@ class AppSettings:
     include_timestamp: bool = True
     include_quality: bool = True
     include_model: bool = False
+    download_non_watermark: bool = True  # Zoom+crop to remove watermark after download
     row_digits: int = 3
     separator: str = "_"
     
@@ -250,6 +251,10 @@ class AppSettings:
             # 10 → 11: Add auto-sweep max rounds
             10: lambda d: {**d,
                 'auto_sweep_max_rounds': 5,
+            },
+            # 11 → 12: Add download non-watermark (zoom+crop)
+            11: lambda d: {**d,
+                'download_non_watermark': True,
             },
         }
         

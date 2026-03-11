@@ -25,8 +25,9 @@ class TabT2V(GenerationTabBase):
     INPUT_PLACEHOLDER = (
         "Enter prompts here, one per line...\n\n"
         "A sunset scene over mountains with golden light\n"
-        "Camera pans across the valley revealing a river\n"
-        "Birds flying in formation against the orange sky"
+        "Camera pans across the valley revealing a river\n\n"
+        "Or paste a JSON scene:\n"
+        '{"prompt_en": "...", "duration": "8s", "description_vi": "..."}'
     )
     CONTROLLER_METHOD = "add_t2v_batch"
     SHOW_CONTINUATION = True
@@ -42,6 +43,11 @@ class TabT2V(GenerationTabBase):
 1. Enter prompts in the input area (one per line)
 2. Use Continuation toggle to chain video sequences
 3. Click Add to Queue when ready
+
+Prompt Formats:
+- Plain text: one prompt per line
+- JSON scene: {"prompt_en": "...", "duration": "8s"}
+  → Auto-detects duration and metadata
 
 Settings:
 - Aspect Ratio: Choose between Landscape, Portrait, or Square

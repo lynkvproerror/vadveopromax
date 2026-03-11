@@ -230,7 +230,7 @@ class VEOApiClient:
           batchAsyncGenerateVideoText:     sessionId + tool + paygateTier + recaptcha
           batchGenerateImages:             sessionId + tool + projectId + recaptcha
           uploadUserImage:                 sessionId + tool (ASSET_MANAGER only)
-          batchAsyncGenerateVideoUpsampleVideo: sessionId + recaptcha ONLY
+          batchAsyncGenerateVideoUpsampleVideo: sessionId + projectId + tool + paygateTier + recaptcha
         """
         import time
         import uuid as _uuid
@@ -529,15 +529,20 @@ class VEOApiClient:
         aspect_ratio: str = "VIDEO_ASPECT_RATIO_LANDSCAPE",
         seed: Optional[int] = None,
         scene_id: Optional[str] = None,
+        project_id: str = "",
+        paygate_tier: str = "PAYGATE_TIER_TWO",
     ) -> Dict[str, Any]:
         """Build upscale video body for Extension submission.
         
-        HAR verified: upscale uses minimal clientContext (sessionId only,
-        NO projectId, NO paygateTier, NO tool). Extension adds recaptchaContext.
+        HAR verified 2026-03-11: upscale uses FULL clientContext:
+        projectId + tool (PINHOLE) + userPaygateTier + sessionId.
+        Extension adds recaptchaContext.
+        Also requires: mediaGenerationContext.batchId, useV2ModelConfig.
         
         Args:
-            scene_id: Original scene UUID from generation. If provided, upscale
-                      stays in the same project. If None, creates a new scene.
+            scene_id: Used as workflowId in metadata.
+            project_id: TRPC project UUID (required by API).
+            paygate_tier: Account tier (default PAYGATE_TIER_TWO).
         """
         import uuid as _uuid
         import time as _time
@@ -549,22 +554,30 @@ class VEOApiClient:
         }
         model_key = model_map.get(target_resolution, "veo_3_1_upsampler_1080p")
         
-        # Reuse original sceneId when re-upscaling — keeps video in same project
-        effective_scene_id = scene_id or str(_uuid.uuid4())
+        # HAR: metadata uses workflowId (not sceneId)
+        effective_workflow_id = scene_id or str(_uuid.uuid4())
+        
+        # HAR verified: full clientContext (Extension injects recaptchaContext)
+        client_ctx = self._build_client_context(
+            recaptcha_token="",
+            project_id=project_id,
+            paygate_tier=paygate_tier,
+            tool="PINHOLE",
+            include_recaptcha=False,
+        )
         
         return {
-            "clientContext": {
-                "sessionId": f";{int(_time.time() * 1000)}",
-                # recaptchaContext will be injected by Extension
-            },
+            "mediaGenerationContext": {"batchId": str(_uuid.uuid4())},
+            "clientContext": client_ctx,
             "requests": [{
-                "aspectRatio": aspect_ratio,
                 "resolution": target_resolution,
+                "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
-                "videoInput": {"mediaId": video_media_id},
                 "videoModelKey": model_key,
-                "metadata": {"sceneId": effective_scene_id},
+                "metadata": {"workflowId": effective_workflow_id},
+                "videoInput": {"mediaId": video_media_id},
             }],
+            "useV2ModelConfig": True,
         }
     
     def build_status_body(
@@ -948,7 +961,8 @@ class VEOApiClient:
         """Upscale video resolution.
         
         Endpoint: /v1/video:batchAsyncGenerateVideoUpsampleVideo (Async)
-        HAR verified: requires seed, aspectRatio, videoModelKey, metadata
+        HAR verified 2026-03-11: requires full clientContext + mediaGenerationContext
+        + useV2ModelConfig + metadata.workflowId.
         
         Resolution options:
         - VIDEO_RESOLUTION_1080P → model: veo_3_1_upsampler_1080p
@@ -965,28 +979,27 @@ class VEOApiClient:
         }
         model_key = model_map.get(target_resolution, "veo_3_1_upsampler_1080p")
         
-        # Bug 12 fix: Upscale clientContext = only sessionId + recaptchaContext
-        # NO projectId, NO userPaygateTier, NO tool
-        # HAR verified: website sends minimal context for upscale endpoint
-        import time
-        upscale_ctx: Dict[str, Any] = {
-            "sessionId": f";{int(time.time() * 1000)}",
-        }
-        if recaptcha_token:
-            upscale_ctx["recaptchaContext"] = {
-                "token": recaptcha_token,
-                "applicationType": "RECAPTCHA_APPLICATION_TYPE_WEB",
-            }
+        # HAR verified 2026-03-11: upscale needs FULL clientContext
+        # (projectId + tool + paygateTier + sessionId + recaptchaContext)
+        upscale_ctx = self._build_client_context(
+            recaptcha_token=recaptcha_token,
+            project_id=project_id,
+            paygate_tier=paygate_tier,
+            tool="PINHOLE",
+        )
+        
         data = {
+            "mediaGenerationContext": {"batchId": str(uuid.uuid4())},
             "clientContext": upscale_ctx,
             "requests": [{
-                "aspectRatio": aspect_ratio,
                 "resolution": target_resolution,
+                "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
-                "videoInput": {"mediaId": video_media_id},
                 "videoModelKey": model_key,
-                "metadata": {"sceneId": str(uuid.uuid4())},
+                "metadata": {"workflowId": str(uuid.uuid4())},
+                "videoInput": {"mediaId": video_media_id},
             }],
+            "useV2ModelConfig": True,
         }
         
         return await self._request(

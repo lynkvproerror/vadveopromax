@@ -10,6 +10,7 @@ Used by Engine (Phase 5) for pre-submit enhancement and error recovery.
 """
 
 import hashlib
+import json
 import logging
 import re
 from typing import Optional, Dict, List, Tuple
@@ -277,6 +278,44 @@ def _local_pre_fix(prompt: str) -> Tuple[str, List[str]]:
     return text, changes
 
 
+# ── JSON Prompt Helpers ─────────────────────────────────────────
+
+def _unwrap_json(text: str) -> Tuple[bool, dict, str]:
+    """If text is JSON {...}, extract prompt_en. Otherwise pass through.
+    
+    Returns:
+        (is_json, scene_data, prompt_text)
+    """
+    stripped = text.strip()
+    if stripped.startswith('{'):
+        try:
+            scene = json.loads(stripped)
+            if isinstance(scene, dict):
+                prompt_en = scene.get('prompt_en', '') or scene.get('prompt', '')
+                if prompt_en:
+                    return True, scene, prompt_en
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return False, {}, text
+
+
+def _wrap_json(scene_data: dict, new_prompt: str) -> str:
+    """Put enhanced prompt_en back into JSON structure."""
+    updated = dict(scene_data)
+    if 'prompt_en' in updated:
+        updated['prompt_en'] = new_prompt
+    elif 'prompt' in updated:
+        updated['prompt'] = new_prompt
+    else:
+        updated['prompt_en'] = new_prompt
+    return json.dumps(updated, ensure_ascii=False)
+
+
+def _text_to_json(prompt_text: str) -> str:
+    """Wrap plain text prompt into minimal JSON structure."""
+    return json.dumps({"prompt_en": prompt_text}, ensure_ascii=False)
+
+
 class PromptEnhancer:
     """Enhance VEO prompts and fix policy violations via AI API."""
 
@@ -323,13 +362,15 @@ class PromptEnhancer:
             self._last_provider = "Google"
 
     async def enhance(self, prompt: str, api_key: str,
-                       profile_email: str = "") -> Optional[str]:
+                       profile_email: str = "",
+                       output_format: str = "text") -> Optional[str]:
         """Enhance a VEO prompt with better visual details.
 
         Args:
-            prompt: Original VEO prompt text.
+            prompt: Original VEO prompt text (plain or JSON).
             api_key: API key (may be overridden by Settings).
             profile_email: Profile email for rotation tracking.
+            output_format: 'text' or 'json' — controls output format.
 
         Returns:
             Enhanced prompt string, or None if failed.
@@ -342,8 +383,11 @@ class PromptEnhancer:
         if not api_key:
             return None
 
+        # JSON-aware: unwrap if JSON, enhance prompt_en only
+        is_json, scene_data, prompt_text = _unwrap_json(prompt)
+
         # Check cache
-        cache_key = self._hash(f"enhance:{prompt}")
+        cache_key = self._hash(f"enhance:{prompt}:{output_format}")
         if cache_key in self._cache:
             log.debug("[Enhance] Cache hit")
             return self._cache[cache_key]
@@ -369,7 +413,7 @@ class PromptEnhancer:
         for model in models_to_try:
             try:
                 result = await self.client.generate(
-                    prompt=prompt,
+                    prompt=prompt_text,  # Send unwrapped prompt_en
                     system=self.client.ENHANCE_SYSTEM,
                     api_key=api_key,
                     max_tokens=4096,
@@ -378,12 +422,21 @@ class PromptEnhancer:
                 )
 
                 if result and result.strip():
+                    enhanced = result.strip()
+                    # Format output based on requested format
+                    if output_format == "json":
+                        if is_json:
+                            enhanced = _wrap_json(scene_data, enhanced)
+                        else:
+                            enhanced = _text_to_json(enhanced)
+                    elif is_json:
+                        pass  # text mode + JSON input → return plain enhanced text
                     # Track success
                     if is_google:
                         rotation.increment_used(profile_email, model)
-                    self._put_cache(cache_key, result.strip())
-                    log.info(f"[Enhance] OK ({model}): {prompt[:30]}...")
-                    return result.strip()
+                    self._put_cache(cache_key, enhanced)
+                    log.info(f"[Enhance] OK ({model}): {prompt_text[:30]}...")
+                    return enhanced
 
             except Exception as e:
                 from services.gemini_client import RateLimitError, GeminiAPIError
@@ -442,7 +495,8 @@ class PromptEnhancer:
 
     async def fix_policy(
         self, prompt: str, error_message: str, api_key: str,
-        profile_email: str = ""
+        profile_email: str = "",
+        output_format: str = "text"
     ) -> Optional[str]:
         """Fix a policy-blocked prompt.
 
@@ -453,25 +507,33 @@ class PromptEnhancer:
         Phase 3: Fallback to FIX_POLICY_SYSTEM with original prompt (legacy)
 
         Args:
-            prompt: The blocked prompt text.
+            prompt: The blocked prompt text (plain or JSON).
             error_message: The policy error message.
             api_key: API key (may be overridden by Settings).
             profile_email: Profile email for rotation tracking.
+            output_format: 'text' or 'json' — controls output format.
 
         Returns:
             Fixed prompt string, or None if failed.
         """
+        # JSON-aware: unwrap if JSON, fix prompt_en only
+        is_json, scene_data, prompt_text = _unwrap_json(prompt)
+
         # -- Phase 1: Local Pre-Fix (instant, no API) --
-        local_fixed, changes = _local_pre_fix(prompt)
+        local_fixed, changes = _local_pre_fix(prompt_text)
         if changes:
             log.info(
                 f"[Fix] LOCAL pre-fix applied ({len(changes)} changes): "
                 f"{', '.join(changes[:5])}{'...' if len(changes) > 5 else ''}"
             )
-            # Local fix made meaningful changes — return directly
-            # This avoids sending child-related content to Gemini (which blocks it)
-            self._put_cache(self._hash(f"fix:{prompt}:{error_message}"), local_fixed)
-            return local_fixed
+            # Format output
+            result = local_fixed
+            if output_format == "json":
+                result = _wrap_json(scene_data, local_fixed) if is_json else _text_to_json(local_fixed)
+            elif is_json:
+                pass  # text mode + JSON input → return plain fixed text
+            self._put_cache(self._hash(f"fix:{prompt}:{error_message}:{output_format}"), result)
+            return result
 
         # -- Resolve API key --
         if not api_key:
@@ -483,7 +545,7 @@ class PromptEnhancer:
             return None
 
         # Check cache
-        cache_key = self._hash(f"fix:{prompt}:{error_message}")
+        cache_key = self._hash(f"fix:{prompt}:{error_message}:{output_format}")
         if cache_key in self._cache:
             log.debug("[Fix] Cache hit")
             return self._cache[cache_key]
@@ -508,7 +570,7 @@ class PromptEnhancer:
         # -- Phase 2: Paraphrase Rewrite via API --
         # Send the LOCALLY-PRE-FIXED prompt (safe text, no child refs)
         # to Gemini for a full paraphrase rewrite (85-95% similar)
-        safe_prompt, _ = _local_pre_fix(prompt)  # always pre-fix first
+        safe_prompt, _ = _local_pre_fix(prompt_text)  # always pre-fix first
         log.info(f"[Fix] Phase 2: API paraphrase rewrite ({len(safe_prompt)} chars)")
 
         for model in models_to_try:
@@ -525,11 +587,14 @@ class PromptEnhancer:
                 )
 
                 if result and result.strip():
+                    fixed = result.strip()
+                    if output_format == "json":
+                        fixed = _wrap_json(scene_data, fixed) if is_json else _text_to_json(fixed)
                     if is_google:
                         rotation.increment_used(profile_email, model)
-                    self._put_cache(cache_key, result.strip())
+                    self._put_cache(cache_key, fixed)
                     log.info(f"[Fix] Phase 2 OK ({model}): {result.strip()[:50]}...")
-                    return result.strip()
+                    return fixed
 
             except Exception as e:
                 from services.gemini_client import RateLimitError, GeminiAPIError
@@ -574,11 +639,14 @@ class PromptEnhancer:
                 )
 
                 if result and result.strip():
+                    fixed = result.strip()
+                    if output_format == "json":
+                        fixed = _wrap_json(scene_data, fixed) if is_json else _text_to_json(fixed)
                     if is_google:
                         rotation.increment_used(profile_email, model)
-                    self._put_cache(cache_key, result.strip())
+                    self._put_cache(cache_key, fixed)
                     log.info(f"[Fix] Phase 3 OK ({model}): {result.strip()[:50]}...")
-                    return result.strip()
+                    return fixed
 
             except Exception as e:
                 from services.gemini_client import RateLimitError, GeminiAPIError

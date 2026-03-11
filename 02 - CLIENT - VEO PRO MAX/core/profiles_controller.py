@@ -16,6 +16,7 @@ import json
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from config.constants import MIN_VALID_XCD
 from core.session import AccountSession, SubscriptionType, PaygateTier
 
 
@@ -1521,6 +1522,13 @@ class ProfilesController:
                                     for key in HEADER_KEYS:
                                         val = headers.get(key) or headers.get(key.title()) or headers.get(key.upper())
                                         if val:
+                                            # Guard: never overwrite full xcd with short placeholder
+                                            # ExtraInfo captures the REAL value from Variations Service;
+                                            # requestWillBeSent only sees the 8-char stub.
+                                            if key == "x-client-data":
+                                                existing = captured_headers.get(key, "")
+                                                if existing and len(existing) >= MIN_VALID_XCD and len(val) < MIN_VALID_XCD:
+                                                    continue  # Keep the full value from ExtraInfo
                                             captured_headers[key] = val
                                             found.append(key)
                                     if found:

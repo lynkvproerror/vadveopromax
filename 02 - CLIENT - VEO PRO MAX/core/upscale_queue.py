@@ -237,6 +237,7 @@ class UpscaleQueue:
         profiles_controller=None,        # engine._profiles_controller
         extension_bridge=None,           # engine._extension_bridge
         wake_event: asyncio.Event = None, # T1: event-driven wake from engine
+        pre_submit_gate_fn: Optional[Callable] = None,  # engine._pre_submit_gate
     ):
         """
         Fully decoupled UpscaleQueue — no engine reference.
@@ -288,6 +289,7 @@ class UpscaleQueue:
         self._profiles_controller = profiles_controller
         self._extension_bridge = extension_bridge
         self._wake_event = wake_event  # T1: event-driven wake from engine
+        self._pre_submit_gate_fn = pre_submit_gate_fn  # Centralized xcd + reCAPTCHA gate
         
         self._queues: Dict[str, asyncio.Queue] = {}      # email → Queue[UpscaleJob]
         self._upscale_processors: Dict[str, asyncio.Task] = {}       # email → background task
@@ -458,6 +460,26 @@ class UpscaleQueue:
         # Worker is running — check if there are queued or in-progress jobs
         q = self._queues.get(email)
         return q is not None and not q.empty()
+    
+    def has_pending_work(self) -> bool:
+        """Check if ANY upscale work is pending or actively processing.
+        
+        Used by _check_auto_stop() to prevent engine shutdown while
+        upscales are still in flight. Returns True if:
+        - Any per-account queue has pending jobs, OR
+        - Any per-account worker task is still running
+        """
+        if not self._running:
+            return False
+        # Check queues for pending jobs
+        for email, q in self._queues.items():
+            if not q.empty():
+                return True
+        # Check worker tasks for active processing
+        for email, proc in self._upscale_processors.items():
+            if not proc.done():
+                return True
+        return False
     
     async def _worker_loop(self, email: str):
         """Background worker: processes upscale jobs for one account.
@@ -909,6 +931,19 @@ class UpscaleQueue:
                             except Exception:
                                 pass
                     
+                    # ── Pre-Submit Gate: validate xcd + reCAPTCHA before upscale ──
+                    if self._pre_submit_gate_fn:
+                        try:
+                            _gate_ok = await self._pre_submit_gate_fn(account, task, attempt)
+                            if not _gate_ok:
+                                log.warning(
+                                    f"Upscale {video_label}: PreSubmitGate failed "
+                                    f"(attempt {attempt+1}) — skipping"
+                                )
+                                continue
+                        except Exception as _ge:
+                            log.debug(f"Upscale {video_label}: gate check error: {_ge}")
+                    
                     # Fix G6: Acquire per-account rate lock + anti-detect delay
                     # Same mechanism as engine — serialize API calls with adaptive delay
                     rate_lock = self._rate_locks.setdefault(
@@ -994,6 +1029,8 @@ class UpscaleQueue:
                             aspect_ratio=task.aspect_ratio,
                             seed=stable_seed,
                             scene_id=orig_scene_id,
+                            project_id=getattr(account, 'project_id', '') or task.project_id or "",
+                            paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                         )
                         ext_r = await ext_bridge.submit_upscale(
                             email=account.email, body=upscale_body,
@@ -1016,9 +1053,11 @@ class UpscaleQueue:
                                 access_token=account.get_access_token() or "",
                                 recaptcha_token=recaptcha_token,
                                 video_media_id=media_id,
+                                project_id=getattr(account, 'project_id', '') or task.project_id or "",
                                 target_resolution=resolution,
                                 aspect_ratio=task.aspect_ratio,
                                 seed=stable_seed,
+                                paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                                 account_headers=account.get_api_headers(),
                             )
                     account.invalidate_recaptcha()
@@ -1335,6 +1374,15 @@ class UpscaleQueue:
                 if is_free_upscale and self._running:
                     log.info(f"Upscale {video_label}: 1080p poll failed, re-submitting (free)")
                     try:
+                        # ── Pre-Submit Gate: validate before re-submit ──
+                        if self._pre_submit_gate_fn:
+                            try:
+                                _gate_ok = await self._pre_submit_gate_fn(account, task)
+                                if not _gate_ok:
+                                    log.warning(f"Upscale {video_label}: PreSubmitGate failed for re-submit")
+                                    return (idx, None)
+                            except Exception:
+                                pass
                         if account.email not in self._rate_locks:
                             self._rate_locks[account.email] = asyncio.Lock()
                         async with self._rate_locks[account.email]:
@@ -1358,6 +1406,8 @@ class UpscaleQueue:
                                     aspect_ratio=task.aspect_ratio,
                                     seed=generate_random_seed(),
                                     scene_id=orig_scene_id,
+                                    project_id=getattr(account, 'project_id', '') or task.project_id or "",
+                                    paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                                 )
                                 ext_r = await ext_bridge.submit_upscale(
                                     email=account.email, body=upscale_body,
@@ -1381,9 +1431,11 @@ class UpscaleQueue:
                                         access_token=account.get_access_token() or "",
                                         recaptcha_token=recaptcha_token,
                                         video_media_id=media_id,
+                                        project_id=getattr(account, 'project_id', '') or task.project_id or "",
                                         target_resolution=resolution,
                                         aspect_ratio=task.aspect_ratio,
                                         seed=generate_random_seed(),
+                                        paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                                         account_headers=account.get_api_headers(),
                                     )
                             account.invalidate_recaptcha()

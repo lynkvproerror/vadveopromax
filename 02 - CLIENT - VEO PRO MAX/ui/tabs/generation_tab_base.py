@@ -318,20 +318,35 @@ class GenerationTabBase(QWidget):
     
     def _parse_prompts(self):
         """Parse input text into prompt rows, preserving continuation state."""
+        from core.batch_parser import BatchParser
+        
         text = self.prompt_input.toPlainText()
-        lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
+        
+        # Use BatchParser for JSON auto-detection
+        parser = BatchParser()
+        parsed = parser.parse_text(text)
+        
+        if not parsed:
+            self.prompt_table.set_prompts([])
+            self._update_parsed_count(0)
+            return
         
         if self.SHOW_CONTINUATION:
             # Preserve continuation state from existing rows
             old_rows = self.prompt_table.get_prompts()
             old_cont = {r.index: r.continuation_from for r in old_rows}
-            prompts = []
-            for i, line in enumerate(lines):
-                idx = i + 1
-                row = PromptRow(idx, line, continuation_from=old_cont.get(idx))
-                prompts.append(row)
-        else:
-            prompts = [PromptRow(i + 1, line) for i, line in enumerate(lines)]
+        
+        prompts = []
+        for i, p in enumerate(parsed):
+            idx = i + 1
+            row = PromptRow(
+                index=idx,
+                text=p.text,
+                continuation_from=old_cont.get(idx) if self.SHOW_CONTINUATION else None,
+                duration=getattr(p, 'duration', None),
+                metadata=getattr(p, 'metadata', {}),
+            )
+            prompts.append(row)
         
         self.prompt_table.set_prompts(prompts)
         self._update_parsed_count(len(prompts))

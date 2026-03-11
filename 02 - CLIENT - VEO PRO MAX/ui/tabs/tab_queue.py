@@ -71,8 +71,6 @@ class TabQueue(
     
     # Signals for controller communication
     start_all = Signal()
-    pause_all = Signal()
-    resume_all = Signal()
     stop_all = Signal()
     reset_all = Signal()
     retry_failed = Signal()
@@ -91,7 +89,7 @@ class TabQueue(
         self._group_expanded: Dict[str, bool] = {}   # group_id → expanded state
         self._projects: List[str] = ["All Projects"]  # Dynamic project list
         self._is_processing = False
-        self._is_paused = False
+
         self._start_time = None
         self._retry_pending = []  # Staggered retry queue
         self._input_pulse_thumbs: List[QLabel] = []  # Thumbnails with pulsing border
@@ -159,15 +157,10 @@ class TabQueue(
         """
         # Control bar buttons
         if hasattr(self, 'toggle_btn'):
-            # Preserve current state text
-            if self._is_paused:
-                self.toggle_btn.setText(t("queue.resume"))
-            elif self._is_processing:
-                self.toggle_btn.setText(t("queue.pause"))
+            if self._is_processing:
+                self.toggle_btn.setText(t("queue.stop"))
             else:
                 self.toggle_btn.setText(t("queue.start_all"))
-        if hasattr(self, 'stop_btn'):
-            self.stop_btn.setText(t("queue.stop"))
         if hasattr(self, 'retry_failed_btn'):
             self.retry_failed_btn.setText(t("queue.retry_failed"))
         if hasattr(self, 'reset_btn'):
@@ -222,13 +215,29 @@ class TabQueue(
         if hasattr(widget, 'thumb_slots'):
             # BUG-A3 fix: Get live task status (not stale from widget creation)
             task_status = getattr(widget, '_task_status', 'running')
+            live_task = None  # Init for use in slot refresh below
             if self.controller and hasattr(self.controller, 'dispatcher'):
                 live_task = self.controller.dispatcher.get_all_tasks_dict().get(task_id)
                 if live_task:
                     task_status = live_task.state.value
                     widget._task_status = task_status  # Update cached status
-            for slot in widget.thumb_slots:
+            for vi_idx, slot in enumerate(widget.thumb_slots):
                 try:
+                    # ⚡ FIX: Refresh _video_info from live dispatcher data
+                    # so _apply_thumb_effect sees current upscale_status
+                    # (prevents stale snapshot from rendering green instead of purple)
+                    if live_task and hasattr(live_task, 'video_outputs') and vi_idx < len(live_task.video_outputs):
+                        live_vo = live_task.video_outputs[vi_idx]
+                        slot._video_info = {
+                            'quality': live_vo.quality,
+                            'upscale_status': live_vo.upscale_status,
+                            'upscale_error': live_vo.upscale_error,
+                            'border_color': live_vo.border_color,
+                            'best_file': live_vo.best_file,
+                            'thumbnail_path': live_vo.thumbnail_path,
+                            'upscale_poll_count': getattr(live_vo, 'upscale_poll_count', 0),
+                        }
+                        slot._border_color_name = live_vo.border_color
                     self._apply_thumb_effect(slot, progress, task_status)
                 except RuntimeError:
                     continue
@@ -342,7 +351,6 @@ class TabQueue(
         if self.controller and hasattr(self.controller, 'state'):
             if not self.controller.state.is_processing:
                 self._is_processing = False
-                self._is_paused = False
                 self._update_button_states()
                 
                 # Keep timer alive while upscale queue has work
@@ -538,19 +546,11 @@ class TabQueue(
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(8)
         
-        # Toggle button — Start / Pause / Resume (state-driven)
+        # Toggle button — Start ↔ Stop (2-state)
         self.toggle_btn = QPushButton(t("queue.start_all"))
         self.toggle_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
         self.toggle_btn.clicked.connect(self._on_toggle_engine)
         layout.addWidget(self.toggle_btn)
-        
-        # Stop button — always separate
-        self.stop_btn = QPushButton(t("queue.stop"))
-        self.stop_btn.setStyleSheet(f"background-color: {Theme.RED};")
-        self.stop_btn.setToolTip(t("queue_extra.stop_tooltip"))
-        self.stop_btn.clicked.connect(self._on_stop_all)
-        self.stop_btn.setEnabled(False)
-        layout.addWidget(self.stop_btn)
         
         # Post-queue action dropdown — synced with Settings tab
         from config.settings import get_settings as _gs
@@ -561,7 +561,7 @@ class TabQueue(
         self.post_queue_combo = QComboBox()
         self.post_queue_combo.addItems([t("queue_extra.do_nothing"), t("queue_extra.shutdown"), t("queue_extra.sleep")])
         self.post_queue_combo.setCurrentText(saved_action)
-        self.post_queue_combo.setFixedWidth(140)
+        self.post_queue_combo.setFixedWidth(180)
         self.post_queue_combo.setToolTip(t("queue_extra.post_queue_tooltip"))
         self.post_queue_combo.currentIndexChanged.connect(self._post_queue_combo_changed)
         layout.addWidget(self.post_queue_combo)
@@ -1375,7 +1375,6 @@ class TabQueue(
         # Auto-start
         self.start_all.emit()
         self._is_processing = self.controller.state.is_processing if self.controller else True
-        self._is_paused = False
         self._auto_refresh_timer.start()
         self._update_button_states()
         
@@ -1384,10 +1383,17 @@ class TabQueue(
             mw.show_toast("▶️ Engine auto-started for retry tasks", "info", duration=3000)
     
     def _on_toggle_engine(self):
-        """Unified Start/Pause/Resume toggle."""
+        """Start ↔ Stop toggle (2-state)."""
         if not self._is_processing:
-            # Idle → Start (reset sweep counter for fresh run)
-            self._sweep_count = 0
+            # ── IDLE → START ──
+            # Only reset sweep counter if there are ready tasks (new work).
+            # When _only_ incomplete work exists (re-upscale), preserve the
+            # counter so max rounds isn't bypassed by repeated Start-All clicks.
+            has_ready_tasks = False
+            if self.controller:
+                has_ready_tasks = getattr(self.controller, 'ready_count', 0) > 0
+            if has_ready_tasks:
+                self._sweep_count = 0
             self._sweep_in_progress = False
             self._post_queue_triggered = False
             if self.controller:
@@ -1439,15 +1445,11 @@ class TabQueue(
                     return
                 
                 elif any(acc["warnings"] for acc in check["accounts"]):
-                    # Warnings are auto-resolving — don't show toast
-                    # (Token, reCAPTCHA will auto-fetch on first task)
-                    pass
+                    pass  # Warnings are auto-resolving
                 else:
-                    pass  # All OK — engine start below will show feedback
+                    pass  # All OK
             
             # ── G0: Daily generation limit gate ──────────────────────
-            # Check BEFORE engine starts — block if limit exceeded.
-            # Only applies to TRIAL (PREMIUM/TESTER have limit = -1).
             _ctrl = self.controller
             _perm = getattr(_ctrl, '_permissions', None) if _ctrl else None
             _lc = getattr(_ctrl, '_license_client', None) if _ctrl else None
@@ -1457,7 +1459,6 @@ class TabQueue(
                 if daily_limit > 0:  # -1 = unlimited
                     today_used = _lc.usage.today_generations
                     if today_used >= daily_limit:
-                        # Show purchase popup — blocks until user acts
                         from ui.popups.license_popup import LicenseRequiredDialog
                         dlg = LicenseRequiredDialog(
                             parent=self,
@@ -1471,72 +1472,41 @@ class TabQueue(
                         result = dlg.exec()
                         
                         if result != dlg.DialogCode.Accepted:
-                            # User closed without purchasing → force stop
                             self._is_processing = False
-                            self._is_paused = False
                             self._update_button_states()
-                            return  # Block engine start entirely
+                            return
                         else:
-                            # License activated → re-check limits
                             _perm = getattr(_ctrl, '_permissions', None)
                             new_limit = _perm.limits.daily_generation_limit if _perm else -1
                             if new_limit > 0 and _lc.usage.today_generations >= new_limit:
-                                # Still exceeded (shouldn't happen after upgrade)
                                 self._is_processing = False
-                                self._is_paused = False
                                 self._update_button_states()
                                 return
             # ── End G0 ───────────────────────────────────────────────
             
             self.start_all.emit()
-            # Note: start_all signal is connected to controller.start_processing() in app.py
-            # — no direct call needed here
             self._is_processing = self.controller.state.is_processing if self.controller else True
-            self._is_paused = False
-            self._auto_refresh_timer.start()
-        elif self._is_paused:
-            # Paused → Resume
-            self.resume_all.emit()
-            if self.controller:
-                self.controller.resume_processing()
-            self._is_paused = False
             self._auto_refresh_timer.start()
         else:
-            # Running → Pause
-            self.pause_all.emit()
-            if self.controller:
-                self.controller.pause_processing()
-            self._is_paused = True
+            # ── PROCESSING → STOP ──
+            self._is_processing = False
             self._auto_refresh_timer.stop()
+            self.stop_all.emit()
+            if self.controller:
+                self.controller.stop_processing()
+            # BUG-B5 fix: Delayed state check — stop_processing is async
+            QTimer.singleShot(200, self._sync_processing_state)
         
         self._update_button_states()
     
-    def _on_stop_all(self):
-        """Stop all processing immediately."""
-        self._is_processing = False
-        self._is_paused = False
-        self._auto_refresh_timer.stop()
-        self.stop_all.emit()
-        if self.controller:
-            self.controller.stop_processing()
-        # BUG-B5 fix: Delayed state check — stop_processing is async
-        QTimer.singleShot(200, self._sync_processing_state)
-        self._update_button_states()
-    
     def _update_button_states(self):
-        """Update toggle button appearance based on engine state."""
+        """Update toggle button appearance: Start (green) ↔ Stop (red)."""
         if not self._is_processing:
             self.toggle_btn.setText(t("queue.start_all"))
             self.toggle_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
-            self.stop_btn.setEnabled(False)
-        elif self._is_paused:
-            self.toggle_btn.setText(t("queue.resume"))
-            self.toggle_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
-            self.stop_btn.setEnabled(True)
         else:
-            self.toggle_btn.setText(t("queue.pause"))
-            self.toggle_btn.setStyleSheet(f"background-color: {Theme.YELLOW};")
-            self.stop_btn.setEnabled(True)
+            self.toggle_btn.setText(t("queue.stop"))
+            self.toggle_btn.setStyleSheet(f"background-color: {Theme.RED};")
     
     def _on_retry_failed(self):
         """Retry ALL failed tasks — staggered 1 per 2s to avoid flooding."""
@@ -1802,8 +1772,8 @@ class TabQueue(
     def _check_post_queue_action(self):
         """Check if ALL queue groups are done (including upscale) → trigger action.
         
-        Auto-sweep gate: if incomplete tasks/videos exist, auto-retry
-        up to _max_sweep_rounds before allowing sleep/shutdown.
+        Auto-sweep gate: ALWAYS auto-retry incomplete work (up to _max_sweep_rounds)
+        regardless of post_queue_action. Sleep/shutdown only happens after sweep.
         """
         if self._post_queue_triggered:
             return
@@ -1815,8 +1785,6 @@ class TabQueue(
         from config.settings import get_settings
         s = get_settings()
         action = getattr(s, 'post_queue_action', 'nothing')
-        if action == 'nothing':
-            return
         
         # Sync max sweep rounds from settings (user can change at runtime)
         self._max_sweep_rounds = getattr(s, 'auto_sweep_max_rounds', 5)
@@ -1858,35 +1826,70 @@ class TabQueue(
                     if stats.get('pending_jobs', 0) > 0 or stats.get('active_workers', 0) > 0:
                         return  # Upscale still running
             
-            # ── Auto-Sweep Gate ──────────────────────────────────
-            # Check for incomplete work before allowing sleep/shutdown
+            # ── Account Readiness Gate ──
+            # Don't attempt re-upscale if no account has extension bridge connected
+            # (browser still launching after app restart → token refresh will fail)
+            _any_account_ready = False
+            try:
+                ma = getattr(self.controller, '_multi_account', None)
+                if ma:
+                    for acc in getattr(ma, '_accounts', []):
+                        if getattr(acc, 'extension_bridge', None) and getattr(acc, '_access_token', None):
+                            _any_account_ready = True
+                            break
+            except Exception:
+                pass
+            
+            if not _any_account_ready:
+                return  # Browser not ready yet — wait for next tick
+            
+            # ── Auto-Sweep Gate (ALWAYS runs, independent of post_queue_action) ──
+            # Guarantee 100% completion: retry failed/skipped tasks before any action
             has_incomplete = self._has_incomplete_work(dispatcher)
             
             if has_incomplete and self._sweep_count < self._max_sweep_rounds:
                 self._run_auto_sweep(action)
-                return  # Don't trigger sleep/shutdown yet
+                return  # Don't trigger sleep/shutdown yet — sweep first
             
-            # If max sweeps exhausted but still incomplete → proceed anyway
+            # If max sweeps exhausted but still incomplete → log warning
             if has_incomplete and self._sweep_count >= self._max_sweep_rounds:
                 import logging
                 logging.getLogger("queue").warning(
                     f"[AutoSweep] Max {self._max_sweep_rounds} rounds exhausted, "
-                    f"proceeding with {action} despite incomplete tasks"
+                    f"{action} will proceed despite incomplete tasks"
                 )
         except Exception:
             return  # Safe fallback — don't trigger on error
+        
+        # ── Completion: reset sweep counter for next batch ──
+        if not has_incomplete and self._sweep_count > 0:
+            import logging
+            logging.getLogger("queue").info(
+                f"[AutoSweep] ✅ All work complete after {self._sweep_count} sweep round(s)"
+            )
+            self._sweep_count = 0
+        
+        # Only execute post-queue action (sleep/shutdown) if configured
+        if action == 'nothing':
+            # Mark triggered to stop wasteful per-tick checks
+            if not has_incomplete:
+                self._post_queue_triggered = True
+            return
         
         self._post_queue_triggered = True
         self._execute_post_queue_action(action)
     
     def _has_incomplete_work(self, dispatcher) -> bool:
-        """Check if any original task has incomplete work (video + image modes)."""
+        """Check if any COMPLETED tasks have incomplete video outputs."""
+        import logging
+        _log = logging.getLogger("queue")
         from core.dispatcher import TaskState
         for task in dispatcher._all_tasks.values():
             if task.replace_target:
                 continue
             # Failed/cancelled tasks = incomplete
             if task.state in (TaskState.FAILED, TaskState.CANCELLED):
+                _log.debug(f"[IncompleteCheck] Task {task.id}: state={task.state.value} → incomplete")
                 return True
             if task.state != TaskState.COMPLETED:
                 continue
@@ -1896,6 +1899,15 @@ class TabQueue(
             # Base quality for each mode
             base_quality = '1K' if is_image else '720p'
             for vo in (task.video_outputs or []):
+                # Diagnostic: log video state for tasks wanting upscale
+                if needs_upscale:
+                    _log.info(
+                        f"[IncompleteCheck] {task.id} V{vo.index}: "
+                        f"q={vo.quality}, us={vo.upscale_status}, "
+                        f"up={'Y' if vo.file_upscaled else 'N'}, "
+                        f"720={'Y' if vo.file_720p else 'N'}, "
+                        f"mid={'Y' if vo.media_id else 'N'}"
+                    )
                 if vo.quality == "failed":
                     return True
                 if vo.upscale_status == "failed":
@@ -1927,6 +1939,7 @@ class TabQueue(
             # Phase 3: Re-upscale videos that need upscaling
             reupscale_count = 0
             needs_retry_ids = []  # Tasks needing re-generate (no media_id)
+            engine = getattr(self.controller, '_engine', None)
             if self.controller and hasattr(self.controller, 're_upscale_task'):
                 try:
                     from core.dispatcher import TaskState
@@ -1947,6 +1960,10 @@ class TabQueue(
                         has_missing_media = False
                         
                         for vo in (task.video_outputs or []):
+                            # Skip videos already being retried by Phase 2
+                            # (force_retry_video sets quality='retrying')
+                            if vo.quality == 'retrying':
+                                continue
                             # Case 1: Explicit upscale failure
                             if vo.upscale_status == "failed":
                                 if vo.media_id:
@@ -1969,12 +1986,27 @@ class TabQueue(
                             )
                             needs_retry_ids.append(task.id)
                         elif needs_reupscale:
-                            self.controller.re_upscale_task(task.id, failed_only=True)
-                            reupscale_count += 1
+                            # Dedup: skip if task already has pending jobs in upscale queue
+                            already_queued = False
+                            if engine:
+                                uq = getattr(engine, '_upscale_queue', None)
+                                if uq and hasattr(uq, '_job_queue'):
+                                    try:
+                                        for job in list(uq._job_queue.queue):
+                                            if getattr(job, 'task_id', None) == task.id:
+                                                already_queued = True
+                                                break
+                                    except Exception:
+                                        pass
+                            if not already_queued:
+                                self.controller.re_upscale_task(task.id, failed_only=True)
+                                reupscale_count += 1
                 except Exception as e:
                     log.error(f"[AutoSweep] Re-upscale phase error: {e}")
             
             # Phase 4: Force-retry tasks with missing media_ids (re-generate)
+            # BUG-FIX: Use _enqueue_task() instead of raw _ready_queue.put()
+            # to properly handle duplicate guards, priority, and counter tracking.
             retry_regen = 0
             if needs_retry_ids and hasattr(self.controller, '_dispatcher'):
                 try:
@@ -1982,11 +2014,23 @@ class TabQueue(
                     for tid in needs_retry_ids:
                         task = dispatcher.get_task(tid)
                         if task:
-                            from core.dispatcher import TaskState
+                            from core.dispatcher import TaskState, TaskStage
                             task.state = TaskState.READY
                             task.progress = 0
+                            task.error = None
+                            task.stage = TaskStage.INIT
                             task.status_text = "🔄 Auto-sweep: re-generating missing video(s)"
-                            dispatcher._ready_queue.put(task)
+                            task.assigned_account = None
+                            # Clear stale data for fresh generation
+                            task.image_uris.clear()
+                            task.image_upload_status = ""
+                            task.video_outputs.clear()
+                            task.output_uris.clear()
+                            task.operation_name = None
+                            task.operation_names.clear()
+                            task.scene_ids.clear()
+                            dispatcher._queued_task_ids.discard(tid)
+                            dispatcher._enqueue_task(task, priority=0)
                             retry_regen += 1
                             log.info(f"[AutoSweep] Task {tid}: reset to READY for re-generation")
                 except Exception as e:
@@ -2030,10 +2074,13 @@ class TabQueue(
                         "warning", duration=5000
                     )
             
-            # Auto-start engine if we retried tasks/videos or re-gen'd
+            # Auto-start engine if we retried tasks/videos, re-gen'd, OR re-upscaled
             if result["retried_tasks"] + result["retried_videos"] + retry_regen > 0:
                 self._auto_start_if_idle()
-            elif result["still_incomplete"] == 0 and reupscale_count == 0:
+            elif reupscale_count > 0:
+                # Re-upscale jobs queued → engine must be running for upscale lifecycle
+                self._auto_start_if_idle()
+            elif result["still_incomplete"] == 0:
                 # Everything actually complete → allow action next tick
                 pass  # Will be caught next _check_post_queue_action cycle
         except Exception as e:

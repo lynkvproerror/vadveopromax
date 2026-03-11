@@ -62,7 +62,7 @@ class _GenerationWorker(QObject):
 
     def __init__(self, topics, template, api_key, output_base,
                  scanner, rules_loader, model_name="", base_url="", provider="Google",
-                 matrix_config=None):
+                 matrix_config=None, prompt_format="text"):
         super().__init__()
         self.topics = topics
         self.template = template
@@ -74,6 +74,7 @@ class _GenerationWorker(QObject):
         self.base_url = base_url
         self.provider = provider
         self.matrix_config = matrix_config or {}
+        self.prompt_format = prompt_format
 
     @Slot()
     def run(self):
@@ -127,6 +128,7 @@ class _GenerationWorker(QObject):
                     self.topics, self.template, self.api_key, self.output_base,
                     model=self.model_name,
                     matrix_config=self.matrix_config,
+                    prompt_format=self.prompt_format,
                 )
             )
             loop.close()
@@ -479,6 +481,23 @@ class TabProject(QWidget):
         """)
         self._auto_add_cb.setChecked(True)
         btn_row.addWidget(self._auto_add_cb)
+
+        # Prompt format toggle
+        self._prompt_format_combo = QComboBox()
+        self._prompt_format_combo.addItems(["Text", "JSON"])
+        self._prompt_format_combo.setFixedWidth(70)
+        self._prompt_format_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+                padding: 2px 4px;
+                font-size: 11px;
+            }}
+        """)
+        self._prompt_format_combo.setToolTip("Prompt output format: Text (1 line/prompt) or JSON ({...})")
+        btn_row.addWidget(self._prompt_format_combo)
 
         btn_row.addStretch()
         body_layout.addLayout(btn_row)
@@ -915,6 +934,7 @@ class TabProject(QWidget):
             base_url=base_url,
             provider=provider,
             matrix_config=matrix_config,
+            prompt_format="json" if self._prompt_format_combo.currentText() == "JSON" else "text",
         )
         self._worker.moveToThread(self._worker_thread)
 

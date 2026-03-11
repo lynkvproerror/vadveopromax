@@ -2463,6 +2463,7 @@ class AppController:
         per_prompt_images: Optional[Dict[int, List[str]]] = None,  # Bug 2: per-prompt image mapping
         settings: Optional[Dict] = None,
         continuation_map: Optional[Dict[int, int]] = None,  # index -> parent_index
+        per_prompt_durations: Optional[Dict[int, int]] = None,  # index -> duration_seconds (from JSON scenes)
     ) -> str:
         """Submit prompts for processing.
         
@@ -2520,7 +2521,7 @@ class AppController:
                 aspect_ratio=aspect_ratio,
                 model=model,
                 output_count=output_count,
-                duration_seconds=(settings or {}).get("duration", 8),
+                duration_seconds=(per_prompt_durations or {}).get(i, (settings or {}).get("duration", 8)),
                 # Bug 2 fix: Per-prompt images take priority, fallback to shared list
                 image_uris=(per_prompt_images or {}).get(i, images or []),
                 parent_task_id=parent_task_id,
@@ -2698,18 +2699,22 @@ class AppController:
             prompts: List of PromptRow objects from UI
             settings: Sidebar settings dict
         """
-        # Extract continuation chain
+        # Extract continuation chain + per-prompt durations
         continuation_map = {}
+        per_prompt_durations = {}
+        
         for i, p in enumerate(prompts):
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
-                # continuation_from is 1-indexed, convert to 0-indexed
                 continuation_map[i] = p.continuation_from - 1
+            if hasattr(p, 'duration') and p.duration is not None:
+                per_prompt_durations[i] = p.duration
         
         return self.submit_prompts(
             prompts=[p.text if hasattr(p, 'text') else str(p) for p in prompts],
             workflow=WorkflowType.T2V,
             settings=settings,
-            continuation_map=continuation_map if continuation_map else None
+            continuation_map=continuation_map if continuation_map else None,
+            per_prompt_durations=per_prompt_durations if per_prompt_durations else None,
         )
     
     def _resolve_tags_to_paths(self, tags: List[str]) -> List[str]:
@@ -3356,7 +3361,7 @@ class AppController:
     # === EVENT HANDLERS ===
     
     def _handle_task_completed(self, task: Task):
-        """Handle task completion + detect group completion."""
+        """Handle task completion + detect group completion + auto-stop."""
         # Check group completion FIRST — if group just completed,
         # skip per-task toast to avoid duplicate notifications
         group_completed = self._check_group_completion(task)
@@ -3364,6 +3369,9 @@ class AppController:
         if not group_completed and self._on_task_completed:
             self._on_task_completed(task)
         self._notify_queue_updated()
+        
+        # ── Auto-stop: all tasks finished → stop engine ──
+        self._check_auto_stop()
     
     def _check_group_completion(self, task: Task) -> bool:
         """Check if the task's group is fully completed and fire notification.
@@ -3386,6 +3394,48 @@ class AppController:
         if self._on_task_failed:
             self._on_task_failed(task, error)
         self._notify_queue_updated()
+        
+        # ── Auto-stop: all tasks finished → stop engine ──
+        self._check_auto_stop()
+    
+    def _check_auto_stop(self):
+        """Auto-stop engine when ALL tasks reached terminal state.
+        
+        Prevents engine from running forever after all work is done,
+        which would cause reCAPTCHA request accumulation + Chrome tab freeze.
+        
+        ★ Fix: Also checks UpscaleQueue — defers stop if upscales are
+        still pending/active (prevents killing in-flight upscale API calls).
+        """
+        if not self.state.is_processing:
+            return  # Already stopped
+        
+        try:
+            terminal_states = {'completed', 'failed', 'cancelled'}
+            
+            # Check ready queue first (fast path)
+            if self._dispatcher.ready_count > 0:
+                return
+            
+            # Check all tasks for non-terminal state
+            for task in self._dispatcher.get_all_tasks():
+                if task.state.value not in terminal_states:
+                    return  # Still has active/pending work
+            
+            # ★ FIX: Don't auto-stop if UpscaleQueue has pending work
+            # Without this, AutoStop kills in-flight upscales → 'NoneType' errors
+            # and workers skip upscale on shared _stop_event
+            if hasattr(self, '_engine') and self._engine:
+                uq = getattr(self._engine, '_upscale_queue', None)
+                if uq and uq.has_pending_work():
+                    log.info("[AutoStop] Deferred — UpscaleQueue still has pending work")
+                    return
+            
+            # All tasks in terminal state + ready queue empty + no pending upscales → auto-stop
+            log.info("[AutoStop] All tasks finished — stopping engine automatically")
+            self.stop_processing()
+        except Exception as e:
+            log.warning(f"[AutoStop] Check failed: {e}")
     
     def _handle_progress(self, task_id: str, progress: int, status_text: str = ""):
         """Handle progress update from engine callback.

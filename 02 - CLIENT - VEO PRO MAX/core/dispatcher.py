@@ -1655,6 +1655,10 @@ class Dispatcher:
                 continue
             
             for i, vo in enumerate(task.video_outputs):
+                # NOTE: Only retry quality='failed' here (video generation failure).
+                # upscale_status='failed' is handled separately by Phase 3 re-upscale
+                # in _run_auto_sweep() — force_retry_video would DELETE the good 720p
+                # and re-generate from scratch, which is wasteful.
                 if vo.quality == 'failed':
                     if self.force_retry_video(task.id, i):
                         retried += 1

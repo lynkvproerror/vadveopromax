@@ -127,7 +127,25 @@ class AccountSupervisor:
         
         # ── Phase 1: One-time startup (shared by all foremen) ────────
         try:
-            await self.engine._wait_for_account_ready(self.account, timeout=30.0)
+            # Trigger header refresh + quick xcd poll (gate handles full validation per-task)
+            bridge = getattr(self.account, 'extension_bridge', None)
+            if bridge and bridge.is_connected(self.account.email):
+                log.info(f"[Supervisor:{self.email}] Refreshing browser headers...")
+                try:
+                    await bridge.refresh_headers_lightweight(self.account.email, timeout=10.0)
+                except Exception:
+                    pass
+                # Quick poll — up to 15s for xcd to appear
+                import time as _time
+                from config.constants import MIN_VALID_XCD
+                _start = _time.monotonic()
+                while _time.monotonic() - _start < 15.0:
+                    hdrs = self.account.get_browser_headers() if hasattr(self.account, 'get_browser_headers') else {}
+                    if len((hdrs.get('x-client-data', '') or '')) >= MIN_VALID_XCD:
+                        log.info(f"[Supervisor:{self.email}] ✅ x-client-data ready ({len(hdrs.get('x-client-data',''))} chars)")
+                        break
+                    await asyncio.sleep(1.0)
+            
             await self.engine._check_app_availability(self.account)
             
             # Create project + navigate browser BEFORE reCAPTCHA init.
@@ -588,6 +606,10 @@ class Engine:
         self._account_403_last_epoch: Dict[str, int] = {}    # email → last epoch when 403 was counted
         self._account_resetting: Dict[str, bool] = {}        # email → True if recovery in progress
         
+        # Fix B: Per-account lock for reCAPTCHA recovery serialization
+        # Prevents N foremen from ALL doing the expensive recovery cycle simultaneously
+        self._recaptcha_recovery_locks: Dict[str, asyncio.Lock] = {}
+        
         # Smart Recovery: Credit Window for account health tracking
         from config.settings import get_settings as _get_recovery_settings
         _rs = _get_recovery_settings()
@@ -659,6 +681,7 @@ class Engine:
             profiles_controller=self._profiles_controller,
             extension_bridge=self._extension_bridge,
             wake_event=self._upscale_wake_event,  # T1: event-driven wake
+            pre_submit_gate_fn=self._pre_submit_gate,  # Centralized xcd + reCAPTCHA gate
         )
         
         # Manifest manager: portable project data alongside output videos
@@ -796,14 +819,18 @@ class Engine:
             return None
         
         try:
+            # Auto-detect JSON format: preserve {...} structure
+            _prompt = task.prompt or ""
+            _fmt = "json" if _prompt.strip().startswith('{') else "text"
             enhanced = await self._prompt_enhancer.enhance(
-                prompt=task.prompt or "",
+                prompt=_prompt,
                 api_key=api_key,
                 profile_email=email,
+                output_format=_fmt,
             )
             if enhanced:
                 log.info(
-                    f"[Enhance] {email}: '{(task.prompt or '')[:40]}...' "
+                    f"[Enhance] {email}: '{_prompt[:40]}...' "
                     f"→ '{enhanced[:40]}...'"
                 )
             return enhanced
@@ -817,6 +844,7 @@ class Engine:
                             prompt=task.prompt or "",
                             api_key=rotation_key,
                             profile_email=email,
+                            output_format=_fmt,
                         )
                     except Exception:
                         pass
@@ -863,16 +891,20 @@ class Engine:
             return None
         
         try:
+            # Auto-detect JSON format: preserve {...} structure
+            _prompt = task.prompt or ""
+            _fmt = "json" if _prompt.strip().startswith('{') else "text"
             fixed = await self._prompt_enhancer.fix_policy(
-                prompt=task.prompt or "",
+                prompt=_prompt,
                 error_message=error_msg,
                 api_key=api_key,
                 profile_email=email,
+                output_format=_fmt,
             )
             if fixed:
                 log.info(
                     f"[Fix] {email}: policy error fixed — "
-                    f"'{(task.prompt or '')[:40]}...' → '{fixed[:40]}...'"
+                    f"'{_prompt[:40]}...' → '{fixed[:40]}...'"
                 )
             return fixed
         except Exception as e:
@@ -886,6 +918,7 @@ class Engine:
                             error_message=error_msg,
                             api_key=rotation_key,
                             profile_email=email,
+                            output_format=_fmt,
                         )
                     except Exception:
                         pass
@@ -1093,103 +1126,172 @@ class Engine:
     
     # ── Account Readiness Gate ──
     
-    async def _wait_for_account_ready(self, account, timeout: float = 30.0):
-        """Block until account has valid x-client-data from extension.
+    async def _pre_submit_gate(self, account, task, attempt: int = 0) -> bool:
+        """Centralized pre-submit gate. ALL modes, ALL attempts.
         
-        Chrome's Variations Service needs ~5-15s after launch to generate
-        x-client-data. Submitting before this causes guaranteed 403.
+        THE SINGLE SOURCE OF TRUTH for xcd + reCAPTCHA readiness.
+        Replaces old _wait_for_account_ready + scattered checks.
         
-        Uses get_browser_headers() which reads from ExtensionBridge cache
-        (zero lag) instead of session.client_data (2s debounce delay).
+        Flow:
+        1. Fast path: instant check via cached real-time data (0ms)
+        2. Slow path (under per-account lock):
+           a. Trigger page reload → extension captures fresh headers
+           b. Poll xcd from 3 sources (AM → bridge → session) — max 15s
+           c. If fail → borrow from other accounts
+           d. Post-borrow recovery poll — max 15s
+           e. Still fail → SOFT gate (warn + proceed)
+        3. reCAPTCHA: HARD gate (block — no token = guaranteed failure)
+        
+        Returns True = OK to submit, False = should requeue task.
         """
         import time
-        start = time.monotonic()
-        from config.constants import MIN_VALID_XCD
-        MIN_GOOD = MIN_VALID_XCD  # Shared constant (50)
         email = account.email
+        bridge = getattr(account, 'extension_bridge', None)
+        from config.constants import MIN_VALID_XCD
+        MIN_GOOD = MIN_VALID_XCD  # 50
         
-        # Throttle: avoid 30+ identical debug lines during readiness wait
-        _xcd_last_log = [0.0]  # mutable for closure
-        
+        # ── Helper: read xcd from 3 sources ──
         def _get_xcd() -> str:
-            """Read x-client-data: bridge cache → direct bridge query → session fallback."""
-            has_method = hasattr(account, 'get_browser_headers')
-            has_bridge = bool(getattr(account, '_extension_bridge', None))
-            
+            """Read x-client-data: AM headers → bridge cache → session fallback."""
             # Path 1: AccountManager.get_browser_headers() (reads bridge cache)
-            headers = account.get_browser_headers() if has_method else {}
-            xcd = headers.get('x-client-data', '') or ''
-            if xcd and len(xcd) >= MIN_GOOD:
-                return xcd
+            if hasattr(account, 'get_browser_headers'):
+                headers = account.get_browser_headers()
+                xcd = (headers.get('x-client-data', '') or '')
+                if len(xcd) >= MIN_GOOD:
+                    return xcd
+            else:
+                xcd = ''
             
-            # Path 2: Direct bridge cache query (failsafe if AM bridge ref lost)
-            bridge = getattr(account, '_extension_bridge', None)
-            if bridge:
-                cached = bridge.get_cached_headers(email, max_age_seconds=0)  # any age OK
+            # Path 2: Direct bridge cache query
+            b = getattr(account, '_extension_bridge', None) or bridge
+            if b:
+                cached = b.get_cached_headers(email, max_age_seconds=0)
                 if cached:
-                    xcd2 = cached.get('x-client-data', '') or ''
-                    if xcd2 and len(xcd2) >= MIN_GOOD:
-                        log.debug(f"[Foreman:{email}] _get_xcd: direct bridge→{len(xcd2)} chars (AM path returned {len(xcd)} chars)")
+                    xcd2 = (cached.get('x-client-data', '') or '')
+                    if len(xcd2) >= MIN_GOOD:
                         return xcd2
+                    if len(xcd2) > len(xcd):
+                        xcd = xcd2
             
             # Path 3: Session fallback (debounced value)
-            xcd3 = getattr(account.session, 'client_data', '') or ''
-            # Throttle debug log: once per 5s to reduce noise
-            now = time.monotonic()
-            if now - _xcd_last_log[0] >= 5.0:
-                _xcd_last_log[0] = now
-                log.debug(f"[Foreman:{email}] _get_xcd: session fallback→{len(xcd3)} chars (bridge={has_bridge}, AM→{len(xcd)} chars)")
-            return xcd3 if len(xcd3) > len(xcd) else (xcd or xcd3)
+            xcd3 = getattr(getattr(account, 'session', None), 'client_data', '') or ''
+            return xcd3 if len(xcd3) > len(xcd) else xcd
         
-        # Fast path: already have good data
+        # Skip gate during stop
+        if self._stop_event.is_set():
+            return False
+        
+        # ── Fast Path: instant real-time check ──
+        if bridge:
+            ready, reason = bridge.is_submit_ready(email)
+            if ready:
+                return True
+            log.debug(
+                f"[PreSubmitGate:{email}] Fast check failed: {reason} "
+                f"(task {task.id}, attempt {attempt})"
+            )
+        
+        # Also check 3-layer xcd immediately (bridge might not have is_submit_ready)
         xcd = _get_xcd()
         if len(xcd) >= MIN_GOOD:
-            return
+            # xcd OK — skip slow path, go straight to reCAPTCHA
+            pass  # fall through to reCAPTCHA check below
+        else:
+            # ── Slow Path: active reload + monitor (under per-account lock) ──
+            if not hasattr(self, '_gate_locks'):
+                self._gate_locks = {}
+            if email not in self._gate_locks:
+                self._gate_locks[email] = asyncio.Lock()
+            
+            gate_lock = self._gate_locks[email]
+            
+            if gate_lock.locked():
+                # Another foreman already doing slow path — wait for result
+                log.debug(f"[PreSubmitGate:{email}] Another foreman in slow path — waiting")
+                async with gate_lock:
+                    pass  # Fall through — check xcd after lock release
+                xcd = _get_xcd()
+                if len(xcd) >= MIN_GOOD:
+                    log.info(f"[PreSubmitGate:{email}] ✅ xcd={len(xcd)} chars (from peer)")
+            else:
+                async with gate_lock:
+                    # Step 1: Trigger page reload for fresh headers
+                    if bridge and bridge.is_connected(email):
+                        log.info(
+                            f"[PreSubmitGate:{email}] Triggering header refresh "
+                            f"(task {task.id}, attempt {attempt})"
+                        )
+                        try:
+                            await bridge.refresh_headers_lightweight(email, timeout=10.0)
+                        except Exception as e:
+                            log.debug(f"[PreSubmitGate:{email}] Refresh failed: {e}")
+                    
+                    # Step 2: Poll xcd from 3 sources (max 15s)
+                    start = time.monotonic()
+                    while time.monotonic() - start < 15.0:
+                        if self._stop_event.is_set():
+                            return False
+                        xcd = _get_xcd()
+                        if len(xcd) >= MIN_GOOD:
+                            log.info(
+                                f"[PreSubmitGate:{email}] ✅ xcd={len(xcd)} chars "
+                                f"after {time.monotonic()-start:.1f}s"
+                            )
+                            break
+                        await self._interruptible_sleep(1.0)
+                    else:
+                        # Step 3: Borrow from other accounts
+                        log.warning(
+                            f"[PreSubmitGate:{email}] ⚠️ xcd={len(_get_xcd())} chars "
+                            f"after 15s — trying borrow from other accounts..."
+                        )
+                        try:
+                            self._account_manager.fix_short_client_data()
+                            xcd = _get_xcd()
+                            if len(xcd) >= MIN_GOOD:
+                                log.info(
+                                    f"[PreSubmitGate:{email}] ✅ Borrowed xcd="
+                                    f"{len(xcd)} chars from another account"
+                                )
+                        except Exception as e:
+                            log.debug(f"[PreSubmitGate:{email}] Borrow failed: {e}")
+                        
+                        # Step 4: Post-borrow recovery poll (max 15s)
+                        if len(_get_xcd()) < MIN_GOOD:
+                            start2 = time.monotonic()
+                            while time.monotonic() - start2 < 15.0:
+                                if self._stop_event.is_set():
+                                    return False
+                                xcd = _get_xcd()
+                                if len(xcd) >= MIN_GOOD:
+                                    log.info(
+                                        f"[PreSubmitGate:{email}] ✅ xcd recovered "
+                                        f"{len(xcd)} chars after borrow+{time.monotonic()-start2:.1f}s"
+                                    )
+                                    break
+                                await self._interruptible_sleep(1.0)
+                            else:
+                                # SOFT gate: warn but proceed
+                                xcd_len = len(_get_xcd())
+                                log.warning(
+                                    f"[PreSubmitGate:{email}] ⚠️ xcd={xcd_len} chars "
+                                    f"(need ≥{MIN_GOOD}) — proceeding anyway (soft gate)"
+                                )
         
-        log.info(f"[Foreman:{email}] Waiting for x-client-data (current: {len(xcd)} chars)...")
+        # ── Gate 2: reCAPTCHA readiness (HARD — always required) ──
+        if self._stop_event.is_set():
+            return False
         
-        while time.monotonic() - start < timeout:
-            if self._stop_event.is_set():
-                return
-            xcd = _get_xcd()
-            if len(xcd) >= MIN_GOOD:
-                elapsed = time.monotonic() - start
-                log.info(f"[Foreman:{email}] ✅ Account ready (x-client-data: {len(xcd)} chars, waited {elapsed:.1f}s)")
-                return
-            await self._interruptible_sleep(1.0)
+        rc_ok = await self._wait_for_recaptcha_ready(account, max_wait=15.0)
+        if not rc_ok:
+            log.warning(
+                f"[PreSubmitGate:{email}] ❌ reCAPTCHA not ready "
+                f"— requeue task {task.id}"
+            )
+            return False
         
-        xcd = _get_xcd()
-        if len(xcd) >= MIN_GOOD:
-            return
-        
-        # BUG-B: Try borrowing x-client-data from other accounts
-        # instead of proceeding with guaranteed 403
-        log.warning(
-            f"[Foreman:{email}] ⚠️ Readiness timeout ({timeout:.0f}s) — "
-            f"x-client-data still {len(xcd)} chars. Trying borrow from other accounts..."
-        )
-        try:
-            self._account_manager.fix_short_client_data()
-            xcd = _get_xcd()
-            if len(xcd) >= MIN_GOOD:
-                log.info(f"[Foreman:{email}] ✅ Borrowed x-client-data from another account ({len(xcd)} chars)")
-                return
-        except Exception as borrow_err:
-            log.debug(f"[Foreman:{email}] Borrow failed: {borrow_err}")
-        
-        # Still invalid — wait one more cycle (30s) before giving up
-        log.warning(
-            f"[Foreman:{email}] ⚠️ x-client-data still {len(xcd)} chars after borrow attempt. "
-            f"Waiting 30s cooldown before proceeding..."
-        )
-        for _ in range(30):
-            if self._stop_event.is_set():
-                return
-            await self._interruptible_sleep(1.0)
-            xcd = _get_xcd()
-            if len(xcd) >= MIN_GOOD:
-                log.info(f"[Foreman:{email}] ✅ x-client-data recovered ({len(xcd)} chars)")
-                return
+        log.info(f"[PreSubmitGate:{email}] ✅ Gate passed — submitting")
+        return True
     
     def _execute_js_on_account(self, account, js_expression: str, timeout: float = 10.0):
         """Execute JS on account's debug browser page (thread-safe).
@@ -3412,25 +3514,7 @@ class Engine:
                             # Re-check cooldown AFTER circuit wake — CircuitBreaker
                             # HALF-OPEN probe may have reset cooldown timer
                             await self.wait_for_cooldown(account.email)
-                            
-                            # ★ reCAPTCHA readiness gate: after cooldown, tab may have
-                            # been kept alive via keepalive but reCAPTCHA still needs
-                            # verification. If not ready → requeue instead of wasting
-                            # a submit attempt on a guaranteed 403.
-                            rc_ok = await self._wait_for_recaptcha_ready(
-                                account, max_wait=30.0
-                            )
-                            if not rc_ok:
-                                log.warning(
-                                    f"[Foreman:{account.email}] Task {task.id}: "
-                                    f"reCAPTCHA NOT ready after cooldown (attempt {attempt+1}) "
-                                    f"— requeuing task"
-                                )
-                                self._dispatcher.requeue_task(task)
-                                account.release_workers(worker_count)
-                                worker_count = 0
-                                result = None
-                                break
+                            # (reCAPTCHA + xcd readiness now handled by _pre_submit_gate below)
                         
                         # ── NEW: Extract frame from _pending_frame_source (set by retry_task) ──
                         # When dispatcher retries a continuation child whose parent is COMPLETED,
@@ -3487,6 +3571,15 @@ class Engine:
                                 fresh_uri = await self._re_upload_continuation_frame(task, account)
                                 if fresh_uri:
                                     task.image_uris = [fresh_uri]
+                        
+                        # ── Pre-Submit Gate: validate xcd + reCAPTCHA ──
+                        gate_ok = await self._pre_submit_gate(account, task, attempt)
+                        if not gate_ok:
+                            self._dispatcher.requeue_task(task)
+                            account.release_workers(worker_count)
+                            worker_count = 0
+                            result = None
+                            break
                         
                         # Lock: covers anti-detect delay + single API call only
                         async with self._account_rate_locks[account.email]:
@@ -4390,16 +4483,41 @@ class Engine:
                     # Bug 3 fix: Gate with per-account semaphore (max 3 concurrent)
                     # Without this, N workers = N simultaneous upscale requests
                     upscale_sem = self._get_upscale_api_semaphore(email)
-                    async with upscale_sem:
-                        upscaled = await self._upscale_single(
-                            task, account, fife_url, media_id, effective_video_index
-                        )
+                    upscaled = ""  # ★ Fix C: initialize to prevent UnboundLocalError
+                    # ── Pre-Submit Gate: validate before upscale ──
+                    _gate_ok = await self._pre_submit_gate(account, task)
+                    if not _gate_ok:
+                        log.warning(f"{log_prefix} PreSubmitGate failed — skipping upscale")
+                    else:
+                        async with upscale_sem:
+                            upscaled = await self._upscale_single(
+                                task, account, fife_url, media_id, effective_video_index
+                            )
                     if upscaled:
                         local_final = upscaled
                         final_quality = task.download_quality
                         task.video_outputs[video_index].file_upscaled = upscaled
                         task.video_outputs[video_index].quality = final_quality
                         log.info(f"{log_prefix} ✅ Upscaled to {final_quality}")
+                    else:
+                        # ★ Fix C: Inline upscale failed → fall back to UpscaleQueue
+                        # Instead of silently keeping 720p, delegate to background
+                        # retry so the video eventually gets upscaled
+                        if not self._stop_event.is_set():
+                            from core.upscale_queue import UpscaleJob
+                            self._upscale_queue.enqueue(UpscaleJob(
+                                task_id=task.id,
+                                account_email=email,
+                                original_account=email,
+                                media_ids=[media_id],
+                                output_uris=[fife_url],
+                                target_quality=task.download_quality,
+                                aspect_ratio=task.aspect_ratio,
+                            ))
+                            log.info(
+                                f"{log_prefix} Inline upscale failed → "
+                                f"delegated to UpscaleQueue for background retry"
+                            )
 
             # ── Report result ──
             results_dict[video_index] = WorkerVideoResult(
@@ -4924,18 +5042,15 @@ class Engine:
                     await self._wait_for_circuit(account.email)
                     await self.wait_for_cooldown(account.email)
                     
-                    rc_ok = await self._wait_for_recaptcha_ready(
-                        account, max_wait=30.0
-                    )
-                    if not rc_ok:
-                        log.warning(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"reCAPTCHA NOT ready (attempt {attempt+1}) — requeuing"
-                        )
-                        self._dispatcher.requeue_task(task)
-                        account.release_workers(worker_count)
-                        worker_count = 0
-                        return
+                    # (reCAPTCHA + xcd readiness now handled by _pre_submit_gate below)
+                
+                # ── Pre-Submit Gate: validate xcd + reCAPTCHA ──
+                gate_ok = await self._pre_submit_gate(account, task, attempt)
+                if not gate_ok:
+                    self._dispatcher.requeue_task(task)
+                    account.release_workers(worker_count)
+                    worker_count = 0
+                    return
                 
                 # ═══ Sequential submit (under rate lock — matches video pipeline) ═══
                 # Background tasks queue on rate lock, process one at a time.
@@ -4984,46 +5099,7 @@ class Engine:
                 # ═══ OUTSIDE rate lock: XCD + submit + parse ═══
                 # Rate lock released after burst delay — next task can start spacing
                 try:
-                    # ── XCD pre-check (first attempt only) ──
-                    _xcd_proven = getattr(self, '_t2i_xcd_proven', {}).get(account.email, False)
-                    if attempt == 0 and not _xcd_proven:
-                        from config.constants import MIN_VALID_XCD
-                        hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
-                        xcd_val = hdrs.get('x-client-data', '') or ''
-                        if len(xcd_val) < MIN_VALID_XCD:
-                            ext_bridge = getattr(account, 'extension_bridge', None)
-                            if ext_bridge and ext_bridge.is_connected(account.email):
-                                log.info(
-                                    f"[T2I-BG:{account.email}] Task {task.id}: "
-                                    f"xcd={len(xcd_val)} chars — triggering header refresh"
-                                )
-                                try:
-                                    await ext_bridge.refresh_headers_lightweight(account.email, timeout=5.0)
-                                    await asyncio.sleep(2.0)
-                                    await ext_bridge.probe_browser_headers(account.email, timeout=5.0)
-                                    await asyncio.sleep(1.0)
-                                except Exception as _e:
-                                    log.debug(f"[T2I-BG:{account.email}] header refresh error: {_e}")
-                            
-                            for _xcd_wait in range(10):
-                                hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
-                                xcd_val = hdrs.get('x-client-data', '') or ''
-                                if len(xcd_val) >= MIN_VALID_XCD:
-                                    log.info(
-                                        f"[T2I-BG:{account.email}] Task {task.id}: "
-                                        f"xcd ready after refresh ({len(xcd_val)} chars)"
-                                    )
-                                    break
-                                await asyncio.sleep(1.0)
-                            else:
-                                hdrs = account.get_browser_headers() if hasattr(account, 'get_browser_headers') else {}
-                                xcd_val = hdrs.get('x-client-data', '') or ''
-                                if len(xcd_val) < MIN_VALID_XCD:
-                                    log.warning(
-                                        f"[T2I-BG:{account.email}] Task {task.id}: "
-                                        f"x-client-data still {len(xcd_val)} chars after refresh+10s — skipping to retry"
-                                    )
-                                    continue
+                    # (xcd check now handled by _pre_submit_gate above)
                     
                     ext_bridge = getattr(account, 'extension_bridge', None)
                     if not ext_bridge or not ext_bridge.is_connected(account.email):
@@ -5499,6 +5575,15 @@ class Engine:
                     break
                 
                 try:
+                    # ── Pre-Submit Gate: validate before T2I upscale ──
+                    _gate_ok = await self._pre_submit_gate(account, task, attempt)
+                    if not _gate_ok:
+                        log.warning(
+                            f"[T2I-Upscale] {idx+1}/{total}: "
+                            f"PreSubmitGate failed — skipping attempt {attempt+1}"
+                        )
+                        continue
+                    
                     async with sem:  # Limit concurrent upscale requests
                         log.info(
                             f"[T2I-Upscale] {idx+1}/{total}: "
@@ -5646,13 +5731,13 @@ class Engine:
                             settings = get_settings()
                             output_folder = (
                                 getattr(task, 'output_folder', '')
-                                or settings.output_folder
-                            )
+                                or settings.output_folder or ''
+                            ).strip()
                             project_name = (
                                 getattr(task, 'project_name', '') or "Untitled"
-                            )
+                            ).strip()
                             upscale_dir = (
-                                Path(output_folder) / project_name / upscale_quality
+                                Path(output_folder) / project_name / upscale_quality.strip()
                             )
                             upscale_dir.mkdir(parents=True, exist_ok=True)
                             
@@ -6866,23 +6951,39 @@ class Engine:
     ) -> bool:
         """Layer 2: Wait until Extension confirms grecaptcha is ready.
         
-        Polls Extension via check_recaptcha_ready() every 2s with gentle backoff.
-        Once ready, pre-fetches tokens via RecaptchaPool.priority_prefetch().
-        
-        This replaces fixed sleep(3-5s) with deterministic readiness checking.
-        If Extension doesn't support check_recaptcha_ready (old version),
-        falls back to a 5s fixed delay.
-        
-        Args:
-            account: AccountManager with extension bridge reference.
-            max_wait: Maximum seconds to wait before proceeding anyway.
-            
-        Returns:
-            True if grecaptcha confirmed ready, False if timed out.
+        Serialized per account: only one foreman does recovery at a time.
+        Others wait for the lock, then benefit from the 3s dedup cache.
         """
+        email = account.email
+        if email not in self._recaptcha_recovery_locks:
+            self._recaptcha_recovery_locks[email] = asyncio.Lock()
+        
+        lock = self._recaptcha_recovery_locks[email]
+        if lock.locked():
+            # Another foreman is already recovering — wait for it
+            log.info(
+                f"[Foreman:{email}] reCAPTCHA recovery already in progress "
+                f"by another foreman — waiting for lock..."
+            )
+            async with lock:
+                # Recovery done — check if recaptcha is now ready via cache
+                bridge = account.extension_bridge
+                if bridge:
+                    try:
+                        return await bridge.check_recaptcha_ready(email, timeout=5.0)
+                    except Exception:
+                        return False
+                return False
+        
+        async with lock:
+            return await self._do_wait_for_recaptcha_ready(account, max_wait)
+    
+    async def _do_wait_for_recaptcha_ready(
+        self, account: AccountManager, max_wait: float = 30.0
+    ) -> bool:
+        """Internal: actual reCAPTCHA readiness wait + recovery logic."""
         bridge = account.extension_bridge
         if not bridge:
-            # No extension bridge — fallback to fixed delay
             log.info(f"[Foreman:{account.email}] No extension bridge, using 5s fixed cooldown")
             await asyncio.sleep(5.0)
             return False
@@ -7533,6 +7634,13 @@ class Engine:
                     # Risk 5 fix: Serialize upscale submits per account (prevents burst)
                     if account.email not in self._account_rate_locks:
                         self._account_rate_locks[account.email] = asyncio.Lock()
+                    # ── Pre-Submit Gate: validate before standalone upscale ──
+                    _gate_ok = await self._pre_submit_gate(account, task, attempt)
+                    if not _gate_ok:
+                        log.warning(
+                            f"Upscale {video_label}: PreSubmitGate failed — skipping"
+                        )
+                        break
                     async with self._account_rate_locks[account.email]:
                         # Fix G7: Anti-detect delay before inline upscale submit
                         if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
@@ -7561,6 +7669,8 @@ class Engine:
                                 aspect_ratio=task.aspect_ratio,
                                 seed=generate_random_seed(),
                                 scene_id=orig_scene_id,
+                                project_id=getattr(account, 'project_id', '') or task.project_id or "",
+                                paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                             )
                             ext_result = await ext_bridge.submit_upscale(
                                 email=account.email,
@@ -7601,9 +7711,11 @@ class Engine:
                                     access_token=account.get_access_token() or "",
                                     recaptcha_token=recaptcha_token,
                                     video_media_id=media_id,
+                                    project_id=getattr(account, 'project_id', '') or task.project_id or "",
                                     target_resolution=resolution,
                                     aspect_ratio=task.aspect_ratio,
                                     seed=generate_random_seed(),
+                                    paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                                     account_headers=account.get_api_headers(),
                                 )
                         
@@ -7687,13 +7799,18 @@ class Engine:
                                 restart_ok = await account.restart_browser()
                                 if restart_ok:
                                     log.info(f"✅ Upscale: Browser restarted for {account.email}. Retrying...")
-                                    # Fix: borrow x-client-data from other accounts
-                                    # after restart (new browser may have short value)
-                                    self._account_manager.fix_short_client_data()
-                                    # Fix #3: Wait for x-client-data recovery after restart
-                                    log.info(f"⏳ Upscale: Waiting for x-client-data recovery...")
-                                    await self._wait_for_account_ready(account, timeout=30.0)
-                                    await self._wait_for_recaptcha_ready(account, max_wait=15.0)
+                                    # Post-restart: refresh headers (gate handles full validation on next retry)
+                                    ext_b = getattr(account, 'extension_bridge', None)
+                                    if ext_b and ext_b.is_connected(account.email):
+                                        try:
+                                            await ext_b.refresh_headers_lightweight(account.email, timeout=10.0)
+                                        except Exception:
+                                            pass
+                                    # Borrow xcd as fallback
+                                    try:
+                                        self._account_manager.fix_short_client_data()
+                                    except Exception:
+                                        pass
                                 else:
                                     log.error(f"❌ Upscale: Browser restart returned False")
                             except Exception as restart_err:
@@ -7749,6 +7866,11 @@ class Engine:
                     # Risk 5+6 fix: Rate lock + cooldown for re-submit
                     if account.email not in self._account_rate_locks:
                         self._account_rate_locks[account.email] = asyncio.Lock()
+                    # ── Pre-Submit Gate: validate before standalone upscale re-submit ──
+                    _gate_ok = await self._pre_submit_gate(account, task)
+                    if not _gate_ok:
+                        log.warning(f"Upscale re-submit: PreSubmitGate failed — skipping")
+                        break
                     async with self._account_rate_locks[account.email]:
                         # Fix G7: Anti-detect delay before inline upscale re-submit
                         if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
@@ -7770,6 +7892,8 @@ class Engine:
                                 aspect_ratio=task.aspect_ratio,
                                 seed=generate_random_seed(),
                                 scene_id=orig_scene_id,
+                                project_id=getattr(account, 'project_id', '') or task.project_id or "",
+                                paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                             )
                             ext_r = await ext_bridge.submit_upscale(
                                 email=account.email, body=upscale_body,
@@ -7793,9 +7917,11 @@ class Engine:
                                     access_token=account.get_access_token() or "",
                                     recaptcha_token=recaptcha_token,
                                     video_media_id=media_id,
+                                    project_id=getattr(account, 'project_id', '') or task.project_id or "",
                                     target_resolution=resolution,
                                     aspect_ratio=task.aspect_ratio,
                                     seed=generate_random_seed(),
+                                    paygate_tier=getattr(account, 'paygate_tier', '') or "PAYGATE_TIER_TWO",
                                     account_headers=account.get_api_headers(),
                                 )
                         account.invalidate_recaptcha()
@@ -7966,7 +8092,7 @@ class Engine:
                 failed_indices = [
                     vo.index for vo in task.video_outputs
                     if (
-                        vo.upscale_status in ("failed", "skipped", "")
+                        vo.upscale_status in ("failed", "skipped", "", "pending")
                         and not vo.file_upscaled
                         and vo.quality not in ("1080p", "4K", "2K")
                     )
@@ -8639,6 +8765,15 @@ class Engine:
                         local_paths.append(str(filepath))
                         log.info(f"Downloaded: {filepath.name} → {output_path}")
                         
+                        # ★ Non-Watermark: zoom+crop to remove watermark
+                        if is_video and settings.download_non_watermark:
+                            try:
+                                await self._remove_watermark_zoom_crop(
+                                    filepath, task.aspect_ratio
+                                )
+                            except Exception as wm_err:
+                                log.warning(f"[Non-Watermark] Failed for {filepath.name}: {wm_err}")
+                        
                         # Update per-video file_720p (base quality slot)
                         if i < len(task.video_outputs):
                             task.video_outputs[i].file_720p = str(filepath)
@@ -8754,6 +8889,112 @@ class Engine:
         
         return local_paths
     
+    # ── Non-Watermark: zoom+crop helper ────────────────────────────
+
+    async def _remove_watermark_zoom_crop(self, filepath: Path, aspect_ratio: str):
+        """Zoom in and center-crop video to remove edge watermark.
+        
+        Zoom factors:
+            - 9:16 (Portrait): 109% zoom
+            - 16:9 (Landscape): 115% zoom
+        
+        Process: original → scale up → center-crop to original size → overwrite
+        """
+        # Determine zoom factor
+        is_portrait = "PORTRAIT" in (aspect_ratio or "").upper() or "9:16" in (aspect_ratio or "")
+        zoom = 1.09 if is_portrait else 1.15
+        
+        # Find FFmpeg
+        from core.frame_extractor import FrameExtractor
+        ffmpeg = FrameExtractor._find_ffmpeg()
+        if not ffmpeg:
+            log.warning("[Non-Watermark] FFmpeg not available — skipping")
+            return
+        
+        # Probe original resolution
+        import subprocess
+        ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
+        try:
+            probe_result = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    [ffprobe, "-v", "quiet", "-print_format", "json",
+                     "-show_streams", str(filepath)],
+                    capture_output=True, text=True, timeout=15,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                )
+            )
+            import json
+            probe_data = json.loads(probe_result.stdout)
+            stream = next(
+                (s for s in probe_data.get("streams", []) if s.get("codec_type") == "video"),
+                None
+            )
+            if not stream:
+                log.warning(f"[Non-Watermark] No video stream in {filepath.name}")
+                return
+            
+            orig_w = int(stream["width"])
+            orig_h = int(stream["height"])
+        except Exception as e:
+            log.warning(f"[Non-Watermark] ffprobe failed: {e}")
+            return
+        
+        # Calculate zoomed dimensions (must be even for H.264)
+        zoomed_w = int(orig_w * zoom) // 2 * 2
+        zoomed_h = int(orig_h * zoom) // 2 * 2
+        
+        # FFmpeg: scale up → center-crop → overwrite
+        tmp_path = filepath.with_suffix(".tmp.mp4")
+        cmd = [
+            ffmpeg, "-y", "-i", str(filepath),
+            "-vf", f"scale={zoomed_w}:{zoomed_h},crop={orig_w}:{orig_h}",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-c:a", "copy",  # Pass-through audio
+            "-movflags", "+faststart",
+            str(tmp_path),
+        ]
+        
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+                **({'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}),
+            )
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+            
+            if process.returncode != 0:
+                err_msg = (stderr or b"").decode(errors="replace")[-200:]
+                log.warning(f"[Non-Watermark] FFmpeg failed (rc={process.returncode}): {err_msg}")
+                # Clean up temp file
+                if tmp_path.exists():
+                    tmp_path.unlink()
+                return
+            
+            # Verify output file is reasonable size
+            if tmp_path.exists() and tmp_path.stat().st_size > 100_000:
+                # Replace original with processed version
+                import shutil
+                shutil.move(str(tmp_path), str(filepath))
+                log.info(
+                    f"[Non-Watermark] ✅ {filepath.name}: "
+                    f"zoom {zoom:.0%} → crop {orig_w}x{orig_h}"
+                )
+            else:
+                log.warning(f"[Non-Watermark] Output too small, keeping original")
+                if tmp_path.exists():
+                    tmp_path.unlink()
+                    
+        except asyncio.TimeoutError:
+            log.warning(f"[Non-Watermark] FFmpeg timed out for {filepath.name}")
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except Exception as e:
+            log.warning(f"[Non-Watermark] Error: {e}")
+            if tmp_path.exists():
+                tmp_path.unlink()
+
     # ── Manifest & Thumbnail Helpers ─────────────────────────────
     
     def _save_manifest(self, task: Task):
