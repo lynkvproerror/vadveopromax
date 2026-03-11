@@ -55,12 +55,16 @@ async function restoreTabState() {
   try {
     const result = await chrome.storage.session.get('tabState');
     if (result.tabState && Object.keys(result.tabState).length > 0) {
-      // Verify tabs still exist before restoring
+      // Verify tabs still exist AND have valid URLs before restoring
       for (const [tabId, state] of Object.entries(result.tabState)) {
         try {
           const tab = await chrome.tabs.get(parseInt(tabId));
-          if (tab) {
+          // RC3 FIX: Skip about:blank and chrome:// tabs — they cause
+          // Chrome to consider offscreen doc unnecessary and kill it
+          if (tab && tab.url && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome:')) {
             tabState[tabId] = state;
+          } else if (tab) {
+            console.debug(`[VEO Bridge] Skipping restored tab ${tabId} (URL: ${tab.url || 'none'})`);
           }
         } catch (_) {
           // Tab no longer exists — skip
@@ -75,11 +79,12 @@ async function restoreTabState() {
     console.debug('[VEO Bridge] Session storage restore failed:', e.message);
   }
 
-  // Fallback: discover VEO tabs by URL
+  // Fallback: discover VEO tabs by URL (only real VEO pages, not about:blank)
   try {
     const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
     for (const tab of tabs) {
-      if (!tabState[tab.id]) {
+      // RC3 FIX: Double-check URL is actually labs.google (not about:blank)
+      if (!tabState[tab.id] && tab.url && tab.url.includes('labs.google')) {
         tabState[tab.id] = {
           email: null, headers: {}, accessToken: null,
           lastHeartbeat: 0, recaptchaReady: false,
@@ -2416,6 +2421,9 @@ chrome.alarms.create(TAB_CLEANUP_ALARM, { periodInMinutes: 2 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === KEEPALIVE_ALARM) {
+    // RC2 FIX: Skip offscreen check during startup grace period (45s)
+    // Tab may still be about:blank → Chrome kills offscreen → recreate loop
+    if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
     // Ensure offscreen document is alive (it handles WS keepalive internally)
     ensureOffscreenDocument();
   }
@@ -2636,8 +2644,8 @@ chrome.runtime.onInstalled.addListener(async () => {
     console.warn('[VEO Bridge] ⚠️ Stealth script registration failed (Chrome too old?):', e.message);
   }
 
-  // ⚡ Create offscreen document for persistent WebSocket (replaces connectWebSocket)
-  await ensureOffscreenDocument();
+  // RC1 FIX: Do NOT create offscreen here — let initializeStartup() handle it
+  // to avoid race with restoreTabState() below.
   // Inject into already-open VEO tabs, clean up excess, then ensure one exists
   injectExistingTabs().then(() => {
     closeExcessTabs();
@@ -2647,35 +2655,79 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // ── Startup ─────────────────────────────────────────────────────────────
 
-// 1. Restore tabState from session storage FIRST (before WS connects)
-restoreTabState().then(() => {
-  _tabStateRestored = true; // Fix G: Signal that restore is complete
-  // 2. Create offscreen document for persistent WebSocket
-  ensureOffscreenDocument();
-  // 3. Inject into existing VEO tabs
-  injectExistingTabs().then(() => {
+// RC1 FIX: Consolidated startup — single sequential flow
+// Old code had 3 separate ensureOffscreenDocument() calls racing each other.
+async function initializeStartup() {
+  // Step 1: Restore tabState (filters out about:blank via RC3 fix)
+  try {
+    await restoreTabState();
+  } catch (_) { }
+  _tabStateRestored = true; // Fix G: Signal restore complete
+
+  // Step 2: Create offscreen document ONCE
+  await ensureOffscreenDocument();
+
+  // Step 3: Inject into existing VEO tabs
+  try {
+    await injectExistingTabs();
     closeExcessTabs();
     ensureVeoTab();
-  });
-}).catch(() => {
-  _tabStateRestored = true; // Fix G: Even on failure, mark as done
-  ensureOffscreenDocument();
-});
+  } catch (e) {
+    console.debug('[VEO Bridge] Startup tab injection failed:', e.message);
+  }
+}
+initializeStartup();
 console.log('[VEO Bridge] Background service worker started (v2.3.0 — offscreen WS + persistence)');
+
+// RC2 FIX: Startup grace period — skip offscreen health checks during first 45s
+// During startup, tab is often about:blank → Chrome kills offscreen → loop
+const _startupTime = Date.now();
+const STARTUP_GRACE_MS = 45000; // 45s grace for tab to navigate to labs.google
 
 // ── Offscreen Health Monitor ────────────────────────────────────────────
 // Chrome may destroy offscreen documents under memory pressure.
-// Fix K: Monitor every 15s (was 30s) for faster recovery.
+// RC2+RC4 FIX: Grace period + exponential backoff on rapid failures.
+let _offscreenRecreateFailCount = 0;
+let _lastOffscreenRecreateTime = 0;
 setInterval(async () => {
+  // RC2: Skip during startup grace period
+  if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
+
+  // RC4: Exponential backoff — if recreate keeps failing, slow down
+  const backoffMs = Math.min(15000 * Math.pow(2, _offscreenRecreateFailCount), 120000);
+  if (_offscreenRecreateFailCount > 0 && Date.now() - _lastOffscreenRecreateTime < backoffMs) {
+    return; // Still in backoff period
+  }
+
   try {
     const contexts = await chrome.runtime.getContexts({
       contextTypes: ['OFFSCREEN_DOCUMENT'],
       documentUrls: [chrome.runtime.getURL('offscreen.html')],
     });
     if (contexts.length === 0) {
-      console.warn('[VEO Bridge] ⚠️ Offscreen document destroyed — recreating...');
-      wsConnected = false; // Fix K: Reset state since offscreen is gone
+      console.warn(`[VEO Bridge] ⚠️ Offscreen document destroyed — recreating... (attempt ${_offscreenRecreateFailCount + 1})`);
+      wsConnected = false;
+      _lastOffscreenRecreateTime = Date.now();
       await ensureOffscreenDocument();
+
+      // Check if it actually survived
+      await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+      const recheck = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT'],
+        documentUrls: [chrome.runtime.getURL('offscreen.html')],
+      });
+      if (recheck.length > 0) {
+        console.log('[VEO Bridge] ✅ Offscreen document survived — resetting backoff');
+        _offscreenRecreateFailCount = 0; // Success — reset backoff
+      } else {
+        _offscreenRecreateFailCount++; // Failed again — increase backoff
+        console.warn(`[VEO Bridge] ⚠️ Offscreen killed again — backoff ${Math.ceil(backoffMs / 1000)}s`);
+      }
+    } else {
+      // Healthy — reset failure counter
+      if (_offscreenRecreateFailCount > 0) {
+        _offscreenRecreateFailCount = 0;
+      }
     }
   } catch (e) {
     console.debug('[VEO Bridge] Offscreen health check failed:', e.message);
