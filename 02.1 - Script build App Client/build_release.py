@@ -135,6 +135,59 @@ def generate_hashes() -> dict:
     return hashes
 
 
+def inject_integrity_hashes(hashes: dict):
+    """V1 FIX: Inject computed hashes into integrity_check.py BEFORE Nuitka compile.
+    
+    This patches the CRITICAL_FILES dict from {} to actual SHA-256 hashes.
+    After Nuitka compile, call restore_integrity_check() to undo.
+    """
+    target = PROJECT_ROOT / "security" / "integrity_check.py"
+    backup = target.with_suffix('.py.bak')
+    
+    if not target.exists():
+        print("  [SKIP] integrity_check.py not found")
+        return False
+    
+    # Backup original
+    import shutil
+    shutil.copy2(target, backup)
+    
+    # Build replacement dict literal
+    lines = []
+    for path, hash_val in hashes.items():
+        lines.append(f'    "{path}": "{hash_val}",')
+    dict_content = "{\n" + "\n".join(lines) + "\n}"
+    
+    # Read and replace the empty CRITICAL_FILES dict
+    source = target.read_text(encoding='utf-8')
+    
+    # Pattern: CRITICAL_FILES: Dict[str, str] = {\n...\n}
+    import re
+    pattern = r'(CRITICAL_FILES:\s*Dict\[str,\s*str\]\s*=\s*)\{[^}]*\}'
+    replacement = f'\\1{dict_content}'
+    new_source, count = re.subn(pattern, replacement, source, flags=re.DOTALL)
+    
+    if count == 0:
+        print("  [WARN] Could not find CRITICAL_FILES pattern to inject")
+        backup.unlink(missing_ok=True)
+        return False
+    
+    target.write_text(new_source, encoding='utf-8')
+    print(f"  [OK] Injected {len(hashes)} hashes into integrity_check.py")
+    return True
+
+
+def restore_integrity_check():
+    """Restore original integrity_check.py after Nuitka compile."""
+    target = PROJECT_ROOT / "security" / "integrity_check.py"
+    backup = target.with_suffix('.py.bak')
+    if backup.exists():
+        import shutil
+        shutil.copy2(backup, target)
+        backup.unlink()
+        print("  [OK] Restored original integrity_check.py")
+
+
 def _read_app_version() -> str:
     """Read APP_VERSION from constants.py without importing (avoids encoding issues)."""
     import re
@@ -230,8 +283,9 @@ def run_nuitka_build(onefile: bool = False):
         "--file-description=VEO Pro Max - AI Video Generator",
         "--copyright=Copyright 2026 VEO Studio",
 
-        # Performance
+        # Performance + anti-reverse
         "--jobs=4",
+        "--lto=yes",  # V6: Link-Time Optimization (harder to reverse engineer)
 
         # Remove build artifacts
         "--remove-output",
@@ -434,13 +488,23 @@ def main():
         print("\n[DONE] Hash generation complete (--hash-only mode)")
         sys.exit(0)
 
+    # Step 3.5: Inject integrity hashes into source BEFORE compile
+    print("\n[3.5] Injecting integrity hashes into integrity_check.py...")
+    hashes_injected = inject_integrity_hashes(hashes)
+
     # Step 4: Nuitka compilation
     if not args.skip_compile:
         success = run_nuitka_build(onefile=args.onefile)
         if not success:
+            restore_integrity_check()  # Restore even on failure
             sys.exit(1)
     else:
         print("\n[SKIP] Skipping Nuitka compilation (--skip-compile)")
+    
+    # Step 4.5: Restore original integrity_check.py (source stays clean)
+    if hashes_injected:
+        print("\n[4.5] Restoring original integrity_check.py...")
+        restore_integrity_check()
 
     # Step 5: Copy optional release files + generate version.json
     print("\n[5] Copying release files...")

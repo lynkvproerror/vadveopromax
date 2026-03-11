@@ -1,28 +1,15 @@
-v2.3.1 — Tăng cường tính năng + Cập nhật sạch
+v2.3.2 — Sửa lỗi Auto-Sweep + Cải thiện Upscale
 
-🚀 Project Builder
-• Hiển thị kết quả từng project realtime (không cần đợi hoàn tất toàn bộ)
-• Cải thiện giao diện sidebar rõ ràng, dễ thao tác hơn
-• Parsed Projects panel hiển thị chi tiết file đã tạo
-• Áp dụng cài đặt mặc định chính xác cho các tab tạo video/ảnh
+🔧 Auto-Sweep
+• Sửa lỗi auto-sweep không xử lý được video upscale bị kẹt
+• Video có trạng thái "pending" sau khi restart app giờ được tự động xử lý lại
+• Đảm bảo 100% video hoàn thành upscale sau mỗi lần chạy
+
+📥 Download
+• Bật mặc định tính năng Download Non-Watermark
 
 🔌 Extension & Kết nối
-• Đảm bảo kết nối extension ổn định, tự phục hồi khi mất liên lạc
-• Cải thiện logic chờ extension sau khi khởi động browser
-
-✨ Enhancer & Fix Prompt
-• Tăng cường logic xử lý Enhancer/Fix prompt chính xác hơn
-• Đa ngôn ngữ hóa giao diện Pipeline Enhancer
-• Cải thiện trải nghiệm workflow cho người dùng
-
-⚙️ Settings & Giao diện
-• Gộp phần Output Settings vào giao diện chính, tiện hơn
-• Hiển thị đầy đủ text thay vì thu gọn
-• Tuỳ chọn tên file xuất lưu chính xác sau khi khởi động lại
-• Cài đặt vùng giọng mặc định hoạt động đúng
-
-🔄 Cập nhật tự động
-• Cập nhật sạch: xóa hoàn toàn bản cũ trước khi cài mới, tránh lỗi do file cũ xung đột
+• Nâng cấp thuật toán giải reCAPTCHA
 
 🔒 Bảo mật
-• Tăng cường bảo mật dữ liệu người dùng
+• Tăng cường bảo mật ứng dụng
