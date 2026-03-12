@@ -68,6 +68,14 @@ class MultiAccountManager:
         )
     
     @property
+    def total_max_upscale(self) -> int:
+        """Sum of max upscale workers from all accounts."""
+        return sum(
+            getattr(acc.session, 'max_upscale_workers', 4)
+            for acc in self._accounts
+        )
+    
+    @property
     def account_count(self) -> int:
         """Number of registered accounts."""
         return len(self._accounts)

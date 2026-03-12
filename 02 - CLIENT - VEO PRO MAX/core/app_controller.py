@@ -3734,6 +3734,7 @@ class AppController:
             "active_workers": self._multi_account.total_active,
             # ★ Pool Separation: upscale worker counts
             "active_upscale": self._multi_account.total_active_upscale,
+            "max_upscale": self._multi_account.total_max_upscale,
         }
     
     def get_queue_items(self) -> List[Dict]:
