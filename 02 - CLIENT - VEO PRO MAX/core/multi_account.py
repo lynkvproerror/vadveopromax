@@ -56,8 +56,16 @@ class MultiAccountManager:
     
     @property
     def total_active(self) -> int:
-        """Sum of active workers from all accounts."""
+        """Sum of active ops workers from all accounts."""
         return sum(acc.active_slots for acc in self._accounts)
+    
+    @property
+    def total_active_upscale(self) -> int:
+        """Sum of active upscale workers from all accounts."""
+        return sum(
+            getattr(acc.session, 'active_upscale_workers', 0)
+            for acc in self._accounts
+        )
     
     @property
     def account_count(self) -> int:
@@ -174,6 +182,8 @@ class MultiAccountManager:
                 "available_workers": acc.available_workers,
                 "active_workers": acc.active_workers,
                 "max_workers": acc.max_workers,
+                "active_upscale": getattr(acc.session, 'active_upscale_workers', 0),
+                "max_upscale": getattr(acc.session, 'max_upscale_workers', 4),
                 # Backward compat
                 "available_slots": acc.available_workers,
                 "active_slots": acc.active_workers,

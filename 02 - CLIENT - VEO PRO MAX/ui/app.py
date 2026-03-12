@@ -764,8 +764,19 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             if "workers" in self._status_widgets:
-                # 👷 = actual worker slots held | 📋 = tasks processing (incl. download/upscale with 0 workers)
-                self._status_widgets["workers"].setText(f"👷 {active_workers}/{total_capacity}  📋 {running}")
+                # ★ Pool Separation: show ops + upscale separately when upscale active
+                active_upscale = acc.get("active_upscale", 0)
+                if active_upscale > 0:
+                    # Show split: ops/capacity + upscale/4
+                    self._status_widgets["workers"].setText(
+                        f"👷 {active_workers}/{total_capacity} ops "
+                        f"⬆️ {active_upscale}/4  📋 {running}"
+                    )
+                else:
+                    # No upscale active — show simple format
+                    self._status_widgets["workers"].setText(
+                        f"👷 {active_workers}/{total_capacity}  📋 {running}"
+                    )
                 color = Theme.GREEN if running > 0 else Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
         except Exception as e:

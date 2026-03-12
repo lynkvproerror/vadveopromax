@@ -229,9 +229,23 @@ class AccountManager:
             return self._session.acquire_workers(n)
     
     def release_workers(self, n: int = 1):
-        """Release n workers (thread-safe)."""
+        """Release n ops workers (thread-safe)."""
         with self._lock:
             self._session.release_workers(n)
+    
+    def acquire_upscale_worker(self) -> bool:
+        """Acquire 1 upscale worker slot (thread-safe).
+        
+        Separate from ops pool — max 4 concurrent upscale by default.
+        Returns False if upscale pool is full.
+        """
+        with self._lock:
+            return self._session.acquire_upscale_worker()
+    
+    def release_upscale_worker(self):
+        """Release 1 upscale worker slot (thread-safe)."""
+        with self._lock:
+            self._session.release_upscale_worker()
     
     # --- Deprecated slot methods (backward compat) ---
     def acquire_slot(self) -> bool:

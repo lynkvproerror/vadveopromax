@@ -82,9 +82,13 @@ class AccountSession:
     
     # === Internal State ===
     state: AccountState = AccountState.DISCONNECTED
-    active_workers: int = 0     # Number of THỢ (videos) currently processing
-    max_workers: int = 20       # Max concurrent THỢ (1 THỢ = 1 video)
+    active_workers: int = 0     # Number of ops THỢ currently processing
+    max_workers: int = 20       # Total worker pool (ops + upscale)
     last_activity: Optional[datetime] = None
+    
+    # === Upscale Worker Pool ===
+    active_upscale_workers: int = 0   # Number of upscale slots in use
+    max_upscale_workers: int = 4      # Max concurrent upscale slots
     
     # === Per-Account Worker Settings ===
     retry_count: int = 3       # Max retries on non-auth errors
@@ -128,9 +132,28 @@ class AccountSession:
         return (datetime.now() - self.recaptcha_fetched_at).total_seconds()
     
     @property
+    def effective_ops_capacity(self) -> int:
+        """Max ops workers available, considering upscale pool.
+        
+        When no upscale is running → all max_workers available for ops.
+        When upscale slots in use → ops capped at (max_workers - active_upscale).
+        """
+        return self.max_workers - self.active_upscale_workers
+    
+    @property
     def available_workers(self) -> int:
-        """Get number of available workers (THỢ = videos)."""
-        return max(0, self.max_workers - self.active_workers)
+        """Get number of available ops workers (dynamic pool)."""
+        return max(0, self.effective_ops_capacity - self.active_workers)
+    
+    @property
+    def available_upscale_workers(self) -> int:
+        """Get number of available upscale worker slots."""
+        return max(0, self.max_upscale_workers - self.active_upscale_workers)
+    
+    @property
+    def total_active(self) -> int:
+        """Total active workers (ops + upscale) for UI display."""
+        return self.active_workers + self.active_upscale_workers
     
     # --- Deprecated slot properties (backward compat) ---
     @property
@@ -175,20 +198,39 @@ class AccountSession:
         )
     
     def acquire_workers(self, n: int = 1) -> bool:
-        """Acquire n workers atomically. Returns False if insufficient capacity.
+        """Acquire n ops workers atomically. Returns False if insufficient capacity.
+        
+        Dynamic pool: ops capacity = max_workers - active_upscale_workers.
+        When no upscale running, ops gets full pool (20).
+        When 4 upscale active, ops capped at 16.
         
         Args:
             n: Number of workers (THỢ/videos) to acquire.
         """
-        if self.active_workers + n > self.max_workers:
+        if self.active_workers + n > self.effective_ops_capacity:
             return False
         self.active_workers += n
         self.last_activity = datetime.now()
         return True
     
     def release_workers(self, n: int = 1):
-        """Release n workers."""
+        """Release n ops workers."""
         self.active_workers = max(0, self.active_workers - n)
+    
+    def acquire_upscale_worker(self) -> bool:
+        """Acquire 1 upscale worker slot. Returns False if pool full.
+        
+        Upscale pool is separate from ops pool (max 4 by default).
+        """
+        if self.active_upscale_workers >= self.max_upscale_workers:
+            return False
+        self.active_upscale_workers += 1
+        self.last_activity = datetime.now()
+        return True
+    
+    def release_upscale_worker(self):
+        """Release 1 upscale worker slot."""
+        self.active_upscale_workers = max(0, self.active_upscale_workers - 1)
     
     # --- Deprecated slot methods (backward compat wrappers) ---
     def acquire_slot(self) -> bool:

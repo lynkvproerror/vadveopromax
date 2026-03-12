@@ -3732,6 +3732,8 @@ class AppController:
             "running_tasks": self._dispatcher.running_count,
             # Actual session worker slots currently held (released at submit for T2I)
             "active_workers": self._multi_account.total_active,
+            # ★ Pool Separation: upscale worker counts
+            "active_upscale": self._multi_account.total_active_upscale,
         }
     
     def get_queue_items(self) -> List[Dict]:

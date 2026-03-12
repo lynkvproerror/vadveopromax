@@ -3106,6 +3106,7 @@ class Engine:
                 
                 # Step 1: Two-phase admission — acquire 1 worker first
                 worker_count = 0
+                upscale_worker_held = False
                 if not account.acquire_workers(1):
                     # T2: Event-driven worker wake — instant instead of 0.5s poll
                     _cap_evt = self._workers_available.setdefault(
@@ -4268,6 +4269,14 @@ class Engine:
                         _cap_evt = self._workers_available.get(account.email)
                         if _cap_evt:
                             _cap_evt.set()
+                    # ★ Pool Separation: release upscale slot if still held
+                    if upscale_worker_held:
+                        account.release_upscale_worker()
+                        upscale_worker_held = False
+                        log.warning(
+                            f"[Engine] Cleanup: released leaked upscale worker "
+                            f"for {account.email}"
+                        )
                 
             except asyncio.CancelledError:
                 break
@@ -6442,23 +6451,89 @@ class Engine:
                         # Phase 3A: Upscale — mode determines inline vs background
                         if not skip_upscale:  # Bug #8: check flag instead of testing media_ids
                             if self._workload_priority == 'upscale_priority':
-                                # Issue #5: INLINE upscale — worker holds slot
-                                # Video is upscaled immediately, no queue delay
+                                # ── Pool Separation: release ops → acquire upscale slot ──
+                                # Free ops workers so other foremen can pick new tasks
+                                if worker_count > 0:
+                                    account.release_workers(worker_count)
+                                    log.info(
+                                        f"[Engine] Task {task.id}: released {worker_count} ops "
+                                        f"worker(s) before upscale"
+                                    )
+                                    worker_count = 0
+                                    # Wake foremen waiting for ops capacity
+                                    _cap_evt = self._workers_available.get(account.email)
+                                    if _cap_evt:
+                                        _cap_evt.set()
+                                
+                                # Acquire upscale slot (separate pool, max 4)
+                                if not account.acquire_upscale_worker():
+                                    # Upscale pool full → fallback to UpscaleQueue
+                                    log.info(
+                                        f"[Engine] Task {task.id}: upscale pool full "
+                                        f"({account.session.active_upscale_workers}/"
+                                        f"{account.session.max_upscale_workers}) "
+                                        f"→ fallback to background queue"
+                                    )
+                                    from core.upscale_queue import UpscaleJob
+                                    self._upscale_queue.enqueue(UpscaleJob(
+                                        task_id=task.id,
+                                        account_email=account.email,
+                                        original_account=account.email,
+                                        media_ids=list(media_ids),
+                                        output_uris=list(output_uris),
+                                        target_quality=task.download_quality,
+                                        aspect_ratio=task.aspect_ratio,
+                                    ))
+                                    task.upscale_media_ids = list(media_ids)
+                                    task.stage = TaskStage.UPSCALING
+                                    self._dispatcher.update_progress(
+                                        task.id, 88, f"⬆️ Upscaling {task.download_quality} (queued)"
+                                    )
+                                    # Handle continuation before exit
+                                    if (
+                                        (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
+                                        and self._dispatcher.has_children(task.id)
+                                        and output_uris
+                                    ):
+                                        frame_result = await self._extract_continuation_frame(
+                                            task, account, output_uris[0]
+                                        )
+                                        if frame_result:
+                                            self._dispatcher.activate_children_early(
+                                                task.id, frame_result[0], frame_result[1],
+                                            )
+                                    self._dispatcher.decrement_running(account.email)
+                                    task._counter_decremented = True
+                                    continue  # Skip to next foreman loop iteration
+                                
+                                upscale_worker_held = True
                                 log.info(
                                     f"[Engine] Task {task.id}: upscale_priority mode → "
-                                    f"inline upscale ({task.download_quality})"
+                                    f"inline upscale ({task.download_quality}) "
+                                    f"[upscale slots: {account.session.active_upscale_workers}/"
+                                    f"{account.session.max_upscale_workers}]"
                                 )
                                 task.stage = TaskStage.UPSCALING
                                 self._dispatcher.update_progress(
                                     task.id, 88, f"⬆️ Upscaling {task.download_quality} (inline)"
                                 )
-                                upscale_results = await self._auto_upscale(
-                                    task, account, output_uris, media_ids
-                                )
-                                # Populate upscale_paths for merge at L1642+
-                                for i, uri in enumerate(upscale_results):
-                                    if uri and i < len(upscale_paths):
-                                        upscale_paths[i] = uri
+                                try:
+                                    upscale_results = await self._auto_upscale(
+                                        task, account, output_uris, media_ids
+                                    )
+                                    # Populate upscale_paths for merge at L1642+
+                                    for i, uri in enumerate(upscale_results):
+                                        if uri and i < len(upscale_paths):
+                                            upscale_paths[i] = uri
+                                finally:
+                                    # Always release upscale slot
+                                    account.release_upscale_worker()
+                                    upscale_worker_held = False
+                                    log.info(
+                                        f"[Engine] Task {task.id}: released upscale worker "
+                                        f"[remaining: {account.session.active_upscale_workers}/"
+                                        f"{account.session.max_upscale_workers}]"
+                                    )
                                 
                                 # Handle continuation frame (same as background path)
                                 if (
