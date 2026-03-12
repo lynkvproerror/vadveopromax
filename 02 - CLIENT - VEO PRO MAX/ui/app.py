@@ -768,8 +768,8 @@ class MainWindow(QMainWindow):
                 active_upscale = acc.get("active_upscale", 0)
                 max_upscale = acc.get("max_upscale", 4)
                 self._status_widgets["workers"].setText(
-                    f"{active_workers}/{total_capacity} ops "
-                    f"| ▲ {active_upscale}/{max_upscale}  {running}"
+                    f"👷 {active_workers}/{total_capacity} ops "
+                    f"| ▲ {active_upscale}/{max_upscale}  📋 {running}"
                 )
                 color = Theme.GREEN if running > 0 else Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
