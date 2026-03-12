@@ -770,6 +770,7 @@ class Engine:
         # Prevents 403 cascade by resetting reCAPTCHA context before first submit
         self._last_successful_submit: Dict[str, float] = {}  # email → timestamp
         self._prewarm_stats: Dict[str, dict] = {}  # email → {count, last_idle_secs, last_time}
+        self._prewarm_locks: Dict[str, asyncio.Lock] = {}  # email → Lock (coordinate foremen)
         
         # Gemini AI: Prompt enhancement + policy fix
         from core.prompt_enhancer import PromptEnhancer
@@ -2311,6 +2312,10 @@ class Engine:
         Performs soft recovery (navigate away + back) to reset reCAPTCHA
         scoring context, preventing 403 cascade from stale sessions.
         
+        BUG-36: Uses per-account lock so only ONE foreman runs prewarm.
+        Other foremen wait for the lock, then re-check idle time and skip
+        (because the first foreman already updated _last_successful_submit).
+        
         Steps:
           1. Simulate activity (wake tab)
           2. Soft recovery (navigate about:blank → VEO → re-init reCAPTCHA)
@@ -2319,8 +2324,6 @@ class Engine:
           5. Reset AdaptiveBurst delay
         """
         email = account.email
-        last = self._last_successful_submit.get(email, 0)
-        idle_secs = time.time() - last if last else 0
         
         # Check setting toggle
         if self._settings and not getattr(self._settings, 'prewarm_enabled', True):
@@ -2330,71 +2333,98 @@ class Engine:
         threshold_min = getattr(self._settings, 'prewarm_idle_threshold', 10) if self._settings else 10
         threshold_secs = threshold_min * 60
         
+        # ── Quick check BEFORE lock (avoid lock contention if not needed) ──
+        last = self._last_successful_submit.get(email, 0)
+        idle_secs = time.time() - last if last else 0
         if idle_secs < threshold_secs:
             return  # Not idle enough
     
         # BUG-32: Skip prewarm during stop (soft recovery + reCAPTCHA = 20+s)
         if self._stop_event.is_set():
             return
-    
-        log.info(
-            f"[PreWarm] {email}: idle {idle_secs:.0f}s > {threshold_secs}s "
-            f"— triggering soft recovery before submit"
-        )
         
-        # Update stats for DevConsole
-        stats = self._prewarm_stats.setdefault(email, {
-            'count': 0, 'last_idle_secs': 0, 'last_time': 0,
-        })
-        stats['count'] += 1
-        stats['last_idle_secs'] = idle_secs
-        stats['last_time'] = time.time()
+        # ── BUG-36: Per-account lock — only 1 foreman runs prewarm ──
+        if email not in self._prewarm_locks:
+            self._prewarm_locks[email] = asyncio.Lock()
+        lock = self._prewarm_locks[email]
         
-        # ── Step 1: Simulate activity first (wake tab) ──
-        bridge = account.extension_bridge
-        if bridge and bridge.is_connected(email):
-            try:
-                await bridge.simulate_activity(email, timeout=3.0)
-                await asyncio.sleep(1.0)
-            except Exception:
-                pass
-        
-        # ── Step 2: Soft recovery ──
-        # BUG-32: Check stop before expensive recovery
-        if self._stop_event.is_set():
-            return
-        try:
-            recovered = await account.soft_recover_browser()
-        except Exception as e:
-            log.warning(f"[PreWarm] {email}: soft recovery failed: {e}")
-            recovered = False
-        
-        if recovered:
-            # BUG-32: Check stop before reCAPTCHA wait
-            if self._stop_event.is_set():
+        if lock.locked():
+            # Another foreman is already doing prewarm — just wait for it
+            log.info(f"[PreWarm] {email}: another foreman is warming up — waiting...")
+            async with lock:
+                # Lock released = prewarm done, _last_successful_submit updated
+                log.info(f"[PreWarm] {email}: ✅ piggyback — warm-up done by another foreman")
                 return
-            # ── Step 3: Wait for reCAPTCHA readiness ──
-            await self._wait_for_recaptcha_ready(account, max_wait=20.0)
+        
+        async with lock:
+            # ── Re-check idle after acquiring lock ──
+            last = self._last_successful_submit.get(email, 0)
+            idle_secs = time.time() - last if last else 0
+            if idle_secs < threshold_secs:
+                return  # Another foreman already prewarmed
             
-            # ── Step 4: Validate token ──
-            # BUG-32: Check stop before token validation
+            if self._stop_event.is_set():
+                return
+        
+            log.info(
+                f"[PreWarm] {email}: idle {idle_secs:.0f}s > {threshold_secs}s "
+                f"— triggering soft recovery before submit"
+            )
+            
+            # Update stats for DevConsole
+            stats = self._prewarm_stats.setdefault(email, {
+                'count': 0, 'last_idle_secs': 0, 'last_time': 0,
+            })
+            stats['count'] += 1
+            stats['last_idle_secs'] = idle_secs
+            stats['last_time'] = time.time()
+            
+            # ── Step 1: Simulate activity first (wake tab) ──
+            bridge = account.extension_bridge
+            if bridge and bridge.is_connected(email):
+                try:
+                    await bridge.simulate_activity(email, timeout=3.0)
+                    await asyncio.sleep(1.0)
+                except Exception:
+                    pass
+            
+            # ── Step 2: Soft recovery ──
+            # BUG-32: Check stop before expensive recovery
             if self._stop_event.is_set():
                 return
             try:
-                test_token = await account.refresh_recaptcha()
-                if test_token and len(test_token) > 100:
-                    log.info(f"[PreWarm] {email}: ✅ reCAPTCHA token validated ({len(test_token)} chars)")
-                else:
-                    log.warning(f"[PreWarm] {email}: ⚠️ reCAPTCHA token weak/missing after pre-warm")
+                recovered = await account.soft_recover_browser()
             except Exception as e:
-                log.warning(f"[PreWarm] {email}: reCAPTCHA validation failed: {e}")
-        
-        # ── Step 5: Reset AdaptiveBurst delay for fresh start ──
-        if getattr(self, '_burst_controller', None):
-            self._burst_controller.record_success(email)
-        
-        self._last_successful_submit[email] = time.time()
-        log.info(f"[PreWarm] {email}: ✅ pre-warm complete (idle was {idle_secs:.0f}s)")
+                log.warning(f"[PreWarm] {email}: soft recovery failed: {e}")
+                recovered = False
+            
+            if recovered:
+                # BUG-32: Check stop before reCAPTCHA wait
+                if self._stop_event.is_set():
+                    return
+                # ── Step 3: Wait for reCAPTCHA readiness ──
+                await self._wait_for_recaptcha_ready(account, max_wait=20.0)
+                
+                # ── Step 4: Validate token ──
+                # BUG-32: Check stop before token validation
+                if self._stop_event.is_set():
+                    return
+                try:
+                    test_token = await account.refresh_recaptcha()
+                    if test_token and len(test_token) > 100:
+                        log.info(f"[PreWarm] {email}: ✅ reCAPTCHA token validated ({len(test_token)} chars)")
+                    else:
+                        log.warning(f"[PreWarm] {email}: ⚠️ reCAPTCHA token weak/missing after pre-warm")
+                except Exception as e:
+                    log.warning(f"[PreWarm] {email}: reCAPTCHA validation failed: {e}")
+            
+            # ── Step 5: Reset AdaptiveBurst delay for fresh start ──
+            if getattr(self, '_burst_controller', None):
+                self._burst_controller.record_success(email)
+            
+            # ★ Update timestamp INSIDE lock so waiting foremen see it
+            self._last_successful_submit[email] = time.time()
+            log.info(f"[PreWarm] {email}: ✅ pre-warm complete (idle was {idle_secs:.0f}s)")
     
     async def pause(self):
         """Pause: workers sleep at next loop iteration without exiting.
