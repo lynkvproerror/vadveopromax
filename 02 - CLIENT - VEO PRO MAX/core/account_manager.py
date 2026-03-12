@@ -851,7 +851,7 @@ class AccountManager:
     
     def get_browser_headers(self) -> dict:
         """Get x-browser-* headers from Extension bridge, with session fallback."""
-        MIN_XCD = MIN_VALID_XCD  # Shared constant (50)
+        MIN_XCD = MIN_VALID_XCD  # Shared constant (40)
         if self._extension_bridge:
             ext_headers = self._extension_bridge.get_cached_headers(self.email)
             if ext_headers:

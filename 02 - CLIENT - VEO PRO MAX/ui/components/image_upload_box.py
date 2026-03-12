@@ -105,7 +105,7 @@ class ImageUploadBox(QWidget):
         
         # Clear button (shown when filled)
         self.clear_btn = QPushButton("✕")
-        self.clear_btn.setFixedSize(24, 24)
+        self.clear_btn.setMinimumSize(24, 24)
         self.clear_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.RED};

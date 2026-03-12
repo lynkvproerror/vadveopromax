@@ -62,7 +62,9 @@ class _GenerationWorker(QObject):
 
     def __init__(self, topics, template, api_key, output_base,
                  scanner, rules_loader, model_name="", base_url="", provider="Google",
-                 matrix_config=None, prompt_format="text"):
+                 matrix_config=None, prompt_format="text",
+                 skip_seo=False, skip_research=False, skip_bible=False,
+                 per_topic_template=False):
         super().__init__()
         self.topics = topics
         self.template = template
@@ -75,6 +77,11 @@ class _GenerationWorker(QObject):
         self.provider = provider
         self.matrix_config = matrix_config or {}
         self.prompt_format = prompt_format
+        self.skip_seo = skip_seo
+        self.skip_research = skip_research
+        self.skip_bible = skip_bible
+        self.per_topic_template = per_topic_template
+        self._builder = None  # Reference for cancel support
 
     @Slot()
     def run(self):
@@ -97,6 +104,7 @@ class _GenerationWorker(QObject):
                 scanner=self.scanner,
                 rules_loader=self.rules_loader,
             )
+            self._builder = builder  # Store for cancel support
 
             # Wire progress callbacks
             topic_idx = [0]  # mutable closure
@@ -129,6 +137,10 @@ class _GenerationWorker(QObject):
                     model=self.model_name,
                     matrix_config=self.matrix_config,
                     prompt_format=self.prompt_format,
+                    skip_seo=self.skip_seo,
+                    skip_research=self.skip_research,
+                    skip_bible=self.skip_bible,
+                    per_topic_template=self.per_topic_template,
                 )
             )
             loop.close()
@@ -142,6 +154,65 @@ class _GenerationWorker(QObject):
             self.log_msg.emit(f"[Worker] FATAL ERROR:\n{tb}")
             self.error.emit(str(e))
             log.error(f"[GenerationWorker] Fatal: {e}")
+
+
+class _StageWorker(QObject):
+    """Runs a single pipeline stage in a background thread."""
+    done = Signal(str, str, str)  # stage_name, result_text, error
+
+    def __init__(self, pipeline, stage_name: str, config: dict):
+        super().__init__()
+        self._pipeline = pipeline
+        self._stage = stage_name
+        self._config = config
+
+    def run(self):
+        import asyncio
+        import json
+        try:
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(
+                self._pipeline.run_stage(self._stage, self._config)
+            )
+            loop.close()
+            # Format result for display
+            if result.error:
+                self.done.emit(self._stage, "", result.error)
+            else:
+                display = self._format_result(result)
+                self.done.emit(self._stage, display, "")
+        except Exception as e:
+            self.done.emit(self._stage, "", str(e))
+
+    def _format_result(self, result) -> str:
+        """Format stage result for human review."""
+        import json
+        lines = [f"✅ Stage: {self._stage}\n"]
+        if self._stage == "duration_estimate":
+            d = result.data
+            lines.append(f"Topic: {d.get('topic', 'N/A')}")
+            lines.append(f"Scene count: {d.get('scene_count', 0)}")
+            lines.append(f"Clip duration: {d.get('clip_duration', 8)}s")
+            total = d.get('target_duration', 0)
+            mins, secs = total // 60, total % 60
+            lines.append(f"Total duration: {mins}:{secs:02d}")
+        elif self._stage == "script_analysis":
+            lines.append("Script JSON:")
+            lines.append(result.script_json if result.script_json else json.dumps(result.data, ensure_ascii=False, indent=2))
+        elif self._stage == "scene_breakdown":
+            lines.append(f"Generated {len(result.scenes)} scenes:\n")
+            for s in result.scenes:
+                lines.append(f"  Scene {s.index}: {s.title}")
+                lines.append(f"    Image: {s.description[:100]}...")
+                lines.append(f"    Video: {s.prompt[:100]}...")
+                lines.append("")
+        elif self._stage in ("character_gen", "scene_image_gen"):
+            lines.append(f"Generated {len(result.prompts)} prompts:")
+            for i, p in enumerate(result.prompts, 1):
+                lines.append(f"  {i}. {p[:120]}...")
+        else:
+            lines.append(json.dumps(result.data, ensure_ascii=False, indent=2))
+        return "\n".join(lines)
 
 
 class TabProject(QWidget):
@@ -159,6 +230,7 @@ class TabProject(QWidget):
         self._worker = None
         self._setup_matrix = None # Added for SetupMatrixPanel
         self._parsed_panel = None # Added for ParsedProjectsPanel
+        self._pipeline_mode = "text_only"  # Pipeline mode tracking
 
         self._setup_ui()
         self._init_builder()
@@ -266,17 +338,15 @@ class TabProject(QWidget):
     def _create_sidebar(self) -> QWidget:
         """Create sidebar with workflow + VEO settings."""
         sidebar = QFrame()
-        sidebar.setFixedWidth(220)
-        sidebar.setStyleSheet(f"""
-            QFrame {{
-                background-color: {Theme.SURFACE0};
-                border-right: 1px solid {Theme.BORDER};
-            }}
-        """)
+        sidebar.setFixedWidth(Theme.SIDEBAR_WIDTH)
+        sidebar.setObjectName("sidebarPanel")
 
         layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(
+            Theme.SIDEBAR_PADDING, Theme.SIDEBAR_PADDING,
+            Theme.SIDEBAR_PADDING, Theme.SIDEBAR_PADDING
+        )
+        layout.setSpacing(Theme.SIDEBAR_SPACING)
 
         # ── WORKFLOW Section ──
         wf_header = QLabel(t("project_sidebar.workflow_header"))
@@ -291,68 +361,31 @@ class TabProject(QWidget):
         self._templates_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; border: none;")
         layout.addWidget(self._templates_label)
 
-        # Rescan button
         rescan_btn = QPushButton(t("project_sidebar.rescan"))
-        rescan_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"height: 28px; border-radius: 4px; border: none;"
-        )
+        rescan_btn.setProperty("variant", "secondary")
+        rescan_btn.setProperty("btnSize", "sm")
         rescan_btn.clicked.connect(self._do_rescan)
         layout.addWidget(rescan_btn)
 
         # Template dropdown
         tmpl_label = QLabel(t("project_sidebar.template_label"))
-        tmpl_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
+        tmpl_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-weight: bold; border: none;")
         layout.addWidget(tmpl_label)
-
-        self._template_combo = QComboBox()
-        self._template_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {Theme.SURFACE1};
-                color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER};
-                border-radius: 4px;
-                padding: 4px 8px;
-            }}
-        """)
-        layout.addWidget(self._template_combo)
-
-        # ── VEO Section ──
-        layout.addSpacing(16)
-        veo_header = QLabel(t("project_sidebar.veo_header"))
-        veo_header.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-weight: bold; border: none;")
-        layout.addWidget(veo_header)
-
-        # Aspect ratio
-        ar_label = QLabel(t("project_sidebar.aspect_label"))
-        ar_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
-        layout.addWidget(ar_label)
         self._aspect_combo = QComboBox()
         self._aspect_combo.addItems([t("project_sidebar.landscape"), t("project_sidebar.portrait")])
-        self._aspect_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {Theme.SURFACE1};
-                color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER};
-                border-radius: 4px;
-                padding: 4px 8px;
-            }}
-        """)
         layout.addWidget(self._aspect_combo)
 
         # Output folder
         out_label = QLabel(t("project_sidebar.output_label"))
-        out_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
+        out_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-weight: bold; border: none;")
         layout.addWidget(out_label)
         out_btn = QPushButton(t("project_sidebar.browse"))
-        out_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"height: 28px; border-radius: 4px; border: none;"
-        )
+        out_btn.setProperty("variant", "secondary")
+        out_btn.setProperty("btnSize", "sm")
         out_btn.clicked.connect(self._browse_output)
         layout.addWidget(out_btn)
         self._output_label = QLabel(t("project_sidebar.not_set"))
-        self._output_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; border: none;")
+        self._output_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; font-weight: bold; border: none;")
         self._output_label.setWordWrap(True)
         layout.addWidget(self._output_label)
 
@@ -367,7 +400,7 @@ class TabProject(QWidget):
         REVIEW phase: Topics collapsed, Parsed+Viewer stretch
         """
         workspace = QFrame()
-        workspace.setStyleSheet(f"background-color: {Theme.BASE};")
+        workspace.setStyleSheet(f"QFrame {{ background-color: {Theme.BASE}; }}")
         layout = QVBoxLayout(workspace)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -376,7 +409,7 @@ class TabProject(QWidget):
         # SECTION 1: Topics Input (collapsible)
         # ═══════════════════════════════════════════════════
         topics_section = QFrame()
-        topics_section.setStyleSheet(f"background-color: {Theme.SURFACE0}; border-radius: 0px;")
+        topics_section.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; border-radius: 0px; }}")
         topics_layout = QVBoxLayout(topics_section)
         topics_layout.setContentsMargins(0, 0, 0, 0)
         topics_layout.setSpacing(0)
@@ -414,10 +447,13 @@ class TabProject(QWidget):
             QTextEdit {{
                 background-color: {Theme.SURFACE1};
                 color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER};
+                border: 2px solid {Theme.BLUE};
                 border-radius: 0px;
                 padding: 8px;
                 font-size: 13px;
+            }}
+            QTextEdit:focus {{
+                border-color: {Theme.GREEN};
             }}
         """)
         # Auto-detect on text change (debounced)
@@ -440,29 +476,20 @@ class TabProject(QWidget):
         btn_row = QHBoxLayout()
 
         self._generate_btn = QPushButton(t("project_builder.generate"))
-        self._generate_btn.setObjectName("generateBtn")
-        self._generate_btn.setStyleSheet(
-            f"QPushButton#generateBtn {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-            f"height: 26px; font-weight: bold; border-radius: 4px; font-size: 11px; padding: 0 10px; }}"
-        )
+        self._generate_btn.setProperty("variant", "success")
+        self._generate_btn.setProperty("btnSize", "sm")
         self._generate_btn.clicked.connect(self._on_generate)
         btn_row.addWidget(self._generate_btn)
 
         import_btn = QPushButton(t("project_builder.import"))
-        import_btn.setObjectName("importBtn")
-        import_btn.setStyleSheet(
-            f"QPushButton#importBtn {{ background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"height: 26px; border-radius: 4px; font-size: 11px; padding: 0 10px; }}"
-        )
+        import_btn.setProperty("variant", "secondary")
+        import_btn.setProperty("btnSize", "sm")
         import_btn.clicked.connect(self._on_import_prompts)
         btn_row.addWidget(import_btn)
 
         clear_btn = QPushButton(t("project_builder.clear"))
-        clear_btn.setObjectName("clearBtn")
-        clear_btn.setStyleSheet(
-            f"QPushButton#clearBtn {{ background-color: {Theme.RED}; color: {Theme.CRUST}; "
-            f"height: 26px; border-radius: 4px; font-size: 11px; padding: 0 10px; }}"
-        )
+        clear_btn.setProperty("variant", "danger")
+        clear_btn.setProperty("btnSize", "sm")
         clear_btn.clicked.connect(self._on_clear)
         btn_row.addWidget(clear_btn)
 
@@ -490,14 +517,43 @@ class TabProject(QWidget):
             QComboBox {{
                 background-color: {Theme.SURFACE1};
                 color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER};
+                border: none;
                 border-radius: 4px;
                 padding: 2px 4px;
-                font-size: 11px;
+                font-size: 12px; font-weight: bold;
             }}
         """)
         self._prompt_format_combo.setToolTip("Prompt output format: Text (1 line/prompt) or JSON ({...})")
         btn_row.addWidget(self._prompt_format_combo)
+
+        # Skip-step checkboxes (Fix #4, #12)
+        skip_style = f"""
+            QCheckBox {{ color: {Theme.SUBTEXT0}; font-size: 11px; spacing: 4px; }}
+            QCheckBox::indicator {{
+                width: 14px; height: 14px; border-radius: 3px;
+                border: 1px solid {Theme.SUBTEXT0};
+                background-color: {Theme.SURFACE0};
+            }}
+            QCheckBox::indicator:checked {{
+                border: 1px solid {Theme.YELLOW};
+                background-color: {Theme.YELLOW};
+            }}
+        """
+        self._skip_research_cb = QCheckBox("Skip Research")
+        self._skip_research_cb.setStyleSheet(skip_style)
+        self._skip_research_cb.setToolTip("Skip AI research step (use when topic is well-known)")
+        btn_row.addWidget(self._skip_research_cb)
+
+        self._skip_seo_cb = QCheckBox("Skip SEO")
+        self._skip_seo_cb.setStyleSheet(skip_style)
+        self._skip_seo_cb.setToolTip("Skip SEO generation step")
+        btn_row.addWidget(self._skip_seo_cb)
+
+        self._per_topic_tmpl_cb = QCheckBox("Auto Template")
+        self._per_topic_tmpl_cb.setStyleSheet(skip_style)
+        self._per_topic_tmpl_cb.setChecked(True)
+        self._per_topic_tmpl_cb.setToolTip("Auto-detect template for EACH topic (not just first line)")
+        btn_row.addWidget(self._per_topic_tmpl_cb)
 
         btn_row.addStretch()
         body_layout.addLayout(btn_row)
@@ -521,6 +577,14 @@ class TabProject(QWidget):
         self._progress_bar.setVisible(False)
         topics_layout.addWidget(self._progress_bar)
 
+        self._cancel_btn = QPushButton(t("project_builder.cancel") if t("project_builder.cancel") != "project_builder.cancel" else "⛔ Cancel")
+        self._cancel_btn.setProperty("variant", "danger")
+        self._cancel_btn.setProperty("btnSize", "sm")
+        self._cancel_btn.setFixedHeight(28)
+        self._cancel_btn.setVisible(False)
+        self._cancel_btn.clicked.connect(self._on_cancel_generation)
+        topics_layout.addWidget(self._cancel_btn)
+
         layout.addWidget(topics_section)
 
         # Toggle topics collapse/expand
@@ -537,12 +601,24 @@ class TabProject(QWidget):
         self._topics_header.clicked.connect(_toggle_topics)
 
         # ═══════════════════════════════════════════════════
+        # SECTION 1.5: Stage Checkpoint Panel (Full Production)
+        # ═══════════════════════════════════════════════════
+        self._stage_panel = self._create_stage_panel()
+        self._stage_panel.setVisible(False)  # Hidden until Full Production mode
+        layout.addWidget(self._stage_panel, stretch=1)
+
+        # Wire pipeline mode from sidebar
+        if self._setup_matrix:
+            self._setup_matrix.pipeline_mode_changed.connect(self._on_pipeline_mode_changed)
+
+        # ═══════════════════════════════════════════════════
         # SECTION 2: Parsed Projects (stretch=1)
         # ═══════════════════════════════════════════════════
         if ParsedProjectsPanel:
             self._parsed_panel = ParsedProjectsPanel()
             self._parsed_panel.add_project_to_queue.connect(self._on_add_project_to_queue)
             self._parsed_panel.add_all_to_queue.connect(self._on_add_all_to_queue)
+            self._parsed_panel.retry_project.connect(self._retry_topic)
             layout.addWidget(self._parsed_panel, stretch=1)
         else:
             # Fallback: old flat table
@@ -575,10 +651,8 @@ class TabProject(QWidget):
             layout.addWidget(self._prompts_table, stretch=1)
 
             queue_btn = QPushButton(t("project_builder.fallback.add_all_queue"))
-            queue_btn.setStyleSheet(
-                f"background-color: {Theme.BLUE}; color: white; "
-                f"height: 36px; font-weight: bold; border-radius: 6px;"
-            )
+            queue_btn.setFixedHeight(36)
+            queue_btn.setProperty("btnSize", "lg")
             queue_btn.clicked.connect(self._on_add_to_queue)
             layout.addWidget(queue_btn)
 
@@ -586,6 +660,285 @@ class TabProject(QWidget):
         self._topic_status_labels: List[QLabel] = []
 
         return workspace
+
+    # ── Stage Checkpoint Panel (Full Production) ──────────────
+
+    def _create_stage_panel(self) -> QWidget:
+        """Create the stage checkpoint panel for Full Production mode."""
+        from core.production_pipeline import STAGE_ORDER
+        
+        panel = QWidget()
+        panel.setObjectName("stagePanel")
+        panel.setStyleSheet(f"""
+            #stagePanel {{
+                background-color: {Theme.SURFACE0};
+                border: 1px solid {Theme.BLUE};
+                border-radius: 6px;
+            }}
+        """)
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(8, 6, 8, 6)
+        panel_layout.setSpacing(4)
+
+        # Stage progress dots
+        dots_row = QHBoxLayout()
+        dots_row.setSpacing(2)
+        self._stage_dots = {}
+        STAGE_LABELS = {
+            "duration_estimate": "1.Duration",
+            "script_analysis": "2.Script",
+            "scene_breakdown": "3.Scenes",
+            "character_gen": "4.CharImg",
+            "scene_image_gen": "5.SceneImg",
+            "video_gen": "6.Video",
+            "concat": "7.Concat",
+        }
+        for stage_name in STAGE_ORDER:
+            dot = QPushButton(STAGE_LABELS.get(stage_name, stage_name))
+            dot.setFixedHeight(24)
+            dot.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Theme.SURFACE1};
+                    color: {Theme.SUBTEXT0};
+                    border: 1px solid {Theme.BORDER};
+                    border-radius: 3px;
+                    font-size: 10px; padding: 2px 6px;
+                }}
+            """)
+            dot.setEnabled(False)
+            dots_row.addWidget(dot)
+            self._stage_dots[stage_name] = dot
+        panel_layout.addLayout(dots_row)
+
+        # Stage result viewer
+        self._stage_viewer = QTextEdit()
+        self._stage_viewer.setReadOnly(False)
+        self._stage_viewer.setMinimumHeight(120)
+        self._stage_viewer.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {Theme.BASE};
+                color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER};
+                border-radius: 4px;
+                font-family: 'Segoe UI', 'Inter', sans-serif;
+                font-size: 12px; padding: 8px;
+            }}
+        """)
+        self._stage_viewer.setPlaceholderText("Stage results will appear here for review...")
+        panel_layout.addWidget(self._stage_viewer)
+
+        # Action buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+
+        self._stage_run_btn = QPushButton("▶ Run Stage")
+        self._stage_run_btn.setProperty("variant", "success")
+        self._stage_run_btn.setProperty("btnSize", "sm")
+        self._stage_run_btn.setFixedHeight(30)
+        self._stage_run_btn.clicked.connect(self._run_pipeline_stage)
+        btn_row.addWidget(self._stage_run_btn)
+
+        self._stage_confirm_btn = QPushButton("✅ Confirm & Next")
+        self._stage_confirm_btn.setProperty("variant", "success")
+        self._stage_confirm_btn.setProperty("btnSize", "sm")
+        self._stage_confirm_btn.setFixedHeight(30)
+        self._stage_confirm_btn.setEnabled(False)
+        self._stage_confirm_btn.clicked.connect(self._on_stage_confirm)
+        btn_row.addWidget(self._stage_confirm_btn)
+
+        self._stage_skip_btn = QPushButton("⏭ Skip")
+        self._stage_skip_btn.setProperty("variant", "warning")
+        self._stage_skip_btn.setProperty("btnSize", "sm")
+        self._stage_skip_btn.setFixedHeight(30)
+        self._stage_skip_btn.clicked.connect(self._on_stage_skip)
+        btn_row.addWidget(self._stage_skip_btn)
+
+        btn_row.addStretch()
+        panel_layout.addLayout(btn_row)
+
+        # Pipeline state tracking
+        self._pipeline = None
+        self._pipeline_current_stage = None
+
+        return panel
+
+    def _on_pipeline_mode_changed(self, mode: str):
+        """Switch entire workspace between Text Only and Full Production modes."""
+        is_full = mode == "full_production"
+
+        # ── Stage Checkpoint Panel ──
+        self._stage_panel.setVisible(is_full)
+
+        # ── Text-only controls (hidden in Full Production) ──
+        text_only_widgets = [
+            self._skip_research_cb, self._skip_seo_cb,
+            self._per_topic_tmpl_cb, self._prompt_format_combo,
+            self._auto_add_cb, self._detect_frame,
+        ]
+        for w in text_only_widgets:
+            w.setVisible(not is_full)
+
+        # ── Topics header ──
+        if is_full:
+            self._topics_header.setText("🎬 PRODUCTION INPUT ▼")
+            self._topics_header.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Theme.BLUE};
+                    color: {Theme.CRUST};
+                    font-weight: bold; border: none;
+                    text-align: left; padding-left: 12px;
+                }}
+            """)
+            self._topic_input.setPlaceholderText(
+                "Nhập tiêu đề/kịch bản video...\n"
+                "VD: Bí mật cuộc sống vĩ đại - 10 bài học triết lý"
+            )
+            self._topic_input.setMaximumHeight(16777215)  # Remove height limit — let it stretch
+        else:
+            self._topics_header.setText(f"{t('project_builder.topics_header')} ▼")
+            self._topics_header.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Theme.GREEN};
+                    color: {Theme.CRUST};
+                    font-weight: bold; border: none;
+                    text-align: left; padding-left: 12px;
+                }}
+            """)
+            self._topic_input.setPlaceholderText(t("project_builder.topics_placeholder"))
+            self._topic_input.setMaximumHeight(16777215)  # Same as Full Production — no limit
+
+        # ── Generate button ──
+        if is_full:
+            self._generate_btn.setText("▶ Start Pipeline")
+            self._generate_btn.setProperty("variant", "primary")
+        else:
+            self._generate_btn.setText(t("project_builder.generate"))
+            self._generate_btn.setProperty("variant", "success")
+        self._generate_btn.style().unpolish(self._generate_btn)
+        self._generate_btn.style().polish(self._generate_btn)
+
+        # ── Parsed Projects panel ──
+        # Hidden in Full Production (stage panel replaces it)
+        if self._parsed_panel:
+            self._parsed_panel.setVisible(not is_full)
+
+        self._pipeline_mode = mode
+        log.info(f"[TabProject] Pipeline mode: {mode}")
+
+    def _run_pipeline_stage(self):
+        """Run the next pipeline stage."""
+        import asyncio
+        from core.production_pipeline import ProductionPipeline, STAGE_ORDER
+        
+        # Initialize pipeline if needed
+        if not self._pipeline:
+            try:
+                api_key, model_name, base_url, provider = self._get_ai_config()
+            except ValueError as e:
+                from ui.popups import show_warning
+                show_warning(self, "API Error", str(e))
+                return
+            from services.ai_client_factory import create_ai_client
+            client = create_ai_client(provider, base_url)
+            self._pipeline = ProductionPipeline(
+                gemini_client=client, api_key=api_key, model=model_name
+            )
+            # Set topic from input
+            topic_text = self._topic_input.toPlainText().strip()
+            if topic_text:
+                self._pipeline.state.topic = topic_text.split("\n")[0].strip()
+
+        # Find next stage
+        next_stage = self._pipeline.get_next_stage()
+        if not next_stage:
+            self._stage_viewer.setPlainText("✅ Pipeline complete! All stages done.")
+            return
+
+        self._pipeline_current_stage = next_stage
+
+        # Update dots
+        for name, dot in self._stage_dots.items():
+            if name == next_stage:
+                dot.setStyleSheet(
+                    f"QPushButton {{ background-color: {Theme.YELLOW}; color: {Theme.CRUST}; "
+                    f"border: 1px solid {Theme.YELLOW}; border-radius: 3px; "
+                    f"font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
+                )
+
+        self._stage_run_btn.setEnabled(False)
+        self._stage_run_btn.setText(f"⏳ Running: {next_stage}...")
+        self._stage_confirm_btn.setEnabled(False)
+
+        # Get config from sidebar
+        config = self._setup_matrix.get_config() if self._setup_matrix else {}
+        config["topic"] = self._pipeline.state.topic
+
+        # Run async stage in background thread
+        self._stage_thread = QThread()
+        self._stage_worker_obj = _StageWorker(self._pipeline, next_stage, config)
+        self._stage_worker_obj.moveToThread(self._stage_thread)
+        self._stage_thread.started.connect(self._stage_worker_obj.run)
+        self._stage_worker_obj.done.connect(self._on_stage_done)
+        self._stage_worker_obj.done.connect(self._stage_thread.quit)
+        self._stage_thread.start()
+
+    def _on_stage_done(self, stage_name: str, result_text: str, error: str):
+        """Handle stage completion — show result for user review."""
+        self._stage_run_btn.setEnabled(True)
+        self._stage_run_btn.setText("▶ Run Stage")
+
+        if error:
+            self._stage_viewer.setPlainText(f"❌ Stage '{stage_name}' error:\n\n{error}")
+            self._stage_dots[stage_name].setStyleSheet(
+                f"QPushButton {{ background-color: {Theme.RED}; color: {Theme.CRUST}; "
+                f"border-radius: 3px; font-size: 10px; padding: 2px 6px; }}"
+            )
+        else:
+            self._stage_viewer.setPlainText(result_text)
+            self._stage_confirm_btn.setEnabled(True)
+            self._stage_dots[stage_name].setStyleSheet(
+                f"QPushButton {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+                f"border-radius: 3px; font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
+            )
+
+    def _on_stage_confirm(self):
+        """User confirms current stage result."""
+        if not self._pipeline or not self._pipeline_current_stage:
+            return
+        # Pass any user edits back to pipeline
+        edited_text = self._stage_viewer.toPlainText()
+        self._pipeline.confirm_stage(self._pipeline_current_stage, {"user_edited": edited_text})
+        self._stage_confirm_btn.setEnabled(False)
+        
+        # Check if prompts stage → auto-feed to parsed panel
+        if self._pipeline_current_stage == "scene_breakdown" and self._pipeline.state.scenes:
+            scenes = self._pipeline.state.scenes
+            prompts = [s.prompt for s in scenes if s.prompt]
+            if prompts and self._parsed_panel:
+                for i, p in enumerate(prompts):
+                    self._parsed_panel.add_project(f"Scene {i+1}", {"Prompts": p}, "ready")
+
+        # Auto-advance to next stage
+        next_stage = self._pipeline.get_next_stage()
+        if next_stage:
+            self._stage_viewer.setPlainText(f"Stage '{self._pipeline_current_stage}' confirmed.\n\n→ Ready for: {next_stage}\nClick '▶ Run Stage' to proceed.")
+        else:
+            self._stage_viewer.setPlainText("✅ All stages complete!")
+
+    def _on_stage_skip(self):
+        """User skips current stage."""
+        if not self._pipeline or not self._pipeline_current_stage:
+            return
+        self._pipeline.skip_stage(self._pipeline_current_stage)
+        self._stage_dots[self._pipeline_current_stage].setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.SURFACE1}; color: {Theme.SUBTEXT0}; "
+            f"border: 1px solid {Theme.BORDER}; border-radius: 3px; "
+            f"font-size: 10px; padding: 2px 6px; }}"
+        )
+        self._stage_confirm_btn.setEnabled(False)
+        next_stage = self._pipeline.get_next_stage()
+        if next_stage:
+            self._stage_viewer.setPlainText(f"Stage skipped.\n\n→ Ready for: {next_stage}")
 
     # ── Template Dropdown ──────────────────────────────────────
 
@@ -835,6 +1188,11 @@ class TabProject(QWidget):
 
     def _on_generate(self):
         """Start full auto generation (Fix 1: runs in background thread)."""
+        # ── Full Production mode → redirect to stage pipeline ──
+        if getattr(self, '_pipeline_mode', '') == 'full_production':
+            self._run_pipeline_stage()
+            return
+        
         # ── Permission check: AI Prompt Processing ──
         if self.controller and hasattr(self.controller, '_permissions'):
             from services.permissions import Feature
@@ -909,9 +1267,10 @@ class TabProject(QWidget):
         # Initialize rich status panel (Fix 5)
         self._init_status_panel(topic_list)
 
-        # Disable generate button during generation
+        # Disable generate button, show cancel (Fix #1)
         self._generate_btn.setEnabled(False)
         self._generate_btn.setText(t("project_extra.generating"))
+        self._cancel_btn.setVisible(True)
 
         output_base = ""
         if self._setup_matrix:
@@ -920,6 +1279,18 @@ class TabProject(QWidget):
             output_base = self._output_label.text()
             if output_base == "Not set":
                 output_base = ""
+
+        # Cleanup previous worker thread if still alive (Bug 4 fix)
+        if self._worker_thread is not None:
+            try:
+                if self._worker_thread.isRunning():
+                    self._worker_thread.quit()
+                    self._worker_thread.wait(2000)
+                self._worker_thread.deleteLater()
+            except RuntimeError:
+                pass
+            self._worker_thread = None
+            self._worker = None
 
         # Run in background thread (Fix 1)
         self._worker_thread = QThread()
@@ -935,6 +1306,10 @@ class TabProject(QWidget):
             provider=provider,
             matrix_config=matrix_config,
             prompt_format="json" if self._prompt_format_combo.currentText() == "JSON" else "text",
+            skip_seo=self._skip_seo_cb.isChecked(),
+            skip_research=self._skip_research_cb.isChecked(),
+            skip_bible=False,
+            per_topic_template=self._per_topic_tmpl_cb.isChecked(),
         )
         self._worker.moveToThread(self._worker_thread)
 
@@ -960,6 +1335,7 @@ class TabProject(QWidget):
         """
         self._generate_btn.setEnabled(True)
         self._generate_btn.setText(t("project_builder.generate"))
+        self._cancel_btn.setVisible(False)
 
         # Complete progress bar
         self._progress_bar.setValue(self._progress_bar.maximum())
@@ -993,59 +1369,173 @@ class TabProject(QWidget):
             f"✅ Done: {done_count}/{total} topics, {len(all_prompts)} prompts ▶"
         )
 
-        # Auto-add to Queue: add each ready project individually
+        # Auto-add to Queue: add each ready project individually (skip already queued — Bug 8 fix)
         if self._auto_add_cb.isChecked() and self._parsed_panel:
             for i, row in enumerate(self._parsed_panel._projects):
                 if row.get_status() == "ready":
                     self._on_add_project_to_queue(i)
 
     def _on_generation_error(self, error_msg):
-        """Handle fatal generation error."""
+        """Handle fatal generation error (Bug 1 fix: no _status_summary)."""
         self._generate_btn.setEnabled(True)
         self._generate_btn.setText(t("project_builder.generate"))
-        self._status_summary.setText(f"❌ Fatal Error: {error_msg}")
-        self._status_summary.setStyleSheet(
-            f"color: {Theme.RED}; font-size: 12px; font-weight: bold; border: none;"
+        self._cancel_btn.setVisible(False)
+        # Show error in header (works for both old and new UI)
+        self._topics_header.setText(f"❌ Error: {error_msg[:80]}")
+        self._progress_bar.setVisible(False)
+        # Show popup so user sees the error
+        try:
+            from ui.popups import show_warning
+            show_warning(self, "Generation Error", f"Fatal error during generation:\n\n{error_msg}")
+        except Exception:
+            pass
+
+    def _on_cancel_generation(self):
+        """Fix #1: Cancel running generation."""
+        if self._worker and hasattr(self._worker, '_builder') and self._worker._builder:
+            self._worker._builder.cancel()
+        self._cancel_btn.setEnabled(False)
+        self._cancel_btn.setText("⏳ Cancelling...")
+        self._topics_header.setText("⛔ Cancelling... (finishing current topic)")
+        log.info("[TabProject] Cancel requested by user")
+
+    def _retry_topic(self, topic_idx: int):
+        """Fix #3: Retry a single failed topic."""
+        if not self._parsed_panel or topic_idx >= len(self._parsed_panel._projects):
+            return
+        row = self._parsed_panel._projects[topic_idx]
+        if row.get_status() not in ("error", "ready"):
+            return
+
+        topic_name = row.name
+        row.set_status("generating")
+        log.info(f"[TabProject] Retrying topic {topic_idx}: '{topic_name}'")
+
+        try:
+            api_key, model_name, base_url, provider = self._get_ai_config()
+        except ValueError as e:
+            from ui.popups import show_warning
+            show_warning(self, "API Error", str(e))
+            row.set_status("error")
+            return
+
+        template = self._get_selected_template()
+        output_base = self._setup_matrix.output_folder.text() if self._setup_matrix else ""
+
+        # Run single-topic in background thread
+        self._retry_thread = QThread()
+        self._retry_worker = _GenerationWorker(
+            topics=[topic_name],
+            template=template,
+            api_key=api_key,
+            output_base=output_base,
+            scanner=self._scanner,
+            rules_loader=self._rules_loader,
+            model_name=model_name,
+            base_url=base_url,
+            provider=provider,
+            matrix_config=self._setup_matrix.get_config() if self._setup_matrix else {},
+            prompt_format="json" if self._prompt_format_combo.currentText() == "JSON" else "text",
+            skip_seo=self._skip_seo_cb.isChecked(),
+            skip_research=self._skip_research_cb.isChecked(),
         )
+        retry_idx = topic_idx  # Capture for closure
+        self._retry_worker.moveToThread(self._retry_thread)
+        self._retry_thread.started.connect(self._retry_worker.run)
+
+        def on_retry_done(results):
+            if results and results[0].status == "done":
+                files = dict(results[0].files) if hasattr(results[0], 'files') and results[0].files else {}
+                if files:
+                    self._parsed_panel.update_project_files(retry_idx, files)
+                self._parsed_panel.set_project_status(retry_idx, "ready")
+                log.info(f"[TabProject] Retry topic {retry_idx} succeeded")
+            else:
+                self._parsed_panel.set_project_status(retry_idx, "error")
+                log.warning(f"[TabProject] Retry topic {retry_idx} failed")
+            self._retry_thread.quit()
+
+        def on_retry_error(msg):
+            self._parsed_panel.set_project_status(retry_idx, "error")
+            log.error(f"[TabProject] Retry fatal: {msg}")
+            self._retry_thread.quit()
+
+        self._retry_worker.all_done.connect(on_retry_done)
+        self._retry_worker.error.connect(on_retry_error)
+        self._retry_thread.start()
 
     def _on_import_prompts(self):
-        """Import prompts from clipboard or file (Semi-Manual mode)."""
-        from PySide6.QtWidgets import QInputDialog
-        text, ok = QInputDialog.getMultiLineText(
+        """Import prompts from a text file (txt, md, doc, docx, csv)."""
+        from PySide6.QtWidgets import QFileDialog
+        file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import Prompts",
-            "Paste VEO prompts (1 per line):",
+            "Import Prompts from File",
             "",
+            "Text Files (*.txt *.md *.csv);;Word Documents (*.docx *.doc);;All Files (*.*)",
         )
-        if ok and text.strip():
-            template = self._get_selected_template()
-            if not template:
-                # Create a minimal template
-                from core.workflow_scanner import WorkflowTemplate
-                template = WorkflowTemplate(display_name="Manual")
-
-            from core.project_builder import ProjectBuilder
-            builder = ProjectBuilder()
-            prompts = builder.import_prompts(text, template)
-
-            if self._parsed_panel:
-                # For imported prompts, we don't have files, just the prompt text
-                # Create a dummy project entry for each imported prompt
-                for i, p in enumerate(prompts):
-                    self._parsed_panel.add_project(
-                        f"Imported Prompt {i+1}",
-                        {"Prompts": p.prompt, "Master": p.prompt},
-                        "ready"
-                    )
+        if not file_path:
+            return
+        
+        # Read file content
+        try:
+            if file_path.lower().endswith('.docx'):
+                try:
+                    from docx import Document
+                    doc = Document(file_path)
+                    text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+                except ImportError:
+                    # Fallback: read raw (may not work well for docx)
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        text = f.read()
             else:
-                self._show_prompts_in_table(prompts)
+                # txt, md, csv, doc (plain text)
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    text = f.read()
+        except Exception as e:
+            from ui.popups import show_warning
+            show_warning(self, "Import Error", f"Cannot read file:\n{e}")
+            return
+        
+        if not text.strip():
+            from ui.popups import show_warning
+            show_warning(self, "Empty File", "The selected file is empty.")
+            return
+        
+        # In Full Production mode, paste content into topic input
+        if getattr(self, '_pipeline_mode', '') == 'full_production':
+            self._topic_input.setPlainText(text.strip())
+            import os
+            self._topics_header.setText(f"🎬 PRODUCTION INPUT — {os.path.basename(file_path)} ▼")
+            return
+        
+        # Text-Only mode: parse as prompts
+        template = self._get_selected_template()
+        if not template:
+            from core.workflow_scanner import WorkflowTemplate
+            template = WorkflowTemplate(display_name="Manual")
 
-            self._status_summary.setText(f"✅ Imported {len(prompts)} prompts")
-            self._status_frame.setVisible(True)
+        from core.project_builder import ProjectBuilder
+        builder = ProjectBuilder()
+        prompts = builder.import_prompts(text, template)
 
-            # Auto-add if enabled
-            if self._auto_add_cb.isChecked() and prompts:
-                self._on_add_to_queue()
+        if self._parsed_panel:
+            for i, p in enumerate(prompts):
+                self._parsed_panel.add_project(
+                    f"Imported Prompt {i+1}",
+                    {"Prompts": p.prompt, "Master": p.prompt},
+                    "ready"
+                )
+        else:
+            self._show_prompts_in_table(prompts)
+
+        import os
+        self._topics_header.setText(
+            f"✅ Imported {len(prompts)} prompts from {os.path.basename(file_path)} ▶"
+        )
+
+        # Auto-add if enabled
+        if self._auto_add_cb.isChecked() and prompts:
+            self._on_add_to_queue()
 
     def _show_prompts_in_table(self, prompts):
         """Populate the prompts table."""
@@ -1115,15 +1605,19 @@ class TabProject(QWidget):
                 show_warning(self, "No Prompts", f"Project '{name}' has no prompt content to queue.")
 
     def _on_add_all_to_queue(self):
-        """Add all non-generating projects to queue."""
+        """Add all ready (non-generating, non-queued) projects to queue.
+        
+        Bug 5+8 fix: skip 'generating', 'queued', and 'error' to prevent
+        duplicate queue entries and adding broken projects.
+        """
         if not self._parsed_panel:
             return
         added = 0
         for i, row in enumerate(self._parsed_panel._projects):
-            if row.get_status() != "generating":
+            if row.get_status() == "ready":
                 self._on_add_project_to_queue(i)
                 added += 1
-        log.info(f"[TabProject] _on_add_all_to_queue: processed {added} projects")
+        log.info(f"[TabProject] _on_add_all_to_queue: added {added} ready projects")
 
     def _do_queue_add(self, prompts: list, project_name: str):
         """Common queue-add logic — routes to T2V or T2I based on combo."""
@@ -1205,7 +1699,11 @@ class TabProject(QWidget):
                 self._setup_matrix.output_folder.setText(folder)
 
     def retranslate_ui(self):
-        """Hot-reload UI text on language change — rebuild entire tab."""
+        """Hot-reload UI text on language change — rebuild entire tab.
+        
+        Bug 9 fix: re-init builder after rebuilding UI so scanner/rules_loader
+        remain available.
+        """
         # Remove old layout
         old_layout = self.layout()
         if old_layout:
@@ -1220,5 +1718,6 @@ class TabProject(QWidget):
         self._setup_matrix = None
         self._parsed_panel = None
 
-        # Rebuild
+        # Rebuild UI + re-init builder (Bug 9 fix)
         self._setup_ui()
+        self._init_builder()

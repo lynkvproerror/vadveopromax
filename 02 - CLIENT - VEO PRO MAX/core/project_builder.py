@@ -72,14 +72,21 @@ class DedupResult:
 
 
 class DedupChecker:
-    """3-layer deduplication: exact, fuzzy (batch), history (cross-session)."""
+    """3-layer deduplication: exact, fuzzy (batch), history (cross-session).
+    
+    Fix #6: Thresholds configurable via constructor.
+    Fix #9: History limit configurable.
+    """
 
     HISTORY_FILE = Path.home() / ".veoauto" / "project_history.json"
-    FUZZY_THRESHOLD = 0.85   # Jaccard similarity for batch
-    HISTORY_THRESHOLD = 0.80  # Jaccard similarity for history
 
-    def __init__(self):
+    def __init__(self, fuzzy_threshold: float = 0.85,
+                 history_threshold: float = 0.80,
+                 history_limit: int = 500):
         self._batch_topics: List[str] = []
+        self.fuzzy_threshold = fuzzy_threshold
+        self.history_threshold = history_threshold
+        self.history_limit = history_limit
 
     def check_all(self, topic: str) -> DedupResult:
         """Run all 3 dedup layers."""
@@ -97,7 +104,9 @@ class DedupChecker:
         # Layer 2: Fuzzy match in current batch
         for existing in self._batch_topics:
             sim = self._jaccard(topic, existing)
-            if sim >= self.FUZZY_THRESHOLD:
+            if sim >= self.fuzzy_threshold:
+                # Bug 6 fix: still add to batch so future topics can detect this one
+                self._batch_topics.append(topic)
                 return DedupResult(
                     status="warning",
                     reason=f"Similar topic in batch ({sim:.0%})",
@@ -109,7 +118,9 @@ class DedupChecker:
         history = self._load_history()
         for entry in history:
             sim = self._jaccard(topic, entry.get("topic", ""))
-            if sim >= self.HISTORY_THRESHOLD:
+            if sim >= self.history_threshold:
+                # Bug 6 fix: still add to batch so future topics can detect this one
+                self._batch_topics.append(topic)
                 return DedupResult(
                     status="warning",
                     reason=f"Similar to previous project ({sim:.0%})",
@@ -117,7 +128,7 @@ class DedupChecker:
                     similarity=sim,
                 )
 
-        # Add to batch
+        # Add to batch (Bug 6 fix: also add warning topics to prevent cascading)
         self._batch_topics.append(topic)
         return DedupResult(status="ok")
 
@@ -133,7 +144,7 @@ class DedupChecker:
             "date": datetime.now().isoformat(),
         })
         # Keep last 500 entries
-        history = history[-500:]
+        history = history[-self.history_limit:]
         self.HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(self.HISTORY_FILE, "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2, ensure_ascii=False)
@@ -440,11 +451,22 @@ class ProjectBuilder:
         self.rules_loader = rules_loader
         self.context_mgr = ContextManager()
         self.dedup = DedupChecker()
+        self._cancelled = False  # Fix #1: Cancel support
 
         # Callbacks for UI progress updates
         self.on_step_start: Optional[Callable] = None
         self.on_step_done: Optional[Callable] = None
         self.on_topic_done: Optional[Callable] = None
+
+    def cancel(self):
+        """Request cancellation of the current generation."""
+        self._cancelled = True
+        log.info("[Builder] Cancellation requested")
+
+    def _check_cancelled(self):
+        """Raise if cancelled."""
+        if self._cancelled:
+            raise InterruptedError("Generation cancelled by user")
 
     async def process_topic(
         self,
@@ -453,9 +475,12 @@ class ProjectBuilder:
         api_key: str,
         output_dir: str = "",
         skip_seo: bool = False,
+        skip_research: bool = False,
+        skip_bible: bool = False,
         matrix_config: Optional[Dict] = None,
         model: str = "",
         prompt_format: str = "text",
+        step_config: Optional[Dict] = None,
     ) -> TopicResult:
         """Process a single topic through the full pipeline.
 
@@ -465,6 +490,9 @@ class ProjectBuilder:
             api_key: Gemini API key.
             output_dir: Output directory for files.
             skip_seo: Skip SEO generation step.
+            skip_research: Skip Research step (Fix #4).
+            skip_bible: Skip Bible step (Fix #4).
+            step_config: Override STEP_MODEL_CONFIG per step (Fix #5).
 
         Returns:
             TopicResult with all generated content.
@@ -478,6 +506,7 @@ class ProjectBuilder:
         try:
             result.status = "processing"
             self._model = model  # Store for _safe_generate calls
+            _cfg = step_config or {}  # Fix #5: user overrides
 
             # Load rules for this template
             rules_text = ""
@@ -487,45 +516,52 @@ class ProjectBuilder:
                     template.advanced_rules,
                 )
 
-            # ── Step 1: Research ──
-            step_cfg = STEP_MODEL_CONFIG["Research"]
-            self._emit("Research", topic, 1)
-            system, user_prompt = self.context_mgr.build_context(
-                "Research", topic, template.body, rules_text,
-                matrix_config=matrix_config,
-            )
-            research = await self._safe_generate(
-                prompt=user_prompt,
-                system=system,
-                api_key=api_key,
-                max_tokens=step_cfg["max_tokens"],
-                temperature=step_cfg["temperature"],
-                model=self._model,
-            )
+            # ── Step 1: Research (skippable — Fix #4) ──
+            self._check_cancelled()
+            research = ""
+            if not skip_research:
+                step_cfg = {**STEP_MODEL_CONFIG["Research"], **_cfg.get("Research", {})}
+                self._emit("Research", topic, 1)
+                system, user_prompt = self.context_mgr.build_context(
+                    "Research", topic, template.body, rules_text,
+                    matrix_config=matrix_config,
+                )
+                research = await self._safe_generate(
+                    prompt=user_prompt,
+                    system=system,
+                    api_key=api_key,
+                    max_tokens=step_cfg["max_tokens"],
+                    temperature=step_cfg["temperature"],
+                    model=self._model,
+                )
             result.research = research
             result.steps_completed = 1
 
-            # ── Step 2: Bible Generation ──
-            step_cfg = STEP_MODEL_CONFIG["Bible"]
-            self._emit("Bible", topic, 2)
-            system, user_prompt = self.context_mgr.build_context(
-                "Bible", topic, template.body, rules_text,
-                previous_output=research,
-                matrix_config=matrix_config,
-            )
-            bible = await self._safe_generate(
-                prompt=user_prompt,
-                system=system,
-                api_key=api_key,
-                max_tokens=step_cfg["max_tokens"],
-                temperature=step_cfg["temperature"],
-                model=self._model,
-            )
+            # ── Step 2: Bible Generation (skippable — Fix #4) ──
+            self._check_cancelled()
+            bible = ""
+            if not skip_bible:
+                step_cfg = {**STEP_MODEL_CONFIG["Bible"], **_cfg.get("Bible", {})}
+                self._emit("Bible", topic, 2)
+                system, user_prompt = self.context_mgr.build_context(
+                    "Bible", topic, template.body, rules_text,
+                    previous_output=research,
+                    matrix_config=matrix_config,
+                )
+                bible = await self._safe_generate(
+                    prompt=user_prompt,
+                    system=system,
+                    api_key=api_key,
+                    max_tokens=step_cfg["max_tokens"],
+                    temperature=step_cfg["temperature"],
+                    model=self._model,
+                )
             result.bible = bible
             result.steps_completed = 2
 
             # ── Step 3: Prompt Generation ──
-            step_cfg = STEP_MODEL_CONFIG["Prompts"]
+            self._check_cancelled()
+            step_cfg = {**STEP_MODEL_CONFIG["Prompts"], **_cfg.get("Prompts", {})}
             self._emit("Prompts", topic, 3)
             system, user_prompt = self.context_mgr.build_context(
                 "Prompts", topic, template.body, rules_text,
@@ -579,9 +615,10 @@ class ProjectBuilder:
                         p.valid = True
                         p.violations = []
 
-            # ── Step 4: SEO (optional) ──
+            # ── Step 4: SEO (optional — Fix #12 UI toggle) ──
+            self._check_cancelled()
             if not skip_seo:
-                seo_cfg = STEP_MODEL_CONFIG["SEO"]
+                seo_cfg = {**STEP_MODEL_CONFIG["SEO"], **_cfg.get("SEO", {})}
                 self._emit("SEO", topic, 4)
                 system, user_prompt = self.context_mgr.build_context(
                     "SEO", topic, template.body, "",
@@ -629,14 +666,14 @@ class ProjectBuilder:
             # Save to history
             self.dedup.save_to_history(topic, template.template_id, output_dir)
 
-            # Save output files
+            # Save output files (Bug 3 fix: pass prompt_format)
             if output_dir:
-                self._save_outputs(result, output_dir)
+                self._save_outputs(result, output_dir, prompt_format=prompt_format)
 
             result.status = "done"
 
         except Exception as e:
-            result.status = "error"
+            result.status = "cancelled" if isinstance(e, InterruptedError) else "error"
             result.error = str(e)
             log.error(f"[Builder] Failed processing '{topic}': {e}")
 
@@ -652,13 +689,23 @@ class ProjectBuilder:
         api_key: str,
         output_base: str = "",
         skip_seo: bool = False,
+        skip_research: bool = False,
+        skip_bible: bool = False,
         model: str = "",
         matrix_config: Optional[Dict] = None,
         prompt_format: str = "text",
+        step_config: Optional[Dict] = None,
+        per_topic_template: bool = False,
     ) -> List[TopicResult]:
-        """Process multiple topics sequentially with fresh context per topic."""
+        """Process multiple topics sequentially with fresh context per topic.
+        
+        Fix #2: per_topic_template=True → auto-detect template for EACH topic.
+        Fix #4: skip_research/skip_bible → skip those pipeline steps.
+        """
         results = []
         for i, topic in enumerate(topics):
+            if self._cancelled:
+                break
             topic = topic.strip()
             # Extract topic from tab-separated data (topic = longest column)
             if "\t" in topic:
@@ -691,11 +738,23 @@ class ProjectBuilder:
                 safe_name = re.sub(r'\s+', ' ', safe_name)[:50].strip()
                 output_dir = str(Path(output_base) / safe_name)
 
+            # Fix #2: Per-topic template detection
+            topic_template = template
+            if per_topic_template and self.scanner:
+                topic_name = topic.split("\t")[0].strip() if "\t" in topic else topic
+                matches = self.scanner.detect_mode(topic_name)
+                if matches:
+                    topic_template = matches[0].template
+                    log.info(f"[Builder] Topic '{topic_name[:30]}' → template '{topic_template.display_name}'")
+
             result = await self.process_topic(
-                topic, template, api_key, output_dir, skip_seo,
+                topic, topic_template, api_key, output_dir, skip_seo,
+                skip_research=skip_research,
+                skip_bible=skip_bible,
                 model=model,
                 matrix_config=matrix_config,
                 prompt_format=prompt_format,
+                step_config=step_config,
             )
             results.append(result)
 
@@ -836,8 +895,8 @@ class ProjectBuilder:
         """Build Master file: scene prompts with dialogue + bible summary."""
         lines = [f"# Master — {result.topic}\n"]
         if result.bible:
-            # Extract first 5 lines of bible as summary
-            bible_lines = result.bible.strip().split("\n")[:5]
+            # Fix #8: Include full bible character section (not just 5 lines)
+            bible_lines = result.bible.strip().split("\n")[:20]
             lines.append("## Bible Summary")
             lines.extend(bible_lines)
             lines.append("")
@@ -847,13 +906,27 @@ class ProjectBuilder:
         return "\n".join(lines)
 
     def _build_dubbing(self, result: TopicResult) -> str:
-        """Build Dubbing file: voice script with scene markers."""
+        """Build Dubbing file: voice script with scene markers.
+        
+        Bug 7 fix: Extract real dialogue/narration from prompts instead of
+        placeholder text. Looks for (Giọng: ...) "dialogue" patterns.
+        """
         lines = [f"# Dubbing Script — {result.topic}\n"]
+        dialogue_re = re.compile(
+            r'\(Giọng[^)]*\)\s*["\u201c]([^"\u201d]+)["\u201d]',
+            re.IGNORECASE
+        )
         for p in result.prompts:
             lines.append(f"[Scene {p.index}]")
             if p.scene_description:
                 lines.append(f"  Visual: {p.scene_description}")
-            lines.append(f"  Dialogue: (narration for scene {p.index})")
+            # Extract dialogues from prompt text
+            dialogues = dialogue_re.findall(p.prompt)
+            if dialogues:
+                for d in dialogues:
+                    lines.append(f"  Narration: \"{d.strip()}\"")
+            else:
+                lines.append(f"  Narration: (Scene {p.index} narration)")
             lines.append("")
         return "\n".join(lines)
 
@@ -982,6 +1055,13 @@ class ProjectBuilder:
     def _bundled_path() -> Path:
         """Get bundled data/workflows/ path relative to project root."""
         return Path(__file__).parent.parent / "data" / "workflows"
+
+    @staticmethod
+    def _user_data_path() -> Path:
+        """Fix #10: User-writable path for generated templates/rules."""
+        p = Path.home() / ".veoauto" / "workflows"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
 
     async def generate_template(
         self,

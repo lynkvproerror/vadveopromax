@@ -82,7 +82,8 @@ class EditPromptPopup(BasePopup):
         self._format_combo.setFixedWidth(70)
         self._format_combo.setStyleSheet(
             f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.BORDER}; border-radius: 4px; padding: 2px 4px;"
+            f"border: none; border-radius: 4px; padding: 2px 4px;"
+            f" font-size: 12px; font-weight: bold;"
         )
         self._format_combo.setToolTip("Output format: Text (plain) or JSON ({...})")
         # Auto-detect: if prompt starts with {, select JSON
@@ -92,17 +93,13 @@ class EditPromptPopup(BasePopup):
 
         # Gemini AI buttons
         self.enhance_btn = QPushButton("✨ Enhance")
-        self.enhance_btn.setStyleSheet(
-            f"background-color: {Theme.PURPLE}; color: #1e1e2e; font-weight: bold;"
-        )
+        self.enhance_btn.setProperty("variant", "purple")
         self.enhance_btn.setToolTip("Enhance prompt with better visual details via Gemini AI")
         self.enhance_btn.clicked.connect(self._on_enhance)
         self.footer_layout.addWidget(self.enhance_btn)
         
         self.fix_btn = QPushButton("🔧 Fix")
-        self.fix_btn.setStyleSheet(
-            f"background-color: {Theme.PEACH}; color: #1e1e2e; font-weight: bold;"
-        )
+        self.fix_btn.setProperty("variant", "warning")
         self.fix_btn.setToolTip("Fix prompt to avoid policy violations via Gemini AI")
         self.fix_btn.clicked.connect(self._on_fix)
         self.footer_layout.addWidget(self.fix_btn)
@@ -120,7 +117,6 @@ class EditPromptPopup(BasePopup):
         self.footer_layout.addWidget(cancel_btn)
         
         self.save_btn = QPushButton("💾 Save")
-        self.save_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
         self.save_btn.clicked.connect(self._on_save)
         self.footer_layout.addWidget(self.save_btn)
         
@@ -366,10 +362,19 @@ class AddProfileDialog(BasePopup):
             self.path_entry = QLineEdit()
             self.path_entry.setPlaceholderText("C:\\Users\\...\\Chrome\\User Data\\Default")
             self.path_entry.setMinimumHeight(36)
+            self.path_entry.setStyleSheet(f"""
+                QLineEdit {{
+                    background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                    border: none; border-radius: 4px;
+                    padding: 4px 8px; font-weight: bold;
+                }}
+            """)
             path_layout.addWidget(self.path_entry)
             
             browse_btn = QPushButton("📂")
-            browse_btn.setFixedWidth(40)
+            browse_btn.setMinimumWidth(40)
+            browse_btn.setFixedHeight(36)
+            browse_btn.setProperty("variant", "secondary")
             browse_btn.clicked.connect(self._on_browse)
             path_layout.addWidget(browse_btn)
             self.content_layout.addLayout(path_layout)
@@ -421,7 +426,7 @@ class AddProfileDialog(BasePopup):
         self.footer_layout.addWidget(cancel_btn)
         
         add_btn = QPushButton("➕ Add Profile")
-        add_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
+        add_btn.setProperty("variant", "success")
         add_btn.clicked.connect(self._on_save)
         self.footer_layout.addWidget(add_btn)
         
@@ -493,7 +498,7 @@ class HelpTooltipPopup(BasePopup):
         # Optional link
         if self._link_url:
             link_btn = QPushButton(f"🔗 {self._link_text}")
-            link_btn.setStyleSheet(f"color: {Theme.BLUE}; background: transparent;")
+            link_btn.setProperty("variant", "link")
             link_btn.clicked.connect(lambda: webbrowser.open(self._link_url))
             self.content_layout.addWidget(link_btn)
         
@@ -510,7 +515,6 @@ class HelpTooltipPopup(BasePopup):
         self.footer_layout.addStretch()
         
         close_btn = QPushButton("Got it!")
-        close_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
         close_btn.clicked.connect(self._on_close)
         self.footer_layout.addWidget(close_btn)
         
@@ -610,7 +614,7 @@ class ImageManagerPopup(BasePopup):
         self._sidebar_layout.addStretch()
         
         add_cat_btn = QPushButton("➕ New Category")
-        add_cat_btn.setProperty("variant", "secondary")
+        add_cat_btn.setProperty("variant", "success")
         add_cat_btn.clicked.connect(self._on_add_category)
         self._sidebar_layout.addWidget(add_cat_btn)
         
@@ -663,12 +667,12 @@ class ImageManagerPopup(BasePopup):
         toolbar = QHBoxLayout()
         
         add_btn = QPushButton("➕ Add Images")
-        add_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
+        add_btn.setProperty("variant", "success")
         add_btn.clicked.connect(self._on_add_images)
         toolbar.addWidget(add_btn)
         
         del_all_btn = QPushButton("🗑️ Delete All")
-        del_all_btn.setStyleSheet(f"background-color: {Theme.RED};")
+        del_all_btn.setProperty("variant", "danger")
         del_all_btn.clicked.connect(self._on_delete_all)
         toolbar.addWidget(del_all_btn)
         
@@ -800,7 +804,7 @@ class ImageManagerPopup(BasePopup):
         
         # Select button
         select_btn = QPushButton("S")
-        select_btn.setFixedSize(28, 20)
+        select_btn.setMinimumSize(28, 20)
         select_btn.setStyleSheet(
             f"QPushButton {{ background: {Theme.GREEN}; color: #ffffff; {_btn_base} }}"
             f"QPushButton:hover {{ background: #B8F0B2; }}"
@@ -811,7 +815,7 @@ class ImageManagerPopup(BasePopup):
         
         # Edit tags button
         edit_btn = QPushButton("E")
-        edit_btn.setFixedSize(28, 20)
+        edit_btn.setMinimumSize(28, 20)
         edit_btn.setStyleSheet(
             f"QPushButton {{ background: {Theme.BLUE}; color: #ffffff; {_btn_base} }}"
             f"QPushButton:hover {{ background: #89B4FA; }}"
@@ -822,7 +826,7 @@ class ImageManagerPopup(BasePopup):
         
         # Delete button
         del_btn = QPushButton("X")
-        del_btn.setFixedSize(28, 20)
+        del_btn.setMinimumSize(28, 20)
         del_btn.setStyleSheet(
             f"QPushButton {{ background: {Theme.RED}; color: #ffffff; {_btn_base} }}"
             f"QPushButton:hover {{ background: #EBA0AC; }}"
@@ -1311,7 +1315,7 @@ class LicenseExpirationDialog(BasePopup):
         
         # Renew button
         renew_btn = QPushButton("🔄 Renew License")
-        renew_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
+        renew_btn.setProperty("variant", "success")
         renew_btn.clicked.connect(self._on_renew)
         self.footer_layout.addWidget(renew_btn)
         
@@ -1322,7 +1326,7 @@ class LicenseExpirationDialog(BasePopup):
             self.footer_layout.addWidget(continue_btn)
         else:
             close_btn = QPushButton("Close App")
-            close_btn.setStyleSheet(f"background-color: {Theme.RED};")
+            close_btn.setProperty("variant", "danger")
             close_btn.clicked.connect(self._on_close_app)
             self.footer_layout.addWidget(close_btn)
         

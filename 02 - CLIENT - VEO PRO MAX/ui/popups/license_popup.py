@@ -207,8 +207,9 @@ class LicenseRequiredDialog(QDialog):
         mid_row.addWidget(self._mid_entry)
         
         copy_btn = QPushButton("📋 Copy")
-        copy_btn.setFixedSize(85, 28)
-        copy_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; font-size: 11px;")
+        copy_btn.setMinimumSize(85, 28)
+        copy_btn.setProperty("variant", "secondary")
+        copy_btn.setProperty("btnSize", "sm")
         copy_btn.clicked.connect(self._on_copy_mid)
         self._copy_btn = copy_btn  # Store reference for feedback
         mid_row.addWidget(copy_btn)
@@ -230,10 +231,7 @@ class LicenseRequiredDialog(QDialog):
         
         activate_btn = QPushButton("✅ Kích hoạt")
         activate_btn.setFixedHeight(32)
-        activate_btn.setStyleSheet(
-            f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-            f"font-weight: bold; padding: 0 16px; border-radius: 4px;"
-        )
+        activate_btn.setProperty("variant", "success")
         activate_btn.clicked.connect(self._on_activate)
         activate_btn.setDefault(True)       # Capture Enter key
         activate_btn.setAutoDefault(False)  # Don't auto-trigger accept()
@@ -283,7 +281,7 @@ class LicenseRequiredDialog(QDialog):
         name_row.addWidget(name_lbl)
         self._name_entry = QLineEdit()
         self._name_entry.setPlaceholderText("Nguyễn Văn A")
-        self._name_entry.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px 8px;")
+        self._name_entry.setStyleSheet(f"background-color: {Theme.SURFACE1}; padding: 4px 8px; border: 1px solid {Theme.BLUE}; border-radius: 4px; font-weight: bold;")
         self._name_locked = False
         # Auto-fill and LOCK if name already registered
         try:
@@ -354,7 +352,7 @@ class LicenseRequiredDialog(QDialog):
             else:
                 display_price = td["price"]
             self._tier_combo.addItem(f"{td['name']} — {display_price}", td["key"])
-        self._tier_combo.setStyleSheet(f"background-color: {Theme.SURFACE2};")
+        self._tier_combo.setStyleSheet(f"background-color: {Theme.SURFACE1}; border: none; border-radius: 4px; font-weight: bold;")
         tier_row.addWidget(self._tier_combo)
         req_layout.addLayout(tier_row)
         
@@ -373,7 +371,7 @@ class LicenseRequiredDialog(QDialog):
         email_row.addWidget(email_lbl)
         self._email_entry = QLineEdit()
         self._email_entry.setPlaceholderText("Không bắt buộc")
-        self._email_entry.setStyleSheet(f"background-color: {Theme.SURFACE2}; padding: 4px 8px;")
+        self._email_entry.setStyleSheet(f"background-color: {Theme.SURFACE1}; padding: 4px 8px; border: 1px solid {Theme.BLUE}; border-radius: 4px; font-weight: bold;")
         email_row.addWidget(self._email_entry)
         req_layout.addLayout(email_row)
         
@@ -382,11 +380,7 @@ class LicenseRequiredDialog(QDialog):
         btn_row.addStretch()
         send_btn = QPushButton("📤 Gửi yêu cầu")
         send_btn.setFixedHeight(34)
-        send_btn.setFixedWidth(220)
-        send_btn.setStyleSheet(
-            f"background-color: {Theme.BLUE}; color: {Theme.CRUST}; "
-            f"font-weight: bold; padding: 0 16px; border-radius: 4px; font-size: 12px;"
-        )
+        send_btn.setMinimumWidth(220)
         send_btn.clicked.connect(self._on_send_request)
         send_btn.setAutoDefault(False)
         btn_row.addWidget(send_btn)
@@ -415,11 +409,8 @@ class LicenseRequiredDialog(QDialog):
         exit_row = QHBoxLayout()
         exit_row.addStretch()
         exit_btn = QPushButton("❌ Thoát ứng dụng" if self._force_exit else "Đóng")
-        exit_btn.setFixedSize(180, 36)
-        exit_btn.setStyleSheet(
-            f"background-color: {Theme.RED}; color: {Theme.CRUST}; "
-            f"font-weight: bold; border-radius: 4px;"
-        )
+        exit_btn.setMinimumSize(180, 36)
+        exit_btn.setProperty("variant", "danger")
         exit_btn.clicked.connect(self._on_exit)
         exit_btn.setAutoDefault(False)
         exit_row.addWidget(exit_btn)

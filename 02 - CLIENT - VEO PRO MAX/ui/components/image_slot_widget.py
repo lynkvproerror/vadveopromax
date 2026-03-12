@@ -114,7 +114,7 @@ class ImageSlotWidget(QFrame):
         
         # Clear button (hidden when empty)
         self._clear_btn = QPushButton("✕")
-        self._clear_btn.setFixedSize(18, 18)
+        self._clear_btn.setMinimumSize(18, 18)
         self._clear_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.RED};
@@ -447,7 +447,7 @@ class ImageSlotRow(QFrame):
     def _add_plus_button(self):
         """Add expandable '+' button."""
         self._plus_btn = QPushButton("+")
-        self._plus_btn.setFixedSize(40, 40)
+        self._plus_btn.setMinimumSize(40, 40)
         self._plus_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE1};

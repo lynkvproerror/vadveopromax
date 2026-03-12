@@ -174,10 +174,12 @@ class TabSettings(
         container.setStyleSheet(container.styleSheet() + f"""
             QSpinBox, QDoubleSpinBox {{
                 padding-right: 20px;
-                color: {Theme.TEXT};
                 background-color: {Theme.SURFACE1};
-                border: 1px solid {Theme.BORDER};
+                color: {Theme.TEXT};
+                border: none;
                 border-radius: 4px;
+                font-size: 12px;
+                font-weight: bold;
             }}
             QSpinBox::up-button, QDoubleSpinBox::up-button {{
                 width: 18px;
@@ -544,10 +546,10 @@ class TabSettings(
         _combo_style = f"""
             QComboBox {{
                 background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
-                border: 1px solid {Theme.SURFACE2}; border-radius: 6px;
-                padding: 4px 8px; font-size: 12px;
+                border: none; border-radius: 4px;
+                padding: 4px 8px; font-size: 12px; font-weight: bold;
             }}
-            QComboBox:focus {{ border-color: {Theme.BLUE}; }}
+            QComboBox:focus {{ border: 1px solid {Theme.GREEN}; }}
             QComboBox::drop-down {{
                 border: none; width: 24px;
             }}
@@ -625,8 +627,8 @@ class TabSettings(
         self._pb_baseurl_edit.setFixedWidth(380)
         self._pb_baseurl_edit.setStyleSheet(
             f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; "
-            f"font-family: Consolas, monospace; font-size: 11px; padding: 4px 8px;"
+            f"border: none; border-radius: 4px; "
+            f"font-family: Consolas, monospace; font-size: 12px; font-weight: bold; padding: 4px 8px;"
         )
         # Load saved or default base URL
         saved_url = getattr(s, 'pb_ai_base_url', '') or ''
@@ -662,8 +664,8 @@ class TabSettings(
         self._pb_keys_edit.setFixedHeight(100)
         self._pb_keys_edit.setStyleSheet(
             f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; "
-            f"font-family: Consolas, monospace; font-size: 11px;"
+            f"border: none; border-radius: 4px; "
+            f"font-family: Consolas, monospace; font-size: 12px; font-weight: bold;"
         )
         # Set placeholder based on provider
         hint = self._PROVIDER_KEY_HINTS.get(current_provider, "API key...")
@@ -806,10 +808,9 @@ class TabSettings(
         self._ws_count_label = ws_count
 
         ws_btn = QPushButton(t("settings_ai.manage"))
-        ws_btn.setFixedWidth(90)
-        ws_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px; border-radius: 4px;"
-        )
+        ws_btn.setMinimumWidth(90)
+        ws_btn.setProperty("variant", "secondary")
+        ws_btn.setProperty("btnSize", "sm")
         ws_btn.clicked.connect(lambda: self._manage_source_dirs('workflow_template_sources'))
         ws_row.addWidget(ws_btn)
         ws_row.addStretch()
@@ -829,10 +830,9 @@ class TabSettings(
         self._rs_count_label = rs_count
 
         rs_btn = QPushButton(t("settings_ai.manage"))
-        rs_btn.setFixedWidth(90)
-        rs_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px; border-radius: 4px;"
-        )
+        rs_btn.setMinimumWidth(90)
+        rs_btn.setProperty("variant", "secondary")
+        rs_btn.setProperty("btnSize", "sm")
         rs_btn.clicked.connect(lambda: self._manage_source_dirs('workflow_rules_sources'))
         rs_row.addWidget(rs_btn)
         rs_row.addStretch()
@@ -857,23 +857,26 @@ class TabSettings(
         out_row = QHBoxLayout()
         out_label = QLabel(t("settings_ai.default_output"))
         out_label.setFixedWidth(150)
-        out_label.setStyleSheet(f"color: {Theme.TEXT};")
+        out_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         out_row.addWidget(out_label)
 
         self._project_output_entry = QLineEdit()
         self._project_output_entry.setText(getattr(s, 'project_output_base', ''))
         self._project_output_entry.setPlaceholderText(t("tooltips.select_output"))
-        self._project_output_entry.setStyleSheet(
-            f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.BORDER}; border-radius: 4px; padding: 4px 8px;"
-        )
+        self._project_output_entry.setMinimumHeight(32)
+        self._project_output_entry.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: none; border-radius: 4px;
+                padding: 4px 8px; font-weight: bold;
+            }}
+        """)
         out_row.addWidget(self._project_output_entry)
 
         browse_btn = QPushButton("📂")
-        browse_btn.setFixedWidth(40)
-        browse_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 28px;"
-        )
+        browse_btn.setMinimumWidth(40)
+        browse_btn.setFixedHeight(32)
+        browse_btn.setProperty("variant", "secondary")
         browse_btn.clicked.connect(self._browse_project_output)
         out_row.addWidget(browse_btn)
         layout.addLayout(out_row)
@@ -938,32 +941,36 @@ class TabSettings(
         # Save All button - explicitly force-saves all sections
         save_btn = QPushButton(t("settings_buttons.save_all"))
         save_btn.setToolTip(t("tooltips.save_all_tooltip"))
-        save_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; height: 36px;")
+        save_btn.setProperty("variant", "success")
+        save_btn.setProperty("btnSize", "lg")
         save_btn.clicked.connect(self._on_save)
         layout.addWidget(save_btn)
 
         # Reset Defaults button
         reset_btn = QPushButton(t("settings_buttons.reset_defaults"))
-        reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 36px;")
+        reset_btn.setProperty("variant", "secondary")
+        reset_btn.setProperty("btnSize", "lg")
         reset_btn.clicked.connect(self._on_reset)
         layout.addWidget(reset_btn)
 
         # Export Config button - blue
         export_btn = QPushButton(t("settings_buttons.export_config"))
-        export_btn.setStyleSheet(f"background-color: {Theme.BLUE}; height: 36px;")
+        export_btn.setProperty("btnSize", "lg")
         export_btn.clicked.connect(self._on_export)
         layout.addWidget(export_btn)
 
         # Import Config button
         import_btn = QPushButton(t("settings_buttons.import_config"))
-        import_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 36px;")
+        import_btn.setProperty("variant", "secondary")
+        import_btn.setProperty("btnSize", "lg")
         import_btn.clicked.connect(self._on_import)
         layout.addWidget(import_btn)
 
         # Reload App button — restart Python process
         reload_btn = QPushButton(t("settings_buttons.reload_app"))
         reload_btn.setToolTip(t("tooltips.reload_tooltip"))
-        reload_btn.setStyleSheet(f"background-color: #FF6B00; color: {Theme.CRUST}; height: 36px; font-weight: bold;")
+        reload_btn.setProperty("variant", "warning")
+        reload_btn.setProperty("btnSize", "lg")
         reload_btn.clicked.connect(self._on_reload_app)
         layout.addWidget(reload_btn)
 
@@ -987,32 +994,36 @@ class TabSettings(
         # Save All
         save_btn = QPushButton("💾 " + t('settings_buttons.save_all'))
         save_btn.setToolTip(t("tooltips.save_all_tooltip"))
-        save_btn.setStyleSheet(f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; height: 32px; font-weight: bold; border-radius: 4px; padding: 0 14px;")
+        save_btn.setProperty("variant", "success")
+        save_btn.setProperty("btnSize", "sm")
         save_btn.clicked.connect(self._on_save)
         bar_layout.addWidget(save_btn)
 
         # Reset Defaults
         reset_btn = QPushButton("🔄 " + t('settings_buttons.reset_defaults'))
-        reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 32px; border-radius: 4px; padding: 0 12px;")
+        reset_btn.setProperty("variant", "secondary")
+        reset_btn.setProperty("btnSize", "sm")
         reset_btn.clicked.connect(self._on_reset)
         bar_layout.addWidget(reset_btn)
 
         # Export Config
         export_btn = QPushButton("📤 " + t('settings_buttons.export_config'))
-        export_btn.setStyleSheet(f"background-color: {Theme.BLUE}; height: 32px; border-radius: 4px; padding: 0 12px;")
+        export_btn.setProperty("btnSize", "sm")
         export_btn.clicked.connect(self._on_export)
         bar_layout.addWidget(export_btn)
 
         # Import Config
         import_btn = QPushButton("📥 " + t('settings_buttons.import_config'))
-        import_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; height: 32px; border-radius: 4px; padding: 0 12px;")
+        import_btn.setProperty("variant", "secondary")
+        import_btn.setProperty("btnSize", "sm")
         import_btn.clicked.connect(self._on_import)
         bar_layout.addWidget(import_btn)
 
         # Reload App
         reload_btn = QPushButton("⚡ " + t('settings_buttons.reload_app'))
         reload_btn.setToolTip(t("tooltips.reload_tooltip"))
-        reload_btn.setStyleSheet(f"background-color: #FF6B00; color: {Theme.CRUST}; height: 32px; font-weight: bold; border-radius: 4px; padding: 0 12px;")
+        reload_btn.setProperty("variant", "warning")
+        reload_btn.setProperty("btnSize", "sm")
         reload_btn.clicked.connect(self._on_reload_app)
         bar_layout.addWidget(reload_btn)
 

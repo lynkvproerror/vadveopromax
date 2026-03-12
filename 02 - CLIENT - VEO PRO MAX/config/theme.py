@@ -66,8 +66,15 @@ class Theme:
     
     # === BORDER RADIUS ===
     RADIUS_BTN = 8          # ONLY buttons have rounded corners
+    RADIUS_INPUT = 4        # Inputs, combos, spinboxes
     RADIUS_POPUP = 12       # Popups/modals
     RADIUS_NONE = 0         # Most containers - NO rounded corners
+    
+    # === INPUT WIDGETS (QComboBox, QLineEdit, QSpinBox) ===
+    INPUT_PADDING_V = 4          # Vertical padding (px)
+    INPUT_PADDING_H = 8          # Horizontal padding (px)
+    INPUT_MIN_HEIGHT = 24        # Minimum height (px)
+    INPUT_FONT_SIZE = 12         # Font size (px)
     
     # === TYPOGRAPHY ===
     # Font family names
@@ -84,7 +91,10 @@ class Theme:
     FONT_BUTTON = ("Segoe UI", 13)
     
     # === SIDEBAR ===
-    SIDEBAR_WIDTH = 200
+    SIDEBAR_WIDTH = 240          # Form sidebars (Video, Image, Project Builder)
+    SIDEBAR_NAV_WIDTH = 180      # Navigation sidebars (Dev Console)
+    SIDEBAR_PADDING = 8          # Contents margins (top, right, bottom, left)
+    SIDEBAR_SPACING = 4          # Spacing between widgets
     
     # === WINDOW ===
     WINDOW_MIN_WIDTH = 900
@@ -124,8 +134,8 @@ class Theme:
                 "text_color": cls.CRUST,  # Dark text on light button
             },
             "secondary": {
-                "fg_color": cls.SURFACE1,
-                "hover_color": cls.SURFACE2,
+                "fg_color": cls.SURFACE2,
+                "hover_color": cls.OVERLAY0,
                 "text_color": cls.TEXT,
             },
             "danger": {
@@ -267,70 +277,118 @@ QPushButton:pressed {{
 }}
 
 QPushButton:disabled {{
-    background-color: {cls.SURFACE1};
-    color: {cls.OVERLAY0};
+    background-color: {cls.SURFACE2};
+    color: {cls.SUBTEXT0};
 }}
 
+/* -- Variants -- */
 QPushButton[variant="secondary"] {{
-    background-color: {cls.SURFACE1};
+    background-color: {cls.SURFACE2};
     color: {cls.TEXT};
 }}
-
 QPushButton[variant="secondary"]:hover {{
-    background-color: {cls.SURFACE2};
+    background-color: {cls.OVERLAY0};
 }}
 
 QPushButton[variant="danger"] {{
     background-color: {cls.RED};
 }}
-
 QPushButton[variant="danger"]:hover {{
     background-color: #EBA0AC;
 }}
 
 QPushButton[variant="success"] {{
     background-color: {cls.GREEN};
+    color: {cls.CRUST};
+}}
+QPushButton[variant="success"]:hover {{
+    background-color: #A6E3A1;
+}}
+QPushButton[variant="success"]:checked {{
+    background-color: {cls.GREEN};
+    color: {cls.CRUST};
 }}
 
 QPushButton[variant="purple"] {{
     background-color: {cls.PURPLE};
 }}
+QPushButton[variant="purple"]:hover {{
+    background-color: #C4A7E7;
+}}
+
+QPushButton[variant="warning"] {{
+    background-color: {cls.PEACH};
+}}
+QPushButton[variant="warning"]:hover {{
+    background-color: #FBCFB0;
+}}
+
+QPushButton[variant="link"] {{
+    background-color: transparent;
+    color: {cls.BLUE};
+    border: none;
+    padding: 0;
+    font-weight: normal;
+    text-align: left;
+}}
+QPushButton[variant="link"]:hover {{
+    color: {cls.LAVENDER};
+}}
+
+/* -- Button Sizes -- */
+QPushButton[btnSize="sm"] {{
+    height: 26px;
+    font-size: 11px;
+    padding: 0 10px;
+}}
+
+QPushButton[btnSize="lg"] {{
+    height: 36px;
+    font-size: 14px;
+    padding: 0 20px;
+}}
 
 /* === INPUT FIELDS === */
 QLineEdit, QTextEdit, QPlainTextEdit {{
-    background-color: {cls.SURFACE0};
+    background-color: {cls.SURFACE1};
     color: {cls.TEXT};
     border: 1px solid {cls.BORDER};
-    border-radius: 4px;
-    padding: 8px;
+    border-radius: {cls.RADIUS_INPUT}px;
+    padding: {cls.INPUT_PADDING_V}px {cls.INPUT_PADDING_H}px;
+    font-size: {cls.INPUT_FONT_SIZE}px;
+    font-weight: bold;
+    min-height: {cls.INPUT_MIN_HEIGHT}px;
     selection-background-color: {cls.BLUE};
 }}
 
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
-    border-color: {cls.BORDER_FOCUS};
+    border-color: {cls.GREEN};
 }}
 
 QLineEdit:disabled, QTextEdit:disabled {{
-    background-color: {cls.SURFACE1};
+    background-color: {cls.SURFACE0};
     color: {cls.OVERLAY0};
+    border-color: {cls.BORDER};
 }}
 
 /* === COMBO BOX === */
 QComboBox {{
-    background-color: {cls.SURFACE0};
+    background-color: {cls.SURFACE1};
     color: {cls.TEXT};
-    border: 1px solid {cls.BORDER};
-    border-radius: 4px;
-    padding: 8px;
-    min-width: 100px;
+    border: none;
+    border-radius: {cls.RADIUS_INPUT}px;
+    padding: {cls.INPUT_PADDING_V}px {cls.INPUT_PADDING_H}px;
+    font-size: {cls.INPUT_FONT_SIZE}px;
+    font-weight: bold;
+    min-height: {cls.INPUT_MIN_HEIGHT}px;
 }}
 
 QComboBox:focus {{
-    border-color: {cls.BORDER_FOCUS};
+    border: 1px solid {cls.GREEN};
 }}
 
 QComboBox::drop-down {{
-    border-left: 1px solid {cls.BORDER};
+    border: none;
     width: 30px;
     background-color: {cls.SURFACE1};
     border-top-right-radius: 3px;
@@ -356,22 +414,26 @@ QComboBox QAbstractItemView {{
 
 /* === SPIN BOX === */
 QSpinBox, QDoubleSpinBox {{
-    background-color: {cls.SURFACE0};
+    background-color: {cls.SURFACE1};
     color: {cls.TEXT};
     border: 1px solid {cls.BORDER};
-    border-radius: 4px;
-    padding: 4px 8px;
+    border-radius: {cls.RADIUS_INPUT}px;
+    padding: {cls.INPUT_PADDING_V}px {cls.INPUT_PADDING_H}px;
     padding-right: 28px;  /* Space for buttons on right (24px + 4px) */
+    font-size: {cls.INPUT_FONT_SIZE}px;
+    font-weight: bold;
+    min-height: {cls.INPUT_MIN_HEIGHT}px;
     selection-background-color: {cls.BLUE};
 }}
 
 QSpinBox:focus, QDoubleSpinBox:focus {{
-    border-color: {cls.BORDER_FOCUS};
+    border-color: {cls.GREEN};
 }}
 
 QSpinBox:disabled, QDoubleSpinBox:disabled {{
-    background-color: {cls.SURFACE1};
+    background-color: {cls.SURFACE0};
     color: {cls.OVERLAY0};
+    border-color: {cls.BORDER};
 }}
 
 /* Up button — top right */
@@ -539,12 +601,15 @@ QTabBar::tab {{
     border: 1px solid {cls.BORDER};
     border-bottom: none;
     margin-right: 2px;
+    font-size: 12px;
+    font-weight: bold;
 }}
 
 QTabBar::tab:selected {{
     background-color: {cls.BASE};
     color: {cls.BLUE};
     border-bottom: 2px solid {cls.BLUE};
+    font-weight: bold;
 }}
 
 QTabBar::tab:hover:!selected {{
@@ -607,6 +672,8 @@ QSplitter::handle:vertical {{
 QStatusBar {{
     background-color: {cls.SURFACE0};
     color: {cls.SUBTEXT0};
+    font-size: 12px;
+    font-weight: bold;
 }}
 
 /* === MENU === */
@@ -664,6 +731,11 @@ QFrame#settingsSection {{
     border: 1px solid {cls.BORDER};
     border-radius: 8px;
     padding: 12px;
+}}
+
+/* === SIDEBAR CONTAINER === */
+QWidget#sidebarPanel {{
+    background-color: {cls.SURFACE0};
 }}
 """
 

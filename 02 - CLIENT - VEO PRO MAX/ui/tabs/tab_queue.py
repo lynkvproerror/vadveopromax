@@ -422,7 +422,7 @@ class TabQueue(
         """Create filter bar with dropdowns and search."""
         bar = QFrame()
         bar.setFixedHeight(40)
-        bar.setStyleSheet(f"background-color: {Theme.SURFACE1};")
+        bar.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE1}; }}")
         
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 4, 12, 4)
@@ -442,16 +442,21 @@ class TabQueue(
         
         # Status dropdown
         self.status_filter = QComboBox()
-        self.status_filter.setFixedWidth(100)
+        self.status_filter.setMinimumWidth(130)
         self.status_filter.addItems([t("queue_extra.all_status"), t("queue_extra.status_pending"), t("queue_extra.status_processing"), t("queue_extra.status_completed"), t("queue_extra.status_failed"), t("queue_extra.status_cancelled")])
         self.status_filter.currentTextChanged.connect(self._on_filter_changed)
         layout.addWidget(self.status_filter)
         
         # Mode dropdown
         self.mode_filter = QComboBox()
-        self.mode_filter.setFixedWidth(100)
-        self.mode_filter.addItems([t("queue_extra.all_modes"), "T2V", "I2V", "R2V", "T2I", "I2I"])
-        self.mode_filter.currentTextChanged.connect(self._on_filter_changed)
+        self.mode_filter.setMinimumWidth(160)
+        self.mode_filter.addItem(t("queue_extra.all_modes"), "ALL")
+        self.mode_filter.addItem("Text → Video", "T2V")
+        self.mode_filter.addItem("Image → Video", "I2V")
+        self.mode_filter.addItem("Remix Video", "R2V")
+        self.mode_filter.addItem("Text → Image", "T2I")
+        self.mode_filter.addItem("Image → Image", "I2I")
+        self.mode_filter.currentIndexChanged.connect(self._on_filter_changed)
         layout.addWidget(self.mode_filter)
         
         layout.addStretch()
@@ -493,8 +498,6 @@ class TabQueue(
         project_idx = self.project_filter.currentIndex()
         project = self.project_filter.currentText()
         status = self.status_filter.currentText().lower()
-        mode_idx = self.mode_filter.currentIndex()
-        mode = self.mode_filter.currentText()
         search = self.search_input.text().lower()
         
         # Map UI status labels to internal task states
@@ -526,8 +529,9 @@ class TabQueue(
             if allowed_statuses is not None and item.status not in allowed_statuses:
                 show = False
             
-            # Mode filter: index 0 = All Modes
-            if mode_idx != 0 and item.mode != mode:
+            # Mode filter: use itemData for matching (display shows full description)
+            selected_mode = self.mode_filter.currentData()
+            if selected_mode and selected_mode != "ALL" and item.mode != selected_mode:
                 show = False
             
             # Search filter
@@ -540,15 +544,14 @@ class TabQueue(
         """Create control buttons bar."""
         bar = QFrame()
         bar.setFixedHeight(50)
-        bar.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        bar.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; }}")
         
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(8)
         
-        # Toggle button — Start ↔ Stop (2-state)
         self.toggle_btn = QPushButton(t("queue.start_all"))
-        self.toggle_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
+        self.toggle_btn.setProperty("variant", "success")
         self.toggle_btn.clicked.connect(self._on_toggle_engine)
         layout.addWidget(self.toggle_btn)
         
@@ -561,7 +564,7 @@ class TabQueue(
         self.post_queue_combo = QComboBox()
         self.post_queue_combo.addItems([t("queue_extra.do_nothing"), t("queue_extra.shutdown"), t("queue_extra.sleep")])
         self.post_queue_combo.setCurrentText(saved_action)
-        self.post_queue_combo.setFixedWidth(180)
+        self.post_queue_combo.setMinimumWidth(150)
         self.post_queue_combo.setToolTip(t("queue_extra.post_queue_tooltip"))
         self.post_queue_combo.currentIndexChanged.connect(self._post_queue_combo_changed)
         layout.addWidget(self.post_queue_combo)
@@ -570,43 +573,43 @@ class TabQueue(
         
         # Retry Failed button
         self.retry_failed_btn = QPushButton(t("queue.retry_failed"))
-        self.retry_failed_btn.setStyleSheet(f"background-color: {Theme.PEACH};")
+        self.retry_failed_btn.setProperty("variant", "warning")
         self.retry_failed_btn.setToolTip(t("queue_extra.retry_failed_tooltip"))
         self.retry_failed_btn.clicked.connect(self._on_retry_failed)
         layout.addWidget(self.retry_failed_btn)
 
         # Retry Failed Videos button — retry only failed video slots (partial failures)
         self.retry_videos_btn = QPushButton(t("queue_extra.retry_videos"))
-        self.retry_videos_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE};")
+        self.retry_videos_btn.setProperty("variant", "secondary")
         self.retry_videos_btn.setToolTip(t("queue_extra.retry_videos_tooltip"))
         self.retry_videos_btn.clicked.connect(self._on_retry_failed_videos)
         layout.addWidget(self.retry_videos_btn)
 
         # Force Retry All button — force re-generate ALL tasks
         self.force_all_btn = QPushButton(t("queue_extra.force_all"))
-        self.force_all_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.PEACH};")
+        self.force_all_btn.setProperty("variant", "secondary")
         self.force_all_btn.setToolTip(t("queue_extra.force_all_tooltip"))
         self.force_all_btn.clicked.connect(self._on_force_retry_all)
         layout.addWidget(self.force_all_btn)
 
         # Reset All
         self.reset_btn = QPushButton(t("queue.reset_all"))
-        self.reset_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.YELLOW};")
+        self.reset_btn.setProperty("variant", "secondary")
         self.reset_btn.setToolTip(t("queue_extra.reset_tooltip"))
         self.reset_btn.clicked.connect(self._on_reset_all)
         layout.addWidget(self.reset_btn)
         
         # Delete All
         self.delete_all_btn = QPushButton(t("queue.delete_all"))
-        self.delete_all_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.RED};")
+        self.delete_all_btn.setProperty("variant", "danger")
         self.delete_all_btn.setToolTip(t("queue_extra.delete_all_tooltip"))
         self.delete_all_btn.clicked.connect(self._on_delete_all)
         layout.addWidget(self.delete_all_btn)
 
         # 🔍 Debug Queue (temporary diagnostic)
         self._debug_btn = QPushButton("🔍 Debug")
-        self._debug_btn.setFixedWidth(70)
-        self._debug_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.YELLOW};")
+        self._debug_btn.setMinimumWidth(70)
+        self._debug_btn.setProperty("variant", "secondary")
         self._debug_btn.setToolTip("Dump queue state for diagnostics")
         self._debug_btn.clicked.connect(self._on_debug_dump)
         layout.addWidget(self._debug_btn)
@@ -652,7 +655,7 @@ class TabQueue(
             if label_text is None:
                 # Toggle All expand/collapse button
                 self._toggle_all_btn = QPushButton("▼")
-                self._toggle_all_btn.setFixedSize(40, 24)
+                self._toggle_all_btn.setMinimumSize(40, 24)
                 self._toggle_all_btn.setToolTip(t("queue_extra.toggle_all_tooltip"))
                 self._toggle_all_btn.setCursor(Qt.PointingHandCursor)
                 self._toggle_all_btn.setStyleSheet(f"""
@@ -699,7 +702,7 @@ class TabQueue(
         """Create statistics bar at bottom."""
         bar = QFrame()
         bar.setFixedHeight(40)
-        bar.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        bar.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; }}")
         
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 0, 12, 0)
@@ -1019,7 +1022,7 @@ class TabQueue(
         
         # Retry button
         retry_btn = QPushButton("\u27f3")
-        retry_btn.setFixedSize(30, 24)
+        retry_btn.setMinimumSize(30, 24)
         retry_btn.setToolTip(t("queue_extra.retry_prompt_tooltip"))
         retry_btn.setStyleSheet(_RETRY_BTN_STYLE)
         retry_btn.clicked.connect(lambda checked, _id=item.id: self._on_retry_item(_id))
@@ -1030,7 +1033,7 @@ class TabQueue(
         
         # Delete button
         delete_btn = QPushButton("\u2715")
-        delete_btn.setFixedSize(30, 24)
+        delete_btn.setMinimumSize(30, 24)
         delete_btn.setToolTip(t("queue_extra.remove_prompt_tooltip"))
         delete_btn.setStyleSheet(_DELETE_BTN_STYLE)
         delete_btn.clicked.connect(lambda checked, _id=item.id: self._on_delete_item(_id))
@@ -1503,11 +1506,12 @@ class TabQueue(
         """Update toggle button appearance: Start (green) ↔ Stop (red)."""
         if not self._is_processing:
             self.toggle_btn.setText(t("queue.start_all"))
-            self.toggle_btn.setStyleSheet(f"background-color: {Theme.GREEN};")
+            self.toggle_btn.setProperty("variant", "success")
         else:
             self.toggle_btn.setText(t("queue.stop"))
-            self.toggle_btn.setStyleSheet(f"background-color: {Theme.RED};")
-    
+            self.toggle_btn.setProperty("variant", "danger")
+        self.toggle_btn.style().unpolish(self.toggle_btn)
+        self.toggle_btn.style().polish(self.toggle_btn)    
     def _on_retry_failed(self):
         """Retry ALL failed tasks — staggered 1 per 2s to avoid flooding."""
         # BUG-B3 fix: Query dispatcher for live failed tasks (not stale _queue_items)

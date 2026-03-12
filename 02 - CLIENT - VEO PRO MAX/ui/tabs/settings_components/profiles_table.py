@@ -120,21 +120,7 @@ class SettingsProfilesMixin:
         browser_btn = QPushButton(t("profiles.add_profile"))
         browser_btn.setToolTip(t("tooltips.login_tooltip"))
         browser_btn.setFixedHeight(32)
-        browser_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.GREEN};
-                color: #1e1e2e;
-                font-size: 12px;
-                font-weight: bold;
-                padding: 4px 16px;
-                border: none;
-                border-radius: 6px;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.GREEN};
-                opacity: 0.9;
-            }}
-        """)
+        browser_btn.setProperty("variant", "success")
         browser_btn.clicked.connect(self._on_add_profile_browser)
         btn_layout.addWidget(browser_btn)
 
@@ -142,21 +128,6 @@ class SettingsProfilesMixin:
         bulk_btn = QPushButton(t("profiles.bulk_add"))
         bulk_btn.setToolTip(t("bulk_add.info"))
         bulk_btn.setFixedHeight(32)
-        bulk_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.BLUE};
-                color: #1e1e2e;
-                font-size: 12px;
-                font-weight: bold;
-                padding: 4px 16px;
-                border: none;
-                border-radius: 6px;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.BLUE};
-                opacity: 0.9;
-            }}
-        """)
         bulk_btn.clicked.connect(self._on_bulk_add_profiles)
         btn_layout.addWidget(bulk_btn)
 
@@ -166,20 +137,7 @@ class SettingsProfilesMixin:
         self._email_toggle_btn = QPushButton(t("profiles.show_email") if self._emails_hidden else t("profiles.hide_email"))
         self._email_toggle_btn.setFixedHeight(32)
         self._email_toggle_btn.setToolTip(t("profiles.show_email") if self._emails_hidden else t("profiles.hide_email"))
-        self._email_toggle_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.SURFACE2};
-                color: {Theme.TEXT};
-                font-size: 12px;
-                border: 1px solid {Theme.BORDER};
-                border-radius: 6px;
-                padding: 4px 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.SURFACE1};
-                border: 1px solid rgba(255,255,255,0.3);
-            }}
-        """)
+        self._email_toggle_btn.setProperty("variant", "secondary")
         self._email_toggle_btn.clicked.connect(self._toggle_email_visibility)
         btn_layout.addWidget(self._email_toggle_btn)
         layout.addLayout(btn_layout)
@@ -349,32 +307,32 @@ class SettingsProfilesMixin:
             # Explicit style: ensure number is visible on dark table background
             slots_spin.setStyleSheet(f"""
                 QSpinBox {{
-                    background-color: {Theme.SURFACE0};
+                    background-color: {Theme.SURFACE1};
                     color: {Theme.TEXT};
-                    border: 1px solid {Theme.BORDER};
-                    border-radius: 3px;
+                    border: none;
+                    border-radius: 4px;
                     padding: 2px 4px;
                     padding-right: 18px;
-                    font-size: 13px;
+                    font-size: 12px;
                     font-weight: bold;
                 }}
                 QSpinBox:focus {{
-                    border-color: {Theme.BLUE};
+                    border: 1px solid {Theme.GREEN};
                 }}
                 QSpinBox::up-button {{
                     width: 20px;
-                    border-left: 1px solid {Theme.BORDER};
-                    background-color: {Theme.SURFACE1};
-                    border-top-right-radius: 2px;
+                    border: none;
+                    background-color: {Theme.SURFACE2};
+                    border-top-right-radius: 3px;
                 }}
                 QSpinBox::down-button {{
                     width: 20px;
-                    border-left: 1px solid {Theme.BORDER};
-                    background-color: {Theme.SURFACE1};
-                    border-bottom-right-radius: 2px;
+                    border: none;
+                    background-color: {Theme.SURFACE2};
+                    border-bottom-right-radius: 3px;
                 }}
                 QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
-                    background-color: {Theme.SURFACE2};
+                    background-color: {Theme.LAVENDER};
                 }}
             """)
             slots_spin.valueChanged.connect(
@@ -460,7 +418,7 @@ class SettingsProfilesMixin:
             toggle_color = Theme.GREEN if is_visible else Theme.YELLOW
             toggle_tip = "Browser VISIBLE — click to HIDE" if is_visible else "Browser HIDDEN — click to SHOW"
             toggle_btn = QPushButton(toggle_text)
-            toggle_btn.setFixedSize(32, 32)
+            toggle_btn.setMinimumSize(32, 32)
             toggle_btn.setToolTip(toggle_tip)
             toggle_btn.setObjectName(f"toggle_vis_{email}")
             toggle_btn.setStyleSheet(f"""

@@ -7,7 +7,7 @@ Extends GenerationTabBase. Adds Frame Mode selector (START/START+END).
 from typing import Optional
 from enum import Enum
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QComboBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QComboBox, QLabel
 
 from config.theme import Theme
 from ui.tabs.generation_tab_base import GenerationTabBase
@@ -47,11 +47,26 @@ class TabI2V(GenerationTabBase):
         """Initialize frame mode state."""
         self._frame_mode = FrameMode.START_ONLY
     
+    def _create_sidebar(self):
+        """Override: create sidebar then inject mode dropdown inside it."""
+        super()._create_sidebar()
+        self._inject_mode_into_sidebar()
+    
     def _create_sidebar_extra(self, layout):
-        """Add frame mode dropdown between header and sidebar widget."""
-        mode_content = QFrame()
-        mode_content_layout = QVBoxLayout(mode_content)
-        mode_content_layout.setContentsMargins(12, 8, 12, 8)
+        """No-op: mode dropdown is added inside sidebar after creation."""
+        pass
+    
+    def _inject_mode_into_sidebar(self):
+        """Inject frame mode dropdown into sidebar, just above Image Library button."""
+        # Create "Mode:" label
+        mode_label = QLabel("📂 Mode:")
+        mode_label.setStyleSheet(f"""
+            color: {Theme.SUBTEXT0};
+            font-size: 11px;
+            font-weight: bold;
+            padding-top: 8px;
+            padding-bottom: 2px;
+        """)
         
         self.mode_dropdown = QComboBox()
         self.mode_dropdown.addItems([
@@ -59,9 +74,21 @@ class TabI2V(GenerationTabBase):
             "START + END"
         ])
         self.mode_dropdown.currentTextChanged.connect(self._on_mode_change)
-        mode_content_layout.addWidget(self.mode_dropdown)
         
-        layout.addWidget(mode_content)
+        # Insert right before the image library button in the sidebar layout
+        sidebar_layout = self.sidebar._layout
+        if hasattr(self.sidebar, 'image_library_btn'):
+            # Find index of image_library_btn
+            idx = sidebar_layout.indexOf(self.sidebar.image_library_btn)
+            if idx >= 0:
+                sidebar_layout.insertWidget(idx, self.mode_dropdown)
+                sidebar_layout.insertWidget(idx, mode_label)
+                return
+        
+        # Fallback: insert before the stretch
+        stretch_idx = sidebar_layout.count() - 1  # stretch is last before bottom
+        sidebar_layout.insertWidget(stretch_idx, mode_label)
+        sidebar_layout.insertWidget(stretch_idx + 1, self.mode_dropdown)
     
     def _on_mode_change(self, value: str):
         """Handle frame mode change — update image slots in parsed prompt table."""

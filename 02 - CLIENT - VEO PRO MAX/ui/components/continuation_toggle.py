@@ -70,7 +70,7 @@ class ContinuationHeader(QWidget):
         
         # All button
         self.all_btn = QPushButton("All")
-        self.all_btn.setFixedSize(60, 28)
+        self.all_btn.setMinimumSize(60, 28)
         self.all_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE1};
@@ -91,7 +91,7 @@ class ContinuationHeader(QWidget):
         
         # None button
         self.none_btn = QPushButton("None")
-        self.none_btn.setFixedSize(60, 28)
+        self.none_btn.setMinimumSize(60, 28)
         self.none_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE1};

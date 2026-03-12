@@ -663,6 +663,11 @@ class AppController:
         GAP #1 fix: Auto-trigger browser restart instead of just logging.
         Runs in background thread to avoid blocking the event loop.
         """
+        # ★ Guard: don't auto-restart if engine was intentionally stopped
+        if hasattr(self, '_engine') and self._engine and not self._engine.is_running:
+            log.info(f"[AppController] Tab dead for {email} but engine stopped — skipping auto-restart")
+            return
+        
         log.warning(f"[AppController] 💀 Tab dead: {email} (reason: {reason}) — auto-restarting browser")
         try:
             self._push_browser_status()
@@ -1106,12 +1111,22 @@ class AppController:
         
         # Auto-restart if browser closed unexpectedly
         if state == "closed":
+            # ★ Guard: don't auto-restart if engine was intentionally stopped
+            if hasattr(self, '_engine') and self._engine and not self._engine.is_running:
+                log.info(f"[AppController] Browser closed for {email} but engine stopped — skipping auto-restart")
+                return
+            
             log.warning(f"[AppController] 🔴 Browser closed for {email} — scheduling auto-restart in 5s")
             import threading
             
             def _auto_restart():
                 import time
                 time.sleep(5)
+                
+                # ★ Re-check after 5s sleep — engine may have stopped while waiting
+                if hasattr(self, '_engine') and self._engine and not self._engine.is_running:
+                    log.info(f"[AppController] Engine stopped during wait — cancelling auto-restart for {email}")
+                    return
                 # Verify Chrome is really dead (not just Playwright disconnect)
                 pc = self._profiles_controller
                 if pc:

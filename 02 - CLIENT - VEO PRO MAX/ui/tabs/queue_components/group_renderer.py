@@ -111,7 +111,7 @@ class QueueGroupMixin:
              lambda checked, _gid=gid: self._on_delete_group(_gid)),
         ]:
             btn = QPushButton(btn_text)
-            btn.setFixedSize(36 if btn_text != "⚒️" else 32, 24)
+            btn.setMinimumSize(36 if btn_text != "⚒️" else 32, 24)
             btn.setToolTip(btn_tip)
             hover_bg = Theme.RED if btn_text == "DEL" else btn_color
             hover_color = Theme.CRUST
@@ -605,11 +605,12 @@ class QueueGroupMixin:
             QDialog {{ background-color: {Theme.BASE}; }}
             QLabel {{ color: {Theme.TEXT}; font-size: 12px; }}
             QLineEdit, QComboBox {{
-                background-color: {Theme.SURFACE0}; color: {Theme.TEXT};
-                border: 1px solid {Theme.SURFACE2}; border-radius: 6px;
-                padding: 6px 10px; min-height: 28px;
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: none; border-radius: 4px;
+                padding: 4px 8px; font-size: 12px; font-weight: bold;
+                min-height: 28px;
             }}
-            QLineEdit:focus, QComboBox:focus {{ border-color: {Theme.BLUE}; }}
+            QLineEdit:focus, QComboBox:focus {{ border: 1px solid {Theme.GREEN}; }}
         """)
         
         layout = QVBoxLayout(dialog)
@@ -641,31 +642,44 @@ class QueueGroupMixin:
                 idx = 0
         model_combo.setCurrentIndex(idx)
         layout.addWidget(model_combo)
+        _label_style = f"color: {Theme.TEXT}; font-weight: bold;"
+        _input_style = f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: none; border-radius: 4px;
+                padding: 4px 8px; font-weight: bold;
+            }}
+        """
+        _combo_style = f"""
+            QComboBox {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: none; border-radius: 4px;
+                padding: 4px 8px; font-weight: bold;
+            }}
+        """
         
-        layout.addWidget(QLabel("📐 Aspect Ratio"))
+        _ar_label = QLabel("📐 Aspect Ratio")
+        _ar_label.setStyleSheet(_label_style)
+        layout.addWidget(_ar_label)
         ar_combo = QComboBox()
         ar_combo.addItems(["16:9 (Landscape)", "9:16 (Portrait)"])
+        ar_combo.setStyleSheet(_combo_style)
         if 'PORTRAIT' in group_data.get('aspect_ratio', '').upper():
             ar_combo.setCurrentIndex(1)
         layout.addWidget(ar_combo)
         
-        layout.addWidget(QLabel("📂 Output Folder"))
+        _folder_label = QLabel("📂 Output Folder")
+        _folder_label.setStyleSheet(_label_style)
+        layout.addWidget(_folder_label)
         folder_row = QHBoxLayout()
         folder_input = QLineEdit()
         folder_input.setText(group_data.get('output_folder', ''))
+        folder_input.setStyleSheet(_input_style)
         folder_row.addWidget(folder_input)
         browse_btn = QPushButton("📂")
-        browse_btn.setFixedSize(40, 34)
-        browse_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.SURFACE2}; color: {Theme.TEXT};
-                border: 1px solid {Theme.SURFACE2}; border-radius: 6px;
-                font-size: 16px; padding: 0px;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.BLUE}; border-color: {Theme.BLUE};
-            }}
-        """)
+        browse_btn.setFixedHeight(34)
+        browse_btn.setMinimumWidth(40)
+        browse_btn.setProperty("variant", "secondary")
         browse_btn.setToolTip("Browse output folder")
         browse_btn.clicked.connect(
             lambda: folder_input.setText(QFileDialog.getExistingDirectory(dialog, "Select Output Folder") or folder_input.text())
@@ -701,13 +715,13 @@ class QueueGroupMixin:
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setFixedSize(100, 36)
+        cancel_btn.setMinimumSize(100, 36)
         cancel_btn.clicked.connect(dialog.reject)
         btn_layout.addWidget(cancel_btn)
         
         apply_btn = QPushButton("✅ Apply")
-        apply_btn.setFixedSize(120, 36)
-        apply_btn.setStyleSheet(f"QPushButton {{ background-color: {Theme.BLUE}; color: {Theme.CRUST}; border-radius: 8px; font-weight: bold; }}")
+        apply_btn.setMinimumSize(120, 36)
+        apply_btn.setProperty("btnSize", "lg")
         
         def _apply_settings():
             from config.constants import resolve_model_key, WorkflowType

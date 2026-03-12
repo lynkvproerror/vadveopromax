@@ -600,6 +600,9 @@ if (window.__veoContentLoaded) {
             const payload = msg.payload || {};
             const needsRecaptcha = msg.needsRecaptcha !== false;
             const endpointKey = msg.endpoint || '';
+            // ★ Progressive timeout: use dynamic values from Python tier
+            const rcTimeout = msg.rcTimeout || 15000;
+            const fetchTimeout = msg.fetchTimeout || 20000;
 
             console.log(
                 `[VEO Bridge Content] 🚀 submit_prompt relay: ` +
@@ -627,17 +630,18 @@ if (window.__veoContentLoaded) {
             };
             window.addEventListener('message', resultHandler);
 
-            // Safety timeout: clean up listener after 45s if no result
+            // Safety timeout — scales with fetchTimeout (2x for reCAPTCHA + fetch + margin)
+            const relayTimeout = Math.max((rcTimeout + fetchTimeout) * 2, 60000);
             const timeout = setTimeout(() => {
                 window.removeEventListener('message', resultHandler);
-                console.error(`[VEO Bridge Content] ❌ submit_prompt timed out (45s)`);
+                console.error(`[VEO Bridge Content] ❌ submit_prompt timed out (${relayTimeout / 1000}s)`);
                 chrome.runtime.sendMessage({
                     action: 'submit_prompt_relay_result',
                     requestId: requestId,
                     success: false,
-                    error: 'Content script relay timeout (45s)',
+                    error: `Content script relay timeout (${relayTimeout / 1000}s)`,
                 });
-            }, 45000);
+            }, relayTimeout);
 
             // Override cleanup on result
             const origHandler = resultHandler;
@@ -660,6 +664,8 @@ if (window.__veoContentLoaded) {
     const payload = ${JSON.stringify(payload)};
     const needsRecaptcha = ${JSON.stringify(needsRecaptcha)};
     const endpointKey = ${JSON.stringify(endpointKey)};
+    const rcTimeoutMs = ${rcTimeout};
+    const fetchTimeoutMs = ${fetchTimeout};
 
     try {
         // ── Step 1: reCAPTCHA token ──────────────────────────────
@@ -700,7 +706,7 @@ if (window.__veoContentLoaded) {
                 const rcAction = (endpointKey === 'T2I') ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
                 const recaptchaPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
                 const recaptchaTimeout = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
+                    setTimeout(() => reject(new Error('reCAPTCHA execute timeout (' + (rcTimeoutMs / 1000) + 's)')), rcTimeoutMs)
                 );
                 recaptchaToken = await Promise.race([recaptchaPromise, recaptchaTimeout]);
                 // HAR verified: valid tokens are 1742-2169 chars
@@ -751,7 +757,7 @@ if (window.__veoContentLoaded) {
         if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
 
         const controller = new AbortController();
-        const fetchTimeout = setTimeout(() => controller.abort(), 20000);
+        const fetchTimer = setTimeout(() => controller.abort(), fetchTimeoutMs);
         try {
             const resp = await fetch(endpointUrl, {
                 method: 'POST',
@@ -760,7 +766,7 @@ if (window.__veoContentLoaded) {
                 body: JSON.stringify(body),
                 signal: controller.signal,
             });
-            clearTimeout(fetchTimeout);
+            clearTimeout(fetchTimer);
             const responseText = await resp.text();
             let responseData = null;
             try { responseData = JSON.parse(responseText); }
@@ -774,9 +780,9 @@ if (window.__veoContentLoaded) {
                 tokenLength: recaptchaToken ? recaptchaToken.length : 0,
             }}, '*');
         } catch (fetchErr) {
-            clearTimeout(fetchTimeout);
+            clearTimeout(fetchTimer);
             const errMsg = fetchErr.name === 'AbortError'
-                ? 'fetch timeout (20s) — API did not respond'
+                ? 'fetch timeout (' + (fetchTimeoutMs / 1000) + 's) — API did not respond'
                 : 'fetch failed: ' + fetchErr.message;
             window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
                 success: false,

@@ -180,19 +180,14 @@ class EnhanceDialog(QDialog):
         btn_row.addStretch()
         
         self._cancel_btn = QPushButton("Cancel")
-        self._cancel_btn.setFixedSize(100, 32)
-        self._cancel_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; border-radius: 6px;"
-        )
+        self._cancel_btn.setMinimumSize(100, 32)
+        self._cancel_btn.setProperty("variant", "secondary")
         self._cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(self._cancel_btn)
         
         self._enhance_btn = QPushButton("✨ Enhance")
-        self._enhance_btn.setFixedSize(120, 32)
-        self._enhance_btn.setStyleSheet(
-            f"background-color: {Theme.GREEN}; color: {Theme.BASE};"
-            f" font-weight: bold; border-radius: 6px;"
-        )
+        self._enhance_btn.setMinimumSize(120, 32)
+        self._enhance_btn.setProperty("variant", "success")
         self._enhance_btn.clicked.connect(self._on_enhance)
         btn_row.addWidget(self._enhance_btn)
         

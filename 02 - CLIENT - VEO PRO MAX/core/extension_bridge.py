@@ -529,7 +529,7 @@ class ExtensionBridge:
         if cancelled:
             log.info(f"[ExtensionBridge] Cancelled {cancelled} pending request(s) (server still running)")
 
-    async def request_recaptcha(self, email: str, timeout: float = 25.0) -> Optional[str]:
+    async def request_recaptcha(self, email: str, timeout: float = 35.0, attempt: int = 0) -> Optional[str]:
         """Request reCAPTCHA token from Extension for a specific email.
 
         Sends request to Extension → Extension calls grecaptcha.execute()
@@ -537,10 +537,14 @@ class ExtensionBridge:
         
         Auto-simulates activity if tab has been idle >60s to prevent
         cold-start failures.
+        
+        ★ Progressive timeout: attempt 0 → 15s reCAPTCHA execute,
+        attempt 1 → 25s, attempt 2+ → 35s (forwarded to Extension).
 
         Args:
             email: Account email to get token for
-            timeout: Max seconds to wait for response
+            timeout: Max seconds to wait for response (35s for slow network tolerance)
+            attempt: Retry attempt number (0-based) for progressive escalation
 
         Returns:
             reCAPTCHA token string, or None if failed
@@ -572,13 +576,20 @@ class ExtensionBridge:
             self._pending_request_conns[request_id] = conn  # GAP #9: tag with connection
 
             try:
+                # ── Progressive timeout: calculate tier-based rcTimeout ──
+                from config.constants import get_timeout_tier
+                tier = get_timeout_tier(attempt)
+                rc_timeout_ms = tier['rc_execute_ms']
+                bridge_timeout = tier['bridge_timeout']
+                
                 await self._ws_send(conn, {
                     'action': 'request_recaptcha',
                     'requestId': request_id,
                     'email': email,
+                    'rcTimeout': rc_timeout_ms,  # ★ Dynamic timeout for Extension
                 })
 
-                result = await asyncio.wait_for(future, timeout=timeout)
+                result = await asyncio.wait_for(future, timeout=bridge_timeout)
                 token = result.get('token')
                 error = result.get('error')
 
@@ -754,13 +765,17 @@ class ExtensionBridge:
         endpoint: str,
         body: dict,
         needs_recaptcha: bool = True,
-        timeout: float = 35.0,
+        timeout: float = 45.0,
+        attempt: int = 0,
     ) -> Optional[dict]:
         """Submit prompt via Extension — reCAPTCHA + API call from page context.
 
         Extension generates reCAPTCHA token and sends fetch() from the real
         labs.google page. Token is used immediately (<100ms), all browser
         headers (x-client-data, x-browser-*) are auto-added by Chrome.
+        
+        ★ Progressive timeout: attempt 0 → 15s reCAPTCHA + 20s fetch,
+        attempt 1 → 25s + 30s, attempt 2+ → 35s + 40s.
 
         Args:
             email: Account email to submit for
@@ -770,8 +785,9 @@ class ExtensionBridge:
                   Extension adds fresh token). Must include clientContext
                   (sessionId, tool, projectId, paygateTier) and requests[].
             needs_recaptcha: Whether to generate reCAPTCHA token (default True)
-            timeout: Max seconds to wait for response (default 35s —
-                     reCAPTCHA 3-5s + API 2-10s + buffer)
+            timeout: Max seconds to wait for response (45s for slow network —
+                     reCAPTCHA 3-10s + API 2-15s + buffer)
+            attempt: Retry attempt number (0-based) for progressive escalation
 
         Returns:
             dict with keys: success, status, statusText, data, tokenLength, error
@@ -808,6 +824,13 @@ class ExtensionBridge:
             self._pending_request_conns[request_id] = conn
 
             try:
+                # ── Progressive timeout: calculate tier-based timeouts ──
+                from config.constants import get_timeout_tier
+                tier = get_timeout_tier(attempt)
+                rc_timeout_ms = tier['rc_execute_ms']
+                fetch_timeout_ms = tier['fetch_ms']
+                bridge_timeout = tier['bridge_timeout']
+                
                 await self._ws_send(conn, {
                     'action': 'submit_prompt',
                     'requestId': request_id,
@@ -815,9 +838,12 @@ class ExtensionBridge:
                     'endpoint': endpoint,
                     'payload': {'body': body},
                     'needsRecaptcha': needs_recaptcha,
+                    'rcTimeout': rc_timeout_ms,       # ★ Dynamic reCAPTCHA timeout
+                    'fetchTimeout': fetch_timeout_ms,  # ★ Dynamic fetch timeout
+                    'attempt': attempt,                # ★ For Extension logging
                 })
 
-                result = await asyncio.wait_for(future, timeout=timeout)
+                result = await asyncio.wait_for(future, timeout=bridge_timeout)
 
                 success = result.get('success', False)
                 status = result.get('status', 0)
@@ -1618,7 +1644,7 @@ class ExtensionBridge:
                 # Guard: don't downgrade x-client-data in bridge cache
                 # Chrome Variations Service needs ~15s after launch; Extension
                 # sends truncated 8-char value during that window.
-                MIN_XCD = MIN_VALID_XCD  # Shared constant (50)
+                MIN_XCD = MIN_VALID_XCD  # Shared constant (40)
                 new_xcd = headers.get('x-client-data', '')
                 old_headers = conn.headers.get(email, {})
                 old_xcd = old_headers.get('x-client-data', '')

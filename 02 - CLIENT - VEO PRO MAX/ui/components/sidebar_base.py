@@ -29,7 +29,7 @@ class SidebarBase(QWidget):
     Subclasses add tab-specific widgets.
     """
     
-    WIDTH = 240
+    WIDTH = Theme.SIDEBAR_WIDTH
     
     # Signals
     add_to_queue = Signal()
@@ -39,14 +39,17 @@ class SidebarBase(QWidget):
         
         self._on_add_to_queue = on_add_to_queue
         
-        # Fixed width
+        # Fixed width + object name for QSS targeting
         self.setFixedWidth(self.WIDTH)
-        self.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        self.setObjectName("sidebarPanel")
         
         # Main layout
         self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(8, 8, 8, 8)
-        self._layout.setSpacing(4)
+        self._layout.setContentsMargins(
+            Theme.SIDEBAR_PADDING, Theme.SIDEBAR_PADDING,
+            Theme.SIDEBAR_PADDING, Theme.SIDEBAR_PADDING
+        )
+        self._layout.setSpacing(Theme.SIDEBAR_SPACING)
         
         # Create common widgets
         self._create_widgets()
@@ -66,6 +69,7 @@ class SidebarBase(QWidget):
         label.setStyleSheet(f"""
             color: {Theme.SUBTEXT0};
             font-size: 11px;
+            font-weight: bold;
             padding-top: 8px;
             padding-bottom: 2px;
         """)
@@ -79,7 +83,6 @@ class SidebarBase(QWidget):
         
         self.project_name = QLineEdit()
         self.project_name.setPlaceholderText("T2V-Project-01")
-        self.project_name.setMinimumHeight(32)
         self._layout.addWidget(self.project_name)
         
         # === OUTPUT FOLDER ===
@@ -87,11 +90,10 @@ class SidebarBase(QWidget):
         
         self.output_folder = FolderDropLineEdit()
         self.output_folder.setPlaceholderText("D:/Projects/VEO (or drag folder here)")
-        self.output_folder.setMinimumHeight(32)
         self._layout.addWidget(self.output_folder)
         
         self.browse_btn = QPushButton(t("sidebar.browse"))
-        self.browse_btn.setMinimumHeight(28)
+        self.browse_btn.setFixedHeight(34)
         self.browse_btn.setProperty("variant", "secondary")
         self.browse_btn.clicked.connect(self._browse_folder)
         self._layout.addWidget(self.browse_btn)
@@ -111,7 +113,6 @@ class SidebarBase(QWidget):
         
         self.aspect_ratio = QComboBox()
         self.aspect_ratio.addItems(["16:9 (Landscape)", "9:16 (Portrait)"])
-        self.aspect_ratio.setMinimumHeight(32)
         # Auto-populate from AppSettings
         if global_settings:
             _ar = getattr(global_settings, 'default_aspect_ratio', 'LANDSCAPE')
@@ -134,23 +135,12 @@ class SidebarBase(QWidget):
         
         # Queue status
         self.queue_status = QLabel(t("sidebar.queue_status").replace("{count}", "0"))
-        self.queue_status.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 4px 0;")
+        self.queue_status.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; font-weight: bold; padding: 4px 0;")
         self._layout.addWidget(self.queue_status)
         
         # Add to queue button
         self.add_queue_btn = QPushButton(t("sidebar.add_to_queue"))
-        self.add_queue_btn.setMinimumHeight(36)
-        self.add_queue_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.BLUE};
-                color: {Theme.CRUST};
-                border-radius: 8px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.LAVENDER};
-            }}
-        """)
+        self.add_queue_btn.setFixedHeight(40)
         self.add_queue_btn.clicked.connect(self._handle_add_to_queue)
         self._layout.addWidget(self.add_queue_btn)
     
@@ -251,7 +241,6 @@ class VideoSidebar(SidebarBase):
         self.outputs_per_prompt.addItems(["1 video", "2 videos", "3 videos", "4 videos"])
         _oc = getattr(_s, 'default_output_count', 4) if _s else 4
         self.outputs_per_prompt.setCurrentText(f"{_oc} video" if _oc == 1 else f"{_oc} videos")
-        self.outputs_per_prompt.setMinimumHeight(32)
         self._layout.addWidget(self.outputs_per_prompt)
         
         # === AI MODEL ===
@@ -270,7 +259,6 @@ class VideoSidebar(SidebarBase):
             idx = self.model.findText(_m)
             if idx >= 0:
                 self.model.setCurrentIndex(idx)
-        self.model.setMinimumHeight(32)
         self._layout.addWidget(self.model)
         
         # === DOWNLOAD QUALITY ===
@@ -281,13 +269,12 @@ class VideoSidebar(SidebarBase):
         if _s:
             _dq = getattr(_s, 'default_download_quality', '1080p')
             self.download_quality.setCurrentText(_dq)
-        self.download_quality.setMinimumHeight(32)
         self._layout.addWidget(self.download_quality)
         
         # === IMAGE LIBRARY BUTTON ===
         if self._show_image_library:
             self.image_library_btn = QPushButton(t("sidebar.image_library"))
-            self.image_library_btn.setMinimumHeight(32)
+            self.image_library_btn.setFixedHeight(34)
             self.image_library_btn.setProperty("variant", "secondary")
             self.image_library_btn.clicked.connect(self._on_open_image_library)
             self._layout.addWidget(self.image_library_btn)
@@ -372,17 +359,7 @@ class ImageSidebar(SidebarBase):
         super().__init__(parent, **kwargs)
         
         # Override button color to purple
-        self.add_queue_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.PURPLE};
-                color: {Theme.CRUST};
-                border-radius: 8px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.PURPLE_HOVER};
-            }}
-        """)
+        self.add_queue_btn.setProperty("variant", "purple")
         
         # Update aspect ratio for image tabs
         # Must re-apply saved value after clear/addItems resets index to 0
@@ -419,7 +396,6 @@ class ImageSidebar(SidebarBase):
         self.outputs_per_prompt.addItems(["1 image", "2 images", "3 images", "4 images"])
         _oc = getattr(_s, 'default_output_count', 4) if _s else 4
         self.outputs_per_prompt.setCurrentText(f"{_oc} image" if _oc == 1 else f"{_oc} images")
-        self.outputs_per_prompt.setMinimumHeight(32)
         self._layout.addWidget(self.outputs_per_prompt)
         
         # === AI MODEL ===
@@ -436,7 +412,6 @@ class ImageSidebar(SidebarBase):
             idx = self.model.findText(_im)
             if idx >= 0:
                 self.model.setCurrentIndex(idx)
-        self.model.setMinimumHeight(32)
         self._layout.addWidget(self.model)
         
         # === DOWNLOAD QUALITY ===
@@ -451,13 +426,12 @@ class ImageSidebar(SidebarBase):
         if _s:
             _iq = getattr(_s, 'default_image_quality', '1k')
             self.download_quality.setCurrentText(_iq)
-        self.download_quality.setMinimumHeight(32)
         self._layout.addWidget(self.download_quality)
         
         # === IMAGE LIBRARY BUTTON ===
         if self._show_image_library:
             self.image_library_btn = QPushButton(t("sidebar.image_library"))
-            self.image_library_btn.setMinimumHeight(32)
+            self.image_library_btn.setFixedHeight(34)
             self.image_library_btn.setProperty("variant", "secondary")
             self.image_library_btn.clicked.connect(self._on_open_image_library)
             self._layout.addWidget(self.image_library_btn)

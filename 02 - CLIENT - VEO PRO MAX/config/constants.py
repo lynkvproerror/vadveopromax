@@ -292,11 +292,38 @@ class TokenLifetime:
 # HAR-verified: valid values are 48+ chars (experiment flags).
 # After browser launch, Variations needs ~10-15s to load → short 8-char value.
 # Use this as the single threshold across ALL modules.
-MIN_VALID_XCD = 50  # was 20 in most files, 40 in remedy, 50 in engine
+MIN_VALID_XCD = 40  # Chrome Variations: valid xcd is 40+ chars; 8-char stub = not ready
 
 # After browser restart, wait this long for Variations Service to produce
 # a valid x-client-data before falling back to borrow.
 XCD_VARIATIONS_WAIT_TIMEOUT = 20  # seconds
+
+
+# === PROGRESSIVE TIMEOUT TIERS ===
+# Slow/unstable networks get escalating timeouts per retry attempt.
+# Fast networks still pass quickly via early-exit logic.
+TIMEOUT_TIERS = [
+    # Attempt 0 (first try) — normal network
+    {'xcd_poll': 20.0, 'rc_wait': 25.0, 'bridge_timeout': 35.0,
+     'rc_execute_ms': 15000, 'fetch_ms': 20000},
+    # Attempt 1 (retry) — slow network tolerance
+    {'xcd_poll': 30.0, 'rc_wait': 35.0, 'bridge_timeout': 45.0,
+     'rc_execute_ms': 25000, 'fetch_ms': 30000},
+    # Attempt 2+ (final retries) — maximum patience
+    {'xcd_poll': 40.0, 'rc_wait': 45.0, 'bridge_timeout': 55.0,
+     'rc_execute_ms': 35000, 'fetch_ms': 40000},
+]
+
+
+def get_timeout_tier(attempt: int = 0) -> dict:
+    """Get timeout configuration for a given retry attempt.
+    
+    Progressive escalation: attempt 0 → Tier 0 (fast), 1 → Tier 1 (slow),
+    2+ → Tier 2 (maximum patience). Early-exit logic in all wait loops
+    means fast networks are unaffected.
+    """
+    tier_idx = min(attempt, len(TIMEOUT_TIERS) - 1)
+    return TIMEOUT_TIERS[tier_idx]
 
 
 # === APP CONSTANTS ===

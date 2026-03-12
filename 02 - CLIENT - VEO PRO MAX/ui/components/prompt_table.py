@@ -430,7 +430,7 @@ class PromptTable(QWidget):
         actions_layout.setAlignment(Qt.AlignCenter)
         
         edit_btn = QPushButton("Edit")
-        edit_btn.setFixedSize(55, 30)
+        edit_btn.setMinimumSize(55, 30)
         edit_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE2};
@@ -451,7 +451,7 @@ class PromptTable(QWidget):
         actions_layout.addWidget(edit_btn)
         
         delete_btn = QPushButton("Del")
-        delete_btn.setFixedSize(55, 30)
+        delete_btn.setMinimumSize(55, 30)
         delete_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.SURFACE2};
@@ -531,7 +531,7 @@ class PromptTable(QWidget):
                 if not has_image and slot_count > 1:
                     rm_btn = QPushButton("×", slot)  # Parent = slot for overlay
                     rm_size = 14
-                    rm_btn.setFixedSize(rm_size, rm_size)
+                    rm_btn.setMinimumSize(rm_size, rm_size)
                     rm_btn.setStyleSheet(f"""
                         QPushButton {{
                             background-color: {Theme.SURFACE2};
@@ -565,7 +565,7 @@ class PromptTable(QWidget):
             if slot_count < max_slots:
                 plus_btn = QPushButton("+")
                 plus_size = min(mini_size, 30)
-                plus_btn.setFixedSize(plus_size, plus_size)
+                plus_btn.setMinimumSize(plus_size, plus_size)
                 plus_btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: {Theme.SURFACE1};

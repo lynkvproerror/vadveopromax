@@ -252,13 +252,13 @@ class TabDevConsole(QWidget):
         
         # ── Sidebar ──
         sidebar_frame = QFrame()
-        sidebar_frame.setFixedWidth(180)
+        sidebar_frame.setFixedWidth(Theme.SIDEBAR_NAV_WIDTH)
         sidebar_frame.setStyleSheet(
             f"QFrame {{ background-color: {Theme.MANTLE}; "
             f"border-right: 1px solid {Theme.BORDER}; }}"
         )
         sidebar_layout = QVBoxLayout(sidebar_frame)
-        sidebar_layout.setContentsMargins(0, 8, 0, 8)
+        sidebar_layout.setContentsMargins(0, Theme.SIDEBAR_PADDING, 0, Theme.SIDEBAR_PADDING)
         sidebar_layout.setSpacing(0)
         
         self._sidebar = QListWidget()
@@ -323,7 +323,7 @@ class TabDevConsole(QWidget):
         """Create minimal top toolbar."""
         toolbar = QFrame()
         toolbar.setFixedHeight(40)
-        toolbar.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        toolbar.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; }}")
         
         layout = QHBoxLayout(toolbar)
         layout.setContentsMargins(12, 0, 12, 0)
@@ -350,8 +350,8 @@ class TabDevConsole(QWidget):
         bar = QFrame()
         bar.setFixedHeight(28)
         bar.setStyleSheet(
-            f"background-color: {Theme.SURFACE0}; "
-            f"border-top: 1px solid {Theme.BORDER};"
+            f"QFrame {{ background-color: {Theme.SURFACE0}; "
+            f"border-top: 1px solid {Theme.BORDER}; }}"
         )
         
         layout = QHBoxLayout(bar)

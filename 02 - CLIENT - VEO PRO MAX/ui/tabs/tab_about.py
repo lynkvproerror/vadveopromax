@@ -56,7 +56,7 @@ class TabAbout(QWidget):
         # Scrollable content
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"background-color: {Theme.BASE};")
+        scroll.setStyleSheet(f"QScrollArea {{ background-color: {Theme.BASE}; }}")
         
         content = QWidget()
         content_layout = QVBoxLayout(content)
@@ -91,7 +91,7 @@ class TabAbout(QWidget):
     def _create_logo_section(self) -> QWidget:
         """Create ASCII logo section."""
         frame = QFrame()
-        frame.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        frame.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; }}")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(16, 16, 16, 16)
         
@@ -150,7 +150,7 @@ class TabAbout(QWidget):
         
         for icon_label, url in links:
             btn = QPushButton(f"{icon_label}: {url}")
-            btn.setStyleSheet(f"color: {Theme.BLUE}; text-align: left; background: transparent;")
+            btn.setProperty("variant", "link")
             btn.clicked.connect(lambda checked, u=url: webbrowser.open(u) if "http" in u else None)
             layout.addWidget(btn)
         

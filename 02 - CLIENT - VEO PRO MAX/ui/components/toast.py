@@ -76,7 +76,7 @@ class ToastWidget(QFrame):
         
         # Close button
         close_btn = QLabel("✕")
-        close_btn.setFixedSize(20, 20)
+        close_btn.setMinimumSize(20, 20)
         close_btn.setAlignment(Qt.AlignCenter)
         close_btn.setStyleSheet(f"""
             color: {Theme.OVERLAY0};

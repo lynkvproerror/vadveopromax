@@ -214,7 +214,7 @@ class VideoPlayerPopup(BasePopup):
         
         # Play/Pause button
         self.play_btn = QPushButton("▶ Play")
-        self.play_btn.setFixedWidth(90)
+        self.play_btn.setMinimumWidth(90)
         self.play_btn.setFixedHeight(32)
         self.play_btn.setStyleSheet(f"""
             QPushButton {{
@@ -385,7 +385,7 @@ class VideoPlayerPopup(BasePopup):
         # Copy path button (left side)
         if self._video_path:
             copy_btn = QPushButton("📋 Copy Path")
-            copy_btn.setFixedWidth(100)
+            copy_btn.setMinimumWidth(100)
             copy_btn.clicked.connect(self._on_copy_path)
             footer_layout.addWidget(copy_btn)
         
@@ -393,7 +393,7 @@ class VideoPlayerPopup(BasePopup):
         
         # Open in external player
         open_btn = QPushButton("📺 Open in Player")
-        open_btn.setFixedWidth(130)
+        open_btn.setMinimumWidth(130)
         open_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.BLUE};
@@ -410,7 +410,8 @@ class VideoPlayerPopup(BasePopup):
         
         # Close button
         close_btn = QPushButton("Close")
-        close_btn.setFixedWidth(80)
+        close_btn.setMinimumWidth(80)
+        close_btn.setProperty("variant", "secondary")
         close_btn.clicked.connect(self._on_close)
         footer_layout.addWidget(close_btn)
         

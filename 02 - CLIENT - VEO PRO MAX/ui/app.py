@@ -126,12 +126,19 @@ class MainWindow(QMainWindow):
                 from core.auto_updater import AutoUpdater
                 self._auto_updater = AutoUpdater(self)
                 self._auto_updater.update_available.connect(self._on_update_available)
-                self._auto_updater.start_periodic_check()
+                
+                # Check for deferred updates (saved before reboot/exit)
+                pending = AutoUpdater.check_pending_update()
+                if pending:
+                    log.info(f"Pending update found: v{pending.get('version')}")
+                    QTimer.singleShot(3000, lambda: self._apply_pending_update(pending))
+                else:
+                    self._auto_updater.start_periodic_check()
             except Exception as e:
                 log.debug(f"Auto-updater init failed: {e}")
         
-        # 🔒 Min client version check (3s delay to let UI load)
-        QTimer.singleShot(3000, self._check_min_version)
+        # 🔒 Min client version check (5s delay — after pending update dialog at 3s)
+        QTimer.singleShot(5000, self._check_min_version)
     
     def _setup_window(self):
         """Configure window properties."""
@@ -235,7 +242,7 @@ class MainWindow(QMainWindow):
         
         # Left side: license status
         license_label = QLabel("🔑 N/A")
-        license_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-right: 8px;")
+        license_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-right: 8px; font-weight: bold;")
         status_bar.addWidget(license_label, stretch=1)
         self._status_widgets["license"] = license_label
         
@@ -252,7 +259,7 @@ class MainWindow(QMainWindow):
         
         for key, text in items:
             label = QLabel(text)
-            label.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-right: 8px;")
+            label.setStyleSheet(f"color: {Theme.SUBTEXT0}; margin-right: 8px; font-weight: bold;")
             status_bar.addPermanentWidget(label)
             self._status_widgets[key] = label
     
@@ -263,19 +270,19 @@ class MainWindow(QMainWindow):
             return
         if not online:
             label.setText("❌ Offline")
-            label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px;")
+            label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px; font-weight: bold;")
         elif latency_ms < 100:
             label.setText(f"📶 {latency_ms}ms")
-            label.setStyleSheet(f"color: {Theme.GREEN}; margin-right: 8px;")
+            label.setStyleSheet(f"color: {Theme.GREEN}; margin-right: 8px; font-weight: bold;")
         elif latency_ms < 300:
             label.setText(f"📶 {latency_ms}ms")
-            label.setStyleSheet(f"color: {Theme.YELLOW}; margin-right: 8px;")
+            label.setStyleSheet(f"color: {Theme.YELLOW}; margin-right: 8px; font-weight: bold;")
         elif latency_ms < 1000:
             label.setText(f"⚠️ {latency_ms}ms")
-            label.setStyleSheet(f"color: {Theme.PEACH}; margin-right: 8px;")
+            label.setStyleSheet(f"color: {Theme.PEACH}; margin-right: 8px; font-weight: bold;")
         else:
             label.setText(f"❌ {latency_ms}ms")
-            label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px;")
+            label.setStyleSheet(f"color: {Theme.RED}; margin-right: 8px; font-weight: bold;")
     
     def _check_connectivity_async(self):
         """Check internet connectivity in a background thread (non-blocking)."""
@@ -674,7 +681,7 @@ class MainWindow(QMainWindow):
         else:
             color = Theme.RED
         
-        label.setStyleSheet(f"color: {color}; margin-right: 8px;")
+        label.setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
     
     def _poll_status_bar(self):
         """Poll live data for status bar widgets (called by QTimer every 5s)."""
@@ -733,7 +740,7 @@ class MainWindow(QMainWindow):
                     color = Theme.YELLOW  # Accounts added but not ready
                 else:
                     color = Theme.GREEN
-                self._status_widgets["accounts"].setStyleSheet(f"color: {color}; margin-right: 8px;")
+                self._status_widgets["accounts"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
         except Exception as e:
             import logging
             logging.getLogger("veo.ui").debug(f"[StatusBar] Accounts poll error: {e}")
@@ -760,7 +767,7 @@ class MainWindow(QMainWindow):
                 # 👷 = actual worker slots held | 📋 = tasks processing (incl. download/upscale with 0 workers)
                 self._status_widgets["workers"].setText(f"👷 {active_workers}/{total_capacity}  📋 {running}")
                 color = Theme.GREEN if running > 0 else Theme.SUBTEXT0
-                self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px;")
+                self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
         except Exception as e:
             import logging
             logging.getLogger("veo.ui").debug(f"[StatusBar] Workers poll error: {e}")
@@ -782,7 +789,7 @@ class MainWindow(QMainWindow):
                         color = Theme.GREEN if completed_prompts == total_prompts else Theme.BLUE
                     else:
                         color = Theme.SUBTEXT0
-                    self._status_widgets["queue"].setStyleSheet(f"color: {color}; margin-right: 8px;")
+                    self._status_widgets["queue"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
         except Exception:
             pass
         
@@ -818,7 +825,7 @@ class MainWindow(QMainWindow):
                     color = Theme.YELLOW
                 else:
                     color = Theme.SUBTEXT0
-                self._status_widgets["cpu"].setStyleSheet(f"color: {color}; margin-right: 8px;")
+                self._status_widgets["cpu"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
         except Exception:
             pass
     
@@ -830,6 +837,70 @@ class MainWindow(QMainWindow):
             return AppConstants.APP_VERSION
         except Exception:
             return "?.?.?"
+    
+    def _on_update_available(self, info):
+        """Handle update available signal from background check — show toast."""
+        try:
+            if info.update_type == "full":
+                msg = f"🆕 Full Update v{info.version} available!"
+            elif info.update_type == "ext_only":
+                msg = f"🆕 Extension v{info.ext_version} update available!"
+            else:
+                return
+            self.show_toast(msg, "info", duration=8000)
+        except Exception:
+            pass
+    
+    def _apply_pending_update(self, pending: dict):
+        """Apply a deferred full update on startup.
+        
+        Guards against version downgrade (if user manually updated since).
+        Shows confirm dialog, then applies or discards.
+        """
+        try:
+            from core.auto_updater import AutoUpdater, compare_versions
+            from config.constants import AppConstants
+            
+            pending_ver = pending.get("version", "0.0.0")
+            current_ver = AppConstants.APP_VERSION
+            
+            # Guard: skip if pending version <= current (already updated or would downgrade)
+            if compare_versions(current_ver, pending_ver) >= 0:
+                log.info(
+                    f"Pending update v{pending_ver} skipped — "
+                    f"current v{current_ver} is same or newer"
+                )
+                AutoUpdater.clear_pending_update()
+                if self._auto_updater:
+                    self._auto_updater.start_periodic_check()
+                return
+            
+            from ui.popups import show_confirm
+            answer = show_confirm(
+                self,
+                "🔄 Pending Update",
+                f"v{pending_ver} was downloaded previously.\n\n"
+                f"• Yes — Install now and restart\n"
+                f"• No — Skip this update"
+            )
+            
+            if answer and self._auto_updater:
+                self.show_toast(
+                    f"📦 Installing v{pending_ver}...", "info", duration=3000
+                )
+                self._auto_updater.apply_update(pending["zip_path"])
+            else:
+                # User skipped → clear pending + start normal checks
+                AutoUpdater.clear_pending_update()
+                if self._auto_updater:
+                    self._auto_updater.start_periodic_check()
+        except Exception as e:
+            import logging
+            logging.getLogger('veo').error(f"Pending update apply failed: {e}")
+            from core.auto_updater import AutoUpdater
+            AutoUpdater.clear_pending_update()
+            if self._auto_updater:
+                self._auto_updater.start_periodic_check()
     
     def _check_min_version(self):
         """Check server-configured min version & maintenance mode.

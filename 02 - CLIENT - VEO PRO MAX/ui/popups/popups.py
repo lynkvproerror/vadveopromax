@@ -96,17 +96,8 @@ class BasePopup(QDialog):
         header_layout.addStretch()
         
         self.close_btn = QPushButton("✕")
-        self.close_btn.setFixedSize(32, 28)
-        self.close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Theme.TEXT};
-                border: none;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.RED};
-            }}
-        """)
+        self.close_btn.setMinimumSize(32, 28)
+        self.close_btn.setProperty("variant", "link")
         self.close_btn.clicked.connect(self._on_close)
         header_layout.addWidget(self.close_btn)
         
@@ -195,10 +186,11 @@ class ConfirmDialog(BasePopup):
         self.footer_layout.addWidget(self.cancel_btn)
         
         # Confirm button
-        confirm_color = Theme.RED if self.danger else Theme.BLUE
+        confirm_color_variant = "danger" if self.danger else None
         self.confirm_btn = QPushButton(self.confirm_text)
         self.confirm_btn.setMinimumWidth(80)
-        self.confirm_btn.setStyleSheet(f"background-color: {confirm_color};")
+        if confirm_color_variant:
+            self.confirm_btn.setProperty("variant", confirm_color_variant)
         self.confirm_btn.clicked.connect(self._on_confirm)
         self.footer_layout.addWidget(self.confirm_btn)
         
@@ -273,7 +265,6 @@ class ErrorDialog(BasePopup):
         
         self.ok_btn = QPushButton("OK")
         self.ok_btn.setMinimumWidth(80)
-        self.ok_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
         self.ok_btn.clicked.connect(self._on_close)
         self.footer_layout.addWidget(self.ok_btn)
         
@@ -341,7 +332,6 @@ class RenameDialog(BasePopup):
         
         ok_btn = QPushButton("OK")
         ok_btn.setMinimumWidth(80)
-        ok_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
         ok_btn.clicked.connect(self._on_confirm)
         self.footer_layout.addWidget(ok_btn)
         

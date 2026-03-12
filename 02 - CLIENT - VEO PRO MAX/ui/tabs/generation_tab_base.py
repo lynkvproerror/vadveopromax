@@ -134,8 +134,8 @@ class GenerationTabBase(QWidget):
     def _create_sidebar(self):
         """Create sidebar with section header + sidebar widget."""
         self.sidebar_frame = QFrame()
-        self.sidebar_frame.setFixedWidth(260)
-        self.sidebar_frame.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        self.sidebar_frame.setFixedWidth(Theme.SIDEBAR_WIDTH)
+        self.sidebar_frame.setObjectName("sidebarPanel")
         
         layout = QVBoxLayout(self.sidebar_frame)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -144,7 +144,7 @@ class GenerationTabBase(QWidget):
         # Section header
         mode_header = QFrame()
         mode_header.setFixedHeight(32)
-        mode_header.setStyleSheet(f"background-color: {self.MODE_HEADER_COLOR};")
+        mode_header.setStyleSheet(f"QFrame {{ background-color: {self.MODE_HEADER_COLOR}; }}")
         mode_layout = QHBoxLayout(mode_header)
         mode_layout.setContentsMargins(12, 0, 12, 0)
         
@@ -155,7 +155,7 @@ class GenerationTabBase(QWidget):
         mode_layout.addStretch()
         
         help_btn = QPushButton("❓")
-        help_btn.setFixedSize(24, 24)
+        help_btn.setMinimumSize(24, 24)
         help_btn.clicked.connect(self._on_help)
         mode_layout.addWidget(help_btn)
         
@@ -181,7 +181,7 @@ class GenerationTabBase(QWidget):
     def _create_workspace(self) -> QWidget:
         """Create main workspace area."""
         workspace = QFrame()
-        workspace.setStyleSheet(f"background-color: {Theme.BASE};")
+        workspace.setStyleSheet(f"QFrame {{ background-color: {Theme.BASE}; }}")
         layout = QVBoxLayout(workspace)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -197,7 +197,7 @@ class GenerationTabBase(QWidget):
     def _create_input_section(self) -> QWidget:
         """Create prompt input section."""
         frame = QFrame()
-        frame.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        frame.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; }}")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 8)
         layout.setSpacing(0)
@@ -205,7 +205,7 @@ class GenerationTabBase(QWidget):
         # Header
         header = QFrame()
         header.setFixedHeight(32)
-        header.setStyleSheet(f"background-color: {self.MODE_HEADER_COLOR};")
+        header.setStyleSheet(f"QFrame {{ background-color: {self.MODE_HEADER_COLOR}; }}")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 12, 0)
         
@@ -250,7 +250,7 @@ class GenerationTabBase(QWidget):
     def _create_parsed_section(self) -> QWidget:
         """Create parsed prompts section."""
         frame = QFrame()
-        frame.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        frame.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; }}")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -258,7 +258,7 @@ class GenerationTabBase(QWidget):
         # Header
         header = QFrame()
         header.setFixedHeight(32)
-        header.setStyleSheet(f"background-color: {self.MODE_HEADER_COLOR};")
+        header.setStyleSheet(f"QFrame {{ background-color: {self.MODE_HEADER_COLOR}; }}")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(12, 0, 12, 0)
         

@@ -331,9 +331,7 @@ class SettingsPipelineEnhancerMixin:
 
         self._enhance_download_btn = QPushButton(t("pipeline.download_models"))
         self._enhance_download_btn.setFixedHeight(28)
-        self._enhance_download_btn.setStyleSheet(
-            f"background-color: {Theme.BLUE}; font-size: 11px; padding: 2px 12px;"
-        )
+        self._enhance_download_btn.setProperty("btnSize", "sm")
         self._enhance_download_btn.clicked.connect(self._on_download_enhancer_models)
         self._enhance_download_btn.setVisible(False)  # Show only when models missing
         model_row.addWidget(self._enhance_download_btn)
@@ -419,10 +417,8 @@ class SettingsPipelineEnhancerMixin:
         # PyTorch install button (shown only if torch not installed)
         self._enhance_install_btn = QPushButton(t("pipeline.install_pytorch"))
         self._enhance_install_btn.setFixedHeight(28)
-        self._enhance_install_btn.setStyleSheet(
-            f"background-color: {Theme.YELLOW}; color: {Theme.BASE}; "
-            f"font-size: 11px; font-weight: bold; padding: 2px 12px;"
-        )
+        self._enhance_install_btn.setProperty("variant", "warning")
+        self._enhance_install_btn.setProperty("btnSize", "sm")
         self._enhance_install_btn.clicked.connect(self._on_install_pytorch)
         self._enhance_install_btn.setVisible(False)
         layout.addWidget(self._enhance_install_btn)

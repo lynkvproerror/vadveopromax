@@ -151,10 +151,6 @@ class LogsPage(QWidget):
         self._search_input = QLineEdit()
         self._search_input.setPlaceholderText("Filter logs...")
         self._search_input.setFixedWidth(160)
-        self._search_input.setStyleSheet(
-            f"background-color: {Theme.BASE}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 2px 6px;"
-        )
         self._search_input.textChanged.connect(self._on_search_changed)
         tb_layout.addWidget(self._search_input)
 
@@ -169,10 +165,6 @@ class LogsPage(QWidget):
         self._lines_combo.addItems(list(LINE_COUNT_OPTIONS.keys()))
         self._lines_combo.setCurrentText("5K")  # Default
         self._lines_combo.setFixedWidth(70)
-        self._lines_combo.setStyleSheet(
-            f"QComboBox {{ background-color: {Theme.BASE}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 2px 4px; }}"
-        )
         self._lines_combo.currentTextChanged.connect(self._on_lines_changed)
         tb_layout.addWidget(self._lines_combo)
 
@@ -185,10 +177,6 @@ class LogsPage(QWidget):
         self._source_combo.addItems(SOURCE_CATEGORIES)
         self._source_combo.setCurrentText("All")
         self._source_combo.setFixedWidth(100)
-        self._source_combo.setStyleSheet(
-            f"QComboBox {{ background-color: {Theme.BASE}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 2px 4px; }}"
-        )
         self._source_combo.currentTextChanged.connect(self._on_source_changed)
         tb_layout.addWidget(self._source_combo)
 

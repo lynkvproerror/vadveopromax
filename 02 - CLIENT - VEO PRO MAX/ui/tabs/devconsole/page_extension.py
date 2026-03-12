@@ -51,30 +51,6 @@ class ExtensionDebugPage(QWidget):
         )
         header_row.addWidget(title)
         header_row.addStretch()
-
-        # Auto-refresh toggle
-        self._auto_refresh_btn = QPushButton("⏸ Auto")
-        self._auto_refresh_btn.setFixedWidth(70)
-        self._auto_refresh_btn.setCheckable(True)
-        self._auto_refresh_btn.setChecked(True)
-        self._auto_refresh_btn.setStyleSheet(
-            f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-            f"height: 26px; border-radius: 4px; font-size: 11px;"
-        )
-        self._auto_refresh_btn.toggled.connect(self._on_auto_toggle)
-        header_row.addWidget(self._auto_refresh_btn)
-
-        # Manual refresh
-        refresh_btn = QPushButton("🔄")
-        refresh_btn.setFixedSize(28, 28)
-        refresh_btn.setToolTip("Refresh now")
-        refresh_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"border-radius: 4px;"
-        )
-        refresh_btn.clicked.connect(self._do_refresh)
-        header_row.addWidget(refresh_btn)
-
         layout.addLayout(header_row)
 
         # ── Filter row ──
@@ -84,20 +60,31 @@ class ExtensionDebugPage(QWidget):
         self._filter_input = QLineEdit()
         self._filter_input.setPlaceholderText("Action or email...")
         self._filter_input.setFixedWidth(200)
-        self._filter_input.setStyleSheet(
-            f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.BORDER}; border-radius: 4px; padding: 4px;"
-        )
         filter_row.addWidget(self._filter_input)
 
         self._dir_filter = QComboBox()
         self._dir_filter.addItems(["All", "IN ←", "OUT →"])
         self._dir_filter.setFixedWidth(80)
-        self._dir_filter.setStyleSheet(
-            f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.BORDER}; border-radius: 4px; padding: 2px;"
-        )
         filter_row.addWidget(self._dir_filter)
+
+        # Auto-refresh toggle
+        self._auto_refresh_btn = QPushButton("⏸ Auto")
+        self._auto_refresh_btn.setMinimumWidth(80)
+        self._auto_refresh_btn.setFixedHeight(28)
+        self._auto_refresh_btn.setCheckable(True)
+        self._auto_refresh_btn.setChecked(True)
+        self._auto_refresh_btn.setProperty("variant", "success")
+        self._auto_refresh_btn.setProperty("btnSize", "sm")
+        self._auto_refresh_btn.toggled.connect(self._on_auto_toggle)
+        filter_row.addWidget(self._auto_refresh_btn)
+
+        # Manual refresh
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setMinimumSize(34, 28)
+        refresh_btn.setToolTip("Refresh now")
+        refresh_btn.setProperty("variant", "secondary")
+        refresh_btn.clicked.connect(self._do_refresh)
+        filter_row.addWidget(refresh_btn)
 
         filter_row.addStretch()
 
@@ -189,17 +176,13 @@ class ExtensionDebugPage(QWidget):
         if checked:
             self._timer.start()
             self._auto_refresh_btn.setText("⏸ Auto")
-            self._auto_refresh_btn.setStyleSheet(
-                f"background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-                f"height: 26px; border-radius: 4px; font-size: 11px;"
-            )
+            self._auto_refresh_btn.setProperty("variant", "success")
         else:
             self._timer.stop()
             self._auto_refresh_btn.setText("▶ Auto")
-            self._auto_refresh_btn.setStyleSheet(
-                f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-                f"height: 26px; border-radius: 4px; font-size: 11px;"
-            )
+            self._auto_refresh_btn.setProperty("variant", "secondary")
+        self._auto_refresh_btn.style().unpolish(self._auto_refresh_btn)
+        self._auto_refresh_btn.style().polish(self._auto_refresh_btn)
 
     def set_controller(self, controller):
         """Set controller reference (for lazy binding)."""

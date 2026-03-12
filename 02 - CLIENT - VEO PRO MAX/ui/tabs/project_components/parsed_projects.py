@@ -108,6 +108,7 @@ class ProjectRow(QFrame):
 
     file_selected = Signal(int, str)  # (project_index, file_type)
     add_to_queue = Signal(int)        # project_index
+    retry_requested = Signal(int)     # project_index (Fix #3)
 
     def __init__(self, index: int, name: str, parent=None):
         super().__init__(parent)
@@ -170,18 +171,36 @@ class ProjectRow(QFrame):
             self._file_tabs[ft] = btn
             header_layout.addWidget(btn)
 
-        # Status badge
         self._status_label = QLabel()
         self._status_label.setFixedWidth(24)
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setStyleSheet("border: none;")
         header_layout.addWidget(self._status_label)
 
+        # Retry button (Fix #3 — visible only on error)
+        self._retry_btn = QPushButton("🔄")
+        self._retry_btn.setObjectName("retryBtn")
+        self._retry_btn.setMinimumSize(22, 22)
+        self._retry_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._retry_btn.setToolTip("Retry this topic")
+        self._retry_btn.setVisible(False)
+        self._retry_btn.setStyleSheet(f"""
+            QPushButton#retryBtn {{
+                background-color: {Theme.YELLOW if hasattr(Theme, 'YELLOW') else '#f9e2af'};
+                color: {Theme.CRUST};
+                border: none; border-radius: 3px;
+                font-size: 11px; font-weight: bold;
+            }}
+            QPushButton#retryBtn:hover {{ background-color: {Theme.BLUE}; }}
+        """)
+        self._retry_btn.clicked.connect(lambda: self.retry_requested.emit(self.index))
+        header_layout.addWidget(self._retry_btn)
+
         main_layout.addWidget(header_widget)
 
-        # ── Inline viewer (hidden by default) ──
+        # ── Inline viewer (hidden by default, Fix #11: editable) ──
         self._inline_viewer = QTextEdit()
-        self._inline_viewer.setReadOnly(True)
+        self._inline_viewer.setReadOnly(False)  # Fix #11: editable
         self._inline_viewer.setVisible(False)
         self._inline_viewer.setMinimumHeight(450)
         self._inline_viewer.setStyleSheet(f"""
@@ -190,9 +209,9 @@ class ProjectRow(QFrame):
                 color: {Theme.TEXT};
                 border: none;
                 border-top: 1px solid {Theme.BORDER};
-                padding: 6px;
-                font-size: 11px;
-                font-family: 'Consolas', 'Courier New', monospace;
+                padding: 10px 12px;
+                font-size: 13px;
+                font-family: 'Segoe UI', 'Inter', 'SF Pro Display', sans-serif;
             }}
         """)
         main_layout.addWidget(self._inline_viewer)
@@ -231,6 +250,8 @@ class ProjectRow(QFrame):
     def set_status(self, status: str):
         self._status = status
         self._update_status_badge()
+        # Fix #3: Show retry button on error
+        self._retry_btn.setVisible(status == "error")
 
     def _update_status_badge(self):
         emoji, color = STATUS_BADGES.get(self._status, ("?", Theme.SUBTEXT0))
@@ -271,6 +292,7 @@ class ParsedProjectsPanel(QFrame):
 
     add_project_to_queue = Signal(int)         # project_index
     add_all_to_queue = Signal()
+    retry_project = Signal(int)                   # project_index (Fix #3)
     file_content_changed = Signal(int, str, str)  # proj_idx, file_type, content
     output_type_changed = Signal(str)              # "T2V" or "T2I"
 
@@ -286,7 +308,7 @@ class ParsedProjectsPanel(QFrame):
         # Color header
         header = QFrame()
         header.setFixedHeight(28)
-        header.setStyleSheet(f"background-color: {Theme.GREEN};")
+        header.setStyleSheet(f"QFrame {{ background-color: {Theme.GREEN}; }}")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 0, 10, 0)
         self._header_title = QLabel(f"{t('project_builder.parsed_header')} (0)")
@@ -325,7 +347,7 @@ class ParsedProjectsPanel(QFrame):
         self._output_combo.setStyleSheet(f"""
             QComboBox#outputCombo {{
                 background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                border: none; border-radius: 4px;
                 padding: 0 6px; font-size: 11px; font-weight: bold;
             }}
             QComboBox#outputCombo::drop-down {{
@@ -340,20 +362,16 @@ class ParsedProjectsPanel(QFrame):
         btn_row.addWidget(self._output_combo)
 
         self._add_selected_btn = QPushButton(t("project_builder.add_selected"))
-        self._add_selected_btn.setObjectName("addSelectedBtn")
-        self._add_selected_btn.setStyleSheet(
-            f"QPushButton#addSelectedBtn {{ background-color: {Theme.BLUE}; color: {Theme.CRUST}; "
-            f"height: 24px; border-radius: 4px; font-weight: bold; font-size: 11px; padding: 0 8px; }}"
-        )
+        self._add_selected_btn.setFixedHeight(24)
+        self._add_selected_btn.setProperty("variant", "success")
+        self._add_selected_btn.setProperty("btnSize", "sm")
         self._add_selected_btn.clicked.connect(self._on_add_selected)
         btn_row.addWidget(self._add_selected_btn)
 
         self._add_all_btn = QPushButton(t("project_builder.add_all"))
-        self._add_all_btn.setObjectName("addAllBtn")
-        self._add_all_btn.setStyleSheet(
-            f"QPushButton#addAllBtn {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
-            f"height: 24px; border-radius: 4px; font-weight: bold; font-size: 11px; padding: 0 8px; }}"
-        )
+        self._add_all_btn.setFixedHeight(24)
+        self._add_all_btn.setProperty("variant", "success")
+        self._add_all_btn.setProperty("btnSize", "sm")
         self._add_all_btn.clicked.connect(self._on_add_all)
         btn_row.addWidget(self._add_all_btn)
 
@@ -390,6 +408,7 @@ class ParsedProjectsPanel(QFrame):
         row.set_status(status)
         row.file_selected.connect(self._on_file_selected)
         row.add_to_queue.connect(lambda i: self.add_project_to_queue.emit(i))
+        row.retry_requested.connect(lambda i: self.retry_project.emit(i))
 
         # Insert before stretch
         insert_pos = self._project_list_layout.count() - 1  # before stretch

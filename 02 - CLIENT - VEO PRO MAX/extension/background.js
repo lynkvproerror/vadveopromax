@@ -370,8 +370,10 @@ async function handleAppMessage(msg) {
         });
 
         // Fix #1: Timeout guard — prevents grecaptcha.execute() from hanging forever
+        // ★ Progressive timeout: use dynamic rcTimeout from Python (default 15000ms)
+        const rcTimeoutMs = msg.rcTimeout || 15000;
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('reCAPTCHA execute timeout (15s) — widget may be frozen')), 15000)
+          setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s) — widget may be frozen`)), rcTimeoutMs)
         );
         const results = await Promise.race([scriptPromise, timeoutPromise]);
 
@@ -872,7 +874,7 @@ async function handleAppMessage(msg) {
         const scriptPromise = chrome.scripting.executeScript({
           target: { tabId },
           world: 'MAIN',
-          func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey) => {
+          func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey, rcTimeoutMs, fetchTimeoutMs) => {
             // ── Step 1: Extract reCAPTCHA site key ────────────────────────
             let siteKey = null;
             if (needsRecaptcha) {
@@ -901,7 +903,8 @@ async function handleAppMessage(msg) {
               }
             }
 
-            // ── Step 2: Generate reCAPTCHA token (with 10s timeout) ───────
+            // ── Step 2: Generate reCAPTCHA token ───────
+            // ★ rcTimeoutMs comes from function parameter (progressive tier from Python)
             let recaptchaToken = null;
             if (needsRecaptcha) {
               try {
@@ -910,10 +913,10 @@ async function handleAppMessage(msg) {
                 const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
                 const rcAction = imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
                 const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
-                const rcTimeout = new Promise((_, reject) =>
-                  setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
+                const rcTimeout_ = new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s)`)), rcTimeoutMs)
                 );
-                recaptchaToken = await Promise.race([rcPromise, rcTimeout]);
+                recaptchaToken = await Promise.race([rcPromise, rcTimeout_]);
                 // HAR verified: valid tokens are 1742-2169 chars
                 // A 538-char token passed old threshold (500) but was rejected by Google
                 if (!recaptchaToken || recaptchaToken.length < 1000) {
@@ -980,9 +983,9 @@ async function handleAppMessage(msg) {
             }
 
             const controller = new AbortController();
-            // T2I is synchronous — server generates images before responding (~37s per HAR)
-            // Video endpoints are async — return operation name immediately
-            const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey) ? 90000 : 20000;
+            // ★ Progressive timeout: T2I/I2I/UPSCALE_IMAGE synchronous → min 90s, others use dynamic fetchTimeoutMs
+            const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey)
+              ? Math.max(fetchTimeoutMs || 20000, 90000) : (fetchTimeoutMs || 20000);
             const fetchTimer = setTimeout(() => controller.abort(), fetchTimeout);
             try {
               // Diagnostic: log what we're about to send
@@ -1044,6 +1047,8 @@ async function handleAppMessage(msg) {
             msg.needsRecaptcha !== false, // default: true
             tabState[tabId]?.accessToken || null, // fresh token from webRequest headers
             msg.endpoint || '', // endpoint key for reCAPTCHA action selection
+            msg.rcTimeout || 15000,   // ★ Dynamic reCAPTCHA timeout from Python tier
+            msg.fetchTimeout || 20000, // ★ Dynamic fetch timeout from Python tier
           ],
         });
 

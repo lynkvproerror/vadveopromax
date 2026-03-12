@@ -433,7 +433,7 @@ class AccountSupervisor:
         if phase == 0:
             # Gentle: wait readiness + reload tabs
             if count <= 1:
-                await engine._wait_for_recaptcha_ready(account, max_wait=15.0)
+                await engine._wait_for_recaptcha_ready(account, max_wait=30.0)
             elif count <= 2:
                 if account.extension_bridge:
                     try:
@@ -1126,19 +1126,48 @@ class Engine:
     
     # ── Account Readiness Gate ──
     
+    # ── Progressive Timeout Tiers ──
+    # Slow/unstable networks get escalating timeouts per retry attempt.
+    # Fast networks still pass quickly via early-exit logic.
+    _TIMEOUT_TIERS = [
+        # Attempt 0 (first try) — normal network
+        {'xcd_poll': 20.0, 'rc_wait': 25.0, 'bridge_timeout': 35.0,
+         'rc_execute_ms': 15000, 'fetch_ms': 20000},
+        # Attempt 1 (retry) — slow network tolerance
+        {'xcd_poll': 30.0, 'rc_wait': 35.0, 'bridge_timeout': 45.0,
+         'rc_execute_ms': 25000, 'fetch_ms': 30000},
+        # Attempt 2+ (final retries) — maximum patience
+        {'xcd_poll': 40.0, 'rc_wait': 45.0, 'bridge_timeout': 55.0,
+         'rc_execute_ms': 35000, 'fetch_ms': 40000},
+    ]
+    
+    @classmethod
+    def _get_timeout_tier(cls, attempt: int = 0) -> dict:
+        """Get timeout configuration for a given retry attempt.
+        
+        Delegates to config.constants.get_timeout_tier() — single source of truth.
+        """
+        from config.constants import get_timeout_tier
+        return get_timeout_tier(attempt)
+    
     async def _pre_submit_gate(self, account, task, attempt: int = 0) -> bool:
         """Centralized pre-submit gate. ALL modes, ALL attempts.
         
         THE SINGLE SOURCE OF TRUTH for xcd + reCAPTCHA readiness.
         Replaces old _wait_for_account_ready + scattered checks.
         
+        ★ Progressive timeout escalation:
+          attempt 0 → Tier 0 (xcd=20s, reCAPTCHA=25s — normal network)
+          attempt 1 → Tier 1 (xcd=30s, reCAPTCHA=35s — slow network)
+          attempt 2+ → Tier 2 (xcd=40s, reCAPTCHA=45s — maximum patience)
+        
         Flow:
         1. Fast path: instant check via cached real-time data (0ms)
         2. Slow path (under per-account lock):
            a. Trigger page reload → extension captures fresh headers
-           b. Poll xcd from 3 sources (AM → bridge → session) — max 15s
+           b. Poll xcd from 3 sources (AM → bridge → session) — tier-based timeout
            c. If fail → borrow from other accounts
-           d. Post-borrow recovery poll — max 15s
+           d. Post-borrow recovery poll — tier-based timeout
            e. Still fail → SOFT gate (warn + proceed)
         3. reCAPTCHA: HARD gate (block — no token = guaranteed failure)
         
@@ -1149,6 +1178,19 @@ class Engine:
         bridge = getattr(account, 'extension_bridge', None)
         from config.constants import MIN_VALID_XCD
         MIN_GOOD = MIN_VALID_XCD  # 50
+        
+        # ── Get timeout tier based on attempt ──
+        tier = self._get_timeout_tier(attempt)
+        tier_idx = min(attempt, len(self._TIMEOUT_TIERS) - 1)
+        xcd_poll_timeout = tier['xcd_poll']
+        rc_wait_timeout = tier['rc_wait']
+        
+        if attempt > 0:
+            log.info(
+                f"[PreSubmitGate:{email}] ⏱️ Timeout Tier {tier_idx} "
+                f"(attempt {attempt}) → xcd={xcd_poll_timeout:.0f}s, "
+                f"reCAPTCHA={rc_wait_timeout:.0f}s"
+            )
         
         # ── Helper: read xcd from 3 sources ──
         def _get_xcd() -> str:
@@ -1226,9 +1268,9 @@ class Engine:
                         except Exception as e:
                             log.debug(f"[PreSubmitGate:{email}] Refresh failed: {e}")
                     
-                    # Step 2: Poll xcd from 3 sources (max 15s)
+                    # Step 2: Poll xcd — tier-based timeout
                     start = time.monotonic()
-                    while time.monotonic() - start < 15.0:
+                    while time.monotonic() - start < xcd_poll_timeout:
                         if self._stop_event.is_set():
                             return False
                         xcd = _get_xcd()
@@ -1243,7 +1285,8 @@ class Engine:
                         # Step 3: Borrow from other accounts
                         log.warning(
                             f"[PreSubmitGate:{email}] ⚠️ xcd={len(_get_xcd())} chars "
-                            f"after 15s — trying borrow from other accounts..."
+                            f"after {xcd_poll_timeout:.0f}s (tier {tier_idx}) "
+                            f"— trying borrow from other accounts..."
                         )
                         try:
                             self._account_manager.fix_short_client_data()
@@ -1256,10 +1299,10 @@ class Engine:
                         except Exception as e:
                             log.debug(f"[PreSubmitGate:{email}] Borrow failed: {e}")
                         
-                        # Step 4: Post-borrow recovery poll (max 15s)
+                        # Step 4: Post-borrow recovery poll — tier-based timeout
                         if len(_get_xcd()) < MIN_GOOD:
                             start2 = time.monotonic()
-                            while time.monotonic() - start2 < 15.0:
+                            while time.monotonic() - start2 < xcd_poll_timeout:
                                 if self._stop_event.is_set():
                                     return False
                                 xcd = _get_xcd()
@@ -1282,15 +1325,16 @@ class Engine:
         if self._stop_event.is_set():
             return False
         
-        rc_ok = await self._wait_for_recaptcha_ready(account, max_wait=15.0)
+        rc_ok = await self._wait_for_recaptcha_ready(account, max_wait=rc_wait_timeout)
         if not rc_ok:
             log.warning(
                 f"[PreSubmitGate:{email}] ❌ reCAPTCHA not ready "
+                f"(tier {tier_idx}, waited {rc_wait_timeout:.0f}s) "
                 f"— requeue task {task.id}"
             )
             return False
         
-        log.info(f"[PreSubmitGate:{email}] ✅ Gate passed — submitting")
+        log.info(f"[PreSubmitGate:{email}] ✅ Gate passed — submitting (tier {tier_idx})")
         return True
     
     def _execute_js_on_account(self, account, js_expression: str, timeout: float = 10.0):
@@ -3725,15 +3769,20 @@ class Engine:
                                             f"outputs={task.output_count}"
                                         )
                                     
+                                    # ★ Progressive timeout: use tier-based bridge timeout
+                                    from config.constants import get_timeout_tier
+                                    tier = get_timeout_tier(attempt)
+                                    bridge_timeout = tier['bridge_timeout']
+                                    
                                     ext_result = await asyncio.wait_for(
                                         ext_bridge.submit_prompt(
                                             email=account.email,
                                             endpoint=endpoint_key,
                                             body=body,
                                             needs_recaptcha=True,
-                                            timeout=timeout,
+                                            attempt=attempt,
                                         ),
-                                        timeout=timeout + 5,  # outer guard
+                                        timeout=bridge_timeout + 5,  # outer guard
                                     )
                                     
                                     # Convert Extension response → WorkerResult
@@ -5161,15 +5210,20 @@ class Engine:
                         f"📦 submitting {endpoint_key} ({task.output_count or 4} images)"
                     )
                     
+                    # ★ Progressive timeout: use tier-based bridge timeout
+                    from config.constants import get_timeout_tier
+                    tier = get_timeout_tier(attempt)
+                    bridge_timeout = tier['bridge_timeout']
+                    
                     ext_result = await asyncio.wait_for(
                         ext_bridge.submit_prompt(
                             email=account.email,
                             endpoint=endpoint_key,
                             body=body,
                             needs_recaptcha=True,
-                            timeout=timeout,
+                            attempt=attempt,
                         ),
-                        timeout=timeout + 5,
+                        timeout=bridge_timeout + 5,
                     )
                     
                     # Parse response
@@ -7642,9 +7696,10 @@ class Engine:
                         )
                         break
                     async with self._account_rate_locks[account.email]:
-                        # Fix G7: Anti-detect delay before inline upscale submit
-                        if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
-                            await self._burst_controller.wait(account.email)
+                        # Fix G7: Skip burst controller for upscale submits —
+                        # upscale is a follow-up action, not a new generation.
+                        # Only apply a short 1s cooldown to avoid API spam.
+                        await asyncio.sleep(1.0)
                         # ★ PRIMARY PATH: Extension-based upscale
                         ext_bridge = getattr(account, 'extension_bridge', None)
                         use_extension = (
@@ -7872,9 +7927,8 @@ class Engine:
                         log.warning(f"Upscale re-submit: PreSubmitGate failed — skipping")
                         break
                     async with self._account_rate_locks[account.email]:
-                        # Fix G7: Anti-detect delay before inline upscale re-submit
-                        if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
-                            await self._burst_controller.wait(account.email)
+                        # Fix G7: Skip burst controller for upscale re-submit
+                        await asyncio.sleep(1.0)
                         # ★ PRIMARY PATH: Extension-based re-submit
                         ext_bridge = getattr(account, 'extension_bridge', None)
                         use_ext = (ext_bridge and ext_bridge.is_connected(account.email))
@@ -7995,9 +8049,14 @@ class Engine:
                 log.info(f"Upscale {video_label}: stop signal — aborting poll")
                 return []
             
-            # Risk 2 fix: Jitter for upscale polls (prevents 4 workers polling at t=0,5,10...)
+            # Risk 2 fix: Progressive poll interval for upscale
+            # Poll 0: wait 30s — server needs processing time
+            # Poll 1+: 5-8s — quickly catch completion
             jitter = random.uniform(0, 2.0)
-            await asyncio.sleep(30 + jitter)
+            if poll_num == 0:
+                await asyncio.sleep(30 + jitter)
+            else:
+                await asyncio.sleep(5 + jitter)
             
             # Progress: map to 88-90% range
             progress = min(90, 88 + int(poll_num * 0.5))

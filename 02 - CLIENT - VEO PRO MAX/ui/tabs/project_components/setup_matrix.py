@@ -21,7 +21,7 @@ from typing import Dict, List, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QSpinBox, QPushButton, QFrame,
-    QScrollArea, QFileDialog, QLineEdit,
+    QScrollArea, QFileDialog, QLineEdit, QCheckBox,
 )
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 
@@ -36,6 +36,26 @@ log = logging.getLogger("veo.setup_matrix")
 # ═══════════════════════════════════════════════════════════════════
 # Data: Dimension options
 # ═══════════════════════════════════════════════════════════════════
+
+# ── Project Type (new) ──
+PROJECT_TYPES = [
+    ("video_voice",    "🎬 Video + Voice"),
+    ("video_silent",   "🎞️ Video (No Voice)"),
+    ("animation",      "🎭 Phim Hoạt hình"),
+    ("action",         "💥 Phim Hành động"),
+    ("documentary",    "📹 Phim Tài liệu"),
+    ("philosophy",     "🧘 Triết lý / Tâm linh"),
+    ("slideshow",      "🖼️ Slideshow Ảnh"),
+    ("storytelling",   "📖 Kể chuyện"),
+    ("comedy",         "😂 Hài / Giải trí"),
+    ("music_video",    "🎵 Music Video"),
+    ("tutorial",       "📚 Hướng dẫn / How-to"),
+    ("product_review", "📦 Review Sản phẩm"),
+    ("custom",         "✏️ Custom"),
+]
+
+# ── Clip durations (seconds) ──
+CLIP_DURATIONS = [6, 8, 10, 12, 15]
 
 CATEGORIES = [
     ("health",          "🏥 Health"),
@@ -62,13 +82,20 @@ CATEGORIES = [
 ]
 
 STRUCTURES = [
-    ("pmcs",          "PMCS"),
-    ("3act",          "3-Act"),
-    ("conflict_tips", "Tips"),
-    ("silent_review", "Silent"),
-    ("pov_styling",   "POV"),
-    ("narrative",     "Narrative"),
-    ("custom",        "Custom"),
+    ("pmcs",           "PMCS"),
+    ("3act",           "3-Act"),
+    ("conflict_tips",  "Tips"),
+    ("silent_review",  "Silent"),
+    ("pov_styling",    "POV"),
+    ("narrative",      "Narrative"),
+    ("montage",        "Montage"),
+    ("parallel",       "Song song"),
+    ("loop_cycle",     "Vòng lặp"),
+    ("minimal",        "Tối giản"),
+    ("before_after",   "Trước/Sau"),
+    ("countdown",      "Countdown"),
+    ("interview",      "Phỏng vấn"),
+    ("custom",         "Custom"),
 ]
 
 VISUAL_STYLES = [
@@ -84,6 +111,12 @@ VISUAL_STYLES = [
     ("scientific",     "Science"),
     ("stickfigure",    "Người que"),
     ("watercolor",     "Watercolor"),
+    ("claymation",     "Claymation"),
+    ("retro_pixel",    "Retro/Pixel"),
+    ("oil_painting",   "Oil Paint"),
+    ("noir",           "Film Noir"),
+    ("neon_cyber",     "Neon/Cyber"),
+    ("pastel",         "Pastel"),
 ]
 
 CHARACTER_TYPES = [
@@ -95,10 +128,12 @@ CHARACTER_TYPES = [
 ]
 
 AUDIENCES = [
-    ("kids",   "Kids"),
-    ("teens",  "Teens"),
-    ("adults", "Adults"),
-    ("family", "Family"),
+    ("kids",     "Kids"),
+    ("teens",    "Teens"),
+    ("adults",   "Adults"),
+    ("family",   "Family"),
+    ("seniors",  "Người cao tuổi"),
+    ("all_ages", "Mọi lứa tuổi"),
 ]
 
 PERSONAS = [
@@ -118,13 +153,18 @@ PERSONAS = [
 ]
 
 TONES = [
-    ("fun",       "Vui"),
-    ("serious",   "Nghiêm"),
-    ("dramatic",  "Drama"),
-    ("warm",      "Ấm"),
-    ("villain",   "Villain"),
-    ("inspiring", "Truyền cảm"),
-    ("nostalgic", "Hoài niệm"),
+    ("fun",         "Vui"),
+    ("serious",     "Nghiêm"),
+    ("dramatic",    "Drama"),
+    ("warm",        "Ấm"),
+    ("villain",     "Villain"),
+    ("inspiring",   "Truyền cảm"),
+    ("nostalgic",   "Hoài niệm"),
+    ("mysterious",  "Bí ẩn"),
+    ("epic",        "Hoành tráng"),
+    ("sarcastic",   "Mỉa mai"),
+    ("calm",        "Bình yên"),
+    ("intense",     "Gay cấn"),
 ]
 
 VOICE_REGIONS = [
@@ -297,12 +337,13 @@ class SetupMatrixPanel(QFrame):
     """
 
     config_changed = Signal(dict)
+    pipeline_mode_changed = Signal(str)  # "text_only" or "full_production"
 
     def __init__(self, parent=None):
         super().__init__(parent)
         # Match SidebarBase: fixed width, same background
-        self.setFixedWidth(260)
-        self.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        self.setFixedWidth(Theme.SIDEBAR_WIDTH)
+        self.setObjectName("sidebarPanel")
 
         # Main layout (no scroll — matches SidebarBase)
         outer = QVBoxLayout(self)
@@ -310,16 +351,16 @@ class SetupMatrixPanel(QFrame):
         outer.setSpacing(0)
 
         # ── Color header bar (matches GenerationTabBase._create_sidebar) ──
-        mode_header = QFrame()
-        mode_header.setFixedHeight(32)
-        mode_header.setStyleSheet(f"background-color: {Theme.GREEN};")
-        mode_layout = QHBoxLayout(mode_header)
+        self._mode_header = QFrame()
+        self._mode_header.setFixedHeight(32)
+        self._mode_header.setStyleSheet(f"background-color: {Theme.GREEN};")
+        mode_layout = QHBoxLayout(self._mode_header)
         mode_layout.setContentsMargins(12, 0, 12, 0)
-        mode_title = QLabel(t("project_builder.title"))
-        mode_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
-        mode_layout.addWidget(mode_title)
+        self._mode_title = QLabel(t("project_builder.title"))
+        self._mode_title.setStyleSheet(f"color: {Theme.CRUST}; font-weight: bold;")
+        mode_layout.addWidget(self._mode_title)
         mode_layout.addStretch()
-        outer.addWidget(mode_header)
+        outer.addWidget(self._mode_header)
 
         # ── Scrollable body ──
         scroll = QScrollArea()
@@ -328,9 +369,13 @@ class SetupMatrixPanel(QFrame):
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
         inner = QWidget()
+        inner.setMaximumWidth(Theme.SIDEBAR_WIDTH)
         self._layout = QVBoxLayout(inner)
-        self._layout.setContentsMargins(8, 8, 8, 8)
-        self._layout.setSpacing(4)
+        self._layout.setContentsMargins(
+            Theme.SIDEBAR_PADDING, Theme.SIDEBAR_PADDING,
+            Theme.SIDEBAR_PADDING, Theme.SIDEBAR_PADDING
+        )
+        self._layout.setSpacing(Theme.SIDEBAR_SPACING)
 
         self._create_content_section()
         self._create_production_section()
@@ -379,7 +424,6 @@ class SetupMatrixPanel(QFrame):
                 for oid, olabel in options:
                     combo.addItem(olabel, oid)
 
-            combo.setMinimumHeight(32)
             self._layout.addWidget(combo)
 
             if on_change:
@@ -395,6 +439,190 @@ class SetupMatrixPanel(QFrame):
 
             return combo
 
+        # ═══ Pipeline Mode (master toggle) ═══
+        self._create_section_label("⚙️ Pipeline Mode")
+        self._pipeline_mode = QComboBox()
+        self._pipeline_mode.addItem("📝 Prompt Text Only", "text_only")
+        self._pipeline_mode.addItem("🎬 Full Production", "full_production")
+        self._pipeline_mode.setMinimumHeight(34)
+        self._pipeline_mode.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 4px 8px; font-size: 12px; font-weight: bold;
+            }}
+        """)
+        self._pipeline_mode.currentIndexChanged.connect(self._on_pipeline_mode_changed)
+        self._layout.addWidget(self._pipeline_mode)
+
+        # ── Shared styles ──
+        section_style = f"""
+            color: {Theme.SUBTEXT0};
+            font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+            padding: 8px 0 2px 0; border: none;
+        """
+        cb_style = f"""
+            QCheckBox {{ color: {Theme.TEXT}; font-size: 11px; }}
+            QCheckBox::indicator {{
+                width: 16px; height: 16px; border-radius: 3px;
+                border: 1px solid {Theme.BORDER};
+                background-color: {Theme.SURFACE0};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {Theme.GREEN};
+                border-color: {Theme.GREEN};
+            }}
+        """
+
+        # ═══════════════════════════════════════
+        # GROUP 1: 📦 DỰ ÁN
+        # ═══════════════════════════════════════
+        self._separator()
+        grp1_label = QLabel("📦 DỰ ÁN")
+        grp1_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; font-weight: bold; border: none; padding: 2px 0;")
+        self._layout.addWidget(grp1_label)
+
+        # Project Type
+        self.d0_project_type = _dim_combo("🎬 Project Type", PROJECT_TYPES,
+                                          self._on_project_type_changed)
+
+        # Video Count + Voice on same row
+        proj_row = QHBoxLayout()
+        proj_row.setSpacing(6)
+
+        self._video_count = QSpinBox()
+        self._video_count.setRange(1, 100)
+        self._video_count.setValue(1)
+        self._video_count.setSuffix(" video")
+        self._video_count.setMinimumHeight(34)
+        self._video_count.setStyleSheet(f"""
+            QSpinBox {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 4px 8px; font-weight: bold;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                border: none; width: 16px;
+            }}
+        """)
+        self._video_count.setToolTip("Tổng số video/dự án cần sản xuất")
+        self._video_count.valueChanged.connect(lambda: self._emit_config())
+        proj_row.addWidget(self._video_count)
+
+        self._voice_enabled = QCheckBox("Có lời thoại")
+        self._voice_enabled.setChecked(True)
+        self._voice_enabled.setStyleSheet(cb_style)
+        self._voice_enabled.setToolTip(
+            "Bật: Video có lời thoại, thuyết minh, hoặc voice-over\n"
+            "Tắt: Video chỉ có hình ảnh/âm nhạc, không có giọng nói"
+        )
+        self._voice_enabled.stateChanged.connect(lambda: self._emit_config())
+        proj_row.addWidget(self._voice_enabled)
+
+        self._layout.addLayout(proj_row)
+
+        # ═══════════════════════════════════════
+        # GROUP 2: ⏱️ THỜI LƯỢNG
+        # ═══════════════════════════════════════
+        self._separator()
+        grp2_label = QLabel("⏱️ THỜI LƯỢNG")
+        grp2_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 12px; font-weight: bold; border: none; padding: 2px 0;")
+        self._layout.addWidget(grp2_label)
+
+        # Total video duration (main input)
+        self._target_duration = QLineEdit()
+        self._target_duration.setPlaceholderText("Tổng: 1:30 / 90s / 1:00:00")
+        self._target_duration.setMinimumHeight(34)
+        self._target_duration.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 0 8px; font-size: 13px; font-weight: bold;
+            }}
+            QLineEdit:focus {{ border: 1px solid {Theme.GREEN}; }}
+        """)
+        self._target_duration.setToolTip(
+            "Tổng độ dài video mong muốn:\n"
+            "• HH:MM:SS (1:00:00 = 1 giờ)\n"
+            "• MM:SS (1:30 = 1 phút 30 giây)\n"
+            "• Số giây (90s hoặc 90)"
+        )
+        self._target_duration.textChanged.connect(self._on_target_duration_changed)
+        self._layout.addWidget(self._target_duration)
+
+        # Clip duration
+        clip_row = QHBoxLayout()
+        clip_row.setSpacing(6)
+        clip_lbl = QLabel("Mỗi clip:")
+        clip_lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
+        clip_row.addWidget(clip_lbl)
+
+        self._clip_duration = QComboBox()
+        for d in CLIP_DURATIONS:
+            self._clip_duration.addItem(f"{d}s", d)
+        self._clip_duration.setCurrentIndex(1)  # 8s default
+        self._clip_duration.setMinimumHeight(34)
+        self._clip_duration.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 4px 8px; font-weight: bold;
+            }}
+        """)
+        self._clip_duration.currentIndexChanged.connect(self._update_duration_estimate)
+        clip_row.addWidget(self._clip_duration)
+        self._layout.addLayout(clip_row)
+
+        # Hidden spinbox for scene count value
+        self._scene_count = QSpinBox()
+        self._scene_count.setRange(1, 999)
+        self._scene_count.setValue(8)
+        self._scene_count.setVisible(False)
+        self._layout.addWidget(self._scene_count)
+
+        # Auto-calculated result
+        self._duration_label = QLabel()
+        self._duration_label.setStyleSheet(f"""
+            color: {Theme.GREEN}; font-size: 12px; font-weight: bold;
+            padding: 4px 8px; border: 1px solid {Theme.BORDER}; border-radius: 4px;
+            background-color: {Theme.SURFACE1};
+        """)
+        self._layout.addWidget(self._duration_label)
+        self._update_duration_estimate()
+
+        # Placeholder for _full_prod_sidebar (compat)
+        self._full_prod_sidebar = QWidget()
+        self._full_prod_sidebar.setVisible(False)
+        self._layout.addWidget(self._full_prod_sidebar)
+
+        # ═══ Detail Mode: Auto / Manual ═══
+        detail_header = QHBoxLayout()
+        detail_header.setSpacing(6)
+        detail_label = QLabel("📋 CHI TIẾT NỘI DUNG")
+        detail_label.setStyleSheet(f"""
+            color: {Theme.SUBTEXT0};
+            font-size: 11px; text-transform: uppercase;
+            padding: 2px 0; border: none;
+        """)
+        detail_header.addWidget(detail_label)
+        detail_header.addStretch()
+
+        self._detail_mode = QComboBox()
+        self._detail_mode.addItem("🤖 Auto", "auto")
+        self._detail_mode.addItem("✋ Thủ công", "manual")
+        self._detail_mode.setFixedHeight(26)
+        self._detail_mode.setMinimumWidth(90)
+        self._detail_mode.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 2px 6px; font-size: 12px; font-weight: bold;
+            }}
+        """)
+        self._detail_mode.currentIndexChanged.connect(self._on_detail_mode_changed)
+        detail_header.addWidget(self._detail_mode)
+        self._layout.addLayout(detail_header)
+
         # All 8 dimensions — stacked label/combo, full width
         self.d1_category  = _dim_combo(t("project_builder.sidebar.category"), CATEGORIES,
                                        self._on_category_changed, multi=True, max_select=3)
@@ -406,6 +634,25 @@ class SetupMatrixPanel(QFrame):
         self.d7_tone      = _dim_combo(t("project_builder.sidebar.tone"), TONES)
         self.d8_voice     = _dim_combo(t("project_builder.sidebar.voice_region"), VOICE_REGIONS,
                                        multi=True, max_select=4)
+
+        # Wrap D1-D8 in a container for Auto/Manual toggle
+        # Each _dim_combo adds 2 widgets (label + combo) = 16 widgets total
+        self._dims_container = QWidget()
+        dims_layout = QVBoxLayout(self._dims_container)
+        dims_layout.setContentsMargins(0, 0, 0, 0)
+        dims_layout.setSpacing(0)
+        # Move last 16 widgets from self._layout → dims_layout
+        widgets_to_move = []
+        for _ in range(16):  # 8 combos × 2 (label + combo)
+            item = self._layout.takeAt(self._layout.count() - 1)
+            if item and item.widget():
+                widgets_to_move.append(item.widget())
+        for w in reversed(widgets_to_move):
+            dims_layout.addWidget(w)
+
+        # Default: Auto → hide dimensions
+        self._dims_container.setVisible(False)
+        self._layout.addWidget(self._dims_container)
 
     # ── Production Section ────────────────────────────────────
 
@@ -422,7 +669,7 @@ class SetupMatrixPanel(QFrame):
         prod_header.setCursor(Qt.CursorShape.PointingHandCursor)
         self._layout.addWidget(prod_header)
 
-        # Container for all production content
+        # Container for production content
         self._prod_container = QWidget()
         prod_layout = QVBoxLayout(self._prod_container)
         prod_layout.setContentsMargins(0, 0, 0, 0)
@@ -436,110 +683,120 @@ class SetupMatrixPanel(QFrame):
 
         prod_header.clicked.connect(_toggle_production)
 
-        # Style helpers (match SidebarBase)
-        def _section_lbl(text):
-            lbl = QLabel(text)
-            lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding-top: 8px; padding-bottom: 2px;")
-            prod_layout.addWidget(lbl)
+        lbl_style = f"color: {Theme.SUBTEXT0}; font-size: 11px; padding-top: 6px; padding-bottom: 1px;"
+        combo_style = f"""
+            QComboBox {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 4px 8px; font-size: 12px; font-weight: bold;
+            }}
+        """
+        input_style = f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: 1px solid {Theme.BORDER}; border-radius: 4px;
+                padding: 4px 8px; font-size: 12px; font-weight: bold;
+            }}
+            QLineEdit:focus {{ border: 1px solid {Theme.GREEN}; }}
+        """
 
         # ── Output Folder ──
-        _section_lbl(t("project_builder.production.output_folder"))
+        lbl = QLabel(t("project_builder.production.output_folder"))
+        lbl.setStyleSheet(lbl_style)
+        prod_layout.addWidget(lbl)
+
+        folder_row = QHBoxLayout()
+        folder_row.setSpacing(4)
         self.output_folder = QLineEdit()
         self.output_folder.setPlaceholderText(t("project_sidebar.output_placeholder"))
-        self.output_folder.setFixedHeight(32)
-        prod_layout.addWidget(self.output_folder)
+        self.output_folder.setMinimumHeight(34)
+        self.output_folder.setStyleSheet(input_style)
+        folder_row.addWidget(self.output_folder)
 
-        browse_btn = QPushButton(t("project_builder.production.browse"))
-        browse_btn.setFixedHeight(30)
-        browse_btn.setMinimumWidth(100)
+        browse_btn = QPushButton("📂 Chọn")
+        browse_btn.setFixedHeight(34)
+        browse_btn.setMinimumWidth(60)
         browse_btn.setProperty("variant", "secondary")
+        browse_btn.setToolTip(t("project_builder.production.browse"))
         browse_btn.clicked.connect(self._browse_output)
-        prod_layout.addWidget(browse_btn)
+        folder_row.addWidget(browse_btn)
+        prod_layout.addLayout(folder_row)
 
-        # Auto-populate from settings
-        try:
-            from config.settings import get_settings
-            s = get_settings()
-            if s and s.output_folder:
-                self.output_folder.setText(s.output_folder)
-        except Exception:
-            pass
+        # ── 📐 Tỷ lệ khung hình ──
+        lbl = QLabel("📐 Tỷ lệ khung hình")
+        lbl.setStyleSheet(lbl_style)
+        prod_layout.addWidget(lbl)
+        self.video_aspect = QComboBox()
+        self.video_aspect.addItems(["16:9 (Ngang)", "9:16 (Dọc)"])
+        self.video_aspect.setMinimumHeight(34)
+        self.video_aspect.setStyleSheet(combo_style)
+        prod_layout.addWidget(self.video_aspect)
 
-        # ── Separator ──
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"background-color: {Theme.BORDER};")
-        sep.setFixedHeight(1)
-        prod_layout.addSpacing(4)
-        prod_layout.addWidget(sep)
+        # Hidden image_aspect synced from video_aspect
+        self.image_aspect = QComboBox()
+        self.image_aspect.addItems([t("project_sidebar.landscape"), t("project_sidebar.portrait")])
+        self.image_aspect.setVisible(False)
+        prod_layout.addWidget(self.image_aspect)
+        self.video_aspect.currentIndexChanged.connect(
+            lambda idx: self.image_aspect.setCurrentIndex(idx)
+        )
 
-        # ── Image Settings ──
-        _section_lbl(t("project_builder.production.image_model"))
+        # ── 🖼️ Image Model / Quality ──
+        lbl = QLabel("🖼️ Ảnh — Model / Chất lượng")
+        lbl.setStyleSheet(lbl_style)
+        prod_layout.addWidget(lbl)
         self.image_model = QComboBox()
         for display, api_key in IMAGE_MODELS:
             self.image_model.addItem(display, api_key)
-        self.image_model.setMinimumHeight(32)
+        self.image_model.setMinimumHeight(34)
+        self.image_model.setStyleSheet(combo_style)
         prod_layout.addWidget(self.image_model)
-
-        _section_lbl(t("project_builder.production.image_aspect"))
-        self.image_aspect = QComboBox()
-        self.image_aspect.addItems([t("project_sidebar.landscape"), t("project_sidebar.portrait")])
-        self.image_aspect.setMinimumHeight(32)
-        prod_layout.addWidget(self.image_aspect)
-
-        _section_lbl(t("project_builder.production.image_count"))
-        self.image_count = QSpinBox()
-        self.image_count.setRange(1, 50)
-        self.image_count.setValue(10)
-        self.image_count.setMinimumHeight(32)
-        prod_layout.addWidget(self.image_count)
-
-        _section_lbl(t("project_builder.production.image_quality"))
         self.image_quality = QComboBox()
         self.image_quality.addItems(["1k", "2k", "4k"])
         self.image_quality.setCurrentText("2k")
-        self.image_quality.setMinimumHeight(32)
+        self.image_quality.setMinimumHeight(34)
+        self.image_quality.setStyleSheet(combo_style)
         prod_layout.addWidget(self.image_quality)
 
-        _section_lbl(t("project_builder.production.image_outputs"))
-        self.image_outputs = QSpinBox()
-        self.image_outputs.setRange(1, 4)
-        self.image_outputs.setValue(4)
-        self.image_outputs.setMinimumHeight(32)
-        prod_layout.addWidget(self.image_outputs)
-
-        # ── Video Settings ──
-        _section_lbl(t("project_builder.production.video_model"))
+        # ── 🎬 Video Model / Quality ──
+        lbl = QLabel("🎬 Video — Model / Chất lượng")
+        lbl.setStyleSheet(lbl_style)
+        prod_layout.addWidget(lbl)
         self.video_model = QComboBox()
         self.video_model.addItems(VIDEO_MODELS)
-        self.video_model.setMinimumHeight(32)
+        self.video_model.setMinimumHeight(34)
+        self.video_model.setStyleSheet(combo_style)
         prod_layout.addWidget(self.video_model)
-
-        _section_lbl(t("project_builder.production.video_quality"))
         self.video_quality = QComboBox()
         self.video_quality.addItems(["720p", "1080p", "4K"])
         self.video_quality.setCurrentText("1080p")
-        self.video_quality.setMinimumHeight(32)
+        self.video_quality.setMinimumHeight(34)
+        self.video_quality.setStyleSheet(combo_style)
         prod_layout.addWidget(self.video_quality)
 
-        _section_lbl(t("project_builder.production.video_aspect"))
-        self.video_aspect = QComboBox()
-        self.video_aspect.addItems(["16:9", "9:16"])
-        self.video_aspect.setMinimumHeight(32)
-        prod_layout.addWidget(self.video_aspect)
+        # Hidden compat fields
+        self.image_outputs = QSpinBox()
+        self.image_outputs.setRange(1, 4)
+        self.image_outputs.setValue(4)
+        self.image_outputs.setVisible(False)
+        prod_layout.addWidget(self.image_outputs)
 
-        _section_lbl(t("project_builder.production.video_count"))
+        self.image_count = QSpinBox()
+        self.image_count.setRange(1, 50)
+        self.image_count.setValue(10)
+        self.image_count.setVisible(False)
+        prod_layout.addWidget(self.image_count)
+
         self.video_count = QSpinBox()
         self.video_count.setRange(1, 50)
         self.video_count.setValue(8)
-        self.video_count.setMinimumHeight(32)
+        self.video_count.setVisible(False)
         prod_layout.addWidget(self.video_count)
 
-        _section_lbl(t("project_builder.production.video_outputs"))
         self.video_outputs = QSpinBox()
         self.video_outputs.setRange(1, 4)
         self.video_outputs.setValue(4)
-        self.video_outputs.setMinimumHeight(32)
+        self.video_outputs.setVisible(False)
         prod_layout.addWidget(self.video_outputs)
 
         # ── Load defaults from AppSettings ──
@@ -547,7 +804,6 @@ class SetupMatrixPanel(QFrame):
             from config.settings import get_settings
             s = get_settings()
             if s:
-                # Video defaults
                 _vm = getattr(s, 'default_model', '')
                 idx = self.video_model.findText(_vm)
                 if idx >= 0:
@@ -558,10 +814,13 @@ class SetupMatrixPanel(QFrame):
                     self.video_quality.setCurrentIndex(idx)
                 _ar = getattr(s, 'default_aspect_ratio', 'LANDSCAPE')
                 self.video_aspect.setCurrentText("9:16" if "PORTRAIT" in _ar.upper() else "16:9")
+                self.image_aspect.setCurrentText(
+                    t("project_sidebar.portrait") if "PORTRAIT" in _ar.upper()
+                    else t("project_sidebar.landscape")
+                )
                 _oc = getattr(s, 'default_output_count', 4)
+                self.image_outputs.setValue(min(max(_oc, 1), 4))
                 self.video_outputs.setValue(min(max(_oc, 1), 4))
-
-                # Image defaults
                 _im = getattr(s, 'default_image_model', '')
                 idx = self.image_model.findText(_im)
                 if idx >= 0:
@@ -570,11 +829,8 @@ class SetupMatrixPanel(QFrame):
                 idx = self.image_quality.findText(_iq)
                 if idx >= 0:
                     self.image_quality.setCurrentIndex(idx)
-                self.image_aspect.setCurrentText(
-                    t("project_sidebar.portrait") if "PORTRAIT" in _ar.upper()
-                    else t("project_sidebar.landscape")
-                )
-                self.image_outputs.setValue(min(max(_oc, 1), 4))
+                if s.output_folder:
+                    self.output_folder.setText(s.output_folder)
         except Exception:
             pass
 
@@ -591,6 +847,127 @@ class SetupMatrixPanel(QFrame):
         idx = combo.findData(data_value)
         if idx >= 0:
             combo.setCurrentIndex(idx)
+
+    def _on_pipeline_mode_changed(self, index: int):
+        """Toggle visibility of Full Production controls."""
+        mode = self._pipeline_mode.currentData() or "text_only"
+        is_full = mode == "full_production"
+        # Show/hide Full Production-specific sidebar controls
+        self._full_prod_sidebar.setVisible(is_full)
+        # Sync header color with workspace mode
+        header_color = Theme.BLUE if is_full else Theme.GREEN
+        self._mode_header.setStyleSheet(f"background-color: {header_color};")
+        self.pipeline_mode_changed.emit(mode)
+        self._emit_config()
+
+    def _on_detail_mode_changed(self, index: int):
+        """Toggle visibility of 8 dimension combos (Auto=hidden, Manual=shown)."""
+        mode = self._detail_mode.currentData() or "auto"
+        self._dims_container.setVisible(mode == "manual")
+        self._emit_config()
+
+    def _on_project_type_changed(self, index: int):
+        """Auto-set voice, structure, style, tone based on project type."""
+        pt = self.d0_project_type.currentData()
+        if not pt:
+            return
+        # Voice toggle based on project type
+        NO_VOICE_TYPES = {"video_silent", "slideshow", "music_video"}
+        self._voice_enabled.setChecked(pt not in NO_VOICE_TYPES)
+        # Auto-suggest structure
+        TYPE_TO_STRUCTURE = {
+            "animation":    "3act",
+            "action":       "3act",
+            "documentary":  "narrative",
+            "philosophy":   "minimal",
+            "slideshow":    "montage",
+            "storytelling": "narrative",
+            "comedy":       "3act",
+            "music_video":  "montage",
+            "tutorial":     "pmcs",
+            "product_review": "before_after",
+        }
+        if pt in TYPE_TO_STRUCTURE:
+            self._auto_select_combo(self.d2_structure, TYPE_TO_STRUCTURE[pt])
+        # Auto-suggest tone
+        TYPE_TO_TONE = {
+            "philosophy":   "calm",
+            "action":       "intense",
+            "comedy":       "fun",
+            "documentary":  "serious",
+            "storytelling": "warm",
+        }
+        if pt in TYPE_TO_TONE:
+            self._auto_select_combo(self.d7_tone, TYPE_TO_TONE[pt])
+        self._emit_config()
+
+    def _on_target_duration_changed(self, *args):
+        """Parse target duration and auto-calculate scene count (live).
+        
+        Accepts: HH:MM:SS, MM:SS, Ns (e.g. 90s), or raw number (seconds).
+        Scene count = ceil(total_duration / clip_duration)
+        """
+        if getattr(self, '_updating_duration', False):
+            return
+        self._updating_duration = True
+        try:
+            import math
+            text = self._target_duration.text().strip()
+            if not text:
+                self._scene_count.setValue(1)
+                self._do_update_label()
+                return
+
+            total_s = 0
+            text_clean = text.lower().replace("s", "").strip()
+            if ":" in text_clean:
+                parts = text_clean.split(":")
+                if len(parts) == 3:  # HH:MM:SS
+                    total_s = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                elif len(parts) == 2:  # MM:SS
+                    total_s = int(parts[0]) * 60 + int(parts[1])
+            else:
+                total_s = int(float(text_clean))
+
+            if total_s <= 0:
+                return
+            clip_s = self._clip_duration.currentData() or 8
+            needed = math.ceil(total_s / clip_s)
+            needed = max(1, min(needed, 999))
+            self._scene_count.setValue(needed)
+            self._do_update_label()
+        except (ValueError, IndexError):
+            pass
+        finally:
+            self._updating_duration = False
+
+    def _update_duration_estimate(self, *args):
+        """Recalculate when clip duration changes."""
+        if getattr(self, '_updating_duration', False):
+            return
+        # If target text exists, recalculate scene count from it
+        if hasattr(self, '_target_duration') and self._target_duration.text().strip():
+            self._on_target_duration_changed()
+        else:
+            self._do_update_label()
+
+    def _do_update_label(self):
+        """Display auto-calculated scene count and actual duration."""
+        clip_s = self._clip_duration.currentData() or 8
+        scenes = self._scene_count.value()
+        actual_s = clip_s * scenes
+
+        hours = actual_s // 3600
+        mins = (actual_s % 3600) // 60
+        secs = actual_s % 60
+        if hours > 0:
+            time_str = f"{hours}:{mins:02d}:{secs:02d}"
+        else:
+            time_str = f"{mins:02d}:{secs:02d}"
+
+        text = f"📊 {scenes} phân cảnh × {clip_s}s = {time_str}"
+        self._duration_label.setText(text)
+        self._emit_config()
 
     def _on_category_changed(self, selected: list):
         """R1-R4, R7: Category → Structure + Character + Style + Hybrid."""
@@ -622,6 +999,8 @@ class SetupMatrixPanel(QFrame):
         self._emit_config()
 
     def _emit_config(self, *args):
+        if not hasattr(self, 'image_aspect'):
+            return  # Still initializing — production section not built yet
         self.config_changed.emit(self.get_config())
 
     # ── Public API ─────────────────────────────────────────────
@@ -632,6 +1011,17 @@ class SetupMatrixPanel(QFrame):
         vid_aspect = "LANDSCAPE" if "16:9" in self.video_aspect.currentText() else "PORTRAIT"
 
         return {
+            # Pipeline mode
+            "pipeline_mode":     self._pipeline_mode.currentData() or "text_only",
+            "detail_mode":       self._detail_mode.currentData() or "auto",
+            # Project type & duration
+            "project_type":      self.d0_project_type.currentData(),
+            "voice_enabled":     self._voice_enabled.isChecked(),
+            "clip_duration":     self._clip_duration.currentData() or 8,
+            "scene_count":       self._scene_count.value(),
+            "video_count":       self._video_count.value(),
+            "target_duration":   self._target_duration.text().strip(),
+            "estimated_duration": (self._clip_duration.currentData() or 8) * self._scene_count.value(),
             # Content dimensions
             "category":  self.d1_category.get_selected(),        # list (multi)
             "structure": [self.d2_structure.currentData()] if self.d2_structure.currentData() else [],

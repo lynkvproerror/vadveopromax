@@ -43,21 +43,17 @@ class GeminiApiPage(QWidget):
 
         # Refresh button
         refresh_btn = QPushButton("🔄 Refresh")
-        refresh_btn.setFixedWidth(90)
-        refresh_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"height: 28px; border-radius: 4px;"
-        )
+        refresh_btn.setMinimumWidth(90)
+        refresh_btn.setFixedHeight(28)
+        refresh_btn.setProperty("variant", "secondary")
         refresh_btn.clicked.connect(self.refresh_diagnostics)
         header_row.addWidget(refresh_btn)
 
         # Clear log
         clear_btn = QPushButton("🗑️ Clear")
-        clear_btn.setFixedWidth(80)
-        clear_btn.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
-            f"height: 28px; border-radius: 4px;"
-        )
+        clear_btn.setMinimumWidth(80)
+        clear_btn.setFixedHeight(28)
+        clear_btn.setProperty("variant", "secondary")
         clear_btn.clicked.connect(lambda: self._log_view.clear())
         header_row.addWidget(clear_btn)
 

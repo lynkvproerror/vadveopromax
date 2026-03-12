@@ -140,20 +140,29 @@ class SettingsSectionsMixin:
         folder_layout = QHBoxLayout()
         folder_label = QLabel(t("settings_extra.save_folder_label"))
         folder_label.setFixedWidth(120)
-        folder_label.setStyleSheet(f"color: {Theme.TEXT};")
+        folder_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         folder_layout.addWidget(folder_label)
 
         self.output_folder_entry = QLineEdit()
         self.output_folder_entry.setPlaceholderText("D:/Projects/VEO")
         self.output_folder_entry.setMinimumWidth(200)
+        self.output_folder_entry.setMinimumHeight(32)
+        self.output_folder_entry.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: none; border-radius: 4px;
+                padding: 4px 8px; font-weight: bold;
+            }}
+        """)
         if _s and getattr(_s, 'output_folder', ''):
             self.output_folder_entry.setText(_s.output_folder)
         folder_layout.addWidget(self.output_folder_entry)
 
         browse_btn = QPushButton(t("settings_extra.browse_select"))
-        browse_btn.setFixedSize(90, 35)
+        browse_btn.setFixedHeight(32)
+        browse_btn.setMinimumWidth(70)
         browse_btn.setToolTip(t("settings_extra.browse_tooltip"))
-        browse_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; font-weight: bold; font-size: 12px; border-radius: 4px;")
+        browse_btn.setProperty("variant", "secondary")
         browse_btn.clicked.connect(self._browse_output_folder)
         folder_layout.addWidget(browse_btn)
         layout.addLayout(folder_layout)
@@ -230,20 +239,29 @@ class SettingsSectionsMixin:
 
         folder_label = QLabel(t("settings_extra.save_folder_label"))
         folder_label.setFixedWidth(120)
-        folder_label.setStyleSheet(f"color: {Theme.TEXT};")
+        folder_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
         folder_layout.addWidget(folder_label)
 
         self.output_folder_entry = QLineEdit()
         self.output_folder_entry.setPlaceholderText("D:/Projects/VEO")
         self.output_folder_entry.setMinimumWidth(200)
+        self.output_folder_entry.setMinimumHeight(32)
+        self.output_folder_entry.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
+                border: none; border-radius: 4px;
+                padding: 4px 8px; font-weight: bold;
+            }}
+        """)
         if _s and getattr(_s, 'output_folder', ''):
             self.output_folder_entry.setText(_s.output_folder)
         folder_layout.addWidget(self.output_folder_entry)
 
         browse_btn = QPushButton(t("settings_extra.browse_select"))
-        browse_btn.setFixedSize(90, 35)
+        browse_btn.setFixedHeight(32)
+        browse_btn.setMinimumWidth(70)
         browse_btn.setToolTip(t("settings_extra.browse_tooltip"))
-        browse_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; font-weight: bold; font-size: 12px; border-radius: 4px;")
+        browse_btn.setProperty("variant", "secondary")
         browse_btn.clicked.connect(self._browse_output_folder)
         folder_layout.addWidget(browse_btn)
 
@@ -625,18 +643,7 @@ class SettingsSectionsMixin:
         # Clear Cache button (YELLOW)
         clear_cache_btn = QPushButton(t("settings_extra.clear_cache"))
         clear_cache_btn.setFixedHeight(32)
-        clear_cache_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.YELLOW};
-                color: {Theme.CRUST};
-                border-radius: 6px;
-                padding: 0 16px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: #FCE8C0;
-            }}
-        """)
+        clear_cache_btn.setProperty("variant", "warning")
         clear_cache_btn.setToolTip(t("tooltips.cache_tooltip"))
         clear_cache_btn.clicked.connect(self._on_clear_cache)
         btn_layout.addWidget(clear_cache_btn)
@@ -721,7 +728,6 @@ class SettingsSectionsMixin:
         self._builtin_sound_names = list(BUILTIN_SOUNDS.keys())
         self.sound_file_combo.addItems(self._builtin_sound_names + ["Custom..."])
         self.sound_file_combo.setFixedWidth(140)
-        self.sound_file_combo.setFixedHeight(30)
 
         # Set current selection from settings
         current_sound = settings.notify_sound_file
@@ -741,20 +747,8 @@ class SettingsSectionsMixin:
 
         # Preview button
         preview_btn = QPushButton(t("settings.notification_sub.preview"))
-        preview_btn.setFixedSize(120, 30)
-        preview_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.SURFACE1};
-                color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER};
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.SURFACE2};
-            }}
-        """)
+        preview_btn.setMinimumSize(120, 30)
+        preview_btn.setProperty("variant", "secondary")
         preview_btn.clicked.connect(self._on_preview_sound)
         sound_row.addWidget(preview_btn)
 
@@ -914,16 +908,18 @@ class SettingsSectionsMixin:
         toggle_row.addStretch()
         layout.addLayout(toggle_row)
 
-        # Row 2: Current version + status
+        # Row 2: Current version + status (dual: app + extension)
         version_row = QHBoxLayout()
 
-        version_label = QLabel(
-            f"{t('settings.update_sub.current_version')}: v{AppConstants.APP_VERSION}"
+        from core.auto_updater import get_local_extension_version
+        ext_ver = get_local_extension_version()
+        self._version_label = QLabel(
+            f"App: v{AppConstants.APP_VERSION}  │  Extension: v{ext_ver}"
         )
-        version_label.setStyleSheet(
+        self._version_label.setStyleSheet(
             f"color: {Theme.TEXT}; font-weight: bold; font-size: 13px;"
         )
-        version_row.addWidget(version_label)
+        version_row.addWidget(self._version_label)
 
         self._update_status_label = QLabel(t("settings.update_sub.up_to_date"))
         self._update_status_label.setStyleSheet(
@@ -937,39 +933,14 @@ class SettingsSectionsMixin:
         btn_row = QHBoxLayout()
 
         self._check_update_btn = QPushButton(t("settings.update_sub.check_now"))
-        self._check_update_btn.setFixedSize(160, 34)
-        self._check_update_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.SURFACE1};
-                color: {Theme.TEXT};
-                border: 1px solid {Theme.BORDER};
-                border-radius: 6px;
-                padding: 4px 12px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.SURFACE2};
-            }}
-        """)
+        self._check_update_btn.setMinimumSize(160, 34)
+        self._check_update_btn.setProperty("variant", "secondary")
         self._check_update_btn.clicked.connect(self._on_check_update)
         btn_row.addWidget(self._check_update_btn)
 
         self._update_now_btn = QPushButton(t("settings.update_sub.update_now"))
-        self._update_now_btn.setFixedSize(260, 34)
+        self._update_now_btn.setMinimumSize(260, 34)
         self._update_now_btn.setVisible(False)  # Hidden until update found
-        self._update_now_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Theme.BLUE};
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
-                padding: 4px 14px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {Theme.LAVENDER};
-            }}
-        """)
         self._update_now_btn.clicked.connect(self._on_update_now)
         btn_row.addWidget(self._update_now_btn)
 
@@ -1006,6 +977,7 @@ class SettingsSectionsMixin:
             self._updater.download_complete.connect(self._on_download_complete)
             self._updater.download_error.connect(self._on_download_error)
             self._updater.update_applied.connect(self._on_update_applied)
+            self._updater.ext_update_applied.connect(self._on_ext_update_applied)
             self._updater.check_error.connect(self._on_check_error_ui)
         return self._updater
 
@@ -1080,32 +1052,43 @@ class SettingsSectionsMixin:
         self._changelog_label.setVisible(False)
 
     def _on_update_available(self, info):
-        """Handle update available signal."""
+        """Handle update available signal — show type-specific UI."""
         self._reset_check_btn()
-        self._update_status_label.setText(
-            f"🆕 v{info.version} {t('settings.update_sub.available')}"
-        )
+        
+        if info.update_type == "full":
+            self._update_status_label.setText(
+                f"🆕 Full Update v{info.version} {t('settings.update_sub.available')}"
+            )
+            self._update_now_btn.setText(
+                f"⬇️ Full Update (v{info.version} — ~67MB)"
+            )
+        elif info.update_type == "ext_only":
+            self._update_status_label.setText(
+                f"🆕 Extension v{info.ext_version} {t('settings.update_sub.available')}"
+            )
+            self._update_now_btn.setText(
+                f"⬇️ Update Extension (v{info.ext_version} — ~50KB)"
+            )
+        
         self._update_status_label.setStyleSheet(
             f"color: {Theme.PEACH}; font-size: 12px; font-weight: bold; margin-left: 12px;"
         )
         self._update_now_btn.setVisible(True)
-        self._update_now_btn.setText(
-            f"⬇️ {t('settings.update_sub.update_now')} (v{info.version})"
-        )
 
         # Show changelog
         if info.changelog:
             self._changelog_label.setText(f"📝 {info.changelog}")
             self._changelog_label.setVisible(True)
 
-        # Also show toast on main window
+        # Toast on main window
         try:
             main_win = self.window()
             if main_win and hasattr(main_win, 'show_toast'):
-                main_win.show_toast(
-                    f"🆕 {t('settings.update_sub.new_version')}: v{info.version}",
-                    "info", duration=8000
-                )
+                if info.update_type == "full":
+                    msg = f"🆕 Full Update: v{info.version}"
+                else:
+                    msg = f"🆕 Extension Update: v{info.ext_version}"
+                main_win.show_toast(msg, "info", duration=8000)
         except Exception:
             pass
 
@@ -1121,32 +1104,105 @@ class SettingsSectionsMixin:
         self._update_now_btn.setText(f"⬇️ {pct}%...")
 
     def _on_download_complete(self, zip_path: str):
-        """Download finished — apply update."""
-        self._update_now_btn.setText(f"📦 {t('settings.update_sub.installing')}")
-        self._update_status_label.setText(
-            f"📦 {t('settings.update_sub.installing')}"
+        """Download finished — apply based on update type."""
+        updater = self._get_updater()
+        info = updater.latest_info
+        
+        if info and info.update_type == "ext_only":
+            # Extension-only: hot-replace immediately, no restart
+            self._update_now_btn.setText("📦 Updating extension...")
+            updater.apply_extension_update(zip_path)
+            return
+        
+        # Full update: ask user to restart now or later
+        from ui.popups import show_confirm
+        answer = show_confirm(
+            self,
+            "🔄 Update Ready",
+            f"v{info.version if info else '?'} đã tải xong.\n\n"
+            f"• Yes — Tắt app, cài bản mới và khởi động lại ngay\n"
+            f"• No — Lưu lại, cài tự động khi mở app lần sau"
         )
-
-        # Show toast before restart
+        
+        if answer:
+            # Restart now
+            self._update_now_btn.setText(f"📦 {t('settings.update_sub.installing')}")
+            self._update_status_label.setText(f"📦 {t('settings.update_sub.installing')}")
+            try:
+                main_win = self.window()
+                if main_win and hasattr(main_win, 'show_toast'):
+                    main_win.show_toast(
+                        f"📦 {t('settings.update_sub.restarting')}",
+                        "success", duration=3000
+                    )
+            except Exception:
+                pass
+            updater.apply_update(zip_path)
+        else:
+            # Defer to next startup
+            updater.save_pending_update(zip_path, info.version if info else "")
+            self._update_now_btn.setVisible(False)
+            self._update_status_label.setText(
+                f"⏰ v{info.version if info else '?'} sẽ cài khi khởi động lại app"
+            )
+            self._update_status_label.setStyleSheet(
+                f"color: {Theme.YELLOW}; font-size: 12px; margin-left: 12px;"
+            )
+            try:
+                main_win = self.window()
+                if main_win and hasattr(main_win, 'show_toast'):
+                    main_win.show_toast(
+                        "⏰ Update saved — will install on next startup",
+                        "info", duration=5000
+                    )
+            except Exception:
+                pass
+    
+    def _on_ext_update_applied(self):
+        """Extension hot-updated — update version label + show success toast."""
+        self._update_now_btn.setVisible(False)
+        self._changelog_label.setVisible(False)
+        self._update_status_label.setText("✅ Extension updated!")
+        self._update_status_label.setStyleSheet(
+            f"color: {Theme.GREEN}; font-size: 12px; margin-left: 12px;"
+        )
+        # Refresh version label to show new extension version
+        try:
+            from core.auto_updater import get_local_extension_version
+            from config.constants import AppConstants
+            new_ext = get_local_extension_version()
+            self._version_label.setText(
+                f"App: v{AppConstants.APP_VERSION}  │  Extension: v{new_ext}"
+            )
+        except Exception:
+            pass
         try:
             main_win = self.window()
             if main_win and hasattr(main_win, 'show_toast'):
                 main_win.show_toast(
-                    f"📦 {t('settings.update_sub.restarting')}",
-                    "success", duration=3000
+                    "✅ Extension updated! No restart needed.",
+                    "success", duration=5000
                 )
         except Exception:
             pass
 
-        # Apply update (will restart app)
-        updater = self._get_updater()
-        updater.apply_update(zip_path)
-
     def _on_download_error(self, error: str):
-        """Handle download error."""
+        """Handle download error — restore button with correct update type."""
         self._update_now_btn.setEnabled(True)
-        self._update_now_btn.setText(t("settings.update_sub.update_now"))
-        self._update_status_label.setText(f"❌ {error[:50]}")
+        # Restore button text matching the update type
+        updater = self._get_updater()
+        info = updater.latest_info
+        if info and info.update_type == "full":
+            self._update_now_btn.setText(
+                f"⬇️ Retry Full Update (v{info.version})"
+            )
+        elif info and info.update_type == "ext_only":
+            self._update_now_btn.setText(
+                f"⬇️ Retry Extension (v{info.ext_version})"
+            )
+        else:
+            self._update_now_btn.setText(t("settings.update_sub.update_now"))
+        self._update_status_label.setText(f"❌ {error[:80]}")
         self._update_status_label.setStyleSheet(
             f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"
         )

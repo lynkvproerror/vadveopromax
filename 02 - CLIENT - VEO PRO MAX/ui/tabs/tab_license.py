@@ -92,7 +92,7 @@ class TabLicense(QWidget):
     def _create_trial_banner(self) -> QWidget:
         """Create dynamic status banner — shows TRIAL/PREMIUM/TESTER/EXPIRED."""
         section = QFrame()
-        section.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        section.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; }}")
         main_layout = QVBoxLayout(section)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -100,7 +100,7 @@ class TabLicense(QWidget):
         # Dynamic banner header
         self._banner_frame = QFrame()
         self._banner_frame.setFixedHeight(40)
-        self._banner_frame.setStyleSheet(f"background-color: {Theme.YELLOW};")
+        self._banner_frame.setStyleSheet(f"QFrame {{ background-color: {Theme.YELLOW}; }}")
         banner_layout = QHBoxLayout(self._banner_frame)
         banner_layout.setContentsMargins(16, 0, 16, 0)
         
@@ -129,11 +129,11 @@ class TabLicense(QWidget):
             row = QHBoxLayout()
             label_widget = QLabel(f"{label}:")
             label_widget.setFixedWidth(200)
-            label_widget.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+            label_widget.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-weight: bold;")
             row.addWidget(label_widget)
             
             value_widget = QLabel("--")
-            value_widget.setStyleSheet(f"color: {Theme.TEXT};")
+            value_widget.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
             self._limit_labels[key] = value_widget
             row.addWidget(value_widget)
             row.addStretch()
@@ -143,7 +143,7 @@ class TabLicense(QWidget):
         machine_row = QHBoxLayout()
         machine_label = QLabel(t("license.machine_id"))
         machine_label.setFixedWidth(200)
-        machine_label.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+        machine_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-weight: bold;")
         machine_row.addWidget(machine_label)
         
         self.machine_id_entry = QLineEdit("--")
@@ -151,13 +151,13 @@ class TabLicense(QWidget):
         self.machine_id_entry.setMinimumWidth(420)
         self.machine_id_entry.setFixedHeight(32)
         self.machine_id_entry.setStyleSheet(
-            f"background-color: {Theme.SURFACE2}; font-family: monospace; font-size: 12px; padding: 4px 8px;"
+            f"background-color: {Theme.SURFACE2}; font-family: monospace; font-size: 12px; font-weight: bold; padding: 4px 8px;"
         )
         machine_row.addWidget(self.machine_id_entry)
         
         copy_btn = QPushButton(t("license.copy"))
-        copy_btn.setFixedSize(100, 32)
-        copy_btn.setStyleSheet(f"background-color: {Theme.SURFACE2}; font-size: 12px; font-weight: bold;")
+        copy_btn.setMinimumSize(100, 32)
+        copy_btn.setProperty("variant", "secondary")
         copy_btn.clicked.connect(self._on_copy_machine_id)
         self._copy_btn = copy_btn
         machine_row.addWidget(copy_btn)
@@ -171,7 +171,7 @@ class TabLicense(QWidget):
     def _create_activation_section(self) -> QWidget:
         """Create license activation section."""
         section = QFrame()
-        section.setStyleSheet(f"background-color: {Theme.SURFACE0}; border-radius: 8px;")
+        section.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; border-radius: 8px; }}")
         layout = QVBoxLayout(section)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
@@ -189,7 +189,6 @@ class TabLicense(QWidget):
         input_layout.addWidget(self.key_entry)
         
         self._activate_btn = QPushButton(t("license.activate"))
-        self._activate_btn.setStyleSheet(f"background-color: {Theme.BLUE};")
         self._activate_btn.clicked.connect(self._on_activate)
         input_layout.addWidget(self._activate_btn)
         
@@ -316,7 +315,7 @@ class TabLicense(QWidget):
         """Create a pricing tier card with dynamic button."""
         card = QFrame()
         card.setFixedWidth(200)
-        card.setStyleSheet(f"background-color: {Theme.SURFACE2}; border-radius: 0px;")
+        card.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE2}; border-radius: 0px; }}")
         
         layout = QVBoxLayout(card)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -324,7 +323,7 @@ class TabLicense(QWidget):
         
         header = QFrame()
         header.setFixedHeight(60)
-        header.setStyleSheet(f"background-color: {color}; border-radius: 0px;")
+        header.setStyleSheet(f"QFrame {{ background-color: {color}; border-radius: 0px; }}")
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(8, 8, 8, 8)
         
@@ -497,7 +496,7 @@ class TabLicense(QWidget):
     def _create_usage_stats(self) -> QWidget:
         """Create usage statistics section with real data bindings."""
         section = QFrame()
-        section.setStyleSheet(f"background-color: {Theme.SURFACE0}; border-radius: 8px;")
+        section.setStyleSheet(f"QFrame {{ background-color: {Theme.SURFACE0}; border-radius: 8px; }}")
         layout = QVBoxLayout(section)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
@@ -519,7 +518,7 @@ class TabLicense(QWidget):
             col = (i % 2) * 2
             
             label_widget = QLabel(label + ":")
-            label_widget.setStyleSheet(f"color: {Theme.SUBTEXT0};")
+            label_widget.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-weight: bold;")
             stats_layout.addWidget(label_widget, row, col)
             
             value_widget = QLabel("--")
@@ -671,7 +670,7 @@ class TabLicense(QWidget):
         if self._banner_text:
             self._banner_text.setText(text)
         if self._banner_frame:
-            self._banner_frame.setStyleSheet(f"background-color: {color};")
+            self._banner_frame.setStyleSheet(f"QFrame {{ background-color: {color}; }}")
     
     def _update_countdown(self):
         """Update banner with live countdown (called every 1s).
