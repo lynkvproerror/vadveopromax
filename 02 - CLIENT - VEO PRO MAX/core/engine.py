@@ -4568,44 +4568,64 @@ class Engine:
                     # Worker returns early with 720p quality
                 else:
                     # Inline upscale (upscale_priority mode)
-                    # Bug 3 fix: Gate with per-account semaphore (max 3 concurrent)
-                    # Without this, N workers = N simultaneous upscale requests
-                    upscale_sem = self._get_upscale_api_semaphore(email)
-                    upscaled = ""  # ★ Fix C: initialize to prevent UnboundLocalError
-                    # ── Pre-Submit Gate: validate before upscale ──
-                    _gate_ok = await self._pre_submit_gate(account, task)
-                    if not _gate_ok:
-                        log.warning(f"{log_prefix} PreSubmitGate failed — skipping upscale")
+                    # ★ Pool Separation: acquire upscale worker slot
+                    if account.acquire_upscale_worker():
+                        try:
+                            # Bug 3 fix: Gate with per-account semaphore (max 3 concurrent)
+                            upscale_sem = self._get_upscale_api_semaphore(email)
+                            upscaled = ""  # ★ Fix C: initialize to prevent UnboundLocalError
+                            # ── Pre-Submit Gate: validate before upscale ──
+                            _gate_ok = await self._pre_submit_gate(account, task)
+                            if not _gate_ok:
+                                log.warning(f"{log_prefix} PreSubmitGate failed — skipping upscale")
+                            else:
+                                async with upscale_sem:
+                                    upscaled = await self._upscale_single(
+                                        task, account, fife_url, media_id, effective_video_index
+                                    )
+                            if upscaled:
+                                local_final = upscaled
+                                final_quality = task.download_quality
+                                task.video_outputs[video_index].file_upscaled = upscaled
+                                task.video_outputs[video_index].quality = final_quality
+                                log.info(f"{log_prefix} ✅ Upscaled to {final_quality}")
+                            else:
+                                # ★ Fix C: Inline upscale failed → fall back to UpscaleQueue
+                                if not self._stop_event.is_set():
+                                    from core.upscale_queue import UpscaleJob
+                                    self._upscale_queue.enqueue(UpscaleJob(
+                                        task_id=task.id,
+                                        account_email=email,
+                                        original_account=email,
+                                        media_ids=[media_id],
+                                        output_uris=[fife_url],
+                                        target_quality=task.download_quality,
+                                        aspect_ratio=task.aspect_ratio,
+                                    ))
+                                    log.info(
+                                        f"{log_prefix} Inline upscale failed → "
+                                        f"delegated to UpscaleQueue for background retry"
+                                    )
+                        finally:
+                            account.release_upscale_worker()
                     else:
-                        async with upscale_sem:
-                            upscaled = await self._upscale_single(
-                                task, account, fife_url, media_id, effective_video_index
-                            )
-                    if upscaled:
-                        local_final = upscaled
-                        final_quality = task.download_quality
-                        task.video_outputs[video_index].file_upscaled = upscaled
-                        task.video_outputs[video_index].quality = final_quality
-                        log.info(f"{log_prefix} ✅ Upscaled to {final_quality}")
-                    else:
-                        # ★ Fix C: Inline upscale failed → fall back to UpscaleQueue
-                        # Instead of silently keeping 720p, delegate to background
-                        # retry so the video eventually gets upscaled
-                        if not self._stop_event.is_set():
-                            from core.upscale_queue import UpscaleJob
-                            self._upscale_queue.enqueue(UpscaleJob(
-                                task_id=task.id,
-                                account_email=email,
-                                original_account=email,
-                                media_ids=[media_id],
-                                output_uris=[fife_url],
-                                target_quality=task.download_quality,
-                                aspect_ratio=task.aspect_ratio,
-                            ))
-                            log.info(
-                                f"{log_prefix} Inline upscale failed → "
-                                f"delegated to UpscaleQueue for background retry"
-                            )
+                        # Upscale pool full → delegate to background queue
+                        log.info(
+                            f"{log_prefix} Upscale pool full "
+                            f"({account.session.active_upscale_workers}/"
+                            f"{account.session.max_upscale_workers}) "
+                            f"→ fallback to UpscaleQueue"
+                        )
+                        from core.upscale_queue import UpscaleJob
+                        self._upscale_queue.enqueue(UpscaleJob(
+                            task_id=task.id,
+                            account_email=email,
+                            original_account=email,
+                            media_ids=[media_id],
+                            output_uris=[fife_url],
+                            target_quality=task.download_quality,
+                            aspect_ratio=task.aspect_ratio,
+                        ))
 
             # ── Report result ──
             results_dict[video_index] = WorkerVideoResult(
