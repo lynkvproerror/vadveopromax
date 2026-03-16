@@ -135,22 +135,3 @@ class TabI2V(GenerationTabBase):
                 "end_frame": pd.get("end_frame"),
             }
         return {}
-    
-    def _on_help(self):
-        """Show help for I2V workflow."""
-        from ui.popups.complex_popups import HelpTooltipPopup
-        help_text = """I2V (Image to Video) Workflow:
-
-1. Use [tag] in your prompts to reference Library images
-2. Set Frame Mode: START only, END only, or both
-3. Images auto-match from Library when prompt is parsed
-4. Enable Continuation to chain videos together
-
-Example prompts:
-- [hero_pose] transforms into action
-- [sunset_bg] camera pans across scene
-
-Note: No manual image upload. All images come from 
-the Library or from Continuation (previous video frame)."""
-        
-        HelpTooltipPopup(self, "I2V Workflow", help_text).exec()

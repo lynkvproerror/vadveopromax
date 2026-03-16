@@ -162,6 +162,50 @@ class Theme:
         return styles.get(variant, styles["primary"])
     
     @classmethod
+    def btn_style(cls, variant: str = "primary", size: str = "md") -> str:
+        """Get inline QSS stylesheet string for a QPushButton.
+        
+        Use with: btn.setStyleSheet(Theme.btn_style("secondary"))
+        
+        This works everywhere (popups, tabs, dialogs) regardless of
+        QSS property selector inheritance issues.
+        
+        Args:
+            variant: 'primary', 'secondary', 'danger', 'success',
+                     'purple', 'warning', 'link'
+            size: 'sm', 'md', 'lg'
+        """
+        styles = {
+            "primary":   (cls.BLUE,    cls.LAVENDER, cls.CRUST),
+            "secondary": (cls.SURFACE2, cls.OVERLAY0, cls.TEXT),
+            "danger":    (cls.RED,     "#EBA0AC",    cls.CRUST),
+            "success":   (cls.GREEN,   "#B8F0B2",    cls.CRUST),
+            "purple":    (cls.PURPLE,  cls.PURPLE_HOVER, cls.CRUST),
+            "warning":   (cls.PEACH,   "#FBCFB0",    cls.CRUST),
+        }
+        sizes = {
+            "sm": f"height: 26px; font-size: 11px; padding: 0 10px;",
+            "md": f"padding: 8px 16px; font-size: 13px;",
+            "lg": f"height: 36px; font-size: 14px; padding: 0 20px;",
+        }
+        
+        if variant == "link":
+            return (
+                f"QPushButton {{ background-color: transparent; color: {cls.BLUE}; "
+                f"border: none; padding: 0; font-weight: normal; text-align: left; }}"
+                f"QPushButton:hover {{ color: {cls.LAVENDER}; }}"
+            )
+        
+        bg, hover, fg = styles.get(variant, styles["primary"])
+        sz = sizes.get(size, sizes["md"])
+        return (
+            f"QPushButton {{ background-color: {bg}; color: {fg}; "
+            f"border: none; border-radius: {cls.RADIUS_BTN}px; "
+            f"font-weight: bold; {sz} }}"
+            f"QPushButton:hover {{ background-color: {hover}; }}"
+        )
+    
+    @classmethod
     def get_input_style(cls) -> dict:
         """Get input field style configuration."""
         return {

@@ -17,10 +17,12 @@ import json
 from pathlib import Path
 import re
 import csv
+import logging
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+log = logging.getLogger("core.batch_parser")
 
 @dataclass
 class ParsedPrompt:
@@ -206,6 +208,7 @@ class BatchParser:
         Auto-detects format:
         - JSON array: [{...}, {...}] → N prompts with metadata
         - Single JSON object: {...} → one prompt with metadata
+        - Text with embedded JSON: strips non-JSON lines before/after array
         - Plain text: one prompt per line
         
         Args:
@@ -223,6 +226,22 @@ class BatchParser:
                 if result:
                     return result
             except Exception:
+                pass  # Fall through to embedded JSON detection
+        
+        # Embedded JSON detection: look for real JSON starts in the text
+        # Skip non-JSON [tag] patterns like [tấm], [CONT] — look for [{ or {" 
+        json_start = -1
+        for m in re.finditer(r'\[\s*\{|\{\s*"', stripped):
+            json_start = m.start()
+            break
+        
+        if json_start > 0:  # JSON found but NOT at start (already tried above)
+            json_candidate = stripped[json_start:]
+            try:
+                result = self.parse_json_text(json_candidate)
+                if result:
+                    return result
+            except Exception:
                 pass  # Fall through to line-by-line parsing
         
         # Default: line-by-line plain text
@@ -236,17 +255,122 @@ class BatchParser:
         
         return prompts
     
+    @staticmethod
+    def _sanitize_json_text(text: str) -> str:
+        """Clean raw text so json.loads() can parse it.
+        
+        Handles edge cases:
+        1. Markdown fences: ```json ... ``` → strip fences
+        2. Non-JSON prefix: '[tấm] [{...}]' → strip before first [{ or {"
+        3. Concatenated arrays: '[{...}][{...}]' → merge into single array
+        4. Labeled concat: 'Label:\n[{...}]\nLabel:\n[{...}]' → extract & merge all arrays
+        5. Bare objects: '{...}, {...}' without [] → wrap in []
+        6. Trailing comma: [{...},] → remove comma before ]
+        """
+        text = text.strip()
+        
+        # ── Case 0: Strip markdown code fences ──
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'```\s*$', '', text)
+            text = text.strip()
+        
+        # ── Case 1: Strip non-JSON prefix (e.g. "[tấm] ", "Tình huống 2:\n")
+        # Find the first real JSON start: [{ or {" 
+        m = re.search(r'\[\s*\{|\{\s*"', text)
+        if m and m.start() > 0:
+            text = text[m.start():]
+        
+        # ── Case 2+3: Concatenated arrays → merge
+        # First try simple whitespace-only concat: "]  ["
+        if re.search(r'\]\s*\[', text):
+            text = re.sub(r'\]\s*\[', ', ', text, count=0)
+            text = text.strip()
+            if not text.startswith('['):
+                text = '[' + text
+            if not text.endswith(']'):
+                text = text + ']'
+        
+        # ── Case 4: Labeled concat — text between arrays
+        # "Label:\n[{...}]\nLabel:\n[{...}]" → extract all [...] fragments and merge
+        # Only triggers if json.loads would fail on current text
+        try:
+            json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            # Extract all JSON array fragments [...] from the text
+            array_fragments = re.findall(r'\[([^\[\]]*(?:\{[^}]*\}[^\[\]]*)*)\]', text)
+            if len(array_fragments) >= 2:
+                # Merge all fragments into one array
+                merged = ', '.join(f.strip().strip(',') for f in array_fragments if f.strip())
+                if merged:
+                    text = '[' + merged + ']'
+        
+        # ── Case 5: Bare objects "{...}, {...}" without [] wrapper
+        text_stripped = text.strip()
+        if text_stripped.startswith('{') and not text_stripped.startswith('['):
+            if re.search(r'\}\s*,\s*\{', text_stripped):
+                text = '[' + text_stripped + ']'
+        
+        # ── Case 6: Trailing comma before ] → remove
+        text = re.sub(r',\s*\]', ']', text)
+        
+        # ── Case 7: Last resort — extract individual {...} objects by brace depth ──
+        # Handles malformed AI output: broken arrays, duplicate [, stray text between objects.
+        # Only triggers if json.loads still fails after all above sanitization.
+        try:
+            json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            objects = []
+            depth = 0
+            start = -1
+            in_string = False
+            escape_next = False
+            for idx, ch in enumerate(text):
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == '\\' and in_string:
+                    escape_next = True
+                    continue
+                if ch == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == '{':
+                    if depth == 0:
+                        start = idx
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0 and start >= 0:
+                        fragment = text[start:idx + 1]
+                        try:
+                            json.loads(fragment)  # validate
+                            objects.append(fragment)
+                        except (json.JSONDecodeError, ValueError):
+                            pass
+                        start = -1
+            if objects:
+                text = '[' + ', '.join(objects) + ']'
+        
+        return text
+    
     def parse_json_text(self, text: str) -> List[ParsedPrompt]:
         """Parse JSON scene(s) into ParsedPrompt(s).
         
         Supports:
         - Single object: {...} → 1 prompt
         - Array: [{...}, {...}, ...] → N prompts (each scene = 1 prompt)
+        - Concatenated arrays: [{...}][{...}] → merged
+        - Bare objects: {...}, {...} → wrapped in []
+        - Non-JSON prefix: [tag] [{...}] → prefix stripped
         
         Required field per scene: prompt_en (the actual VEO prompt)
         Optional fields: duration ("5s" or "8s" or int), scene_number,
                         description_vi, narration_vi, and any extra metadata.
         """
+        text = self._sanitize_json_text(text)
         data = json.loads(text)
         
         # Normalize: single object → list of one
@@ -275,9 +399,53 @@ class BatchParser:
                 if key in scene and scene[key]:
                     metadata[key] = str(scene[key])
             
+            # ── Extract image references ──
+            # Supports: "image": "path" (single) or "images": ["p1", "p2"] (array)
+            image_tags = []
+            raw_images = []
+            
+            # Collect from both "image" and "images" fields
+            single_img = scene.get('image', '') or ''
+            if isinstance(single_img, str) and single_img.strip():
+                raw_images.append(single_img.strip())
+            
+            multi_imgs = scene.get('images', [])
+            if isinstance(multi_imgs, list):
+                for img_val in multi_imgs:
+                    if isinstance(img_val, str) and img_val.strip():
+                        raw_images.append(img_val.strip())
+            elif isinstance(multi_imgs, str) and multi_imgs.strip():
+                raw_images.append(multi_imgs.strip())
+            
+            # Process each image: auto-import to ImageLibrary if valid file path
+            for img_path_str in raw_images:
+                img_path = Path(img_path_str)
+                if img_path.is_file():
+                    # Valid file → import to ImageLibrary
+                    tag_name = img_path.stem.lower()  # filename without ext as tag
+                    try:
+                        from services.image_library import get_image_library
+                        lib = get_image_library()
+                        lib.update_or_add_image(
+                            str(img_path), tags=[tag_name],
+                            category="All", copy_to_library=True,
+                        )
+                        image_tags.append(tag_name)
+                        log.info(
+                            f"[BatchParser] Auto-imported [{tag_name}] "
+                            f"← {img_path.name}"
+                        )
+                    except Exception as e:
+                        log.warning(f"[BatchParser] ImageLibrary import failed: {e}")
+                        image_tags.append(tag_name)
+                else:
+                    # Not a file → treat as tag name (might resolve later)
+                    image_tags.append(img_path_str.strip().strip('[]'))
+            
             prompts.append(ParsedPrompt(
                 text=json.dumps(scene, ensure_ascii=False),  # Full JSON for display
                 line_number=i + 1,
+                images=image_tags,
                 duration=duration,
                 scene_number=scene.get('scene_number', i + 1),
                 metadata=metadata,

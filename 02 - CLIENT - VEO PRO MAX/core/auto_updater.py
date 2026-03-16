@@ -16,6 +16,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time as _time
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -25,25 +27,40 @@ from PySide6.QtCore import QObject, Signal, QTimer, QThread
 log = logging.getLogger(__name__)
 
 
+# ★ E7+R4-3: Lazy-cached SSL context with thread-safe lock
+_ssl_context_cache = None
+_ssl_lock = threading.Lock()
+
 def _create_ssl_context():
-    """Create SSL context with certifi fallback for Nuitka-compiled apps."""
-    import ssl
-    try:
-        ctx = ssl.create_default_context()
-        if ctx.get_ca_certs():
+    """Create or return cached SSL context with certifi fallback."""
+    global _ssl_context_cache
+    if _ssl_context_cache is not None:
+        return _ssl_context_cache
+    with _ssl_lock:
+        # Double-check after acquiring lock
+        if _ssl_context_cache is not None:
+            return _ssl_context_cache
+        import ssl
+        try:
+            ctx = ssl.create_default_context()
+            if ctx.get_ca_certs():
+                _ssl_context_cache = ctx
+                return ctx
+        except Exception:
+            pass
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+            _ssl_context_cache = ctx
             return ctx
-    except Exception:
-        pass
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except ImportError:
-        pass
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    log.warning("SSL: Using unverified context (certifi not available)")
-    return ctx
+        except ImportError:
+            pass
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        log.warning("SSL: Using unverified context (certifi not available)")
+        _ssl_context_cache = ctx
+        return ctx
 
 
 # GitHub raw URL for version manifest
@@ -51,6 +68,45 @@ GITHUB_REPO = "lynkvproerror/vadveopromax"
 VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json"
 UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000  # 30 minutes
 PENDING_UPDATE_FILE = Path.home() / ".veoauto" / "pending_update.json"
+
+
+def _safe_extractall(zf: zipfile.ZipFile, dest: str):
+    """Extract ZIP with path traversal protection (R2-5)."""
+    dest_path = Path(dest).resolve()
+    for member in zf.namelist():
+        member_path = (dest_path / member).resolve()
+        if not str(member_path).startswith(str(dest_path)):
+            raise ValueError(
+                f"ZIP path traversal detected: {member!r} escapes {dest}"
+            )
+    zf.extractall(dest)
+
+
+def _cleanup_old_temp_dirs():
+    """★ E6: Remove orphaned veo_update_*/veo_extract_*/veo_ext_update_* temp dirs.
+    
+    Called at startup to reclaim disk space from crashed/killed downloads.
+    ★ R12-5: Skip dirs modified within 60s (may belong to active downloads).
+    """
+    try:
+        tmp = tempfile.gettempdir()
+        now = _time.time()
+        for name in os.listdir(tmp):
+            if name.startswith(("veo_update_", "veo_extract_", "veo_ext_update_")):
+                full = os.path.join(tmp, name)
+                if os.path.isdir(full):
+                    try:
+                        # ★ R12-5: Skip recently-modified dirs (active download)
+                        mtime = os.path.getmtime(full)
+                        if now - mtime < 60:
+                            log.debug(f"Skipping fresh temp dir: {name} (age={now - mtime:.0f}s)")
+                            continue
+                        shutil.rmtree(full, ignore_errors=True)
+                        log.debug(f"Cleaned orphaned temp dir: {name}")
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
 
 class UpdateInfo:
@@ -94,7 +150,11 @@ def compare_versions(current: str, remote: str) -> int:
         # Pad to 3 parts
         while len(parts) < 3:
             parts.append("0")
-        return tuple(int(p) for p in parts[:3])
+        # ★ E8: Sanitize non-numeric parts (e.g. "2a" → 2)
+        def safe_int(p: str) -> int:
+            digits = re.sub(r'[^0-9]', '', p)
+            return int(digits) if digits else 0
+        return tuple(safe_int(p) for p in parts[:3])
     
     try:
         c = parse(current)
@@ -131,24 +191,51 @@ class UpdateCheckWorker(QThread):
     error = Signal(str)
     
     def run(self):
-        try:
-            import urllib.request
-            
-            ctx = _create_ssl_context()
-            req = urllib.request.Request(
-                VERSION_URL,
-                headers={"User-Agent": "VEO-Pro-Max-Updater/2.0"}
-            )
-            
-            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            
-            info = UpdateInfo(data)
-            self.finished.emit(info)
-            
-        except Exception as e:
-            log.debug(f"Update check failed: {e}")
-            self.error.emit(str(e))
+        import urllib.request
+        import time
+        
+        ctx = _create_ssl_context()
+        max_retries = 3
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                # ★ R5-2: Cache-bust GitHub CDN (serves stale for up to 300s)
+                bust_url = f"{VERSION_URL}?_t={int(_time.time())}"
+                req = urllib.request.Request(
+                    bust_url,
+                    headers={
+                        "User-Agent": "VEO-Pro-Max-Updater/2.0",
+                        "Cache-Control": "no-cache, no-store",
+                        "Pragma": "no-cache",
+                    }
+                )
+                
+                with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                
+                info = UpdateInfo(data)
+                self.finished.emit(info)
+                return  # Success — exit
+                
+            except Exception as e:
+                last_error = e
+                log.debug(f"Update check attempt {attempt+1}/{max_retries} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # 1s, 2s backoff
+        
+        # All retries exhausted
+        err_str = str(last_error) if last_error else "Unknown error"
+        # Friendly message for common connection errors
+        if "Remote end closed" in err_str or "ConnectionReset" in err_str:
+            err_str = "Kết nối bị ngắt — thử lại sau"
+        elif "urlopen error" in err_str:
+            err_str = "Không thể kết nối — kiểm tra mạng"
+        elif "SSL" in err_str or "certificate" in err_str.lower():
+            err_str = "Lỗi SSL — kiểm tra proxy/antivirus"
+        
+        log.debug(f"Update check failed after {max_retries} attempts: {last_error}")
+        self.error.emit(err_str)
 
 
 class UpdateDownloadWorker(QThread):
@@ -180,7 +267,8 @@ class UpdateDownloadWorker(QThread):
             tmp_dir = tempfile.mkdtemp(prefix="veo_update_")
             tmp_path = os.path.join(tmp_dir, self.filename)
             
-            with urllib.request.urlopen(req, timeout=120, context=ctx) as resp:
+            # ★ R4-5: 600s timeout for slow connections (67MB @ 1Mbps = ~9min)
+            with urllib.request.urlopen(req, timeout=600, context=ctx) as resp:
                 total = int(resp.headers.get("Content-Length", 0))
                 
                 # Check disk space (need 3x for download + extract + margin)
@@ -201,6 +289,7 @@ class UpdateDownloadWorker(QThread):
                 
                 downloaded = 0
                 sha = hashlib.sha256()
+                _last_pct = -1
                 
                 with open(tmp_path, "wb") as f:
                     while True:
@@ -212,7 +301,16 @@ class UpdateDownloadWorker(QThread):
                         downloaded += len(chunk)
                         if total > 0:
                             pct = int(downloaded / total * 100)
-                            self.progress.emit(min(pct, 99))
+                            if pct != _last_pct:
+                                self.progress.emit(min(pct, 99))
+                                _last_pct = pct
+                        else:
+                            # ★ U3: No Content-Length → emit MB-based progress
+                            mb = downloaded // (1024 * 1024)
+                            if mb != _last_pct:
+                                # Cap at 95% for indeterminate, real 100% emitted after
+                                self.progress.emit(min(mb, 95))
+                                _last_pct = mb
             
             # Verify SHA-256 if provided
             if self.expected_sha256:
@@ -269,6 +367,10 @@ class AutoUpdater(QObject):
         self._check_worker: Optional[UpdateCheckWorker] = None
         self._download_worker: Optional[UpdateDownloadWorker] = None
         self._latest_info: Optional[UpdateInfo] = None
+        self._periodic_started = False  # ★ E4: guard against stacking timers
+        
+        # ★ E6+R4-7+R11-3: Defer cleanup to background thread (avoid blocking UI)
+        threading.Thread(target=_cleanup_old_temp_dirs, daemon=True).start()
     
     @property
     def latest_info(self) -> Optional[UpdateInfo]:
@@ -276,27 +378,42 @@ class AutoUpdater(QObject):
     
     def start_periodic_check(self):
         """Start checking for updates every 30 minutes."""
+        # ★ E4: Prevent stacking timers on repeated calls
+        if self._periodic_started:
+            return
+        self._periodic_started = True
         # Initial check after 10 seconds (let app fully load)
         QTimer.singleShot(10_000, self.check_now)
         self._check_timer.start(UPDATE_CHECK_INTERVAL_MS)
     
     def stop_periodic_check(self):
         self._check_timer.stop()
+        self._periodic_started = False  # ★ E4: allow restart after stop
     
     def check_now(self):
         """Check for updates immediately (non-blocking)."""
         if self._check_worker and self._check_worker.isRunning():
-            return  # Already checking
+            # ★ R10-3: Detect stuck worker (>30s) and force-terminate
+            started = getattr(self._check_worker, '_started_at', 0)
+            if started and (_time.time() - started > 30):
+                log.warning("Check worker stuck >30s — terminating")
+                self._check_worker.terminate()
+                self._check_worker.wait(1000)
+            else:
+                return  # Already checking
         
-        # Disconnect old worker signals to prevent accumulation
+        # ★ U4: Cleanup old worker to prevent memory leak
         if self._check_worker is not None:
             try:
-                self._check_worker.finished.disconnect()
-                self._check_worker.error.disconnect()
+                # ★ R12-4: Targeted disconnect — avoid detaching Qt internal QThread.finished
+                self._check_worker.finished.disconnect(self._on_check_result)
+                self._check_worker.error.disconnect(self._on_check_error)
             except (RuntimeError, TypeError):
                 pass
+            self._check_worker.deleteLater()
         
         self._check_worker = UpdateCheckWorker()
+        self._check_worker._started_at = _time.time()  # ★ R10-3: track start time
         self._check_worker.finished.connect(self._on_check_result)
         self._check_worker.error.connect(self._on_check_error)
         self._check_worker.start()
@@ -328,14 +445,17 @@ class AutoUpdater(QObject):
             self.download_error.emit(f"No download URL for {info.update_type}")
             return
         
-        # Disconnect old worker signals
+        # ★ U4+R8-3: Cleanup old download worker — wait before disconnect
         if self._download_worker is not None:
             try:
-                self._download_worker.progress.disconnect()
-                self._download_worker.finished.disconnect()
-                self._download_worker.error.disconnect()
+                self._download_worker.wait(100)  # ★ R8-3: let worker finish
+                # ★ R13-1: Targeted disconnect — avoid detaching Qt internal QThread.finished
+                self._download_worker.progress.disconnect(self.download_progress.emit)
+                self._download_worker.finished.disconnect(self._on_download_complete)
+                self._download_worker.error.disconnect(self.download_error.emit)
             except (RuntimeError, TypeError):
                 pass
+            self._download_worker.deleteLater()
         
         self._download_worker = UpdateDownloadWorker(
             url=url, sha256=sha, filename=filename
@@ -349,17 +469,37 @@ class AutoUpdater(QObject):
         """Apply FULL update: extract ZIP, create updater script, restart.
         
         Strategy (CLEAN UPDATE):
-        1. Extract ZIP to temp folder
-        2. Write PowerShell script that waits for exit, replaces app, restarts
-        3. Exit current app
+        1. Validate ZIP integrity (★ R5-1)
+        2. Extract ZIP to temp folder
+        3. Write PowerShell script that waits for exit, replaces app, restarts
+        4. Exit current app
         """
         try:
+            # ★ R5-1: Validate ZIP integrity before destructive operations
+            try:
+                with zipfile.ZipFile(zip_path, "r") as zf_test:
+                    bad = zf_test.testzip()
+                    if bad is not None:
+                        # ★ R10-4: Clean up invalid ZIP
+                        self._cleanup_zip(zip_path)
+                        self.download_error.emit(
+                            f"ZIP corrupted: bad file {bad!r}\n"
+                            f"Please re-download the update."
+                        )
+                        return
+            except (zipfile.BadZipFile, Exception) as ze:
+                self._cleanup_zip(zip_path)
+                self.download_error.emit(
+                    f"ZIP file invalid: {ze}\nPlease re-download."
+                )
+                return
+            
             app_dir = self._get_app_dir()
             extract_dir = tempfile.mkdtemp(prefix="veo_extract_")
             
             # Extract ZIP
             with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(extract_dir)
+                _safe_extractall(zf, extract_dir)
             
             # Find root of extracted content
             extracted_items = os.listdir(extract_dir)
@@ -370,16 +510,36 @@ class AutoUpdater(QObject):
             else:
                 source_dir = extract_dir
             
-            # Create updater PowerShell script
+            # ★ E1: Write paths to JSON sidecar to prevent PowerShell injection
             ps1_path = os.path.join(tempfile.gettempdir(), "veo_updater.ps1")
+            json_path = os.path.join(tempfile.gettempdir(), "veo_updater_paths.json")
             exe_name = os.path.basename(sys.executable)
             exe_full = os.path.join(app_dir, exe_name)
             pid = os.getpid()
             log_path = os.path.join(tempfile.gettempdir(), "veo_update.log")
             
+            # Write all paths to JSON (no PS injection possible)
+            paths_data = {
+                "appDir": app_dir,
+                "srcDir": source_dir,
+                "exePath": exe_full,
+                "zipPath": zip_path,
+                "extrDir": extract_dir,
+                "logFile": log_path,
+                "pid": pid,
+            }
+            with open(json_path, "w", encoding="utf-8") as jf:
+                json.dump(paths_data, jf, ensure_ascii=False)
+            
             ps1_content = f"""
 $ErrorActionPreference = 'Continue'
-$logFile = '{log_path.replace(chr(39), chr(39)+chr(39))}'
+
+# ★ E1+R5-5: Read paths from JSON sidecar (injection-safe, here-string)
+$jsonPath = @'
+{json_path}
+'@
+$cfg = Get-Content -Path $jsonPath -Raw -Encoding utf8 | ConvertFrom-Json
+$logFile  = $cfg.logFile
 
 function Log($msg) {{
     $ts = Get-Date -Format 'HH:mm:ss'
@@ -392,7 +552,7 @@ Log 'Waiting for app to exit...'
 
 # Wait for the running app process to exit (by PID, max 30s)
 try {{
-    $proc = Get-Process -Id {pid} -ErrorAction SilentlyContinue
+    $proc = Get-Process -Id $cfg.pid -ErrorAction SilentlyContinue
     if ($proc) {{
         $proc.WaitForExit(30000) | Out-Null
     }}
@@ -401,11 +561,11 @@ try {{
 # Extra safety wait
 Start-Sleep -Seconds 2
 
-$appDir   = '{app_dir.replace(chr(39), chr(39)+chr(39))}'
-$srcDir   = '{source_dir.replace(chr(39), chr(39)+chr(39))}'
-$exePath  = '{exe_full.replace(chr(39), chr(39)+chr(39))}'
-$zipPath  = '{zip_path.replace(chr(39), chr(39)+chr(39))}'
-$extrDir  = '{extract_dir.replace(chr(39), chr(39)+chr(39))}'
+$appDir   = $cfg.appDir
+$srcDir   = $cfg.srcDir
+$exePath  = $cfg.exePath
+$zipPath  = $cfg.zipPath
+$extrDir  = $cfg.extrDir
 
 # CLEAN UPDATE: Delete old app → Copy new
 Log 'Removing file protections...'
@@ -461,6 +621,8 @@ foreach ($d in $hideDirs) {{
 Log 'Cleaning up temp files...'
 Remove-Item -Path $extrDir -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+# ★ R4-2: Remove JSON sidecar (contains full paths)
+Remove-Item -Path $jsonPath -Force -ErrorAction SilentlyContinue
 
 # Restart
 Log "Starting: $exePath"
@@ -496,87 +658,52 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             
         except Exception as e:
             log.error(f"Failed to apply update: {e}")
+            # ★ R13-4: Clean up extract_dir on failure
+            if 'extract_dir' in locals():
+                shutil.rmtree(extract_dir, ignore_errors=True)
             self.download_error.emit(f"Apply failed: {e}")
     
     def apply_extension_update(self, zip_path: str):
         """Hot-replace extension/ folder only. NO restart needed.
         
-        Handles Chrome file locks with retry logic.
+        ★ R5-4+R6-1: Runs in a QThread worker to avoid blocking the UI.
+        Uses QThread (not threading.Thread) so signals auto-marshal to main thread.
         """
-        try:
-            app_dir = self._get_app_dir()
-            ext_dir = os.path.join(app_dir, "extension")
-            extract_dir = tempfile.mkdtemp(prefix="veo_ext_update_")
-            
-            # Extract
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(extract_dir)
-            
-            # Source: extracted/extension/ or extracted/ 
-            src_ext = os.path.join(extract_dir, "extension")
-            if not os.path.isdir(src_ext):
-                src_ext = extract_dir
-            
-            # Replace extension folder (retry for Chrome file locks)
-            import time
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    if os.path.isdir(ext_dir):
-                        shutil.rmtree(ext_dir)  # NO ignore_errors — catch the exception
-                    break
-                except PermissionError:
-                    if attempt < max_retries - 1:
-                        log.warning(f"Extension files locked (attempt {attempt+1}/{max_retries}), retrying in 2s...")
-                        time.sleep(2)
-                    else:
-                        log.warning("Extension files locked — force overwriting individual files")
-                        # Fallback: overwrite files individually
-                        for root, dirs, files in os.walk(src_ext):
-                            rel = os.path.relpath(root, src_ext)
-                            dst_root = os.path.join(ext_dir, rel)
-                            os.makedirs(dst_root, exist_ok=True)
-                            for f in files:
-                                src_f = os.path.join(root, f)
-                                dst_f = os.path.join(dst_root, f)
-                                try:
-                                    shutil.copy2(src_f, dst_f)
-                                except Exception as e:
-                                    log.warning(f"Cannot overwrite {f}: {e}")
-            else:
-                # All retries used the fallback path, skip copytree
-                pass
-            
-            # Only copytree if rmtree succeeded (ext_dir doesn't exist)
-            if not os.path.isdir(ext_dir):
-                shutil.copytree(src_ext, ext_dir)
-            
-            # Cleanup
-            shutil.rmtree(extract_dir, ignore_errors=True)
+        # ★ R9-1: Guard against double-click / concurrent ext update
+        if hasattr(self, '_ext_worker') and self._ext_worker is not None:
+            if self._ext_worker.isRunning():
+                log.debug("Extension update already in progress — ignoring")
+                return
+            # ★ R7-2: Cleanup old ext worker to prevent memory leak
             try:
-                os.unlink(zip_path)
-            except Exception:
+                # ★ R14-1: Targeted disconnect — avoid detaching Qt internal QThread.finished
+                self._ext_worker.ext_done.disconnect(self._on_ext_update_done)
+                self._ext_worker.ext_error.disconnect(self.download_error.emit)
+            except (RuntimeError, TypeError):
                 pass
-            
-            log.info("Extension hot-updated successfully (no restart needed)")
-            self.ext_update_applied.emit()
-            
-        except Exception as e:
-            log.error(f"Extension update failed: {e}")
-            self.download_error.emit(f"Extension update failed: {e}")
+            self._ext_worker.deleteLater()
+        
+        # ★ R6-1: Use QThread so signals are delivered on main thread
+        self._ext_worker = _ExtUpdateWorker(self, zip_path)
+        # ★ R10-2: Use bound method instead of closure (avoids strong self capture)
+        self._ext_worker.ext_done.connect(self._on_ext_update_done)
+        self._ext_worker.ext_error.connect(self.download_error.emit)
+        self._ext_worker.start()
+    
+    def _on_ext_update_done(self):
+        """★ R8-4+R10-2: Clear stale info after successful ext update."""
+        self._latest_info = None
+        self.ext_update_applied.emit()
     
     # ── Pending Update (defer full update to next startup) ──
     
-    def save_pending_update(self, zip_path: str, version: str):
+    def save_pending_update(self, zip_path: str, version: str, sha256: str = ""):
         """Save pending update marker for deferred full update.
         
         Copies ZIP to ~/.veoauto/updates/ (persistent across reboots).
         Cleans up any existing pending update before saving new one.
         """
         try:
-            # Clean up any previously pending update first (prevent orphaned ZIPs)
-            self.clear_pending_update()
-            
             # Copy ZIP to persistent location (temp may be cleaned)
             updates_dir = PENDING_UPDATE_FILE.parent / "updates"
             updates_dir.mkdir(parents=True, exist_ok=True)
@@ -584,6 +711,19 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             persistent_zip = updates_dir / Path(zip_path).name
             shutil.copy2(zip_path, str(persistent_zip))
             log.info(f"Copied update ZIP to persistent location: {persistent_zip}")
+            
+            # ★ R17-4+R12-1: Clear old pending AFTER copy succeeds, but skip
+            # deleting old ZIP if it's the same path (same-version re-defer)
+            try:
+                if PENDING_UPDATE_FILE.exists():
+                    old_data = json.loads(PENDING_UPDATE_FILE.read_text(encoding='utf-8'))
+                    old_zip = old_data.get("zip_path", "")
+                    # Only delete old ZIP if path differs from new (avoids deleting our fresh copy)
+                    if old_zip and old_zip != str(persistent_zip) and Path(old_zip).exists():
+                        Path(old_zip).unlink(missing_ok=True)
+                    PENDING_UPDATE_FILE.unlink()
+            except Exception:
+                pass
             
             # Clean up original temp file
             try:
@@ -594,11 +734,17 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             except Exception:
                 pass
             
+            # ★ R16-4: Use explicit sha256 parameter (not self._latest_info which may be None)
+            expected_sha = sha256
+            
+            # ★ R18-4: Use standard import instead of __import__ anti-pattern
+            from datetime import datetime as _dt
             data = {
                 "zip_path": str(persistent_zip),
                 "update_type": "full",
                 "version": version,
-                "saved_at": __import__('datetime').datetime.now().isoformat(),
+                "sha256": expected_sha,
+                "saved_at": _dt.now().isoformat(),
             }
             PENDING_UPDATE_FILE.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False),
@@ -607,6 +753,8 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             log.info(f"Pending update saved: v{version} → {persistent_zip}")
         except Exception as e:
             log.error(f"Failed to save pending update: {e}")
+            # ★ R10-5: Notify UI so user doesn't think save succeeded
+            self.download_error.emit(f"Failed to save pending update: {e}")
     
     @staticmethod
     def clear_pending_update():
@@ -668,17 +816,46 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
         app_cmp = compare_versions(current_app, info.version)
         ext_cmp = compare_versions(current_ext, info.ext_version)
         
-        if app_cmp < 0 or info.force_update:
-            # App version changed (or server forced) → must do full update
+        # ★ min_version enforcement: block dangerously outdated versions
+        below_min = compare_versions(current_app, info.min_version) < 0
+        
+        if below_min or app_cmp < 0:
+            # ★ R10-1: App version changed (or below minimum) → must do full update
             info.update_type = "full"
+            reason = f" [BELOW MIN v{info.min_version}]" if below_min else ""
             log.info(
                 f"Full update available: app v{current_app}→v{info.version}, "
-                f"ext v{current_ext}→v{info.ext_version}"
-                f"{' [FORCED]' if info.force_update else ''}"
+                f"ext v{current_ext}→v{info.ext_version}{reason}"
             )
             self._latest_info = info
             self.update_available.emit(info)
+        elif info.force_update and app_cmp == 0 and ext_cmp < 0:
+            # ★ R9-5+R11-1: force_update + same app + ext outdated → ext-only update
+            if not info.ext_download_url:
+                log.warning(
+                    f"Extension v{info.ext_version} available but ext_download_url is empty — skipping"
+                )
+                self.up_to_date.emit()
+                return
+            info.update_type = "ext_only"
+            log.info(f"Extension update available (force): v{current_ext}→v{info.ext_version}")
+            self._latest_info = info
+            self.update_available.emit(info)
+        elif info.force_update and ext_cmp == 0:
+            # ★ R15-1: force_update + app current/newer + ext ALSO current → nothing to do
+            log.debug(
+                f"force_update set but already up-to-date "
+                f"(app=v{current_app}, ext=v{current_ext}) — skipping"
+            )
+            self.up_to_date.emit()
         elif ext_cmp < 0:
+            # ★ R6-5: Skip ext_only if no download URL provided
+            if not info.ext_download_url:
+                log.warning(
+                    f"Extension v{info.ext_version} available but ext_download_url is empty — skipping"
+                )
+                self.up_to_date.emit()
+                return
             # Only extension changed → lightweight update
             info.update_type = "ext_only"
             log.info(f"Extension update available: v{current_ext}→v{info.ext_version}")
@@ -699,9 +876,141 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
         self.download_complete.emit(path)
     
     @staticmethod
+    def _cleanup_zip(zip_path: str):
+        """★ R10-4: Clean up ZIP file and its parent veo_update_* dir."""
+        try:
+            if os.path.exists(zip_path):
+                parent = os.path.dirname(zip_path)
+                if parent and os.path.basename(parent).startswith("veo_update_"):
+                    shutil.rmtree(parent, ignore_errors=True)
+                else:
+                    os.unlink(zip_path)
+        except Exception:
+            pass
+    
+    @staticmethod
     def _get_app_dir() -> str:
         """Get the application root directory."""
         if getattr(sys, "frozen", False):
             return os.path.dirname(sys.executable)
         else:
             return str(Path(__file__).parent.parent)
+
+
+class _ExtUpdateWorker(QThread):
+    """★ R6-1: QThread worker for extension hot-replace.
+    
+    Signals auto-marshal to the receiver's thread (main thread),
+    unlike threading.Thread which does NOT integrate with Qt event loop.
+    """
+    ext_done = Signal()
+    ext_error = Signal(str)
+    
+    def __init__(self, updater, zip_path: str):
+        super().__init__(updater)  # parent = AutoUpdater
+        self._zip_path = zip_path
+        self._updater = updater
+    
+    def run(self):
+        try:
+            zip_path = self._zip_path
+            app_dir = self._updater._get_app_dir()
+            ext_dir = os.path.join(app_dir, "extension")
+            
+            # ★ R8-2: Validate ZIP integrity before extraction (same as full update)
+            try:
+                with zipfile.ZipFile(zip_path, "r") as zf_test:
+                    bad = zf_test.testzip()
+                    if bad is not None:
+                        # ★ R10-4: Clean up invalid ZIP
+                        AutoUpdater._cleanup_zip(zip_path)
+                        self.ext_error.emit(
+                            f"Extension ZIP corrupted: bad file {bad!r}\n"
+                            f"Please re-download the update."
+                        )
+                        return
+            except (zipfile.BadZipFile, Exception) as ze:
+                AutoUpdater._cleanup_zip(zip_path)
+                self.ext_error.emit(f"Extension ZIP invalid: {ze}")
+                return
+            
+            extract_dir = tempfile.mkdtemp(prefix="veo_ext_update_")
+            
+            # Extract
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                _safe_extractall(zf, extract_dir)
+            
+            # Source: extracted/extension/ or extracted/
+            src_ext = os.path.join(extract_dir, "extension")
+            if not os.path.isdir(src_ext):
+                src_ext = extract_dir
+            
+            # Replace extension folder (retry for Chrome file locks)
+            max_retries = 3
+            _rmtree_ok = False
+            for attempt in range(max_retries):
+                try:
+                    if os.path.isdir(ext_dir):
+                        shutil.rmtree(ext_dir)
+                    _rmtree_ok = True
+                    break
+                except PermissionError:
+                    if attempt < max_retries - 1:
+                        log.warning(f"Extension files locked (attempt {attempt+1}/{max_retries}), retrying in 2s...")
+                        _time.sleep(2)
+                    else:
+                        log.warning("Extension files locked — force overwriting individual files")
+                        # ★ R9-3: Ensure ext_dir exists (rmtree may have partially deleted)
+                        os.makedirs(ext_dir, exist_ok=True)
+                        for root, dirs, files in os.walk(src_ext):
+                            rel = os.path.relpath(root, src_ext)
+                            dst_root = os.path.join(ext_dir, rel)
+                            os.makedirs(dst_root, exist_ok=True)
+                            for f in files:
+                                src_f = os.path.join(root, f)
+                                dst_f = os.path.join(dst_root, f)
+                                try:
+                                    shutil.copy2(src_f, dst_f)
+                                except Exception as e:
+                                    log.warning(f"Cannot overwrite {f}: {e}")
+                        # Clean stale files
+                        new_files = set()
+                        for root, dirs, files in os.walk(src_ext):
+                            for f in files:
+                                rel_path = os.path.relpath(os.path.join(root, f), src_ext)
+                                new_files.add(rel_path)
+                        for root, dirs, files in os.walk(ext_dir):
+                            for f in files:
+                                rel_path = os.path.relpath(os.path.join(root, f), ext_dir)
+                                if rel_path not in new_files:
+                                    try:
+                                        os.unlink(os.path.join(root, f))
+                                        log.debug(f"Removed stale extension file: {rel_path}")
+                                    except Exception:
+                                        pass
+            
+            if _rmtree_ok and not os.path.isdir(ext_dir):
+                shutil.copytree(src_ext, ext_dir)
+            
+            # Cleanup
+            shutil.rmtree(extract_dir, ignore_errors=True)
+            try:
+                os.unlink(zip_path)
+                # ★ R7-5: Also remove parent veo_update_* dir (now empty)
+                parent_dir = os.path.dirname(zip_path)
+                if parent_dir and os.path.basename(parent_dir).startswith("veo_update_"):
+                    shutil.rmtree(parent_dir, ignore_errors=True)
+            except Exception:
+                pass
+            
+            log.info("Extension hot-updated successfully (no restart needed)")
+            self.ext_done.emit()
+            
+        except Exception as e:
+            log.error(f"Extension update failed: {e}")
+            # ★ R11-4: Clean up extract_dir if it was created
+            if 'extract_dir' in locals():
+                shutil.rmtree(extract_dir, ignore_errors=True)
+            # ★ R13-3: Clean up downloaded ZIP on failure
+            AutoUpdater._cleanup_zip(zip_path)
+            self.ext_error.emit(f"Extension update failed: {e}")

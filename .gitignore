@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ===========================
 # VEO Pro Max - .gitignore
 # ===========================
@@ -132,3 +133,22 @@ sessions/
 # Large binary archives
 *.zip
 01.2 - Seller Management Final Tool/
+=======
+# Build artifacts
+main.build/
+*.build/
+nuitka-crash-report.xml
+
+# Zip files
+*.zip
+
+# Logs and sessions (user-specific)
+main.dist/logs/
+main.dist/sessions/
+main.dist/assets/models/
+>>>>>>> 153abd7f82564f41115cd8e345cdd2c6f3315014
+main.dist/
+LAMA CLEANER/
+Sora2 watermark remover/
+VEO_Pro_Max/
+VAD_VEO_Pro_Max_v2.2.3/

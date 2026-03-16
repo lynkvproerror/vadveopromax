@@ -1,0 +1,32 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260313_094204
+Total: 27 entries
+============================================================
+
+[INFO ] 09:41:06 - core.session_manager - [Session] Loaded from 2026-03-13T09:38:59.437259
+[INFO ] 09:41:06 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 09:41:06 - veo.tab_queue - [QueueRefresh] 3 groups, 78 total tasks, existing_groups=[]
+[INFO ] 09:41:07 - veo.tab_queue - [GroupCreate] gid=group_20260313_050653 name='Untitled' children=20 expanded=True
+[INFO ] 09:41:07 - veo.tab_queue - [GroupCreate] gid=group_20260313_050655 name='Untitled' children=20 expanded=True
+[INFO ] 09:41:07 - veo.tab_queue - [GroupCreate] gid=group_20260313_084757 name='Untitled' children=38 expanded=True
+[INFO ] 09:41:07 - veo.tab_queue - [QueueRefresh] 3 groups, 78 total tasks, existing_groups=['group_20260313_050653', 'group_20260313_050655', 'group_20260313_084757']
+[DEBUG] 09:41:11 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:41:12 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:41:12 - veo - [VersionCheck] OK: 2.3.2 >= 2.3.0
+[DEBUG] 09:41:12 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[INFO ] 09:41:14 - core.profiles_controller - [ProfilesController] Saved 1 profiles
+[INFO ] 09:41:14 - core.app_controller - [AppController] Account veofidelia169@tunxelamorintesa.sbs disabled
+[DEBUG] 09:41:18 - core.app_controller - Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+[INFO ] 09:41:18 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 09:41:18 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 09:41:18 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 09:41:18 - core.app_controller - [AutoLaunch] No accounts to connect
+[INFO ] 09:41:18 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Account disabled
+[INFO ] 09:41:18 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 09:41:18 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 09:41:21 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:41:21 - core.extension_bridge - [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:41:21 - core.app_controller - [AutoLaunch] Extension status: 0 emails registered: []
+[INFO ] 09:41:21 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 09:41:21 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 09:42:04 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

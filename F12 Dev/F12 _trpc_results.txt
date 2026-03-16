@@ -1,0 +1,474 @@
+curl 'https://www.gstatic.com/glue/cookienotificationbar/config/2a.json' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'if-modified-since: Mon, 15 May 2023 09:18:00 GMT' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE='
+
+curl 'https://labs.google/fx/api/trpc/flow.projectInitialData?input=%7B%22json%22%3A%7B%22projectId%22%3A%22c60cda8a-fa2f-43db-ae87-7fc677435b88%22%7D%7D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..a79zXnqccrBYNqx2.XTS4Hi9w_x3QejyaNo0VIPEKapJ7Yr-9nYOeYFOjSG0sW3Ub7ekDXG2U2DraxX6i4mNc8pGFnCrQ4TD_saHSjlKEqjsxo44xytdDQAuT381vvp81qLNE2TPtFBSphXarvtiHB_XXyNMKRC6KPCiNEWDbD5R7hUA_YUhomv86vnro4XYuZwX_Drc4-M_5joAAtwH3_rK5DBgiL5OOXvWGI923nbwx0O0SlHQ2C3gqg_YIyZooOKCHYjx96yPAJNecS8r5rIwJ1dfkWpmcWvvlkoYVEXnYCGrvNXG1PcrG1tALH36L4b8kK07YvJWixRNKYM7QgO-iWZkP8hOz-Nnney9vXGEt2TfoJWWB6WwflnPElxX_RZAaXIwc_RfwlntggR3tBotTC7iZubqntz5Nafi8VE9fXxL40TVg3VFVkESeq6vFU5OkIVjFj_fLNqAI7DboucORwcxOoLxDe5W_-_y-MmAZiVTAFOB2e86HtvCnGbFURuhQiZKLiNcVC6zChTK6muEZwtcbAxGY4okUbzTJLXgshTAoxqyJn1rqeyp0NSKd-9uae21nXcwN8zwYviDDFBP6-pemslu-91-K1mU3TOFmA_HJb79bC6xDnAlftp-zPhKi2mTdTrZg9RQK6OlBeS0REzp5svkOch9sDpWtWIDltoroZKgPOVKwr-R3AH8Fxw69bSMNW2-8dfdy0vbZjR8UciQd3A3pL-Mv0dbPXx4prerTa9njacaFD8pHjMv2Un-35jien8xEtIlw2BI8_oWb3PeYw9nZ5N55ymJR_3PKmizE-vCnDWlksbI5oXRXJMSOsjN3BDqx_58yE6GQdVaPVdtCfKiR5aN1I617g8OD1w7_mX8Xf8CWbG5DO5C3gOoUDAsAMuYHTawSYMs8qQyDdApo2xesFOKmN8KT1YLp1aqS90pyAMAhLweENL-RFwTKsylsj8_gtQ4agJYgl_ggu8PjKwhDzIsPSdheTODsoIDRkZk_.WZnhxHiZErW3ug6zqWhyuw; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g0$t1773352092$j60$l0$h1200730574' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://labs.google/fx/api/trpc/general.fetchUserAcknowledgement?input=%7B%22json%22%3A%7B%22acknowledgementVersion%22%3A%22CREATIVE_PARTNER_PROGRAM_TOS%22%7D%7D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..a79zXnqccrBYNqx2.XTS4Hi9w_x3QejyaNo0VIPEKapJ7Yr-9nYOeYFOjSG0sW3Ub7ekDXG2U2DraxX6i4mNc8pGFnCrQ4TD_saHSjlKEqjsxo44xytdDQAuT381vvp81qLNE2TPtFBSphXarvtiHB_XXyNMKRC6KPCiNEWDbD5R7hUA_YUhomv86vnro4XYuZwX_Drc4-M_5joAAtwH3_rK5DBgiL5OOXvWGI923nbwx0O0SlHQ2C3gqg_YIyZooOKCHYjx96yPAJNecS8r5rIwJ1dfkWpmcWvvlkoYVEXnYCGrvNXG1PcrG1tALH36L4b8kK07YvJWixRNKYM7QgO-iWZkP8hOz-Nnney9vXGEt2TfoJWWB6WwflnPElxX_RZAaXIwc_RfwlntggR3tBotTC7iZubqntz5Nafi8VE9fXxL40TVg3VFVkESeq6vFU5OkIVjFj_fLNqAI7DboucORwcxOoLxDe5W_-_y-MmAZiVTAFOB2e86HtvCnGbFURuhQiZKLiNcVC6zChTK6muEZwtcbAxGY4okUbzTJLXgshTAoxqyJn1rqeyp0NSKd-9uae21nXcwN8zwYviDDFBP6-pemslu-91-K1mU3TOFmA_HJb79bC6xDnAlftp-zPhKi2mTdTrZg9RQK6OlBeS0REzp5svkOch9sDpWtWIDltoroZKgPOVKwr-R3AH8Fxw69bSMNW2-8dfdy0vbZjR8UciQd3A3pL-Mv0dbPXx4prerTa9njacaFD8pHjMv2Un-35jien8xEtIlw2BI8_oWb3PeYw9nZ5N55ymJR_3PKmizE-vCnDWlksbI5oXRXJMSOsjN3BDqx_58yE6GQdVaPVdtCfKiR5aN1I617g8OD1w7_mX8Xf8CWbG5DO5C3gOoUDAsAMuYHTawSYMs8qQyDdApo2xesFOKmN8KT1YLp1aqS90pyAMAhLweENL-RFwTKsylsj8_gtQ4agJYgl_ggu8PjKwhDzIsPSdheTODsoIDRkZk_.WZnhxHiZErW3ug6zqWhyuw; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g0$t1773352092$j60$l0$h1200730574' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://labs.google/fx/api/trpc/general.fetchUserAcknowledgement?input=%7B%22json%22%3A%7B%22acknowledgementVersion%22%3A%22USER_HISTORY_V1%22%7D%7D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..a79zXnqccrBYNqx2.XTS4Hi9w_x3QejyaNo0VIPEKapJ7Yr-9nYOeYFOjSG0sW3Ub7ekDXG2U2DraxX6i4mNc8pGFnCrQ4TD_saHSjlKEqjsxo44xytdDQAuT381vvp81qLNE2TPtFBSphXarvtiHB_XXyNMKRC6KPCiNEWDbD5R7hUA_YUhomv86vnro4XYuZwX_Drc4-M_5joAAtwH3_rK5DBgiL5OOXvWGI923nbwx0O0SlHQ2C3gqg_YIyZooOKCHYjx96yPAJNecS8r5rIwJ1dfkWpmcWvvlkoYVEXnYCGrvNXG1PcrG1tALH36L4b8kK07YvJWixRNKYM7QgO-iWZkP8hOz-Nnney9vXGEt2TfoJWWB6WwflnPElxX_RZAaXIwc_RfwlntggR3tBotTC7iZubqntz5Nafi8VE9fXxL40TVg3VFVkESeq6vFU5OkIVjFj_fLNqAI7DboucORwcxOoLxDe5W_-_y-MmAZiVTAFOB2e86HtvCnGbFURuhQiZKLiNcVC6zChTK6muEZwtcbAxGY4okUbzTJLXgshTAoxqyJn1rqeyp0NSKd-9uae21nXcwN8zwYviDDFBP6-pemslu-91-K1mU3TOFmA_HJb79bC6xDnAlftp-zPhKi2mTdTrZg9RQK6OlBeS0REzp5svkOch9sDpWtWIDltoroZKgPOVKwr-R3AH8Fxw69bSMNW2-8dfdy0vbZjR8UciQd3A3pL-Mv0dbPXx4prerTa9njacaFD8pHjMv2Un-35jien8xEtIlw2BI8_oWb3PeYw9nZ5N55ymJR_3PKmizE-vCnDWlksbI5oXRXJMSOsjN3BDqx_58yE6GQdVaPVdtCfKiR5aN1I617g8OD1w7_mX8Xf8CWbG5DO5C3gOoUDAsAMuYHTawSYMs8qQyDdApo2xesFOKmN8KT1YLp1aqS90pyAMAhLweENL-RFwTKsylsj8_gtQ4agJYgl_ggu8PjKwhDzIsPSdheTODsoIDRkZk_.WZnhxHiZErW3ug6zqWhyuw; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g0$t1773352092$j60$l0$h1200730574' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://aisandbox-pa.googleapis.com/v1:checkAppAvailability' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: text/plain;charset=UTF-8' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE=' \
+  -H 'x-goog-api-key: AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY' \
+  --data-raw '{"clientContext":{"tool":"PINHOLE"}}'
+
+curl 'https://labs.google/fx/api/trpc/general.submitBatchLog' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..a79zXnqccrBYNqx2.XTS4Hi9w_x3QejyaNo0VIPEKapJ7Yr-9nYOeYFOjSG0sW3Ub7ekDXG2U2DraxX6i4mNc8pGFnCrQ4TD_saHSjlKEqjsxo44xytdDQAuT381vvp81qLNE2TPtFBSphXarvtiHB_XXyNMKRC6KPCiNEWDbD5R7hUA_YUhomv86vnro4XYuZwX_Drc4-M_5joAAtwH3_rK5DBgiL5OOXvWGI923nbwx0O0SlHQ2C3gqg_YIyZooOKCHYjx96yPAJNecS8r5rIwJ1dfkWpmcWvvlkoYVEXnYCGrvNXG1PcrG1tALH36L4b8kK07YvJWixRNKYM7QgO-iWZkP8hOz-Nnney9vXGEt2TfoJWWB6WwflnPElxX_RZAaXIwc_RfwlntggR3tBotTC7iZubqntz5Nafi8VE9fXxL40TVg3VFVkESeq6vFU5OkIVjFj_fLNqAI7DboucORwcxOoLxDe5W_-_y-MmAZiVTAFOB2e86HtvCnGbFURuhQiZKLiNcVC6zChTK6muEZwtcbAxGY4okUbzTJLXgshTAoxqyJn1rqeyp0NSKd-9uae21nXcwN8zwYviDDFBP6-pemslu-91-K1mU3TOFmA_HJb79bC6xDnAlftp-zPhKi2mTdTrZg9RQK6OlBeS0REzp5svkOch9sDpWtWIDltoroZKgPOVKwr-R3AH8Fxw69bSMNW2-8dfdy0vbZjR8UciQd3A3pL-Mv0dbPXx4prerTa9njacaFD8pHjMv2Un-35jien8xEtIlw2BI8_oWb3PeYw9nZ5N55ymJR_3PKmizE-vCnDWlksbI5oXRXJMSOsjN3BDqx_58yE6GQdVaPVdtCfKiR5aN1I617g8OD1w7_mX8Xf8CWbG5DO5C3gOoUDAsAMuYHTawSYMs8qQyDdApo2xesFOKmN8KT1YLp1aqS90pyAMAhLweENL-RFwTKsylsj8_gtQ4agJYgl_ggu8PjKwhDzIsPSdheTODsoIDRkZk_.WZnhxHiZErW3ug6zqWhyuw; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g0$t1773352092$j60$l0$h1200730574' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  --data-raw '{"json":{"appEvents":[{"event":"PAGE_VIEW","eventProperties":[{"key":"URL","stringValue":"https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88"},{"key":"USER_AGENT","stringValue":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},{"key":"IS_DESKTOP"}],"activeExperiments":[],"eventMetadata":{"sessionId":";1773352414808"},"eventTime":"2026-03-12T21:48:13.164Z"}]}}'
+
+curl 'https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je63b0v883763742z89224422997za200zd883763742&_p=1773352093016&gcs=G111&gcd=13r3r3l3l5l1&npa=0&dma=0&cid=1833889205.1766944976&ecid=1200730574&ul=vi-vn&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CGoogle%2520Chrome%3B145.0.7632.160%7CChromium%3B145.0.7632.160&uamb=0&uam=&uap=Windows&uapv=19.0.0&uaw=0&are=1&frm=0&pscdl=noapi&ec_mode=a&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~115616986~115938466~115938469~116024733~117484252&dr=https%3A%2F%2Flabs.google%2F&dp=%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&sid=1773352092&sct=122&seg=1&dl=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&dt=Flow&en=page_view&ep.is_eea=false&ep.page_url=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&ep.referrer=https%3A%2F%2Flabs.google%2F&_et=4&tfd=1570' \
+  -X 'POST' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-length: 0' \
+  -b 'ar_debug=1' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: no-cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'sec-fetch-storage-access: active' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je63b0v883763742z89224422997za200zd883763742&_p=1773352093016&gcs=G111&gcd=13r3r3l3l5l1&npa=0&dma=0&cid=1833889205.1766944976&ecid=1200730574&ul=vi-vn&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CGoogle%2520Chrome%3B145.0.7632.160%7CChromium%3B145.0.7632.160&uamb=0&uam=&uap=Windows&uapv=19.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115616986~115938466~115938469~116024733~117484252&dr=https%3A%2F%2Flabs.google%2F&sid=1773352092&sct=122&seg=1&dl=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&dt=Flow&en=user_consent&ep.is_eea=false&ep.page_url=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&_et=3&tfd=1580' \
+  -X 'POST' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-length: 0' \
+  -b 'ar_debug=1' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: no-cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'sec-fetch-storage-access: active' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je63b0v883763742za200zd883763742&_p=1773352093016&gcs=G111&gcd=13r3r3l3l5l1&npa=0&dma=0&cid=1833889205.1766944976&ecid=1200730574&ul=vi-vn&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CGoogle%2520Chrome%3B145.0.7632.160%7CChromium%3B145.0.7632.160&uamb=0&uam=&uap=Windows&uapv=19.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AEAAAAQ&_s=3&tag_exp=103116026~103200004~115616986~115938466~115938469~116024733~117484252&dr=https%3A%2F%2Flabs.google%2F&sid=1773352092&sct=122&seg=1&dl=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&dt=Flow&en=scroll&ep.is_eea=false&ep.page_url=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&epn.percent_scrolled=90&_et=4&tfd=1589' \
+  -X 'POST' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-length: 0' \
+  -b 'ar_debug=1' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: no-cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'sec-fetch-storage-access: active' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE='
+
+curl 'https://labs.google/fx/api/auth/session' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g1$t1773352093$j59$l0$h1200730574; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..ZSYkBRh2i5corRGm._sIArT37OZcjAkh-A1ezzAi0uw45aFf3OM57G1-gB4lRkisOn309HK4MnQvF7HM9XyWPcAo0X6eXj5CtdGUqQ2uQNdflly_prvOsFgkY6p3oYTsykuVfI0t2D3Gz3f1Q3CBc2YLAKpkwyMwHwS_08T5hQryUljdiOex4FDmO7Qbc3Q2JHJM3ylHBHLZXrz3JyJx367WiXojrRZgmMFHiCJpHqVaFQQj8p0Ix2dMQEDNY-q37s-MVjDD9hcoclEOMA0X5MRF--P6LF-mV88NLaq79riWVWxg5YAJj0nVlzxWeF9uryyDghSxHq9CcaiBWETvkP6Hxme8yhSmZfa7WIS8oQnan6UwvJqK4F7VXaggDwxdRXuhr6zB5F4mDDWbsthfl-neKOYJHGxOhTuZDoXoQu5Jgme0VH6Zw-0lQFGbRlc7YIAB6hFtU2rOYvYusTMNCT3Bt1wpdBXq6qWnkW5lyJtph650k8U7AlI0_fHazxuTUXVmshZVbJ5il13Y66ry1zvuG4o1bwar8YToa2FrcwQw_c5NFdCg_9eEKop9THHzpxvXOlCWIHdW9IwZmm3bRuBDPzSafpXnGB1JcZP964FDBrKJ9J40QNhpwAuqP2shlBwGmlKDHWJVxc_0FblZv5-IOvjtcLgzZOtTpxuJcQVwthUnseNaRjWwA2uPuMFReiPhV3zmi3OczmxIgz0FxvADaq-Kafjms5O6QdCbFgyoIOzvHRTjLiJ-feZt5ac13Cd3FrE8KEUljsPdl1aVmIDFHmE1rF36rS8WKrcqMft5XJP6Z69WG8YQG4O8yQ6zkz_GsDHMaCoR4h9N6hPmpS6nYyQX7ICzM7wj9qK0rFE5U5A5lKaCVz_9bCDw0idAaYISyroQ2BYqsumlkNWEglfEgDhN8qAI_VHLXbU2k7u90ebKyQ3rtSO3CG2Ky1MTYQ8dne3CIV7EckouoR5c2gDMmtUncPe8OqNS5-DtgIg-rpBfTqEMi.pwOf2eRsrevTOoWJocS0XQ' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://labs.google/fx/api/trpc/videoFx.getFlowAppConfig?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g1$t1773352093$j59$l0$h1200730574; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..ZSYkBRh2i5corRGm._sIArT37OZcjAkh-A1ezzAi0uw45aFf3OM57G1-gB4lRkisOn309HK4MnQvF7HM9XyWPcAo0X6eXj5CtdGUqQ2uQNdflly_prvOsFgkY6p3oYTsykuVfI0t2D3Gz3f1Q3CBc2YLAKpkwyMwHwS_08T5hQryUljdiOex4FDmO7Qbc3Q2JHJM3ylHBHLZXrz3JyJx367WiXojrRZgmMFHiCJpHqVaFQQj8p0Ix2dMQEDNY-q37s-MVjDD9hcoclEOMA0X5MRF--P6LF-mV88NLaq79riWVWxg5YAJj0nVlzxWeF9uryyDghSxHq9CcaiBWETvkP6Hxme8yhSmZfa7WIS8oQnan6UwvJqK4F7VXaggDwxdRXuhr6zB5F4mDDWbsthfl-neKOYJHGxOhTuZDoXoQu5Jgme0VH6Zw-0lQFGbRlc7YIAB6hFtU2rOYvYusTMNCT3Bt1wpdBXq6qWnkW5lyJtph650k8U7AlI0_fHazxuTUXVmshZVbJ5il13Y66ry1zvuG4o1bwar8YToa2FrcwQw_c5NFdCg_9eEKop9THHzpxvXOlCWIHdW9IwZmm3bRuBDPzSafpXnGB1JcZP964FDBrKJ9J40QNhpwAuqP2shlBwGmlKDHWJVxc_0FblZv5-IOvjtcLgzZOtTpxuJcQVwthUnseNaRjWwA2uPuMFReiPhV3zmi3OczmxIgz0FxvADaq-Kafjms5O6QdCbFgyoIOzvHRTjLiJ-feZt5ac13Cd3FrE8KEUljsPdl1aVmIDFHmE1rF36rS8WKrcqMft5XJP6Z69WG8YQG4O8yQ6zkz_GsDHMaCoR4h9N6hPmpS6nYyQX7ICzM7wj9qK0rFE5U5A5lKaCVz_9bCDw0idAaYISyroQ2BYqsumlkNWEglfEgDhN8qAI_VHLXbU2k7u90ebKyQ3rtSO3CG2Ky1MTYQ8dne3CIV7EckouoR5c2gDMmtUncPe8OqNS5-DtgIg-rpBfTqEMi.pwOf2eRsrevTOoWJocS0XQ' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://labs.google/fx/api/trpc/videoFx.getUserSettings?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g1$t1773352093$j59$l0$h1200730574; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..ZSYkBRh2i5corRGm._sIArT37OZcjAkh-A1ezzAi0uw45aFf3OM57G1-gB4lRkisOn309HK4MnQvF7HM9XyWPcAo0X6eXj5CtdGUqQ2uQNdflly_prvOsFgkY6p3oYTsykuVfI0t2D3Gz3f1Q3CBc2YLAKpkwyMwHwS_08T5hQryUljdiOex4FDmO7Qbc3Q2JHJM3ylHBHLZXrz3JyJx367WiXojrRZgmMFHiCJpHqVaFQQj8p0Ix2dMQEDNY-q37s-MVjDD9hcoclEOMA0X5MRF--P6LF-mV88NLaq79riWVWxg5YAJj0nVlzxWeF9uryyDghSxHq9CcaiBWETvkP6Hxme8yhSmZfa7WIS8oQnan6UwvJqK4F7VXaggDwxdRXuhr6zB5F4mDDWbsthfl-neKOYJHGxOhTuZDoXoQu5Jgme0VH6Zw-0lQFGbRlc7YIAB6hFtU2rOYvYusTMNCT3Bt1wpdBXq6qWnkW5lyJtph650k8U7AlI0_fHazxuTUXVmshZVbJ5il13Y66ry1zvuG4o1bwar8YToa2FrcwQw_c5NFdCg_9eEKop9THHzpxvXOlCWIHdW9IwZmm3bRuBDPzSafpXnGB1JcZP964FDBrKJ9J40QNhpwAuqP2shlBwGmlKDHWJVxc_0FblZv5-IOvjtcLgzZOtTpxuJcQVwthUnseNaRjWwA2uPuMFReiPhV3zmi3OczmxIgz0FxvADaq-Kafjms5O6QdCbFgyoIOzvHRTjLiJ-feZt5ac13Cd3FrE8KEUljsPdl1aVmIDFHmE1rF36rS8WKrcqMft5XJP6Z69WG8YQG4O8yQ6zkz_GsDHMaCoR4h9N6hPmpS6nYyQX7ICzM7wj9qK0rFE5U5A5lKaCVz_9bCDw0idAaYISyroQ2BYqsumlkNWEglfEgDhN8qAI_VHLXbU2k7u90ebKyQ3rtSO3CG2Ky1MTYQ8dne3CIV7EckouoR5c2gDMmtUncPe8OqNS5-DtgIg-rpBfTqEMi.pwOf2eRsrevTOoWJocS0XQ' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://labs.google/fx/api/trpc/general.fetchUserAcknowledgement?input=%7B%22json%22%3A%7B%22acknowledgementVersion%22%3A%22FLOW_IMAGE_UPLOAD_TOS%22%7D%7D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g1$t1773352093$j59$l0$h1200730574; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..ZSYkBRh2i5corRGm._sIArT37OZcjAkh-A1ezzAi0uw45aFf3OM57G1-gB4lRkisOn309HK4MnQvF7HM9XyWPcAo0X6eXj5CtdGUqQ2uQNdflly_prvOsFgkY6p3oYTsykuVfI0t2D3Gz3f1Q3CBc2YLAKpkwyMwHwS_08T5hQryUljdiOex4FDmO7Qbc3Q2JHJM3ylHBHLZXrz3JyJx367WiXojrRZgmMFHiCJpHqVaFQQj8p0Ix2dMQEDNY-q37s-MVjDD9hcoclEOMA0X5MRF--P6LF-mV88NLaq79riWVWxg5YAJj0nVlzxWeF9uryyDghSxHq9CcaiBWETvkP6Hxme8yhSmZfa7WIS8oQnan6UwvJqK4F7VXaggDwxdRXuhr6zB5F4mDDWbsthfl-neKOYJHGxOhTuZDoXoQu5Jgme0VH6Zw-0lQFGbRlc7YIAB6hFtU2rOYvYusTMNCT3Bt1wpdBXq6qWnkW5lyJtph650k8U7AlI0_fHazxuTUXVmshZVbJ5il13Y66ry1zvuG4o1bwar8YToa2FrcwQw_c5NFdCg_9eEKop9THHzpxvXOlCWIHdW9IwZmm3bRuBDPzSafpXnGB1JcZP964FDBrKJ9J40QNhpwAuqP2shlBwGmlKDHWJVxc_0FblZv5-IOvjtcLgzZOtTpxuJcQVwthUnseNaRjWwA2uPuMFReiPhV3zmi3OczmxIgz0FxvADaq-Kafjms5O6QdCbFgyoIOzvHRTjLiJ-feZt5ac13Cd3FrE8KEUljsPdl1aVmIDFHmE1rF36rS8WKrcqMft5XJP6Z69WG8YQG4O8yQ6zkz_GsDHMaCoR4h9N6hPmpS6nYyQX7ICzM7wj9qK0rFE5U5A5lKaCVz_9bCDw0idAaYISyroQ2BYqsumlkNWEglfEgDhN8qAI_VHLXbU2k7u90ebKyQ3rtSO3CG2Ky1MTYQ8dne3CIV7EckouoR5c2gDMmtUncPe8OqNS5-DtgIg-rpBfTqEMi.pwOf2eRsrevTOoWJocS0XQ' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'content-type: text/plain;charset=UTF-8' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE=' \
+  --data-raw '{"onramp":["FLOW_UPGRADE_BANNER","FLOW_UPGRADE_BUTTON","FLOW_MANAGE_AI_CREDITS","FLOW_VIDEO_TOOLTIP_UPSELL","FLOW_MODEL_UPGRADE","FLOW_MANAGE_MEMBERSHIP"]}'
+
+curl 'https://aisandbox-pa.googleapis.com/v1:fetchUserRecommendations' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'content-type: text/plain;charset=UTF-8' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE=' \
+  --data-raw '{"onramp":["FLOW_UPGRADE_BANNER","FLOW_UPGRADE_BUTTON","FLOW_MANAGE_AI_CREDITS","FLOW_VIDEO_TOOLTIP_UPSELL","FLOW_MODEL_UPGRADE","FLOW_MANAGE_MEMBERSHIP"]}'
+
+curl 'https://www.google-analytics.com/g/collect?v=2&tid=G-X2GNH8R5NS&gtm=45je63b0v883763742z89224422997za200zd883763742&_p=1773352093016&gcs=G111&gcd=13r3r3l3l5l1&npa=0&dma=0&cid=1833889205.1766944976&ecid=1200730574&ul=vi-vn&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CGoogle%2520Chrome%3B145.0.7632.160%7CChromium%3B145.0.7632.160&uamb=0&uam=&uap=Windows&uapv=19.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=4&tag_exp=103116026~103200004~115616986~115938466~115938469~116024733~117484252&dr=https%3A%2F%2Flabs.google%2F&sid=1773352092&sct=122&seg=1&dl=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&dt=Flow&en=scroll&ep.is_eea=false&ep.page_url=https%3A%2F%2Flabs.google%2Ffx%2Fvi%2Ftools%2Fflow%2Fproject%2Fc60cda8a-fa2f-43db-ae87-7fc677435b88&_et=7&tfd=6597' \
+  -X 'POST' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-length: 0' \
+  -b 'ar_debug=1' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: no-cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'sec-fetch-storage-access: active' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://labs.google/fx/api/trpc/general.fetchUserAcknowledgement?input=%7B%22json%22%3A%7B%22acknowledgementVersion%22%3A%22FLOW_IMAGE_UPLOAD_TOS%22%7D%7D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'content-type: application/json' \
+  -b '__Host-next-auth.csrf-token=28d1e3215b42d00bcb4b37d81333c17328f2ba8f03c101e90f8201a995e940d1%7Cb671c8dedc7b0c1b6fc7df40ba4a5ddaac1a66b253f71006f0b67f47342fbf1b; _ga=GA1.1.1833889205.1766944976; _ga_5K7X2T4V16=GS2.1.s1767767637$o1$g0$t1767767638$j59$l0$h0; _ga_X5V89YHGSH=GS2.1.s1772058057$o7$g1$t1772058074$j43$l0$h0; EMAIL=%22levanlinh.kma%40gmail.com%22; email=levanlinh.kma%40gmail.com; __Secure-next-auth.callback-url=https%3A%2F%2Flabs.google%2Ffx%2Ftools%2Fflow; _ga_X2GNH8R5NS=GS2.1.s1773352092$o122$g1$t1773352093$j59$l0$h1200730574; __Secure-next-auth.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..oC2rOINNimi7rPeT.bFjILdZvBvleYSV3ilzovSQMKssKygoIZ0cbElTp2LZY6nrgZooCGg_2ocMuFr15_vkrddByu4usCiu0497SjixRHx0lfEa0bWOiqci6JWdCNnsjwVKQrGycW5uvtOR5iZiNsOWEQLn5iirTXuQogdnV7HsGPrR-rGdKI51_JT3dgv3FmfTf5joWxWY6GHveBjMv3v9Q-MEKFd2b1NKH7EiFSGX9ZJtKqnQ2CCp14Nt5FENlDXSOG8OI731a_wt3IA-UrfLQQxwVP_oGTKkCeXlr45M0HArkI9yhLHBosdS7liYRRX4Q3lvSSpgmBhfYe9R3vSMhmPFt937p5HxYOQDEaumLJHzxh0Yv3zE-fqZjSJg2Y7hJFuyhlZvmhue_pAsCwgO9Rdfwh5TMi4Oo7pFQAD-Vp6qKCpaED8sU4tGZFyamT49ejoyyn1exPv2X1QWu_3rCgW1Th4qn2u2jgNL_hAm23DcANJI1ObRepdRwizukNowRZ82hEZZT1ge3X_7EFF-9rnQ0TJXkIA1nkWUC7DA9-njdTG2WE9SGajc9PfTuhZcQ5Pwy2eK7joeJpZUjL-H8YbLiidj4BQZkY0hoZmQxgocaH7iNuAs9695g9h80SjusRw8D36RpGi_rrsgOMhJjyVYKHJozy2SGDhFYL44flePUycXxXWw-mLmLU1KTkRuD5fyjd49jlT0N_E9YVO-xzjjLrj_GRIB5_m4cRy9_tN1F4jJCsI09wU3ZaFgaWy5SkXixZ12rWcxqWC9WuV7hEgRr1XmVMwoMSYNKZ7sXhnIjPdH9Z97gbEgwCSg8j5bwDhah5ZShTTE5huyFbS522OM-HeOcyRBwb99Pioo9Ddy4uDj4TjsbeIKFD2alGZFSpo-dQRHFA77lN23zvgDQ5gUvdiRiBt_Mcf_9MzwDGQ9OwVdLvY7EDNK2v1UD1zNwVSCUP9VSqmPSj-wRoqFy8C52FIq3i47C6M_6_9zpYWKVbaR9.YAOr1K81ExcG0WHHEt7bsA' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+
+curl 'https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE='
+
+curl 'https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=6e278f5f-6fde-4dec-a9cc-9a4098bab579_upsampled' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'Referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0'
+
+curl 'https://storage.googleapis.com/ai-sandbox-videofx/video/6e278f5f-6fde-4dec-a9cc-9a4098bab579_upsampled?GoogleAccessId=labs-ai-sandbox-videoserver-prod@system.gserviceaccount.com&Expires=1773366621&Signature=jJpmWVmaKzuEHxvRFdyuL7VTvjMtPVme%2Fp3vkchc0%2FD3MYhZn2tMbsa109duFRmyrbOiEBbfMHN6Uo1ngl0AtcWYY7ilWPCknF%2BbmomoamUOnuzPwnauPEkf6BadrzkAKf4D9RU%2F4JyTmKV7EdxB7KLp8cYbbCBZlf0i5qEXmWtzzg6cY1dnLoA3JfL4SH6BsByclKlnT3B4LD%2BmfbKocx8fP%2FupOQm8TzG3MSgPAspcaLMPNDewR%2B%2BUD8xH%2BjXS39YLAKcLaj5UOq0xw4TYBnjbrr2QcYxqesOblrJCED568wDY1By9a4PENv07RxXM4YT8raJZadLTV7Ri1ymETg%3D%3D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026'
+
+curl 'https://aisandbox-pa.googleapis.com/v1/flow:batchLogFrontendEvents' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'content-type: text/plain;charset=UTF-8' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE=' \
+  --data-raw '{"events":[{"eventType":"FLOW_DOWNLOAD","metadata":{"sessionId":";1773352414808","createTime":"2026-03-12T21:50:28.668Z","additionalParams":{"USER_AGENT":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},"IS_DESKTOP":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"true"}}}}]}'
+
+curl 'https://aisandbox-pa.googleapis.com/v1:batchLog' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'content-type: text/plain;charset=UTF-8' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE=' \
+  --data-raw '{"appEvents":[{"event":"FLOW_DOWNLOAD","eventProperties":[{"key":"DOWNLOAD_TILES_COUNT","integerValue":1},{"key":"USER_AGENT","stringValue":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},{"key":"IS_DESKTOP","booleanValue":true}],"eventMetadata":{"sessionId":";1773352414808"},"eventTime":"2026-03-12T21:50:28.667Z"}]}'
+
+curl 'https://aisandbox-pa.googleapis.com/v1:batchLog' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'content-type: text/plain;charset=UTF-8' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE=' \
+  --data-raw '{"appEvents":[{"event":"FLOW_VIDEO_LATENCY","eventProperties":[{"key":"CURRENT_TIME_MS","doubleValue":1773352234213},{"key":"DURATION_MS","doubleValue":1161},{"key":"USER_AGENT","stringValue":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},{"key":"IS_DESKTOP","booleanValue":true}],"eventMetadata":{"sessionId":";1773352414808"},"eventTime":"2026-03-12T21:50:40.375Z"}]}'
+
+curl 'https://aisandbox-pa.googleapis.com/v1/flow:batchLogFrontendEvents' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'authorization: Bearer ya29.a0ATkoCc51A6VZ8mEOhAOZPIdfVV0c_5GOcRCNX2yluUHyoDtm1v3Be2eBMp_WDr79SlupligXNhlwMI264KlGF-vh82xShNg8jFGgS-N5zM2x24eBsTs0Tb710YLKgVsNk0l-xxRkTkyDzvG8lMSXM3fHZy3pGZGck6TrbNnwI7EWcZx5wYk3J6JtCydRCntTv_3bm-0QRx6GRHvvDsNSvJN4TP3aGzViH5--za1-_dfkWGUi9ttpp1yHOu0vcYoLtybERxkgx3kqcUfRE4s6_QRQq_t6cZ9IZ45RcF2o5n1JPJdeZg3L75s15GA1RKf7I05nDx49VjTdQsI5TIMJ4D5J1wjo-Jz-4XW_biHTjzsaCgYKAfoSARcSFQHGX2MiurkWDVvyY6sHs-JjdK-HBw0370' \
+  -H 'content-type: text/plain;charset=UTF-8' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026' \
+  -H 'x-client-data: CI+2yQEIo7bJAQipncoBCM7aygEIkqHLAQiFoM0BCJqszwE=' \
+  --data-raw '{"events":[{"eventType":"FLOW_VIDEO_LATENCY","metadata":{"sessionId":";1773352414808","createTime":"2026-03-12T21:50:40.375Z","additionalParams":{"CURRENT_TIME_MS":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"1773352234213"},"DURATION_MS":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"1161"},"USER_AGENT":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"},"IS_DESKTOP":{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"true"}}}}]}'
+
+curl 'https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=6e278f5f-6fde-4dec-a9cc-9a4098bab579_upsampled' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'Referer: https://labs.google/fx/vi/tools/flow/project/c60cda8a-fa2f-43db-ae87-7fc677435b88' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0'
+
+curl 'https://storage.googleapis.com/ai-sandbox-videofx/video/6e278f5f-6fde-4dec-a9cc-9a4098bab579_upsampled?GoogleAccessId=labs-ai-sandbox-videoserver-prod@system.gserviceaccount.com&Expires=1773366621&Signature=jJpmWVmaKzuEHxvRFdyuL7VTvjMtPVme%2Fp3vkchc0%2FD3MYhZn2tMbsa109duFRmyrbOiEBbfMHN6Uo1ngl0AtcWYY7ilWPCknF%2BbmomoamUOnuzPwnauPEkf6BadrzkAKf4D9RU%2F4JyTmKV7EdxB7KLp8cYbbCBZlf0i5qEXmWtzzg6cY1dnLoA3JfL4SH6BsByclKlnT3B4LD%2BmfbKocx8fP%2FupOQm8TzG3MSgPAspcaLMPNDewR%2B%2BUD8xH%2BjXS39YLAKcLaj5UOq0xw4TYBnjbrr2QcYxqesOblrJCED568wDY1By9a4PENv07RxXM4YT8raJZadLTV7Ri1ymETg%3D%3D' \
+  -H 'accept: */*' \
+  -H 'accept-language: vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7' \
+  -H 'if-modified-since: Wed, 11 Mar 2026 10:07:36 GMT' \
+  -H 'if-none-match: "c49f0d1677bcee67480c25c621835213"' \
+  -H 'origin: https://labs.google' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://labs.google/' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Windows"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'x-browser-channel: stable' \
+  -H 'x-browser-copyright: Copyright 2026 Google LLC. All Rights reserved.' \
+  -H 'x-browser-validation: mGtxj/IERUi4uQ9hLSvZZF4DQgA=' \
+  -H 'x-browser-year: 2026'

@@ -1,0 +1,597 @@
+{
+  "group_id": "group_20260316_004229",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 4,
+  "tasks": [
+    {
+      "id": "group_20260316_004229_task_0",
+      "prompt": "{\"scene_number\": 1, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman slowly improving himself step by step, small upward arrow showing progress, hand drawn animation, simple doodle style\", \"description_vi\": \"Nhân vật người que đứng trước bảng đen, từng bước leo lên các bậc nhỏ tượng trưng cho việc cải thiện bản thân mỗi ngày.\", \"narration_vi\": \"Cuộc sống không cần hoàn hảo, chỉ cần mỗi ngày ta cố gắng tốt hơn hôm qua một chút là đủ rồi\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_1",
+      "prompt": "{\"scene_number\": 2, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman facing obstacles like rocks then becoming stronger and standing tall, hand drawn stickman animation\", \"description_vi\": \"Người que gặp các tảng đá cản đường, sau đó đẩy qua và trở nên mạnh mẽ hơn.\", \"narration_vi\": \"Khó khăn đôi khi xuất hiện không phải để quật ngã bạn mà để rèn luyện trái tim mạnh mẽ hơn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_2",
+      "prompt": "{\"scene_number\": 3, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman noticing small stars, heart and little objects around him, showing appreciation, hand drawn style\", \"description_vi\": \"Người que nhìn thấy những ngôi sao và trái tim nhỏ xung quanh, mỉm cười trân trọng những điều giản dị.\", \"narration_vi\": \"Hãy trân trọng những điều nhỏ bé quanh mình vì chính chúng âm thầm góp lại thành hạnh phúc lớn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_3",
+      "prompt": "{\"scene_number\": 4, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, sunrise drawn in chalk, white stickman opening a blank book and starting to write, hand drawn animation\", \"description_vi\": \"Mặt trời mọc trên bảng đen, người que mở một cuốn sách trắng và bắt đầu viết câu chuyện mới.\", \"narration_vi\": \"Mỗi buổi sáng thức dậy cuộc đời lại trao cho ta một trang giấy mới để tiếp tục viết ước mơ hôm nay\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_4",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_5",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_6",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_7",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_8",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_9",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_10",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_11",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_12",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_13",
+      "prompt": "{\"scene_number\": 1, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman slowly improving himself step by step, small upward arrow showing progress, hand drawn animation, simple doodle style\", \"description_vi\": \"Nhân vật người que đứng trước bảng đen, từng bước leo lên các bậc nhỏ tượng trưng cho việc cải thiện bản thân mỗi ngày.\", \"narration_vi\": \"Cuộc sống không cần hoàn hảo, chỉ cần mỗi ngày ta cố gắng tốt hơn hôm qua một chút là đủ rồi\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_14",
+      "prompt": "{\"scene_number\": 2, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman facing obstacles like rocks then becoming stronger and standing tall, hand drawn stickman animation\", \"description_vi\": \"Người que gặp các tảng đá cản đường, sau đó đẩy qua và trở nên mạnh mẽ hơn.\", \"narration_vi\": \"Khó khăn đôi khi xuất hiện không phải để quật ngã bạn mà để rèn luyện trái tim mạnh mẽ hơn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_15",
+      "prompt": "{\"scene_number\": 3, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman noticing small stars, heart and little objects around him, showing appreciation, hand drawn style\", \"description_vi\": \"Người que nhìn thấy những ngôi sao và trái tim nhỏ xung quanh, mỉm cười trân trọng những điều giản dị.\", \"narration_vi\": \"Hãy trân trọng những điều nhỏ bé quanh mình vì chính chúng âm thầm góp lại thành hạnh phúc lớn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_16",
+      "prompt": "{\"scene_number\": 4, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, sunrise drawn in chalk, white stickman opening a blank book and starting to write, hand drawn animation\", \"description_vi\": \"Mặt trời mọc trên bảng đen, người que mở một cuốn sách trắng và bắt đầu viết câu chuyện mới.\", \"narration_vi\": \"Mỗi buổi sáng thức dậy cuộc đời lại trao cho ta một trang giấy mới để tiếp tục viết ước mơ hôm nay\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_17",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_18",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_19",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_20",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_21",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_22",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_23",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_24",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_25",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_26",
+      "prompt": "{\"scene_number\": 1, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman slowly improving himself step by step, small upward arrow showing progress, hand drawn animation, simple doodle style\", \"description_vi\": \"Nhân vật người que đứng trước bảng đen, từng bước leo lên các bậc nhỏ tượng trưng cho việc cải thiện bản thân mỗi ngày.\", \"narration_vi\": \"Cuộc sống không cần hoàn hảo, chỉ cần mỗi ngày ta cố gắng tốt hơn hôm qua một chút là đủ rồi\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_27",
+      "prompt": "{\"scene_number\": 2, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman facing obstacles like rocks then becoming stronger and standing tall, hand drawn stickman animation\", \"description_vi\": \"Người que gặp các tảng đá cản đường, sau đó đẩy qua và trở nên mạnh mẽ hơn.\", \"narration_vi\": \"Khó khăn đôi khi xuất hiện không phải để quật ngã bạn mà để rèn luyện trái tim mạnh mẽ hơn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_28",
+      "prompt": "{\"scene_number\": 3, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman noticing small stars, heart and little objects around him, showing appreciation, hand drawn style\", \"description_vi\": \"Người que nhìn thấy những ngôi sao và trái tim nhỏ xung quanh, mỉm cười trân trọng những điều giản dị.\", \"narration_vi\": \"Hãy trân trọng những điều nhỏ bé quanh mình vì chính chúng âm thầm góp lại thành hạnh phúc lớn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_29",
+      "prompt": "{\"scene_number\": 4, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, sunrise drawn in chalk, white stickman opening a blank book and starting to write, hand drawn animation\", \"description_vi\": \"Mặt trời mọc trên bảng đen, người que mở một cuốn sách trắng và bắt đầu viết câu chuyện mới.\", \"narration_vi\": \"Mỗi buổi sáng thức dậy cuộc đời lại trao cho ta một trang giấy mới để tiếp tục viết ước mơ hôm nay\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_30",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_31",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_32",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_33",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_34",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_35",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_36",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_37",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_38",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_39",
+      "prompt": "{\"scene_number\": 1, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman slowly improving himself step by step, small upward arrow showing progress, hand drawn animation, simple doodle style\", \"description_vi\": \"Nhân vật người que đứng trước bảng đen, từng bước leo lên các bậc nhỏ tượng trưng cho việc cải thiện bản thân mỗi ngày.\", \"narration_vi\": \"Cuộc sống không cần hoàn hảo, chỉ cần mỗi ngày ta cố gắng tốt hơn hôm qua một chút là đủ rồi\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_40",
+      "prompt": "{\"scene_number\": 2, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman facing obstacles like rocks then becoming stronger and standing tall, hand drawn stickman animation\", \"description_vi\": \"Người que gặp các tảng đá cản đường, sau đó đẩy qua và trở nên mạnh mẽ hơn.\", \"narration_vi\": \"Khó khăn đôi khi xuất hiện không phải để quật ngã bạn mà để rèn luyện trái tim mạnh mẽ hơn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_41",
+      "prompt": "{\"scene_number\": 3, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman noticing small stars, heart and little objects around him, showing appreciation, hand drawn style\", \"description_vi\": \"Người que nhìn thấy những ngôi sao và trái tim nhỏ xung quanh, mỉm cười trân trọng những điều giản dị.\", \"narration_vi\": \"Hãy trân trọng những điều nhỏ bé quanh mình vì chính chúng âm thầm góp lại thành hạnh phúc lớn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_42",
+      "prompt": "{\"scene_number\": 4, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, sunrise drawn in chalk, white stickman opening a blank book and starting to write, hand drawn animation\", \"description_vi\": \"Mặt trời mọc trên bảng đen, người que mở một cuốn sách trắng và bắt đầu viết câu chuyện mới.\", \"narration_vi\": \"Mỗi buổi sáng thức dậy cuộc đời lại trao cho ta một trang giấy mới để tiếp tục viết ước mơ hôm nay\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_43",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_44",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_45",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_46",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_47",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_48",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_49",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_50",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_51",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_52",
+      "prompt": "{\"scene_number\": 1, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman slowly improving himself step by step, small upward arrow showing progress, hand drawn animation, simple doodle style\", \"description_vi\": \"Nhân vật người que đứng trước bảng đen, từng bước leo lên các bậc nhỏ tượng trưng cho việc cải thiện bản thân mỗi ngày.\", \"narration_vi\": \"Cuộc sống không cần hoàn hảo, chỉ cần mỗi ngày ta cố gắng tốt hơn hôm qua một chút là đủ rồi\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_53",
+      "prompt": "{\"scene_number\": 2, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman facing obstacles like rocks then becoming stronger and standing tall, hand drawn stickman animation\", \"description_vi\": \"Người que gặp các tảng đá cản đường, sau đó đẩy qua và trở nên mạnh mẽ hơn.\", \"narration_vi\": \"Khó khăn đôi khi xuất hiện không phải để quật ngã bạn mà để rèn luyện trái tim mạnh mẽ hơn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_54",
+      "prompt": "{\"scene_number\": 3, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman noticing small stars, heart and little objects around him, showing appreciation, hand drawn style\", \"description_vi\": \"Người que nhìn thấy những ngôi sao và trái tim nhỏ xung quanh, mỉm cười trân trọng những điều giản dị.\", \"narration_vi\": \"Hãy trân trọng những điều nhỏ bé quanh mình vì chính chúng âm thầm góp lại thành hạnh phúc lớn mỗi ngày\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_55",
+      "prompt": "{\"scene_number\": 4, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, sunrise drawn in chalk, white stickman opening a blank book and starting to write, hand drawn animation\", \"description_vi\": \"Mặt trời mọc trên bảng đen, người que mở một cuốn sách trắng và bắt đầu viết câu chuyện mới.\", \"narration_vi\": \"Mỗi buổi sáng thức dậy cuộc đời lại trao cho ta một trang giấy mới để tiếp tục viết ước mơ hôm nay\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_56",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_57",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_58",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_59",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_60",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_61",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_62",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_63",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_004229_task_64",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

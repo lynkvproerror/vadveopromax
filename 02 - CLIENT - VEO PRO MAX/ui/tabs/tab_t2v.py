@@ -34,29 +34,3 @@ class TabT2V(GenerationTabBase):
     SHOW_IMAGE_LIBRARY = False
     IMAGE_MODE = None
     CLEAR_AFTER_ADD = False
-    
-    def _on_help(self):
-        """Show help for T2V workflow."""
-        from ui.popups.complex_popups import HelpTooltipPopup
-        help_text = """T2V (Text to Video) Workflow:
-
-1. Enter prompts in the input area (one per line)
-2. Use Continuation toggle to chain video sequences
-3. Click Add to Queue when ready
-
-Prompt Formats:
-- Plain text: one prompt per line
-- JSON scene: {"prompt_en": "...", "duration": "8s"}
-  → Auto-detects duration and metadata
-
-Settings:
-- Aspect Ratio: Choose between Landscape, Portrait, or Square
-- Outputs/Prompt: Number of videos per prompt
-- AI Model: Veo 3.1 Fast or Quality mode
-- Download Quality: 1080p or 720p
-
-Tips:
-- Use descriptive prompts for best results
-- Chain prompts with Continuation for longer sequences"""
-        
-        HelpTooltipPopup(self, "T2V Workflow", help_text).exec()

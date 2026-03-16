@@ -1,0 +1,579 @@
+{
+  "group_id": "group_20260315_104900",
+  "workflow": "I2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_i2v_s_fast_ultra_relaxed",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260315_104900_task_0",
+      "prompt": "[Scene 1] Establishing, Garden. Wide shot, pan right. 3D Stylized Animation. Vuong Garden. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, and [Thúy Vân] Thúy Vân, 17-year-old sister, representing peaceful beauty, 1.60m, balanced and healthy, warm cream, radiant and healthy glow, Round \"full moon\" face, kind eyes, gentle smile, dimples, deep black, thick hair tied in a neat bun decorated with fresh flowers, light cherry blossom pink silk robe, beige silk traditional trousers, small gold flower earrings, walking among peach blossoms. Audio of wind through trees, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_1",
+      "prompt": "[Scene 2] Character action, Music. Medium shot, static. 3D Stylized Animation. Vuong Garden. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, plucking lute strings with graceful fingers. Audio of lute music, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_2",
+      "prompt": "[Scene 3] Character action, Playful. Medium shot, pan left. 3D Stylized Animation. Vuong Garden. [Thúy Vân] Thúy Vân, 17-year-old sister, representing peaceful beauty, 1.60m, balanced and healthy, warm cream, radiant and healthy glow, Round \"full moon\" face, kind eyes, gentle smile, dimples, deep black, thick hair tied in a neat bun decorated with fresh flowers, light cherry blossom pink silk robe, beige silk traditional trousers, small gold flower earrings, laughing and chasing a yellow butterfly. Audio of light laughter, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_3",
+      "prompt": "[Scene 4] Character emotion, Melancholy. Close up, static. 3D Stylized Animation. Vuong Garden. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, looking at the pond with a faint, sad smile. Audio of water rippling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_4",
+      "prompt": "[Scene 5] Establishing, Festival. Wide shot, forward. 3D Stylized Animation. Spring Festival Field. Crowds of people walking through white pear blossoms. Audio of distant festive chatter, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_5",
+      "prompt": "[Scene 6] Character entry, Heroic. Medium shot, pan right. 3D Stylized Animation. Spring Festival Field. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, riding a white horse through the mist. Audio of horse hooves on grass, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_6",
+      "prompt": "[Scene 7] Meeting, Romance. Close up, multi-segment. 3D Stylized Animation. Spring Festival Field. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, looking up in surprise >> [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, stopping his horse and staring. Audio of a sudden harp glissando, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_7",
+      "prompt": "[Scene 8] Interaction, Discovery. Medium shot, low angle. 3D Stylized Animation. Spring Festival Field. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, picking up a gold hairpin from the grass. Audio of rustling grass, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_8",
+      "prompt": "[Scene 9] Character emotion, Shyness. Medium shot, static. 3D Stylized Animation. Spring Festival Field. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, blushing and bowing her head. Audio of soft wind, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_9",
+      "prompt": "[Scene 10] Character action, Devotion. Close up, static. 3D Stylized Animation. Spring Festival Field. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, pressing the hairpin to his chest while watching her leave. Audio of a heartbeat thumping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_10",
+      "prompt": "[Scene 11] Atmospheric, Night. Wide shot, static. 3D Stylized Animation. Moonlight Terrace. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, leaning on a wooden railing under a silver moon. Audio of crickets chirping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_11",
+      "prompt": "[Scene 12] Action, Secret. Medium shot, upward angle. 3D Stylized Animation. Moonlight Terrace. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, climbing over a stone wall into the garden. Audio of stone scraping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_12",
+      "prompt": "[Scene 13] Interaction, Romance. Medium shot, pan left. 3D Stylized Animation. Moonlight Terrace. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, and [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, standing together under a weeping willow. Audio of leaves rustling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_13",
+      "prompt": "[Scene 14] Gift, Promise. Close up, static. 3D Stylized Animation. Moonlight Terrace. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, placing a glowing jade pendant into her hand. Audio of a soft chime, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_14",
+      "prompt": "[Scene 15] Sacrifice, Token. Medium shot, static. 3D Stylized Animation. Moonlight Terrace. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, cutting a lock of her hair with small scissors. Audio of a sharp snip, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_15",
+      "prompt": "[Scene 16] Ritual, Oath. Medium shot, static. 3D Stylized Animation. Moonlight Terrace. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, and [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, lighting incense together. Audio of fire crackling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_16",
+      "prompt": "[Scene 17] Detail, Connection. Extreme close up, static. 3D Stylized Animation. Moonlight Terrace. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, and [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, interlocking their fingers. Audio of soft breathing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_17",
+      "prompt": "[Scene 18] Atmospheric, Peace. Wide shot, static. 3D Stylized Animation. Moonlight Terrace. The moon reflecting perfectly in the still garden pond. Audio of a distant owl, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_18",
+      "prompt": "[Scene 19] Departure, Sadness. Medium shot, pan right. 3D Stylized Animation. Vuong Garden gate. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, waving goodbye while walking away. Audio of footsteps fading, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_19",
+      "prompt": "[Scene 20] Character action, Longing. Wide shot, static. 3D Stylized Animation. Vuong Garden gate. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, standing alone watching the empty road. Audio of wind howling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_20",
+      "prompt": "[Scene 21] Omen, Change. Wide shot, tilt up. 3D Stylized Animation. Vuong Garden. A heavy dark cloud blocking the bright sun. Audio of distant thunder, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_21",
+      "prompt": "[Scene 22] Action, Chaos. Medium shot, forward. 3D Stylized Animation. Vuong Garden. Soldiers kicking down the wooden gate and smashing flower pots. Audio of wood splintering, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_22",
+      "prompt": "[Scene 23] Arrest, Distress. Wide shot, static. 3D Stylized Animation. Vuong Garden. Soldiers dragging Kiều's father away in heavy iron chains. Audio of metal clanking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_23",
+      "prompt": "[Scene 24] Character emotion, Grief. Close up, static. 3D Stylized Animation. Vuong Garden. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, weeping with her hands over her face. Audio of sobbing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_24",
+      "prompt": "[Scene 25] Interaction, Negotiation. Medium shot, multi-segment. 3D Stylized Animation. Vuong Garden. A middleman mouth open speaking firmly >> [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, nodding while listening with a pale face. Audio of hushed whispering, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_25",
+      "prompt": "[Scene 26] Internal conflict, Choice. Medium shot, static. 3D Stylized Animation. Vuong Garden. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, looking at the jade pendant then looking at her crying mother. Audio of a dramatic violin note, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_26",
+      "prompt": "[Scene 27] Character entry, Villainy. Medium shot, pan left. 3D Stylized Animation. Vuong Garden. [Mã Giám Sinh] Mã Giám Sinh, 45-year-old human trafficker, deceitful and greedy, 1.70m, slightly slouching posture, sallow tan, uneven texture, Narrow shifty eyes, thin mustache, sharp features, pretentious smirk, dark brown, greased back under a flashy hat, dark blood red silk robe with gaudy gold embroidery, black silk pants, heavy gold rings on multiple fingers, walking in, adjusting his silk robes arrogantly. Audio of silk rustling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_27",
+      "prompt": "[Scene 28] Greed, Transaction. Close up, static. 3D Stylized Animation. Vuong Garden. [Mã Giám Sinh] Mã Giám Sinh, 45-year-old human trafficker, deceitful and greedy, 1.70m, slightly slouching posture, sallow tan, uneven texture, Narrow shifty eyes, thin mustache, sharp features, pretentious smirk, dark brown, greased back under a flashy hat, dark blood red silk robe with gaudy gold embroidery, black silk pants, heavy gold rings on multiple fingers, counting a stack of gold coins with a smirk. Audio of coins clinking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_28",
+      "prompt": "[Scene 29] Action, Sacrifice. Medium shot, multi-segment. 3D Stylized Animation. Vuong Garden. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, dipping a brush in ink >> [Thúy Kiều] signing a contract with a trembling hand. Audio of brush on paper, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_29",
+      "prompt": "[Scene 30] Interaction, Farewell. Medium shot, static. 3D Stylized Animation. Vuong Garden. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, handing the jade pendant to [Thúy Vân] Thúy Vân, 17-year-old sister, representing peaceful beauty, 1.60m, balanced and healthy, warm cream, radiant and healthy glow, Round \"full moon\" face, kind eyes, gentle smile, dimples, deep black, thick hair tied in a neat bun decorated with fresh flowers, light cherry blossom pink silk robe, beige silk traditional trousers, small gold flower earrings, while crying. Audio of a soft sob, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_30",
+      "prompt": "[Scene 31] Departure, Exile. Wide shot, pan right. 3D Stylized Animation. Road. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, entering a wooden carriage and looking back. Audio of carriage wheels creaking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_31",
+      "prompt": "[Scene 32] Transition, Journey. Wide shot, static. 3D Stylized Animation. Muddy Road. The carriage moving through a heavy rainstorm. Audio of heavy rain, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_32",
+      "prompt": "[Scene 33] Arrival, Gloom. Medium shot, forward. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, stepping out of the carriage under flickering red lanterns. Audio of wind blowing lanterns, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_33",
+      "prompt": "[Scene 34] Setting, Trap. Medium shot, static. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, standing in a room filled with heavy red silk curtains. Audio of a door locking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_34",
+      "prompt": "[Scene 35] Emotion, Despair. Close up, static. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, gasping as she realizes the deception. Audio of a sharp intake of breath, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_35",
+      "prompt": "[Scene 36] Character action, Isolation. Medium shot, low angle. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, staring out of a small window with iron bars. Audio of distant thunder, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_36",
+      "prompt": "[Scene 37] Montage, Suffering. Medium shot, pan left. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, playing the lute for laughing, shadowy figures. Audio of fast, frantic lute music, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_37",
+      "prompt": "[Scene 38] Character detail, Fatigue. Close up, static. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, with dark circles under her eyes and a pale face. Audio of a low hum, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_38",
+      "prompt": "[Scene 39] Action, Escape. Medium shot, pan right. 3D Stylized Animation. The Brothel hallway. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, running down a dark corridor but being caught by a guard. Audio of running footsteps, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_39",
+      "prompt": "[Scene 40] Character action, Hopelessness. Medium shot, static. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, holding a small dagger and looking at her reflection. Audio of a metallic ring, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_40",
+      "prompt": "[Scene 41] Character action, Resilience. Medium shot, static. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, throwing the dagger onto the floor and sitting down. Audio of a metal thud, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_41",
+      "prompt": "[Scene 42] Suspense, Entry. Wide shot, static. 3D Stylized Animation. The Brothel. A giant shadow of a man appearing against the paper door. Audio of a heavy footstep, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_42",
+      "prompt": "[Scene 43] Character entry, Power. Medium shot, low angle. 3D Stylized Animation. The Brothel. [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, stepping into the room, his red cape flowing. Audio of a deep, resonant bell, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_43",
+      "prompt": "[Scene 44] Interaction, Respect. Close up, static. 3D Stylized Animation. The Brothel. [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, looking at [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, with an attentive, respectful expression. Audio of silence, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_44",
+      "prompt": "[Scene 45] Character action, Music. Medium shot, static. 3D Stylized Animation. The Brothel. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, playing a loud, heroic song on her lute. Audio of powerful lute chords, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_45",
+      "prompt": "[Scene 46] Character emotion, Joy. Medium shot, static. 3D Stylized Animation. The Brothel. [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, mouth open laughing heartily and clapping his hands. Audio of deep laughter, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_46",
+      "prompt": "[Scene 47] Action, Rescue. Medium shot, multi-segment. 3D Stylized Animation. The Brothel. [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, kicking the door off its hinges >> [Từ Hải] leading [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, out by the hand. Audio of wood crashing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_47",
+      "prompt": "[Scene 48] Action, Protection. Medium shot, static. 3D Stylized Animation. The Brothel gate. [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, placing a heavy red cloak over Kiều's shoulders. Audio of fabric fluttering, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_48",
+      "prompt": "[Scene 49] Transition, Freedom. Wide shot, pan left. 3D Stylized Animation. Mountain Path. [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, and [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, riding horses toward a high fortress. Audio of galloping horses, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_49",
+      "prompt": "[Scene 50] Character action, Status. Medium shot, static. 3D Stylized Animation. Rebel Fortress. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, sitting on a carved wooden throne next to [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword,. Audio of a trumpet fanfare, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_50",
+      "prompt": "[Scene 51] Action, Justice. Wide shot, forward. 3D Stylized Animation. Rebel Fortress. [Mã Giám Sinh] Mã Giám Sinh, 45-year-old human trafficker, deceitful and greedy, 1.70m, slightly slouching posture, sallow tan, uneven texture, Narrow shifty eyes, thin mustache, sharp features, pretentious smirk, dark brown, greased back under a flashy hat, dark blood red silk robe with gaudy gold embroidery, black silk pants, heavy gold rings on multiple fingers, being led into the courtyard in heavy chains. Audio of angry shouting, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_51",
+      "prompt": "[Scene 52] Character emotion, Judgment. Close up, static. 3D Stylized Animation. Rebel Fortress. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, looking down at her captors with a firm, stern expression. Audio of wind whistling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_52",
+      "prompt": "[Scene 53] Action, Resolution. Medium shot, pan right. 3D Stylized Animation. Rebel Fortress. Soldiers leading the villains away into the dark. Audio of dragging chains, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_53",
+      "prompt": "[Scene 54] Warfare, Chaos. Wide shot, static. 3D Stylized Animation. Valley. A massive battle with red flags waving and smoke rising. Audio of distant war drums, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_54",
+      "prompt": "[Scene 55] Character action, Tragedy. Medium shot, static. 3D Stylized Animation. Battlefield. [Từ Hải] Từ Hải, 35-year-old rebel hero, Kieu's savior and husband, 1.95m, massive and muscular frame, deep bronze, rugged and weathered, \"Tiger\" beard, thick eyebrows, piercing confident eyes, square jaw, coarse black hair, partially tied with a red ribbon, fire engine red warrior's tunic with leather armor plates, dark charcoal combat trousers, golden dragon-head belt buckle, massive broadsword, standing tall but being surrounded by a thick white mist. Audio of a mournful flute, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_55",
+      "prompt": "[Scene 56] Character action, Wandering. Wide shot, pan left. 3D Stylized Animation. Riverbank. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, walking alone by a wide, flowing river. Audio of water rushing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_56",
+      "prompt": "[Scene 57] Character entry, Search. Medium shot, forward. 3D Stylized Animation. Riverbank. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, in official robes searching through the tall grass. Audio of rustling reeds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_57",
+      "prompt": "[Scene 58] Discovery, Mystery. Wide shot, static. 3D Stylized Animation. Riverbank. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, seeing a woman in white robes standing by a small hut. Audio of a soft bird call, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_58",
+      "prompt": "[Scene 59] Recognition, Emotion. Close up, multi-segment. 3D Stylized Animation. Riverbank. [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, turning around slowly >> [Thúy Kiều] gasping in shock. Audio of a sudden orchestral swell, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_59",
+      "prompt": "[Scene 60] Climax, Reunion. Medium shot, multi-segment. 3D Stylized Animation. Riverbank. [Kim Trọng] Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, Kim Trọng, 21-year-old noble scholar, Kieu's first love, 1.78m, tall and poised, light wheat, smooth scholarly complexion, High forehead, intelligent eyes, straight nose, noble expression, dark charcoal black, tied up in a scholar's cap, light steel blue scholar's robe with subtle cloud patterns, slate gray traditional trousers, white jade belt pendant, running across a bridge >> [Kim Trọng] embracing [Thúy Kiều] Thúy Kiều, 19-year-old female protagonist, a talented musician and poet, 1.62m, slender and graceful, porcelain ivory, smooth and luminous, Almond-shaped \"autumn water\" eyes, thin \"spring mountain\" eyebrows, small rose-bud lips, jet black, long flowing hair styled with a silver phoenix hairpin, soft lavender silk yếm with a translucent white outer robe, pure white flowing silk skirt, silver phoenix hairpin, small turquoise jade pendant, tightly. Audio of running footsteps, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_60",
+      "prompt": "[Scene 61] Family, Joy. Wide shot, pan right. 3D Stylized Animation. Riverbank. [Thúy Vân] Thúy Vân, 17-year-old sister, representing peaceful beauty, 1.60m, balanced and healthy, warm cream, radiant and healthy glow, Round \"full moon\" face, kind eyes, gentle smile, dimples, deep black, thick hair tied in a neat bun decorated with fresh flowers, light cherry blossom pink silk robe, beige silk traditional trousers, small gold flower earrings, and her parents running toward Kiều with open arms. Audio of joyful shouting, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_61",
+      "prompt": "[Scene 62] Atmospheric, Hope. Wide shot, static. 3D Stylized Animation. Riverbank. The entire family standing together as a golden sun rises. Audio of birds singing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_104900_task_62",
+      "prompt": "[Scene 63] Final shot, Legacy. Close up, tilt down. 3D Stylized Animation. Riverbank. Kiều's lute leaning against a tree with a white blossom falling on it. Audio of a single lute note, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

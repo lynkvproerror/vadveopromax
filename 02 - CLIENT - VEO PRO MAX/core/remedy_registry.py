@@ -253,9 +253,11 @@ _ACTIONS = {
 REMEDY_CHAINS: Dict[ErrorType, List[Remedy]] = {
     
     ErrorType.RECAPTCHA_403: [
+        Remedy("simulate_activity", "Warm up tab before reload", 2),
         Remedy("reload_page", "Full page reload → fresh reCAPTCHA context", 10),
+        Remedy("borrow_headers", "Copy x-client-data from healthy account", 0),
         Remedy("soft_recovery", "Navigate away + back → reset reCAPTCHA", 8),
-        Remedy("hard_restart", "Kill Chrome + relaunch for fresh reCAPTCHA", 15),
+        Remedy("soft_recovery", "Extended soft recovery — navigate away/back", 15),
         Remedy("suspend", "Suspend account + migrate tasks", 0),
     ],
     
@@ -263,24 +265,24 @@ REMEDY_CHAINS: Dict[ErrorType, List[Remedy]] = {
         Remedy("simulate_activity", "Warm up tab with simulated activity", 3),
         Remedy("reload_tab", "Reload active tab", 5),
         Remedy("soft_recovery", "Soft browser recovery", 8),
-        Remedy("hard_restart", "Hard browser restart", 15),
+        Remedy("soft_recovery", "Extended soft recovery — navigate away/back", 15),
     ],
     
     ErrorType.TOKEN_TOO_SHORT: [
         Remedy("reload_page", "Navigate to /tools/flow for reCAPTCHA", 5),
         Remedy("soft_recovery", "Fresh reCAPTCHA context via soft recovery", 8),
-        Remedy("hard_restart", "Hard browser restart", 15),
+        Remedy("soft_recovery", "Extended soft recovery — navigate away/back", 15),
     ],
     
     ErrorType.TAB_FROZEN: [
         Remedy("reload_tab", "Reload frozen tab", 5),
-        Remedy("hard_restart", "Kill Chrome + relaunch", 15),
+        Remedy("soft_recovery", "Extended soft recovery — navigate away/back", 15),
     ],
     
     ErrorType.XCD_STUCK: [
         Remedy("borrow_headers", "Copy x-client-data from healthy account", 0),
         Remedy("reload_page", "Trigger Variations enrollment", 10),
-        Remedy("hard_restart", "Restart Chrome for fresh enrollment", 15),
+        Remedy("soft_recovery", "Extended soft recovery — navigate away/back", 15),
     ],
     
     ErrorType.AUTH_EXPIRED: [

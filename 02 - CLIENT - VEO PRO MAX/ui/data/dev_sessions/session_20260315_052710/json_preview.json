@@ -1,0 +1,147 @@
+{
+  "group_id": "group_20260315_052514",
+  "workflow": "I2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_i2v_s_fast_ultra_relaxed",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260315_052514_task_0",
+      "prompt": "[Scene 1] Intro, Morning. Wide shot, Pan left. 3D Stylized Animation. Humble cottage yard. [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, sweeping dirt with a broom >> [Cám] Cám, 17-year-old spoiled and lazy half-sister, 1.58m, slightly shorter than Tấm, pale cream, pampered and unblemished skin, Sharp chin, narrow cat-like eyes, frequent haughty smirk, thin eyebrows, jet black, styled in elaborate twin buns with colorful silk ribbons, vibrant hot pink \"yếm\" with a bright yellow silk outer robe, deep indigo purple silk skirt, flashy gold hairpins and multiple colorful beaded necklaces, reclining on a hammock eating fruit >> [Mẹ Cám] Mẹ Cám, 45-year-old cunning and biased stepmother, 1.62m, rigid posture, light tan, slightly weathered with sharp character lines, High prominent cheekbones, sharp calculating gaze, a small \"beauty mark\" (mole) near her lip, charcoal grey-streaked black hair tied in a tight bun under a black \"mỏ quạ\" headscarf, dark maroon traditional heavy silk robe, solid black silk trousers, dark teal jade ring and a dark wooden hand fan, watching with a stern frown. Audio of sweeping and birds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_1",
+      "prompt": "[Scene 2] Conflict, Challenge. Medium shot, Static. 3D Stylized Animation. Cottage yard. [Mẹ Cám] Mẹ Cám, 45-year-old cunning and biased stepmother, 1.62m, rigid posture, light tan, slightly weathered with sharp character lines, High prominent cheekbones, sharp calculating gaze, a small \"beauty mark\" (mole) near her lip, charcoal grey-streaked black hair tied in a tight bun under a black \"mỏ quạ\" headscarf, dark maroon traditional heavy silk robe, solid black silk trousers, dark teal jade ring and a dark wooden hand fan, speaking instructively while handing two bamboo baskets >> [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, attentive listening expression while holding a basket. Audio of wind rustling leaves, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_2",
+      "prompt": "[Scene 3] Labor, Pond. Wide shot, Forward. 3D Stylized Animation. Lotus pond. [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, wading in muddy water, diligently catching small fish and filling her basket with a focused expression. Audio of water splashing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_3",
+      "prompt": "[Scene 4] Deception, Betrayal. Medium shot, Pan right. 3D Stylized Animation. Pond edge. [Cám] Cám, 17-year-old spoiled and lazy half-sister, 1.58m, slightly shorter than Tấm, pale cream, pampered and unblemished skin, Sharp chin, narrow cat-like eyes, frequent haughty smirk, thin eyebrows, jet black, styled in elaborate twin buns with colorful silk ribbons, vibrant hot pink \"yếm\" with a bright yellow silk outer robe, deep indigo purple silk skirt, flashy gold hairpins and multiple colorful beaded necklaces, pointing excitedly at a distant bird >> [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, looking away curiously >> [Cám] Cám, 17-year-old spoiled and lazy half-sister, 1.58m, slightly shorter than Tấm, pale cream, pampered and unblemished skin, Sharp chin, narrow cat-like eyes, frequent haughty smirk, thin eyebrows, jet black, styled in elaborate twin buns with colorful silk ribbons, vibrant hot pink \"yếm\" with a bright yellow silk outer robe, deep indigo purple silk skirt, flashy gold hairpins and multiple colorful beaded necklaces, quickly swapping their baskets and running away with a smirk. Audio of running footsteps on grass, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_4",
+      "prompt": "[Scene 5] Sadness, Despair. Close-up, Static. 3D Stylized Animation. Pond edge under a grey sky. [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, looking into her empty basket and sobbing into her hands with a heartbroken expression. Audio of soft weeping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_5",
+      "prompt": "[Scene 6] Magic, Encounter. Medium shot, Forward. 3D Stylized Animation. Pond edge. A golden light erupting from the water >> [Bụt] Bụt, Ancient, eternal magical spirit/deity, 1.75m (usually floating 10cm off the ground), ethereal glowing ivory, radiating soft light, Long flowing white beard, eyes crinkled with kindness, serene and peaceful expression, snow-white long hair and beard, flowing like silk in a non-existent wind, translucent sky blue and white flowing celestial robes, matching ethereal robes that fade into mist at the bottom, glowing golden staff with a lotus bud top that emits sparkles, appearing with a kind smile and gesturing toward the ripples. Audio of magical shimmering chime, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_6",
+      "prompt": "[Scene 7] Friendship, Joy. Medium shot, Static. 3D Stylized Animation. Stone well. [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, dropping rice grains into the water and smiling as a golden fish leaps up to eat. Audio of water rippling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_7",
+      "prompt": "[Scene 8] Tragedy, Loss. Medium shot, Pan left. 3D Stylized Animation. Stone well. [Mẹ Cám] Mẹ Cám, 45-year-old cunning and biased stepmother, 1.62m, rigid posture, light tan, slightly weathered with sharp character lines, High prominent cheekbones, sharp calculating gaze, a small \"beauty mark\" (mole) near her lip, charcoal grey-streaked black hair tied in a tight bun under a black \"mỏ quạ\" headscarf, dark maroon traditional heavy silk robe, solid black silk trousers, dark teal jade ring and a dark wooden hand fan, and [Cám] Cám, 17-year-old spoiled and lazy half-sister, 1.58m, slightly shorter than Tấm, pale cream, pampered and unblemished skin, Sharp chin, narrow cat-like eyes, frequent haughty smirk, thin eyebrows, jet black, styled in elaborate twin buns with colorful silk ribbons, vibrant hot pink \"yếm\" with a bright yellow silk outer robe, deep indigo purple silk skirt, flashy gold hairpins and multiple colorful beaded necklaces, sneaking toward the well with a net >> [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, kneeling by the well later, staring at fish scales with a devastated face. Audio of sinister orchestral strings, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_8",
+      "prompt": "[Scene 9] Preparation, Festival. Wide shot, Pan right. 3D Stylized Animation. Village path. Villagers in colorful clothes walking toward a palace >> [Mẹ Cám] Mẹ Cám, 45-year-old cunning and biased stepmother, 1.62m, rigid posture, light tan, slightly weathered with sharp character lines, High prominent cheekbones, sharp calculating gaze, a small \"beauty mark\" (mole) near her lip, charcoal grey-streaked black hair tied in a tight bun under a black \"mỏ quạ\" headscarf, dark maroon traditional heavy silk robe, solid black silk trousers, dark teal jade ring and a dark wooden hand fan, and [Cám] Cám, 17-year-old spoiled and lazy half-sister, 1.58m, slightly shorter than Tấm, pale cream, pampered and unblemished skin, Sharp chin, narrow cat-like eyes, frequent haughty smirk, thin eyebrows, jet black, styled in elaborate twin buns with colorful silk ribbons, vibrant hot pink \"yếm\" with a bright yellow silk outer robe, deep indigo purple silk skirt, flashy gold hairpins and multiple colorful beaded necklaces, admiring their silk robes and laughing. Audio of distant festive drums, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_9",
+      "prompt": "[Scene 10] Cruelty, Task. Medium shot, Static. 3D Stylized Animation. Cottage interior. [Mẹ Cám] Mẹ Cám, 45-year-old cunning and biased stepmother, 1.62m, rigid posture, light tan, slightly weathered with sharp character lines, High prominent cheekbones, sharp calculating gaze, a small \"beauty mark\" (mole) near her lip, charcoal grey-streaked black hair tied in a tight bun under a black \"mỏ quạ\" headscarf, dark maroon traditional heavy silk robe, solid black silk trousers, dark teal jade ring and a dark wooden hand fan, mouth open speaking firmly while pouring a bowl of rice and paddy onto the floor >> [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, nodding while listening with a sad face. Audio of grains hitting the floor, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_10",
+      "prompt": "[Scene 11] Miracle, Help. Medium shot, Forward. 3D Stylized Animation. Cottage floor. [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, weeping over the mixed grains >> A flock of sparrows flying through the window and rapidly sorting the pile into two baskets. Audio of many wings flapping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_11",
+      "prompt": "[Scene 12] Magic, Transformation. Full shot, Static. 3D Stylized Animation. Cottage yard. [Bụt] Bụt, Ancient, eternal magical spirit/deity, 1.75m (usually floating 10cm off the ground), ethereal glowing ivory, radiating soft light, Long flowing white beard, eyes crinkled with kindness, serene and peaceful expression, snow-white long hair and beard, flowing like silk in a non-existent wind, translucent sky blue and white flowing celestial robes, matching ethereal robes that fade into mist at the bottom, glowing golden staff with a lotus bud top that emits sparkles, waving a glowing wooden staff >> [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, spinning as her rags transform into a shimmering pink silk gown and golden shoes. Audio of magical swirling wind, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_12",
+      "prompt": "[Scene 13] Accident, Bridge. Medium shot, Pan left. 3D Stylized Animation. Stone bridge. [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, running toward the palace >> [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, tripping slightly and one golden shoe falling into the river below. Audio of a soft splash, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_13",
+      "prompt": "[Scene 14] Trial, Palace. Medium shot, Static. 3D Stylized Animation. Palace courtyard. [Nhà Vua] Nhà Vua, 22-year-old noble and handsome King, 1.80m, athletic and regal build, healthy sun-kissed tan, Strong jawline, kind but commanding dark eyes, friendly smile, neat black hair tucked under a royal headpiece, brilliant gold royal robe with intricate crimson dragon embroidery, matching gold silk trousers, crimson royal belt and a small golden crown, holding the golden shoe thoughtfully >> [Cám] Cám, 17-year-old spoiled and lazy half-sister, 1.58m, slightly shorter than Tấm, pale cream, pampered and unblemished skin, Sharp chin, narrow cat-like eyes, frequent haughty smirk, thin eyebrows, jet black, styled in elaborate twin buns with colorful silk ribbons, vibrant hot pink \"yếm\" with a bright yellow silk outer robe, deep indigo purple silk skirt, flashy gold hairpins and multiple colorful beaded necklaces, struggling to force her foot into the small shoe with a frustrated grimace. Audio of crowd murmuring, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260315_052514_task_14",
+      "prompt": "[Scene 15] Resolution, Ending. Medium shot, Forward. 3D Stylized Animation. Palace courtyard. [Tấm] Tấm, 18-year-old hardworking and kind-hearted orphan girl, 1.60m, slender and graceful, soft peach, porcelain smooth skin with a healthy glow, Large expressive almond-shaped eyes, button nose, gentle smile, soft rosy cheeks, deep espresso brown, long silky hair tied back with a simple hemp ribbon, rustic cinnamon brown \"yếm\" (bodice) under a faded beige outer robe, soft matte black traditional long skirt (váy đổng), a single small white jasmine flower often tucked behind her ear, stepping forward and sliding her foot perfectly into the shoe >> [Nhà Vua] Nhà Vua, 22-year-old noble and handsome King, 1.80m, athletic and regal build, healthy sun-kissed tan, Strong jawline, kind but commanding dark eyes, friendly smile, neat black hair tucked under a royal headpiece, brilliant gold royal robe with intricate crimson dragon embroidery, matching gold silk trousers, crimson royal belt and a small golden crown, smiling warmly and taking her hand. Audio of triumphant orchestral music, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

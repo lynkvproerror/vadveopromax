@@ -107,6 +107,13 @@ class TaskWatchdog:
                 # Counter audit: detect and auto-fix _running_count mismatches
                 self._dispatcher.audit_counters()
                 
+                # Upscale counter audit: detect leaked active_upscale_workers
+                multi_acc = getattr(self._engine, '_multi_account', None)
+                if multi_acc and hasattr(multi_acc, 'audit_upscale_counters'):
+                    # Pass empty set = no inline upscale tasks expected
+                    # (if any are truly inline, they'd be caught by RUNNING timeout above)
+                    multi_acc.audit_upscale_counters(running_task_ids=set())
+                
         except asyncio.CancelledError:
             pass
         except Exception as e:

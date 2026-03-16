@@ -517,6 +517,12 @@ if (window.__veoContentLoaded) {
 
             const ready = hasExecute && hasSiteKey;
 
+            // ★ Piggyback: also refresh x-client-data by triggering a small fetch
+            // to Google domains. Chrome adds x-client-data to these requests,
+            // which onBeforeSendHeaders in background.js captures.
+            // This ensures xcd doesn't stay at 8 chars — refreshes every 60s.
+            performLightweightRefresh();
+
             // Report to background
             chrome.runtime.sendMessage({
                 action: 'recaptcha_warmth',
@@ -710,10 +716,10 @@ if (window.__veoContentLoaded) {
                 );
                 recaptchaToken = await Promise.race([recaptchaPromise, recaptchaTimeout]);
                 // HAR verified: valid tokens are 1742-2169 chars
-                if (!recaptchaToken || recaptchaToken.length < 1000) {
+                if (!recaptchaToken || recaptchaToken.length < 1500) {
                     window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
                         success: false,
-                        error: 'reCAPTCHA token too short (' + (recaptchaToken ? recaptchaToken.length : 0) + ' chars, need ≥1000)',
+                        error: 'reCAPTCHA token too short (' + (recaptchaToken ? recaptchaToken.length : 0) + ' chars, need ≥1500)',
                         tokenLength: recaptchaToken ? recaptchaToken.length : 0
                     }}, '*');
                     return;
@@ -734,6 +740,19 @@ if (window.__veoContentLoaded) {
                 token: recaptchaToken,
                 applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
             };
+            // ★ T2I/I2I: also inject into nested requests[].clientContext
+            // F12 verified 2026-03-15: T2I format has clientContext inside
+            // EACH request item, and ALL must include recaptchaContext
+            if (Array.isArray(body.requests)) {
+                for (const req of body.requests) {
+                    if (req.clientContext) {
+                        req.clientContext.recaptchaContext = {
+                            token: recaptchaToken,
+                            applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+                        };
+                    }
+                }
+            }
         }
 
         // ── Step 3: Access token ─────────────────────────────────

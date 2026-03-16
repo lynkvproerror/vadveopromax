@@ -137,7 +137,7 @@ class TabQueue(
         self._input_pulse_timer.start()
         # Auto-refresh timer: periodic full queue refresh while engine is running
         self._auto_refresh_timer = QTimer(self)
-        self._auto_refresh_timer.setInterval(2000)  # every 2s
+        self._auto_refresh_timer.setInterval(5000)  # every 5s
         self._auto_refresh_timer.timeout.connect(self._on_auto_refresh_tick)
         
         self._setup_ui()
@@ -1159,7 +1159,7 @@ class TabQueue(
             import logging
             _qlog = logging.getLogger("veo.tab_queue")
             total_tasks = sum(len(g.get('tasks', [])) for g in groups_data)
-            _qlog.info(f"[QueueRefresh] {len(groups_data)} groups, {total_tasks} total tasks, existing_groups={list(self._group_widgets.keys())}")
+            _qlog.debug(f"[QueueRefresh] {len(groups_data)} groups, {total_tasks} total tasks, existing_groups={list(self._group_widgets.keys())}")
             self._refresh_groups(groups_data)
         elif hasattr(self.controller, 'get_queue_items'):
             # Fallback to flat items
@@ -1361,20 +1361,61 @@ class TabQueue(
     
     # ── Engine Controls ──────────────────────────────────────────
     
-    def _auto_start_if_idle(self):
+    def _auto_start_if_idle(self, force: bool = False):
         """Auto-start engine if idle and ready tasks exist.
         
-        Called after force_retry creates replacement tasks
-        so the user doesn't have to click Start All manually.
-        Skips preflight/license checks (retry = re-running existing work).
+        Args:
+            force: If True, bypass auto_start_queue setting check.
+                   Used for retry contexts (user-initiated re-runs).
+                   If False, only auto-start when setting is enabled.
+        
+        Skips preflight/license checks (assumed valid for auto-start).
         """
+        import logging
+        log = logging.getLogger(__name__)
+        
         if self._is_processing:
-            return  # Already running
+            # Check if controller already finished stopping (UI flag out of sync)
+            ctrl_processing = self.controller.state.is_processing if self.controller else True
+            if not ctrl_processing:
+                # Engine already stopped — sync flag and proceed
+                log.info("[AutoStart] Syncing _is_processing (was True, controller says False)")
+                self._is_processing = False
+                self._update_button_states()
+            else:
+                # Engine truly still running/stopping — schedule retry after stop completes
+                # Throttle: log only once per 30s to avoid flooding
+                import time as _time
+                _now = _time.time()
+                _last = getattr(self, '_last_deferred_log_ts', 0)
+                if _now - _last > 30:
+                    log.info(f"[AutoStart] Deferred — engine still processing, retry in 5s")
+                    self._last_deferred_log_ts = _now
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(5000, self._auto_start_if_idle)
+                return
+        
         if not self.controller:
+            log.warning(f"[AutoStart] Skipped — no controller")
             return
-        if self.controller.ready_count == 0:
+        
+        ready = self.controller.ready_count
+        if ready == 0:
+            log.info(f"[AutoStart] Skipped — ready_count=0 (no tasks)")
             return  # No tasks to process
         
+        # Check auto_start_queue setting (skip for forced retry contexts)
+        if not force:
+            try:
+                from config.settings import get_settings
+                s = get_settings()
+                if not getattr(s, 'auto_start_queue', False):
+                    log.info(f"[AutoStart] Skipped — auto_start_queue=False, ready={ready}")
+                    return  # Setting disabled — user must click Start All
+            except Exception:
+                return
+        
+        log.info(f"[AutoStart] ✅ Starting engine! ready_count={ready}, force={force}")
         # Auto-start
         self.start_all.emit()
         self._is_processing = self.controller.state.is_processing if self.controller else True
@@ -1383,7 +1424,8 @@ class TabQueue(
         
         mw = self.window()
         if mw and hasattr(mw, 'show_toast'):
-            mw.show_toast("▶️ Engine auto-started for retry tasks", "info", duration=3000)
+            source = "retry" if force else "new tasks"
+            mw.show_toast(f"▶️ Engine auto-started ({source})", "info", duration=3000)
     
     def _on_toggle_engine(self):
         """Start ↔ Stop toggle (2-state)."""
@@ -1438,11 +1480,16 @@ class TabQueue(
                 main_window = self.window()
                 
                 if not check["can_start"]:
-                    details = []
+                    # Compact toast: summary + bullet issues per account
+                    lines = [check['summary']]
                     for acc in check["accounts"]:
                         if acc["issues"]:
-                            details.append(f"{acc['email']}: {', '.join(acc['issues'])}")
-                    msg = f"{check['summary']}\n" + "\n".join(details)
+                            short_email = acc['email'].split('@')[0]
+                            for issue in acc["issues"]:
+                                # Strip verbose suffix after "—"
+                                short_issue = issue.split('—')[0].strip()
+                                lines.append(f"  • {short_email}: {short_issue}")
+                    msg = "\n".join(lines)
                     if main_window and hasattr(main_window, 'show_toast'):
                         main_window.show_toast(msg, "error", duration=8000)
                     return
@@ -1562,7 +1609,7 @@ class TabQueue(
         
         # Auto-start engine if idle
         if retried > 0:
-            self._auto_start_if_idle()
+            self._auto_start_if_idle(force=True)
 
     def _on_force_retry_all(self):
         """Force retry ALL tasks (re-generate everything) — runs in background thread."""
@@ -1784,6 +1831,14 @@ class TabQueue(
         if self._sweep_in_progress:
             return
         if not self.controller:
+            return
+        
+        # ★ R7-1: Don't trigger sleep/shutdown while pipeline is active
+        # _check_auto_stop in app_controller checks these flags, but this
+        # separate post-queue action path was bypassing that guard.
+        if getattr(self.controller, '_pipeline_mode_active', False):
+            return
+        if getattr(self.controller, '_pipeline_awaiting_queue', False):
             return
         
         from config.settings import get_settings
@@ -2080,10 +2135,10 @@ class TabQueue(
             
             # Auto-start engine if we retried tasks/videos, re-gen'd, OR re-upscaled
             if result["retried_tasks"] + result["retried_videos"] + retry_regen > 0:
-                self._auto_start_if_idle()
+                self._auto_start_if_idle(force=True)
             elif reupscale_count > 0:
                 # Re-upscale jobs queued → engine must be running for upscale lifecycle
-                self._auto_start_if_idle()
+                self._auto_start_if_idle(force=True)
             elif result["still_incomplete"] == 0:
                 # Everything actually complete → allow action next tick
                 pass  # Will be caught next _check_post_queue_action cycle

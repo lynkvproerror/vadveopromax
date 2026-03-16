@@ -572,6 +572,7 @@ class SettingsSectionsMixin:
                 ("Prompt Input",    "restore_prompt_input",       _g('restore_prompt_input')),
                 ("Parsed Prompts",  "restore_parsed_prompts",     _g('restore_parsed_prompts')),
                 ("Prompt Images",   "restore_prompt_images",      _g('restore_prompt_images')),
+                ("Project Builder", "restore_project_builder",    _g('restore_project_builder')),
             ]),
         ]
 
@@ -967,18 +968,28 @@ class SettingsSectionsMixin:
         return section
 
     def _get_updater(self):
-        """Get or create AutoUpdater instance."""
+        """Get or create AutoUpdater instance.
+        
+        ★ R2-3: Reuse main_window's updater to avoid duplicate instances.
+        """
         if self._updater is None:
-            from core.auto_updater import AutoUpdater
-            self._updater = AutoUpdater(self)
-            self._updater.update_available.connect(self._on_update_available)
-            self._updater.up_to_date.connect(self._on_up_to_date)
-            self._updater.download_progress.connect(self._on_download_progress)
-            self._updater.download_complete.connect(self._on_download_complete)
-            self._updater.download_error.connect(self._on_download_error)
-            self._updater.update_applied.connect(self._on_update_applied)
-            self._updater.ext_update_applied.connect(self._on_ext_update_applied)
-            self._updater.check_error.connect(self._on_check_error_ui)
+            # Try to reuse main window's AutoUpdater
+            main_window = self.window()
+            if hasattr(main_window, '_auto_updater') and main_window._auto_updater is not None:
+                self._updater = main_window._auto_updater
+            else:
+                from core.auto_updater import AutoUpdater
+                self._updater = AutoUpdater(self)
+            # Connect UI signals (safe with UniqueConnection)
+            from PySide6.QtCore import Qt
+            self._updater.update_available.connect(self._on_update_available, Qt.ConnectionType.UniqueConnection)
+            self._updater.up_to_date.connect(self._on_up_to_date, Qt.ConnectionType.UniqueConnection)
+            self._updater.download_progress.connect(self._on_download_progress, Qt.ConnectionType.UniqueConnection)
+            self._updater.download_complete.connect(self._on_download_complete, Qt.ConnectionType.UniqueConnection)
+            self._updater.download_error.connect(self._on_download_error, Qt.ConnectionType.UniqueConnection)
+            self._updater.update_applied.connect(self._on_update_applied, Qt.ConnectionType.UniqueConnection)
+            self._updater.ext_update_applied.connect(self._on_ext_update_applied, Qt.ConnectionType.UniqueConnection)
+            self._updater.check_error.connect(self._on_check_error_ui, Qt.ConnectionType.UniqueConnection)
         return self._updater
 
     def _save_update_settings(self, *args):
@@ -1002,6 +1013,9 @@ class SettingsSectionsMixin:
                         main_window._auto_updater.update_available.connect(
                             main_window._on_update_available
                         )
+                        # ★ R5-3+R15-5: Reset cached updater and eagerly re-connect UI signals
+                        self._updater = None
+                        self._get_updater()
                     except Exception:
                         pass
                 if main_window._auto_updater:
@@ -1094,9 +1108,29 @@ class SettingsSectionsMixin:
 
     def _on_update_now(self):
         """Start downloading the update."""
+        updater = self._get_updater()
+        info = updater.latest_info
+        # ★ R9-4: Explicit guard when info is None (e.g. cleared after ext update)
+        if not info:
+            self._update_status_label.setText(
+                "❌ No update info — please check for updates first"
+            )
+            self._update_status_label.setStyleSheet(
+                f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"
+            )
+            return
+        # ★ E5: Pre-validate URL before disabling button
+        url = info.download_url if info.update_type == "full" else info.ext_download_url
+        if not url:
+            self._update_status_label.setText(
+                f"❌ No download URL available for {info.update_type} update"
+            )
+            self._update_status_label.setStyleSheet(
+                f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"
+            )
+            return
         self._update_now_btn.setEnabled(False)
         self._update_now_btn.setText("⬇️ 0%...")
-        updater = self._get_updater()
         updater.download_update()
 
     def _on_download_progress(self, pct: int):
@@ -1108,24 +1142,48 @@ class SettingsSectionsMixin:
         updater = self._get_updater()
         info = updater.latest_info
         
-        if info and info.update_type == "ext_only":
+        # ★ R7-4: Guard — if updater was reset between download start and completion
+        if info is None:
+            # ★ R9-2+R14-5: Clean up orphaned ZIP (reuse utility instead of inline duplicate)
+            try:
+                from core.auto_updater import AutoUpdater
+                AutoUpdater._cleanup_zip(zip_path)
+            except Exception:
+                pass
+            self._update_now_btn.setEnabled(True)
+            self._update_now_btn.setText(t("settings.update_sub.update_now"))
+            self._update_status_label.setText("❌ Update info lost — please check again")
+            self._update_status_label.setStyleSheet(
+                f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"
+            )
+            return
+        
+        if info.update_type == "ext_only":
             # Extension-only: hot-replace immediately, no restart
             self._update_now_btn.setText("📦 Updating extension...")
             updater.apply_extension_update(zip_path)
             return
         
         # Full update: ask user to restart now or later
+        # ★ R18-1: Capture metadata BEFORE blocking dialog (periodic check can update
+        #   _latest_info during Qt's modal event loop, causing version/SHA mismatch)
+        captured_version = info.version
+        captured_sha256 = info.sha256
+        
+        # ★ R6-4: Guard against concurrent signals during blocking dialog
+        self._confirm_dialog_open = True
         from ui.popups import show_confirm
         answer = show_confirm(
             self,
             "🔄 Update Ready",
-            f"v{info.version if info else '?'} đã tải xong.\n\n"
+            f"v{captured_version} đã tải xong.\n\n"
             f"• Yes — Tắt app, cài bản mới và khởi động lại ngay\n"
             f"• No — Lưu lại, cài tự động khi mở app lần sau"
         )
+        self._confirm_dialog_open = False
         
         if answer:
-            # Restart now
+            # Restart now — apply_update only uses zip_path, not info
             self._update_now_btn.setText(f"📦 {t('settings.update_sub.installing')}")
             self._update_status_label.setText(f"📦 {t('settings.update_sub.installing')}")
             try:
@@ -1139,11 +1197,11 @@ class SettingsSectionsMixin:
                 pass
             updater.apply_update(zip_path)
         else:
-            # Defer to next startup
-            updater.save_pending_update(zip_path, info.version if info else "")
+            # Defer to next startup — use captured metadata (immune to _latest_info race)
+            updater.save_pending_update(zip_path, captured_version, sha256=captured_sha256)
             self._update_now_btn.setVisible(False)
             self._update_status_label.setText(
-                f"⏰ v{info.version if info else '?'} sẽ cài khi khởi động lại app"
+                f"⏰ v{captured_version} sẽ cài khi khởi động lại app"
             )
             self._update_status_label.setStyleSheet(
                 f"color: {Theme.YELLOW}; font-size: 12px; margin-left: 12px;"
@@ -1188,20 +1246,31 @@ class SettingsSectionsMixin:
 
     def _on_download_error(self, error: str):
         """Handle download error — restore button with correct update type."""
-        self._update_now_btn.setEnabled(True)
-        # Restore button text matching the update type
+        # ★ R6-4: Skip UI update if confirm dialog is blocking
+        # ★ R18-3: But log the error so diagnostic info is not permanently lost
+        if getattr(self, '_confirm_dialog_open', False):
+            import logging
+            logging.getLogger('veo').warning(f"Download error during confirm dialog (dropped): {error}")
+            return
+        # ★ R12-2: Skip stale error after ext update cleared info (button already hidden)
+        # ★ R16-5: But ALWAYS show the error message — don't silently swallow it
         updater = self._get_updater()
         info = updater.latest_info
-        if info and info.update_type == "full":
-            self._update_now_btn.setText(
-                f"⬇️ Retry Full Update (v{info.version})"
-            )
-        elif info and info.update_type == "ext_only":
-            self._update_now_btn.setText(
-                f"⬇️ Retry Extension (v{info.ext_version})"
-            )
-        else:
-            self._update_now_btn.setText(t("settings.update_sub.update_now"))
+        if info is not None:
+            # ★ R11-2: Ensure button is visible (may have been hidden by deferred save path)
+            self._update_now_btn.setVisible(True)
+            self._update_now_btn.setEnabled(True)
+            # Restore button text matching the update type
+            if info.update_type == "full":
+                self._update_now_btn.setText(
+                    f"⬇️ Retry Full Update (v{info.version})"
+                )
+            elif info.update_type == "ext_only":
+                self._update_now_btn.setText(
+                    f"⬇️ Retry Extension (v{info.ext_version})"
+                )
+            else:
+                self._update_now_btn.setText(t("settings.update_sub.update_now"))
         self._update_status_label.setText(f"❌ {error[:80]}")
         self._update_status_label.setStyleSheet(
             f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"

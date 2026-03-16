@@ -1,0 +1,147 @@
+{
+  "group_id": "group_20260314_103256",
+  "workflow": "I2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260314_103256_task_0",
+      "prompt": "Opening scene. Wide shot, slow dolly in. Animated, colorful, clean lines, stylized. Vietnamese cottage at dawn. [Tam] kneeling and digging through coal, weary expression. Audio of birds chirping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_1",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nInterior. Medium shot, static. Animated, colorful, clean lines, stylized. Vietnamese cottage interior. [Me Cam] standing with a pile of rice, [Cam] lounging on a hammock. Audio of gentle breeze, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_2",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nClose up, static. Animated, colorful, clean lines, stylized. Vietnamese cottage interior. [Tam] hands with rough skin, gentle but tired eyes. Audio of faint sigh, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_3",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nInterior. Medium shot, static. Animated, colorful, clean lines, stylized. Vietnamese cottage interior. [Cam] laughing with [Me Cam], [Me Cam] smiling fondly. Audio of light laughter, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_4",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Medium shot, slow pan. Animated, colorful, clean lines, stylized. Muddy riverbank. [Me Cam] holding two baskets, gesturing sternly to [Tam] and [Cam]. Audio of flowing water, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_5",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Series of quick cuts, dynamic. Animated, colorful, clean lines, stylized. Muddy riverbank. [Tam] wading into water, diligently catching small fish. Audio of splashing water, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_6",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Time lapse effect, static. Animated, colorful, clean lines, stylized. Muddy riverbank. [Cam] sleeping under a tree, a few fruits nearby. Audio of distant birds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_7",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Medium shot, static. Animated, colorful, clean lines, stylized. Muddy riverbank. [Tam]'s basket is full, [Tam] looking tired but content. Audio of satisfied sigh, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_8",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Medium shot, static. Animated, colorful, clean lines, stylized. Muddy riverbank. [Cam] sneakily dumping [Tam]'s fish into her own basket. Audio of rustling leaves, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_9",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Medium shot, static. Animated, colorful, clean lines, stylized. Muddy riverbank. [Cam] running towards home, holding her full basket. Audio of hurried footsteps, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_10",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Close up, static. Animated, colorful, clean lines, stylized. Muddy riverbank. [Tam] looking at her empty basket, heartbroken. Audio of soft crying, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_11",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nExterior. Medium shot, static. Animated, colorful, clean lines, stylized. Riverbank. [Tam] crying, [But] appearing in a gentle glow. Audio of soft weeping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_12",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nClose up, static. Animated, colorful, clean lines, stylized. Riverbank. [But]'s kind face, [Tam] looking up. Audio of gentle wind, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_13",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nClose up, static. Animated, colorful, clean lines, stylized. Riverbank. [But] handing a small, shimmering fish to [Tam]. Audio of magical chime, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_103256_task_14",
+      "prompt": "—, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion\nClose up, static. Animated, colorful, clean lines, stylized. Riverbank. [Tam] holding the fish, a glimmer of hope in her eyes. Audio of hopeful melody, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

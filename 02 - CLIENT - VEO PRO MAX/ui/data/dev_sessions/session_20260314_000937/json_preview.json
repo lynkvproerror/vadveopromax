@@ -1,0 +1,48 @@
+{
+  "group_id": "group_20260313_234841",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260313_234841_task_0",
+      "prompt": "Portrait of a 72-year-old traditional Vietnamese grandmother, 1.52m tall, weathered sun-aged olive skin #C69061 with deep wisdom lines, kind hooded eyes, thin lips, slightly hunched posture, pure silver-white hair #F5F5F5 tied in a neat tight low bun. Wearing a muted chestnut brown silk \"áo bà ba\" #5D4037 and soft matte black loose-fit silk trousers #1A1A1A, dark teal jade ring #008080 on left hand, thin gold hoop earrings #FFD700. Realistic cinematic style, Rembrandt lighting, simple studio background with soft shadows, 8k resolution, highly detailed skin texture.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_234841_task_1",
+      "prompt": "Medium shot of a 42-year-old Vietnamese man, 1.75m tall, healthy light tan skin #D2B48C with smooth texture, strong square jaw, gentle eyes, wearing thin-rimmed rectangular glasses, charcoal black hair #2B2B2B in a neat short side-part. Wearing a crisp light blue button-down shirt #F0F8FF with sleeves rolled up and charcoal grey tailored cotton trousers #36454F, steel blue leather strap wristwatch #4682B4. Realistic cinematic style, professional studio lighting, neutral minimalist background, sharp focus, 8k.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_234841_task_2",
+      "prompt": "Medium shot of a 38-year-old Vietnamese woman, 1.62m tall, fair peach skin #EBC8AF, soft and radiant, oval face, bright expressive eyes, subtle dimples, jet black shoulder-length wavy hair #1C1C1C partially pinned back. Wearing a soft lavender linen blouse #E6E6FA with delicate floral embroidery and pure white wide-leg linen pants #FFFFFF, light pink pearl stud earrings #FFB6C1. Realistic cinematic style, soft warm studio lighting, clean simple background, 8k, elegant and nurturing atmosphere.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_234841_task_3",
+      "prompt": "Portrait of a 7-year-old energetic Vietnamese girl, 1.20m tall, rosy porcelain skin #F3D1B0 with sun-kissed cheeks, round \"apple\" cheeks, large curious eyes, missing one front tooth, dark espresso black hair #222222 styled in two high pigtails with bright red silk ribbons #FF0000. Wearing a bright sunflower yellow t-shirt #FFD700 with a small white daisy and royal blue denim overalls #4169E1. Realistic cinematic style, bright cheerful studio lighting, simple soft-focus background, 8k, high dynamic range.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

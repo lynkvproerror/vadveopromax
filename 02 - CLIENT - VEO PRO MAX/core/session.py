@@ -87,8 +87,9 @@ class AccountSession:
     last_activity: Optional[datetime] = None
     
     # === Upscale Worker Pool ===
-    active_upscale_workers: int = 0   # Number of upscale slots in use
-    max_upscale_workers: int = 4      # Max concurrent upscale slots
+    active_upscale_workers: int = 0   # Number of inline upscale slots in use (affects ops capacity)
+    max_upscale_workers: int = 4      # Max concurrent inline upscale slots
+    active_bg_upscale: int = 0        # UpscaleQueue background jobs count (display only, no ops impact)
     
     # === Per-Account Worker Settings ===
     retry_count: int = 3       # Max retries on non-auth errors
@@ -391,6 +392,8 @@ class AccountSession:
             session.max_workers = 20
         # Bug #10 fix: Always reset active_workers on load (crash recovery)
         session.active_workers = 0
+        session.active_upscale_workers = 0  # Fix: prevent persistent upscale counter leak
+        session.active_bg_upscale = 0        # Fix: reset background upscale counter
         session.retry_count = data.get("retry_count", 3)
         session.request_timeout = data.get("request_timeout", 120)
         return session

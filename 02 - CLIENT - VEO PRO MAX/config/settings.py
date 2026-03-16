@@ -72,6 +72,7 @@ class AppSettings:
     restore_parsed_prompts: bool = True      # Parsed prompt table rows
     restore_prompt_images: bool = True       # Image paths in prompts (all tabs)
     restore_frame_mode: bool = True          # I2V frame mode dropdown
+    restore_project_builder: bool = True     # Project Builder topics + sidebar config
     
     # === WORKER DEFAULTS (applied to new accounts) ===
     # Per-account max_slots is stored in AccountSession, not here

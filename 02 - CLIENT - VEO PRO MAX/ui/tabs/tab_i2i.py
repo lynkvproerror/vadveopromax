@@ -41,25 +41,3 @@ class TabI2I(GenerationTabBase):
         """Use ImageSidebar with Image Library."""
         from ui.components.sidebar_base import ImageSidebar
         return ImageSidebar(self, show_image_library=True)
-    
-    def _on_help(self):
-        """Show help for I2I workflow."""
-        from ui.popups.complex_popups import HelpTooltipPopup
-        help_text = """Image Tag Usage:
-• Use [tag_name] in prompts to reference source images
-• Example: [portrait] Add dramatic lighting
-
-Tag Format:
-• Tags reference images from your Image Library
-• Each tag matches an image you've added with that tag
-
-Workflow:
-1. Add images to Library with tags (📂 Image Library)
-2. Write prompts with [tag] references
-3. System auto-matches tags to images
-
-Image Library:
-• Click 📂 Image Library in sidebar to manage images
-• Add tags when importing images"""
-        
-        HelpTooltipPopup(self, "Image to Image", help_text).exec()

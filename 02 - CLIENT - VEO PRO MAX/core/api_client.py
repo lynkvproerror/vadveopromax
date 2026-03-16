@@ -21,20 +21,37 @@ from config.constants import APIEndpoints, WorkflowType, AspectRatio
 
 
 # === SEED CONSTANTS ===
+# Video seeds (T2V, I2V, R2V) — HAR verified range
 SEED_MIN = 5000
-SEED_MAX = 24999  # HAR verified: website seeds observed 5K-24K (e.g. 23713, 14781, 23516, 16504)
+SEED_MAX = 24999
+
+# Image seeds (T2I, I2I) — F12 verified 2026-03-15: 11229, 14587, 134141, 219035, 304242, 541405
+IMAGE_SEED_MIN = 10000
+IMAGE_SEED_MAX = 999999
 
 
 def generate_random_seed() -> int:
-    """Generate a random seed in valid range (5000-24999, per HAR analysis)."""
+    """Generate a random seed for video workflows (5000-24999)."""
     return random.randint(SEED_MIN, SEED_MAX)
 
 
+def generate_random_image_seed() -> int:
+    """Generate a random seed for image workflows (1-999999)."""
+    return random.randint(IMAGE_SEED_MIN, IMAGE_SEED_MAX)
+
+
 def validate_seed(seed: int) -> int:
-    """Validate and clamp seed to valid range."""
+    """Validate and clamp seed to video range."""
     if not isinstance(seed, int):
         raise ValueError("Seed must be an integer")
     return max(SEED_MIN, min(SEED_MAX, seed))
+
+
+def validate_image_seed(seed: int) -> int:
+    """Validate and clamp seed to image range."""
+    if not isinstance(seed, int):
+        raise ValueError("Seed must be an integer")
+    return max(IMAGE_SEED_MIN, min(IMAGE_SEED_MAX, seed))
 
 
 # === BROWSER HEADERS ===
@@ -216,6 +233,7 @@ class VEOApiClient:
         paygate_tier: str = "PAYGATE_TIER_TWO",
         tool: str = "PINHOLE",
         include_recaptcha: bool = True,
+        session_id: str = "",
     ) -> Dict[str, Any]:
         """Build clientContext for API requests.
         
@@ -231,11 +249,14 @@ class VEOApiClient:
           batchGenerateImages:             sessionId + tool + projectId + recaptcha
           uploadUserImage:                 sessionId + tool (ASSET_MANAGER only)
           batchAsyncGenerateVideoUpsampleVideo: sessionId + projectId + tool + paygateTier + recaptcha
+        
+        F12 2026-03-16: All images in a T2I batch share the SAME sessionId.
+        Pass session_id to reuse across batch; omit to auto-generate.
         """
         import time
         import uuid as _uuid
         ctx: Dict[str, Any] = {
-            "sessionId": f";{int(time.time() * 1000)}",
+            "sessionId": session_id or f";{int(time.time() * 1000)}",
         }
         # tool: included when specified (most endpoints except upscale)
         if tool:
@@ -348,6 +369,8 @@ class VEOApiClient:
         seed: Optional[int] = None,
         paygate_tier: str = "PAYGATE_TIER_TWO",
         image_uris: Optional[List[str]] = None,
+        batch_id: str = "",
+        session_id: str = "",
     ) -> Tuple[str, Dict[str, Any]]:
         """Build full request body for Extension-based submission.
         
@@ -364,6 +387,8 @@ class VEOApiClient:
             seed: Optional deterministic seed
             paygate_tier: Paygate tier
             image_uris: Image media IDs (for I2V, R2V, F2V)
+            batch_id: F12 verified: all images in T2I batch share same batchId
+            session_id: F12 verified: all images in T2I batch share same sessionId
             
         Returns:
             Tuple of (endpoint_key, body_dict)
@@ -389,9 +414,10 @@ class VEOApiClient:
                 req_item = {
                     "aspectRatio": aspect_ratio,
                     "seed": validate_seed(actual_seed),
-                    "textInput": {"prompt": prompt},
+                    # F12 2026-03-15: video now uses structuredPrompt (not textInput.prompt)
+                    "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                     "videoModelKey": model,
-                    "metadata": {"sceneId": str(_uuid.uuid4())},
+                    "metadata": {},  # F12: empty object
                 }
                 # F2V: add start image
                 if wt == "F2V" and image_uris:
@@ -406,8 +432,10 @@ class VEOApiClient:
                 endpoint = "T2V"
             
             return endpoint, {
+                "mediaGenerationContext": {"batchId": str(_uuid.uuid4())},
                 "clientContext": client_ctx,
                 "requests": requests_list,
+                "useV2ModelConfig": True,
             }
         
         elif wt == "I2V":
@@ -417,9 +445,9 @@ class VEOApiClient:
                 req_item = {
                     "aspectRatio": aspect_ratio,
                     "seed": validate_seed(actual_seed),
-                    "textInput": {"prompt": prompt},
+                    "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                     "videoModelKey": model,
-                    "metadata": {"sceneId": str(_uuid.uuid4())},
+                    "metadata": {},
                 }
                 if image_uris and len(image_uris) >= 2:
                     req_item["startImage"] = {"mediaId": image_uris[0]}
@@ -433,8 +461,10 @@ class VEOApiClient:
                 requests_list.append(req_item)
             
             return endpoint, {
+                "mediaGenerationContext": {"batchId": str(_uuid.uuid4())},
                 "clientContext": client_ctx,
                 "requests": requests_list,
+                "useV2ModelConfig": True,
             }
         
         elif wt == "R2V":
@@ -449,15 +479,17 @@ class VEOApiClient:
                 requests_list.append({
                     "aspectRatio": aspect_ratio,
                     "seed": validate_seed(actual_seed),
-                    "textInput": {"prompt": prompt},
+                    "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                     "videoModelKey": model,
-                    "metadata": {"sceneId": str(_uuid.uuid4())},
+                    "metadata": {},
                     "referenceImages": ref_images,
                 })
             
             return "R2V", {
+                "mediaGenerationContext": {"batchId": str(_uuid.uuid4())},
                 "clientContext": client_ctx,
                 "requests": requests_list,
+                "useV2ModelConfig": True,
             }
         
         elif wt in ("T2I", "I2I"):
@@ -474,49 +506,50 @@ class VEOApiClient:
                 img_ar = "IMAGE_ASPECT_RATIO_LANDSCAPE"
             
             # T2I clientContext: sessionId + projectId + tool only (no paygateTier)
+            # F12 2026-03-16: all images in batch share same sessionId
             t2i_ctx = self._build_client_context(
                 recaptcha_token="",
                 project_id=project_id,
                 paygate_tier="",   # HAR: no userPaygateTier for T2I
                 tool="PINHOLE",
                 include_recaptcha=False,
+                session_id=session_id,  # F12: reuse across batch
             )
             
-            # Build requests[] — one item per output (HAR verified: Tao hinh image 4.har)
-            requests_list = []
-            for idx in range(min(output_count, 4)):
-                actual_seed = (seed + idx) if seed is not None else generate_random_seed()
-                
-                # HAR: imageInputs is ALWAYS present
-                # T2I: [] (empty), I2I: [{name, imageInputType}]
-                image_inputs = []
-                if image_uris:
-                    image_inputs = [
-                        {
-                            "name": uri,
-                            "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE",
-                        }
-                        for uri in image_uris
-                    ]
-                
-                req_item = {
-                    "clientContext": t2i_ctx,   # HAR: nested per-request
-                    "seed": validate_seed(actual_seed),
-                    "imageModelName": model or "GEM_PIX_2",
-                    "imageAspectRatio": img_ar,
-                    "imageInputs": image_inputs,  # HAR: always present
-                }
-                # HAR 2026-03-07: NARWHAL uses structuredPrompt, others use prompt
-                if model == "NARWHAL":
-                    req_item["structuredPrompt"] = {"parts": [{"text": prompt}]}
-                else:
-                    req_item["prompt"] = prompt
-                
-                requests_list.append(req_item)
+            # F12 2026-03-15: Website sends 1 request per image, NOT all in batch.
+            # build_request_body returns body for 1 image only.
+            # Caller should loop with output_count=1 for each image in batch.
+            actual_seed = seed if seed is not None else generate_random_image_seed()
             
+            # HAR: imageInputs is ALWAYS present
+            # T2I: [] (empty), I2I: [{name, imageInputType}]
+            image_inputs = []
+            if image_uris:
+                image_inputs = [
+                    {
+                        "name": uri,
+                        "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE",
+                    }
+                    for uri in image_uris
+                ]
+            
+            req_item = {
+                "clientContext": t2i_ctx,   # HAR: nested per-request
+                "seed": validate_image_seed(actual_seed),
+                "imageModelName": model or "GEM_PIX_2",  # Sidebar default: 🔥 Nano Banana Pro
+                "imageAspectRatio": img_ar,
+                "imageInputs": image_inputs,  # HAR: always present
+                "structuredPrompt": {"parts": [{"text": prompt}]},
+            }
+            
+            # F12 2026-03-16: all images in batch share same batchId
+            import uuid as _uuid_t2i
+            effective_batch_id = batch_id or str(_uuid_t2i.uuid4())
             return "T2I", {
                 "clientContext": t2i_ctx,
-                "requests": requests_list,
+                "mediaGenerationContext": {"batchId": effective_batch_id},
+                "useNewMedia": True,
+                "requests": [req_item],  # F12: exactly 1 item per HTTP request
             }
         
         else:
@@ -653,16 +686,19 @@ class VEOApiClient:
             requests_list.append({
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
-                "textInput": {"prompt": prompt},
+                # F12 2026-03-15: video uses structuredPrompt
+                "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                 "videoModelKey": model,
-                "metadata": {"sceneId": str(uuid.uuid4())},
+                "metadata": {},  # F12: empty object
             })
         
         data = {
+            "mediaGenerationContext": {"batchId": str(uuid.uuid4())},
             "clientContext": self._build_client_context(
                 recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
             ),
             "requests": requests_list,
+            "useV2ModelConfig": True,
         }
         
         return await self._request(
@@ -706,17 +742,19 @@ class VEOApiClient:
             requests_list.append({
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
-                "textInput": {"prompt": prompt},
+                "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                 "videoModelKey": model,
                 "startImage": {"mediaId": image_media_id},
-                "metadata": {"sceneId": str(uuid.uuid4())},
+                "metadata": {},
             })
         
         data = {
+            "mediaGenerationContext": {"batchId": str(uuid.uuid4())},
             "clientContext": self._build_client_context(
                 recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
             ),
             "requests": requests_list,
+            "useV2ModelConfig": True,
         }
         
         return await self._request(
@@ -761,18 +799,20 @@ class VEOApiClient:
             requests_list.append({
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
-                "textInput": {"prompt": prompt},
+                "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                 "videoModelKey": model,
                 "startImage": {"mediaId": start_image_media_id},
                 "endImage": {"mediaId": end_image_media_id},
-                "metadata": {"sceneId": str(uuid.uuid4())},
+                "metadata": {},
             })
         
         data = {
+            "mediaGenerationContext": {"batchId": str(uuid.uuid4())},
             "clientContext": self._build_client_context(
                 recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
             ),
             "requests": requests_list,
+            "useV2ModelConfig": True,
         }
         
         return await self._request(
@@ -821,17 +861,19 @@ class VEOApiClient:
             requests_list.append({
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
-                "textInput": {"prompt": prompt},
+                "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                 "videoModelKey": model,
                 "referenceImages": ref_images,
-                "metadata": {"sceneId": str(uuid.uuid4())},
+                "metadata": {},
             })
         
         data = {
+            "mediaGenerationContext": {"batchId": str(uuid.uuid4())},
             "clientContext": self._build_client_context(
                 recaptcha_token, project_id=project_id, paygate_tier=paygate_tier
             ),
             "requests": requests_list,
+            "useV2ModelConfig": True,
         }
         
         return await self._request(
@@ -863,52 +905,79 @@ class VEOApiClient:
         
         Endpoint: /v1/projects/{id}/flowMedia:batchGenerateImages (Sync)
         
-        HAR verified:
-        - clientContext appears BOTH at top-level AND inside each request item
-        - Each request item has: clientContext, seed, imageModelName, prompt, imageInputs
-        - T2I: imageInputs = []
-        - I2I: imageInputs = [{name: "mediaId", imageInputType: "IMAGE_INPUT_TYPE_REFERENCE"}]
+        F12 2026-03-15 verified: Website sends 1 HTTP request PER IMAGE,
+        NOT all images in 1 request. Each request has:
+        - 1 item in requests[] with unique seed + fresh reCAPTCHA
+        - Same batchId shared across all requests in the batch
         - Response: {"media": [{"image": {"generatedImage": {...}}}]}
         """
+        import uuid as _uuid_gen
+        import logging
+        _log = logging.getLogger(__name__)
+        
         endpoint = f"/v1/projects/{project_id}/flowMedia:batchGenerateImages"
+        batch_id = str(_uuid_gen.uuid4())  # F12: same batchId for entire batch
         
-        # Build shared clientContext — HAR: T2I top-level cc has NO userPaygateTier
-        client_ctx = self._build_client_context(
-            recaptcha_token, project_id=project_id, paygate_tier="",
-        )
+        all_media = []
+        last_error = None
         
-        # HAR verified: each request item has its own clientContext + seed
-        # Field names: "prompt" (not "promptInputs"), "imageAspectRatio" (not "aspectRatio")
-        requests_list = []
-        for _ in range(min(output_count, 4)):
-            actual_seed = seed if seed is not None else generate_random_seed()
+        for idx in range(min(output_count, 4)):
+            actual_seed = seed if seed is not None else generate_random_image_seed()
+            
+            # Build fresh clientContext per request
+            client_ctx = self._build_client_context(
+                recaptcha_token, project_id=project_id, paygate_tier="",
+            )
+            
+            # F12: each request has exactly 1 item in requests[]
             req_item = {
                 "clientContext": client_ctx,
-                "seed": validate_seed(actual_seed),
+                "seed": validate_image_seed(actual_seed),
                 "imageModelName": model,
                 "imageAspectRatio": aspect_ratio,
                 "imageInputs": image_inputs if image_inputs else [],
+                "structuredPrompt": {"parts": [{"text": prompt}]},
             }
-            # HAR 2026-03-07: NARWHAL uses structuredPrompt, others use prompt
-            if model == "NARWHAL":
-                req_item["structuredPrompt"] = {"parts": [{"text": prompt}]}
+            
+            data = {
+                "clientContext": client_ctx,
+                "mediaGenerationContext": {"batchId": batch_id},
+                "useNewMedia": True,
+                "requests": [req_item],  # F12: exactly 1 item per HTTP request
+            }
+            
+            _log.info(f"[T2I] Sending image {idx+1}/{min(output_count, 4)} seed={actual_seed}")
+            
+            resp = await self._request(
+                "POST",
+                endpoint,
+                access_token,
+                recaptcha_token,
+                data,
+                account_headers=account_headers,
+            )
+            
+            if resp.success and resp.data:
+                media_items = resp.data.get("media", [])
+                all_media.extend(media_items)
+                _log.info(f"[T2I] Image {idx+1} OK, got {len(media_items)} media items")
             else:
-                req_item["prompt"] = prompt
-            requests_list.append(req_item)
+                _log.warning(f"[T2I] Image {idx+1} failed: {resp.error}")
+                last_error = resp.error
+                # Continue trying remaining images even if one fails
         
-        data = {
-            "clientContext": client_ctx,
-            "requests": requests_list,
-        }
-        
-        return await self._request(
-            "POST",
-            endpoint,
-            access_token,
-            recaptcha_token,
-            data,
-            account_headers=account_headers,
-        )
+        # Aggregate all successful media into single response
+        if all_media:
+            return APIResponse(
+                success=True,
+                data={"media": all_media},
+                response_code=200,
+            )
+        else:
+            return APIResponse(
+                success=False,
+                error=last_error or "No images generated",
+            )
     
     # ==================== STATUS CHECKING ====================
     
@@ -1134,35 +1203,35 @@ class VEOApiClient:
         recaptcha_token: str,
         image_base64: str,
         mime_type: str,
-        aspect_ratio: str = "IMAGE_ASPECT_RATIO_LANDSCAPE",
+        file_name: str = "",
         account_headers: Optional[Dict[str, str]] = None,
     ) -> APIResponse:
         """Upload a user image to get a mediaGenerationId.
         
-        Endpoint: /v1:uploadUserImage (Sync)
+        Endpoint: /v1/flow/uploadImage (Sync) — F12 verified 2026-03-15
         
-        HAR verified:
-        - Request: {imageInput: {rawImageBytes, mimeType, isUserUploaded, aspectRatio}, clientContext}
-        - clientContext uses tool="ASSET_MANAGER", NO reCAPTCHA, NO userPaygateTier
+        F12 verified payload structure (I2I upload):
+        - Request: {clientContext, imageBytes, isUserUploaded, isHidden, mimeType, fileName}
+        - clientContext uses tool="PINHOLE", NO reCAPTCHA, NO userPaygateTier
         - Response: {mediaGenerationId: {mediaGenerationId: "CAMaJ..."}, width, height}
         
         The returned mediaGenerationId is used as startImage.mediaId in I2V calls,
         referenceImages[].mediaId in R2V calls, and imageInputs[].name in I2I calls.
         """
         data = {
-            "imageInput": {
-                "rawImageBytes": image_base64,
-                "mimeType": mime_type,
-                "isUserUploaded": True,
-                "aspectRatio": aspect_ratio,
-            },
             "clientContext": self._build_client_context(
                 recaptcha_token,
-                tool="ASSET_MANAGER",
+                tool="PINHOLE",
                 include_recaptcha=False,
                 paygate_tier="",
             ),
+            "imageBytes": image_base64,
+            "isUserUploaded": True,
+            "isHidden": False,
+            "mimeType": mime_type,
         }
+        if file_name:
+            data["fileName"] = file_name
         
         return await self._request(
             "POST",

@@ -39,23 +39,3 @@ class TabT2I(GenerationTabBase):
         """Use ImageSidebar instead of VideoSidebar."""
         from ui.components.sidebar_base import ImageSidebar
         return ImageSidebar(self, show_image_library=False)
-    
-    def _on_help(self):
-        """Show help for T2I workflow."""
-        from ui.popups.complex_popups import HelpTooltipPopup
-        help_text = """T2I (Text to Image) Workflow:
-
-1. Enter prompts in the input area (one per line)
-2. Each prompt generates multiple image variations
-3. Click Add to Queue when ready
-
-Settings:
-- Aspect Ratio: Choose between Landscape, Portrait, or Square
-- Outputs/Prompt: Number of images per prompt (1-4)
-
-Tips:
-- Use detailed, descriptive prompts for best results
-- Specify art style, lighting, and mood
-- Include subject, setting, and composition details"""
-        
-        HelpTooltipPopup(self, "T2I Workflow", help_text).exec()

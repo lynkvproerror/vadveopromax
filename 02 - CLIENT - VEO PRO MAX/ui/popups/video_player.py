@@ -411,7 +411,12 @@ class VideoPlayerPopup(BasePopup):
         # Close button
         close_btn = QPushButton("Close")
         close_btn.setMinimumWidth(80)
-        close_btn.setProperty("variant", "secondary")
+        close_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"padding: 8px 16px; font-weight: bold; font-size: 13px; }}"
+            f"QPushButton:hover {{ background-color: {Theme.OVERLAY0}; }}"
+        )
         close_btn.clicked.connect(self._on_close)
         footer_layout.addWidget(close_btn)
         

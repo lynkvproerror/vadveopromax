@@ -51,22 +51,3 @@ class TabR2V(GenerationTabBase):
                 "end_frame": pd.get("end_frame"),
             }
         return {}
-    
-    def _on_help(self):
-        """Show help for R2V workflow."""
-        from ui.popups.complex_popups import HelpTooltipPopup
-        help_text = """R2V (Ingredients) Workflow:
-
-1. Use [tag] in your prompts to reference Library images
-2. Maximum 3 reference images per prompt
-3. Tags are matched from your Image Library
-
-Example prompts:
-- [hero] transforms into action
-- [hero] [villain] epic confrontation
-- [hero] [bg_forest] [artifact] discovering treasure
-
-Note: All images come from the Library.
-Use "Manage Library" to add/edit images."""
-        
-        HelpTooltipPopup(self, "Ingredients Workflow", help_text).exec()

@@ -1,0 +1,618 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260315_145441
+Total: 604 entries
+============================================================
+
+[INFO ] 14:52:19 - core.session_manager - [Session] Loaded from 2026-03-15T14:51:05.183852
+[INFO ] 14:52:19 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 14:52:19 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[INFO ] 14:52:19 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Truyện Kiều: 6 completed stage(s), current=concat
+[DEBUG] 14:52:19 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=[]
+[INFO ] 14:52:19 - veo.tab_queue - [GroupCreate] gid=group_20260315_134047 name='TEST' children=15 expanded=True
+[DEBUG] 14:52:20 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:52:24 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:52:25 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:52:25 - veo - [VersionCheck] OK: 2.3.2 >= 2.3.0
+[DEBUG] 14:52:25 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[INFO ] 14:52:31 - core.app_controller - Synced profile → runtime: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:31 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[DEBUG] 14:52:31 - core.app_controller - Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+[INFO ] 14:52:31 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 14:52:31 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 14:52:31 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 14:52:31 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: veofidelia169@tunxelamorintesa.sbs...
+[DEBUG] 14:52:31 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for veofidelia169@tunxelamorintesa.sbs...
+[INFO ] 14:52:31 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 14:52:31 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_50d44400
+[DEBUG] 14:52:31 - core.chrome_manager - [ChromeManager] No PID file for browser_session_50d44400
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[DEBUG] 14:52:31 - core.chrome_manager - [ChromeManager] Variations seed already up-to-date for browser_session_50d44400
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_50d44400
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] Chrome launched: PID=43620, port=9223
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 43620
+[INFO ] 14:52:31 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400\.chrome_pid.json
+[WARNING] 14:52:31 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 14:52:32 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 14:52:32 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 14:52:32 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 14:52:32 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.4
+[INFO ] 14:52:32 - core.extension_manager - [ExtMgr] Extension v2.3.4 up-to-date — skipping
+[INFO ] 14:52:32 - core.profiles_controller - [ProfilesController] Chrome PID=43620, port=9223 (new)
+[INFO ] 14:52:32 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 61234)
+[INFO ] 14:52:32 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for veofidelia169@tunxelamorintesa.sbs (smart-hide disabled)
+[DEBUG] 14:52:32 - asyncio - Using proactor: IocpProactor
+[INFO ] 14:52:32 - core.app_controller - [AutoLaunch] ✅ veofidelia169@tunxelamorintesa.sbs browser visible (smart-hide disabled)
+[INFO ] 14:52:32 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 14:52:32 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 14:52:32 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] ⏳ Debug browser starting, waiting...
+[DEBUG] 14:52:32 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[INFO ] 14:52:34 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 14:52:36 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 14:52:36 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 14:52:37 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 61234) still unregistered after 5s
+[INFO ] 14:52:37 - core.app_controller - [AutoAssign] 📧 Late-assign email: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:37 - core.extension_bridge - [ExtensionBridge] 📧 Assigned email to extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:37 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:37 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:37 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[DEBUG] 14:52:37 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[INFO ] 14:52:37 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 14:52:37 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 14:52:37 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[DEBUG] 14:52:37 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[DEBUG] 14:52:37 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[INFO ] 14:52:38 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:38 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:38 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:52:40 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 14:52:40 - core.app_controller - [sync] veofidelia169@tunxelamorintesa.sbs: bridge cache → session x-client-data (0→8 chars)
+[INFO ] 14:52:40 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 14:52:40 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[DEBUG] 14:52:40 - asyncio - Using proactor: IocpProactor
+[WARNING] 14:52:40 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 14:52:40 - core.engine - [Engine] Workload priority → upscale_priority
+[INFO ] 14:52:40 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 14:52:40 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 14:52:40 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 14:52:40 - core.app_controller - [Engine] Processing started
+[INFO ] 14:52:40 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 14:52:40 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] ⏳ Debug browser starting, waiting...
+[INFO ] 14:52:40 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=600s, POLL timeout=900s, scan every 30s
+[INFO ] 14:52:40 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[DEBUG] 14:52:40 - core.engine - [TabKeepalive] Engine processing — yielding...
+[DEBUG] 14:52:40 - core.profiles_controller - [DEBUG] Step 5: Reload done. Headers = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 14:52:40 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 14:52:40 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for veofidelia169@tunxelamorintesa.sbs (persistent, port=9223)
+[INFO ] 14:52:40 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 14:52:40 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 14:52:40 - core.multi_account - All account browsers initialized
+[INFO ] 14:52:40 - core.multi_account - ⏳ No account has good x-client-data yet (best=8 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 14:52:40 - core.engine - Engine starting: 1 accounts, 15 ready tasks in queue
+[INFO ] 14:52:40 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[INFO ] 14:52:40 - core.engine - [G1:veofidelia169@tunxelamorintesa.sbs] max_foremen=-1, raw_foreman=8, existing=0
+[INFO ] 14:52:40 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Spawned CHỦ + 8 Foremen (max_workers=20, output=2, retry=3, timeout=120s)
+[INFO ] 14:52:40 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Started
+[INFO ] 14:52:40 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Refreshing browser headers...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-0] Waiting for supervisor startup...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-1] Waiting for supervisor startup...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-2] Waiting for supervisor startup...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-3] Waiting for supervisor startup...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-4] Waiting for supervisor startup...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-5] Waiting for supervisor startup...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-6] Waiting for supervisor startup...
+[DEBUG] 14:52:40 - core.engine - [foreman-veofidel-7] Waiting for supervisor startup...
+[INFO ] 14:52:40 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 14:52:40 - core.engine - [CreditWindow] Recovery timer started
+[DEBUG] 14:52:40 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 14:52:40 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:52:40 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 14:52:40 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 14:52:40 - core.multi_account - All account browsers initialized
+[INFO ] 14:52:40 - core.multi_account - ⏳ No account has good x-client-data yet (best=8 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 14:52:40 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[DEBUG] 14:52:41 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:41 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:52:41 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:52:41 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:52:42 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:43 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:52:43 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['veofidelia169@tunxelamorintesa.sbs']
+[INFO ] 14:52:43 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 14:52:43 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/B6E5FB7AFC0469CF1976E1FBD8...
+[DEBUG] 14:52:45 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:52:45 - core.extension_manager - [ExtMgr] Closed extensions tab B6E5FB7A... (PUT)
+[INFO ] 14:52:45 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 14:52:45 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.4
+[INFO ] 14:52:45 - core.app_controller - [AppController] Extension v2.3.4 connected via bridge for veofidelia169@tunxelamorintesa.sbs — up-to-date
+[INFO ] 14:52:45 - core.app_controller - [AppController] Extension batch check results: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected'}
+[INFO ] 14:52:45 - core.app_controller - [AutoLaunch] Extension check complete: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected'}
+[INFO ] 14:52:45 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 14:52:45 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 14:52:45 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 14:52:45 - core.app_controller - [AutoLaunch] 📸 Image Library: 25 images, all already uploaded
+[DEBUG] 14:52:45 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[DEBUG] 14:52:45 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:52:45 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:52:45 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:52:45 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:52:45 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:52:45 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 14:52:45 - core.recaptcha_pool - [RecaptchaPool] Prefetched for veofidelia169@tunxelamorintesa.sbs (pool=1/2)
+[DEBUG] 14:52:46 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:52:47 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:52:47 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 14:52:47 - core.recaptcha_pool - [RecaptchaPool] Prefetched for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[INFO ] 14:52:47 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2105 chars)
+[DEBUG] 14:52:47 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:52:47 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2105 chars) → AM + Pool
+[DEBUG] 14:52:47 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2105 chars)
+[INFO ] 14:52:47 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+[INFO ] 14:52:47 - veo - [Status] ✅ veofidelia169@tunxelamorintesa.sbs: reCAPTCHA ready — account prepared
+[DEBUG] 14:52:47 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:47 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 14:52:48 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:49 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:50 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:52:50 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:51 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:51 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:52:51 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:52:51 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:52:52 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:53 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:54 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:55 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:52:55 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:52:56 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 14:52:56 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ checkAppAvailability: AVAILABLE
+[INFO ] 14:52:57 - core.trpc_client - TRPC: Created project 'My Video Project' → 7273aa4a-9381-4f99-b64a-c36605e843ce
+[INFO ] 14:52:57 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] ✅ Project ready: 7273aa4a-9381-4f99-b64a-c36605e843ce
+[INFO ] 14:52:57 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Pre-warming reCAPTCHA...
+[INFO ] 14:52:57 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2126 chars)
+[DEBUG] 14:52:57 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:52:57 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2126 chars) → AM + Pool
+[DEBUG] 14:52:57 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2126 chars)
+[INFO ] 14:52:57 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 14:52:57 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:52:57 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:52:57 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (1/2, 2105 chars)
+[INFO ] 14:52:58 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:52:58 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:52:58 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (2/2, 2105 chars)
+[INFO ] 14:52:59 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:52:59 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] 🧪 Probe (attempt 1/2) — validating reCAPTCHA token...
+[INFO ] 14:53:00 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2084 chars
+[INFO ] 14:53:00 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] 🧪 ✅ Probe OK — reCAPTCHA token valid (2084 chars)
+[INFO ] 14:53:00 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] ✅ Startup complete — unblocking foremen
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-0] Supervisor startup done — entering main loop
+[INFO ] 14:53:00 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_0 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=1)
+[INFO ] 14:53:00 - core.engine - [foreman-veofidel-0] Picked task group_20260315_134047_task_0 [running/init] progress=0% prompt_idx=0 workflow=T2V
+[DEBUG] 14:53:00 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-1] Supervisor startup done — entering main loop
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-1] Stagger delay: 5.0s (anti-detect=on)
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-2] Supervisor startup done — entering main loop
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-2] Stagger delay: 4.2s (anti-detect=on)
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-3] Supervisor startup done — entering main loop
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-3] Stagger delay: 6.9s (anti-detect=on)
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-4] Supervisor startup done — entering main loop
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-4] Stagger delay: 5.3s (anti-detect=on)
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-5] Supervisor startup done — entering main loop
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-5] Stagger delay: 3.9s (anti-detect=on)
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-6] Supervisor startup done — entering main loop
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-6] Stagger delay: 3.3s (anti-detect=on)
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-7] Supervisor startup done — entering main loop
+[DEBUG] 14:53:00 - core.engine - [foreman-veofidel-7] Stagger delay: 7.8s (anti-detect=on)
+[DEBUG] 14:53:00 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:53:00 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:00 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ grecaptcha ready (attempt #1, waited 0.0s)
+[INFO ] 14:53:00 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:53:00 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:00 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (1/2, 2105 chars)
+[DEBUG] 14:53:00 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:53:00 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:53:00 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 14:53:01 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2126 chars
+[INFO ] 14:53:01 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:01 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (2/2, 2126 chars)
+[INFO ] 14:53:02 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:53:02 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:02 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0: adaptive delay (5.5s base) → submit attempt 1/11 [init] progress=5%
+[DEBUG] 14:53:02 - core.adaptive_burst - [AdaptiveBurst] veofidelia169@tunxelamorintesa.sbs: waiting 4.9s (base=5.5s)
+[INFO ] 14:53:03 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_1 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=2)
+[INFO ] 14:53:03 - core.engine - [foreman-veofidel-6] Picked task group_20260315_134047_task_1 [running/init] progress=0% prompt_idx=1 workflow=T2V
+[DEBUG] 14:53:03 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:03 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:03 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2126 chars)
+[DEBUG] 14:53:03 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:53:03 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2126 chars) → AM + Pool
+[DEBUG] 14:53:03 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2126 chars)
+[INFO ] 14:53:03 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 14:53:03 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2126 chars
+[INFO ] 14:53:03 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:03 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (1/2, 2126 chars)
+[INFO ] 14:53:03 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_2 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=3)
+[INFO ] 14:53:03 - core.engine - [foreman-veofidel-5] Picked task group_20260315_134047_task_2 [running/init] progress=0% prompt_idx=2 workflow=T2V
+[DEBUG] 14:53:03 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:03 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:03 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:53:04 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_3 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=4)
+[INFO ] 14:53:04 - core.engine - [foreman-veofidel-2] Picked task group_20260315_134047_task_3 [running/init] progress=0% prompt_idx=3 workflow=T2V
+[DEBUG] 14:53:04 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:04 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:04 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:53:05 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_4 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=5)
+[INFO ] 14:53:05 - core.engine - [foreman-veofidel-1] Picked task group_20260315_134047_task_4 [running/init] progress=0% prompt_idx=4 workflow=T2V
+[DEBUG] 14:53:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:05 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2169 chars
+[INFO ] 14:53:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:05 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (2/2, 2169 chars)
+[DEBUG] 14:53:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:05 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:53:05 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:53:05 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_5 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=6)
+[INFO ] 14:53:05 - core.engine - [foreman-veofidel-4] Picked task group_20260315_134047_task_5 [running/init] progress=0% prompt_idx=5 workflow=T2V
+[DEBUG] 14:53:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:05 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:53:06 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:53:06 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:06 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:06 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:06 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:06 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:06 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_6 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=7)
+[INFO ] 14:53:06 - core.engine - [foreman-veofidel-3] Picked task group_20260315_134047_task_6 [running/init] progress=0% prompt_idx=6 workflow=T2V
+[DEBUG] 14:53:06 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:06 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:07 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2126 chars)
+[DEBUG] 14:53:07 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:53:07 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2126 chars) → AM + Pool
+[DEBUG] 14:53:07 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2126 chars)
+[INFO ] 14:53:07 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 14:53:07 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2126 chars
+[INFO ] 14:53:07 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:07 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (1/2, 2126 chars)
+[INFO ] 14:53:07 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0: submitting via Extension (page context fetch)
+[INFO ] 14:53:07 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] 📦 Request body for T2V:
+  endpoint = T2V
+  body keys = ['clientContext', 'requests']
+  timeout = 120s
+[DEBUG] 14:53:07 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] body summary: prompt='Opening scene, morning. Wide shot, Pan right. 3D Animation. ', model=veo_3_1_t2v_fast_ultra_relaxed, outputs=2
+[INFO ] 14:53:07 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_7 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=8)
+[INFO ] 14:53:07 - core.engine - [foreman-veofidel-7] Picked task group_20260315_134047_task_7 [running/init] progress=0% prompt_idx=7 workflow=T2V
+[DEBUG] 14:53:07 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:07 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:07 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[WARNING] 14:53:08 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: reCAPTCHA evaluation failed — consecutive #1
+[WARNING] 14:53:08 - core.engine - [Extension] 403 response data for veofidelia169@tunxelamorintesa.sbs: {'error': {'code': 403, 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'PUBLIC_ERROR_SOMETHING_WENT_WRONG'}], 'message': 'reCAPTCHA evaluation failed', 'status': 'PERMISSION_DENIED'}}
+[DEBUG] 14:53:08 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] reCAPTCHA token invalidated (single-use consumed)
+[INFO ] 14:53:08 - core.adaptive_burst - [AdaptiveBurst] veofidelia169@tunxelamorintesa.sbs: backed off 5.5s → 8.0s (HTTP 403)
+[WARNING] 14:53:08 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: 403/403 Forbidden: reCAPTCHA evaluation failed → cooldown 30s (consecutive #1)
+[INFO ] 14:53:08 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: classified '403 Forbidden: reCAPTCHA evaluation failed' → recaptcha_403
+[INFO ] 14:53:08 - core.account_health - [CreditWindow] veofidelia169@tunxelamorintesa.sbs: credits 10→7 (cost=3)
+[INFO ] 14:53:08 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: trying remedy 1/6 'simulate_activity' — Warm up tab before reload
+[INFO ] 14:53:08 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_1: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:08 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_1): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=7
+[INFO ] 14:53:08 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:08 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_2: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:08 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_2): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=6
+[INFO ] 14:53:08 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:08 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_3: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:08 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_3): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=5
+[INFO ] 14:53:08 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:08 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_4: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:08 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_4): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=4
+[INFO ] 14:53:08 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:08 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_5: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:08 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_5): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=3
+[INFO ] 14:53:08 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:08 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2126 chars
+[INFO ] 14:53:08 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:08 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (2/2, 2126 chars)
+[INFO ] 14:53:09 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:53:09 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:09 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_6: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:09 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_6): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=2
+[INFO ] 14:53:09 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 29s (with tab keepalive)...
+[INFO ] 14:53:09 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:09 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_7: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:09 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_7): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=1
+[INFO ] 14:53:09 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 29s (with tab keepalive)...
+[DEBUG] 14:53:10 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:53:10 - core.dispatcher - [AUDIT] ✅ Counters OK — running=1, accounts={'veofidelia169@tunxelamorintesa.sbs': 1}
+[INFO ] 14:53:10 - core.remedy_registry - [Remedy] veofidelia169@tunxelamorintesa.sbs: simulated activity + warmup
+[DEBUG] 14:53:12 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:53:12 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:53:12 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 14:53:12 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2126 chars)
+[DEBUG] 14:53:12 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:53:12 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2126 chars) → AM + Pool
+[DEBUG] 14:53:12 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2126 chars)
+[INFO ] 14:53:13 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2084 chars
+[INFO ] 14:53:13 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: ✅ remedy 'simulate_activity' fixed the issue (attempt 1/6)
+[INFO ] 14:53:13 - core.engine - [Recovery] veofidelia169@tunxelamorintesa.sbs: recovery OK (remedy=simulate_activity, backoff=3s)
+[WARNING] 14:53:13 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0 failed (attempt 1/11): 403 Forbidden: reCAPTCHA evaluation failed. Retrying in 3s...
+[DEBUG] 14:53:15 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:53:16 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 23s (with tab keepalive)...
+[DEBUG] 14:53:16 - core.task_journal - [TaskJournal] Snapshot saved — 15 tasks, save #1
+[DEBUG] 14:53:19 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:53:19 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:53:19 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:53:19 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:53:20 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:53:25 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:53:28 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:53:28 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:53:28 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:53:28 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:53:28 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:53:29 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (9s remaining)
+[DEBUG] 14:53:29 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (9s remaining)
+[DEBUG] 14:53:30 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:53:31 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=13s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:53:35 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:53:36 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (3s remaining)
+[DEBUG] 14:53:37 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 14:53:38 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_1 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=2)
+[INFO ] 14:53:38 - core.engine - [foreman-veofidel-6] Picked task group_20260315_134047_task_1 [running/init] progress=0% prompt_idx=1 workflow=T2V
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_2 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=3)
+[INFO ] 14:53:38 - core.engine - [foreman-veofidel-5] Picked task group_20260315_134047_task_2 [running/init] progress=0% prompt_idx=2 workflow=T2V
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_3 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=4)
+[INFO ] 14:53:38 - core.engine - [foreman-veofidel-2] Picked task group_20260315_134047_task_3 [running/init] progress=0% prompt_idx=3 workflow=T2V
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_4 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=5)
+[INFO ] 14:53:38 - core.engine - [foreman-veofidel-1] Picked task group_20260315_134047_task_4 [running/init] progress=0% prompt_idx=4 workflow=T2V
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_5 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=6)
+[INFO ] 14:53:38 - core.engine - [foreman-veofidel-4] Picked task group_20260315_134047_task_5 [running/init] progress=0% prompt_idx=5 workflow=T2V
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_6 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=7)
+[INFO ] 14:53:38 - core.engine - [foreman-veofidel-3] Picked task group_20260315_134047_task_6 [running/init] progress=0% prompt_idx=6 workflow=T2V
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_7 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=8)
+[INFO ] 14:53:38 - core.engine - [foreman-veofidel-7] Picked task group_20260315_134047_task_7 [running/init] progress=0% prompt_idx=7 workflow=T2V
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ⏱️ Timeout Tier 1 (attempt 1) → xcd=30s, reCAPTCHA=35s
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:53:38 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2148 chars)
+[DEBUG] 14:53:38 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:53:38 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2148 chars) → AM + Pool
+[DEBUG] 14:53:38 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2148 chars)
+[INFO ] 14:53:38 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:53:38 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:38 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:53:39 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:53:39 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:39 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (1/2, 2105 chars)
+[DEBUG] 14:53:39 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:39 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:53:39 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:53:39 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:53:40 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:53:40 - core.dispatcher - [AUDIT] ✅ Counters OK — running=8, accounts={'veofidelia169@tunxelamorintesa.sbs': 8}
+[INFO ] 14:53:40 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2084 chars
+[INFO ] 14:53:40 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:53:40 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (2/2, 2084 chars)
+[INFO ] 14:53:41 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 1)
+[INFO ] 14:53:41 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0: adaptive delay (8.0s base) → submit attempt 2/11 [init] progress=5%
+[DEBUG] 14:53:41 - core.adaptive_burst - [AdaptiveBurst] veofidelia169@tunxelamorintesa.sbs: waiting 8.5s (base=8.0s)
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:53:41 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[DEBUG] 14:53:41 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:53:41 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:53:41 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:53:45 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:53:46 - core.task_journal - [TaskJournal] Snapshot saved — 15 tasks, save #2
+[INFO ] 14:53:49 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0: submitting via Extension (page context fetch)
+[INFO ] 14:53:49 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] 📦 Request body for T2V:
+  endpoint = T2V
+  body keys = ['clientContext', 'requests']
+  timeout = 120s
+[DEBUG] 14:53:49 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] body summary: prompt='Opening scene, morning. Wide shot, Pan right. 3D Animation. ', model=veo_3_1_t2v_fast_ultra_relaxed, outputs=2
+[DEBUG] 14:53:50 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[WARNING] 14:53:51 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: reCAPTCHA evaluation failed — consecutive #1
+[WARNING] 14:53:51 - core.engine - [Extension] 403 response data for veofidelia169@tunxelamorintesa.sbs: {'error': {'code': 403, 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'PUBLIC_ERROR_SOMETHING_WENT_WRONG'}], 'message': 'reCAPTCHA evaluation failed', 'status': 'PERMISSION_DENIED'}}
+[DEBUG] 14:53:51 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] reCAPTCHA token invalidated (single-use consumed)
+[INFO ] 14:53:51 - core.adaptive_burst - [AdaptiveBurst] veofidelia169@tunxelamorintesa.sbs: backed off 8.0s → 8.0s (HTTP 403)
+[WARNING] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: 403/403 Forbidden: reCAPTCHA evaluation failed → cooldown 30s (consecutive #1)
+[INFO ] 14:53:51 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: classified '403 Forbidden: reCAPTCHA evaluation failed' → recaptcha_403
+[INFO ] 14:53:51 - core.account_health - [CreditWindow] veofidelia169@tunxelamorintesa.sbs: credits 8→5 (cost=3)
+[INFO ] 14:53:51 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: trying remedy 1/6 'simulate_activity' — Warm up tab before reload
+[INFO ] 14:53:51 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_1: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:51 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_1): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=7
+[INFO ] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:51 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_7: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:51 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_7): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=6
+[INFO ] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:51 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_6: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:51 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_6): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=5
+[INFO ] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:51 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_5: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:51 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_5): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=4
+[INFO ] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:51 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_3: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:51 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_3): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=3
+[INFO ] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:51 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_2: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:51 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_2): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=2
+[INFO ] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:51 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_4: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:53:51 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_4): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=1
+[INFO ] 14:53:51 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:53:53 - core.remedy_registry - [Remedy] veofidelia169@tunxelamorintesa.sbs: simulated activity + warmup
+[DEBUG] 14:53:54 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:53:54 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:53:54 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:53:55 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:53:55 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2148 chars)
+[DEBUG] 14:53:55 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:53:55 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2148 chars) → AM + Pool
+[DEBUG] 14:53:55 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2148 chars)
+[INFO ] 14:53:55 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2084 chars
+[INFO ] 14:53:55 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: ✅ remedy 'simulate_activity' fixed the issue (attempt 1/6)
+[INFO ] 14:53:55 - core.engine - [Recovery] veofidelia169@tunxelamorintesa.sbs: recovery OK (remedy=simulate_activity, backoff=4s)
+[WARNING] 14:53:55 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0 failed (attempt 2/11): 403 Forbidden: reCAPTCHA evaluation failed. Retrying in 4s...
+[INFO ] 14:53:59 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 22s (with tab keepalive)...
+[DEBUG] 14:54:00 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:54:05 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:54:10 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:54:10 - core.dispatcher - [AUDIT] ✅ Counters OK — running=1, accounts={'veofidelia169@tunxelamorintesa.sbs': 1}
+[DEBUG] 14:54:11 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:54:11 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:54:11 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:54:11 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:54:11 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:54:11 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:54:11 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (10s remaining)
+[DEBUG] 14:54:15 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:54:19 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:54:19 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:54:19 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:54:19 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:54:19 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: tab keepalive ping OK (2s remaining)
+[DEBUG] 14:54:20 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:54:21 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_1 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=2)
+[INFO ] 14:54:21 - core.engine - [foreman-veofidel-6] Picked task group_20260315_134047_task_1 [running/init] progress=0% prompt_idx=1 workflow=T2V
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_7 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=3)
+[INFO ] 14:54:21 - core.engine - [foreman-veofidel-7] Picked task group_20260315_134047_task_7 [running/init] progress=0% prompt_idx=7 workflow=T2V
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_6 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=4)
+[INFO ] 14:54:21 - core.engine - [foreman-veofidel-3] Picked task group_20260315_134047_task_6 [running/init] progress=0% prompt_idx=6 workflow=T2V
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_5 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=5)
+[INFO ] 14:54:21 - core.engine - [foreman-veofidel-4] Picked task group_20260315_134047_task_5 [running/init] progress=0% prompt_idx=5 workflow=T2V
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_3 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=6)
+[INFO ] 14:54:21 - core.engine - [foreman-veofidel-2] Picked task group_20260315_134047_task_3 [running/init] progress=0% prompt_idx=3 workflow=T2V
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_2 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=7)
+[INFO ] 14:54:21 - core.engine - [foreman-veofidel-5] Picked task group_20260315_134047_task_2 [running/init] progress=0% prompt_idx=2 workflow=T2V
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.dispatcher - [Dispatcher] 📋 Task group_20260315_134047_task_4 READY → RUNNING (account=veofidelia169@tunxelamorintesa.sbs, running_count=8)
+[INFO ] 14:54:21 - core.engine - [foreman-veofidel-1] Picked task group_20260315_134047_task_4 [running/init] progress=0% prompt_idx=4 workflow=T2V
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ⏱️ Timeout Tier 2 (attempt 2) → xcd=40s, reCAPTCHA=45s
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:54:21 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2212 chars)
+[DEBUG] 14:54:21 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:54:21 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2212 chars) → AM + Pool
+[DEBUG] 14:54:21 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2212 chars)
+[INFO ] 14:54:21 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:21 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:54:21 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:54:21 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:54:21 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (1/2, 2105 chars)
+[INFO ] 14:54:22 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2105 chars
+[INFO ] 14:54:22 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:54:22 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (2/2, 2105 chars)
+[DEBUG] 14:54:23 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:54:23 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 14:54:23 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 2)
+[INFO ] 14:54:23 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0: adaptive delay (8.0s base) → submit attempt 3/11 [init] progress=5%
+[DEBUG] 14:54:23 - core.adaptive_burst - [AdaptiveBurst] veofidelia169@tunxelamorintesa.sbs: waiting 8.4s (base=8.0s)
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[INFO ] 14:54:23 - core.engine - [PreSubmitGate:veofidelia169@tunxelamorintesa.sbs] ✅ Gate passed — submitting (tier 0)
+[DEBUG] 14:54:25 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:54:30 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:54:31 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=13s,cap=✅) | conns=1, pending=0
+[INFO ] 14:54:32 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0: submitting via Extension (page context fetch)
+[INFO ] 14:54:32 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] 📦 Request body for T2V:
+  endpoint = T2V
+  body keys = ['clientContext', 'requests']
+  timeout = 120s
+[DEBUG] 14:54:32 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] body summary: prompt='Opening scene, morning. Wide shot, Pan right. 3D Animation. ', model=veo_3_1_t2v_fast_ultra_relaxed, outputs=2
+[WARNING] 14:54:33 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: reCAPTCHA evaluation failed — consecutive #1
+[WARNING] 14:54:33 - core.engine - [Extension] 403 response data for veofidelia169@tunxelamorintesa.sbs: {'error': {'code': 403, 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'PUBLIC_ERROR_SOMETHING_WENT_WRONG'}], 'message': 'reCAPTCHA evaluation failed', 'status': 'PERMISSION_DENIED'}}
+[DEBUG] 14:54:33 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] reCAPTCHA token invalidated (single-use consumed)
+[INFO ] 14:54:33 - core.adaptive_burst - [AdaptiveBurst] veofidelia169@tunxelamorintesa.sbs: backed off 8.0s → 8.0s (HTTP 403)
+[WARNING] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: 403/403 Forbidden: reCAPTCHA evaluation failed → cooldown 30s (consecutive #1)
+[INFO ] 14:54:33 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: classified '403 Forbidden: reCAPTCHA evaluation failed' → recaptcha_403
+[INFO ] 14:54:33 - core.account_health - [CreditWindow] veofidelia169@tunxelamorintesa.sbs: credits 6→3 (cost=3)
+[INFO ] 14:54:33 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: trying remedy 1/6 'simulate_activity' — Warm up tab before reload
+[INFO ] 14:54:33 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_5: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:54:33 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_5): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=7
+[INFO ] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:54:33 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_1: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:54:33 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_1): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=6
+[INFO ] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:54:33 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_7: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:54:33 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_7): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=5
+[INFO ] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:54:33 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_3: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:54:33 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_3): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=4
+[INFO ] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:54:33 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_2: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:54:33 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_2): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=3
+[INFO ] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:54:33 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_6: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:54:33 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_6): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=2
+[INFO ] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[INFO ] 14:54:33 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_4: cooldown detected INSIDE rate lock — requeueing task, will retry after cooldown
+[DEBUG] 14:54:33 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260315_134047_task_4): running → READY, account=veofidelia169@tunxelamorintesa.sbs → None, running_count=1
+[INFO ] 14:54:33 - core.engine - [Cooldown] veofidelia169@tunxelamorintesa.sbs: waiting 30s (with tab keepalive)...
+[DEBUG] 14:54:35 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[INFO ] 14:54:35 - core.remedy_registry - [Remedy] veofidelia169@tunxelamorintesa.sbs: simulated activity + warmup
+[DEBUG] 14:54:36 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:54:36 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 14:54:36 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 14:54:37 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2105 chars)
+[DEBUG] 14:54:37 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=2/2)
+[DEBUG] 14:54:37 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2105 chars) → AM + Pool
+[DEBUG] 14:54:37 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2105 chars)
+[INFO ] 14:54:37 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2126 chars
+[INFO ] 14:54:37 - core.remedy_registry - [Recovery] veofidelia169@tunxelamorintesa.sbs: ✅ remedy 'simulate_activity' fixed the issue (attempt 1/6)
+[INFO ] 14:54:37 - core.engine - [Recovery] veofidelia169@tunxelamorintesa.sbs: recovery OK (remedy=simulate_activity, backoff=6s)
+[WARNING] 14:54:37 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] Task group_20260315_134047_task_0 failed (attempt 3/11): 403 Forbidden: reCAPTCHA evaluation failed. Retrying in 6s...
+[DEBUG] 14:54:37 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 14:54:40 - veo.tab_queue - [QueueRefresh] 1 groups, 15 total tasks, existing_groups=['group_20260315_134047']
+[DEBUG] 14:54:40 - core.dispatcher - [AUDIT] ✅ Counters OK — running=1, accounts={'veofidelia169@tunxelamorintesa.sbs': 1}
+[INFO ] 14:54:41 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

@@ -178,19 +178,31 @@ class ConfirmDialog(BasePopup):
         
         self.footer_layout.addStretch()
         
+        _btn_base = (
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"padding: 8px 16px; font-weight: bold; font-size: 13px;"
+        )
         # Cancel button
         self.cancel_btn = QPushButton(self.cancel_text)
         self.cancel_btn.setMinimumWidth(80)
-        self.cancel_btn.setProperty("variant", "secondary")
+        self.cancel_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: {Theme.OVERLAY0}; }}"
+        )
         self.cancel_btn.clicked.connect(self._on_close)
         self.footer_layout.addWidget(self.cancel_btn)
         
         # Confirm button
-        confirm_color_variant = "danger" if self.danger else None
+        if self.danger:
+            bg, hover = Theme.RED, "#EBA0AC"
+        else:
+            bg, hover = Theme.BLUE, Theme.LAVENDER
         self.confirm_btn = QPushButton(self.confirm_text)
         self.confirm_btn.setMinimumWidth(80)
-        if confirm_color_variant:
-            self.confirm_btn.setProperty("variant", confirm_color_variant)
+        self.confirm_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {bg}; color: {Theme.CRUST}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: {hover}; }}"
+        )
         self.confirm_btn.clicked.connect(self._on_confirm)
         self.footer_layout.addWidget(self.confirm_btn)
         
@@ -324,14 +336,25 @@ class RenameDialog(BasePopup):
         
         self.footer_layout.addStretch()
         
+        _btn_base = (
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"padding: 8px 16px; font-weight: bold; font-size: 13px;"
+        )
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setMinimumWidth(80)
-        cancel_btn.setProperty("variant", "secondary")
+        cancel_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: {Theme.OVERLAY0}; }}"
+        )
         cancel_btn.clicked.connect(self._on_close)
         self.footer_layout.addWidget(cancel_btn)
         
         ok_btn = QPushButton("OK")
         ok_btn.setMinimumWidth(80)
+        ok_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.BLUE}; color: {Theme.CRUST}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: {Theme.LAVENDER}; }}"
+        )
         ok_btn.clicked.connect(self._on_confirm)
         self.footer_layout.addWidget(ok_btn)
         

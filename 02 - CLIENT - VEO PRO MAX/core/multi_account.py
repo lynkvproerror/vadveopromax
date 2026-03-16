@@ -61,9 +61,10 @@ class MultiAccountManager:
     
     @property
     def total_active_upscale(self) -> int:
-        """Sum of active upscale workers from all accounts."""
+        """Sum of ALL active upscale from all accounts (inline + background)."""
         return sum(
             getattr(acc.session, 'active_upscale_workers', 0)
+            + getattr(acc.session, 'active_bg_upscale', 0)
             for acc in self._accounts
         )
     
@@ -191,6 +192,7 @@ class MultiAccountManager:
                 "active_workers": acc.active_workers,
                 "max_workers": acc.max_workers,
                 "active_upscale": getattr(acc.session, 'active_upscale_workers', 0),
+                "active_bg_upscale": getattr(acc.session, 'active_bg_upscale', 0),
                 "max_upscale": getattr(acc.session, 'max_upscale_workers', 4),
                 # Backward compat
                 "available_slots": acc.available_workers,
@@ -421,3 +423,42 @@ class MultiAccountManager:
                 # Shutdown pools + browsers first
                 await self.shutdown_browsers()
                 self._accounts.clear()
+    
+    def audit_upscale_counters(self, running_task_ids: set = None) -> dict:
+        """Audit and self-heal active_upscale_workers counters.
+        
+        Detects leaked upscale slots (acquired but never released due to
+        cancel, crash, or exception). If no tasks are actively upscaling
+        inline, resets the counter to 0.
+        
+        Args:
+            running_task_ids: Set of task IDs currently in RUNNING/WAITING_POLL
+                state AND doing inline upscale. If None, resets all counters
+                unconditionally (safe when engine is stopped).
+        
+        Returns:
+            Dict with audit results (fixed accounts, previous values).
+        """
+        fixes = []
+        for acc in self._accounts:
+            current = getattr(acc.session, 'active_upscale_workers', 0)
+            if current > 0:
+                # If no running tasks are doing inline upscale → counter is leaked
+                should_be_zero = (running_task_ids is not None and len(running_task_ids) == 0) or running_task_ids is None
+                if should_be_zero:
+                    fixes.append({
+                        "email": acc.email,
+                        "was": current,
+                        "fixed_to": 0,
+                    })
+                    acc.session.active_upscale_workers = 0
+                    log.warning(
+                        f"[AUDIT] ⬆️ {acc.email}: active_upscale_workers "
+                        f"leaked ({current} → 0) — no inline upscale tasks running"
+                    )
+        
+        return {
+            "ok": len(fixes) == 0,
+            "fixes": fixes,
+        }
+

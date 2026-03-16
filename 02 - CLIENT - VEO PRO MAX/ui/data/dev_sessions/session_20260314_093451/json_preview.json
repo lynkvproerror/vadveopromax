@@ -1,0 +1,57 @@
+{
+  "group_id": "group_20260314_091845",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260314_091845_task_0",
+      "prompt": "3D stylized animation, Pixar style, Tấm, 18-year-old Vietnamese girl, slender and graceful, soft peach skin, large expressive almond eyes, gentle smile, long espresso black hair in a low bun with a white lotus wooden hairpin, wearing a rustic cinnamon brown áo tứ thân and a flowing matte black skirt, studio lighting, simple rural garden background, medium shot, vibrant saturated colors, clean lines, high-quality render.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_091845_task_1",
+      "prompt": "3D stylized animation, Pixar style, Cám, 17-year-old girl, pale ivory skin, sharp upturned eyes, thin lips with an arrogant smirk, jet black hair in elaborate twin buns with magenta silk ribbons, wearing a bright coral red silk áo yếm and a glossy black silk skirt, gold hoop earrings, studio lighting, simple wooden porch background, portrait shot, vibrant saturated colors, stylized proportions, clean lines.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_091845_task_2",
+      "prompt": "3D stylized animation, Pixar style, Mẹ Cám, 45-year-old woman, upright commanding posture, sallow skin, high sharp cheekbones, thin arched eyebrows, small mole near upper lip, charcoal black hair with silver streaks in a tight severe bun, wearing a dark plum purple silk tunic with floral embroidery and wide-leg black trousers, heavy gold necklace and jade ring, studio lighting, simple dark interior background, medium shot, stylized features, clean lines.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_091845_task_3",
+      "prompt": "3D stylized animation, Pixar style, Bụt, ancient mystical spirit floating slightly, glowing ethereal gold-tinted skin, wise twinkling eyes, serene smile, long snow-white hair and waist-length beard, wearing luminous golden yellow robes with swirling cloud patterns and matching flowing trousers, holding a wooden fly-whisk with glowing white horsehair, studio lighting with magical gold dust, simple misty background, medium shot, vibrant and magical.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_091845_task_4",
+      "prompt": "3D stylized animation, Pixar style, Nhà Vua, 22-year-old handsome King, athletic regal build, sun-kissed tan skin, strong jawline, commanding dark eyes, thick straight eyebrows, obsidian black hair under an ornate gold crown with a deep red ruby, wearing a brilliant gold royal robe with burnt orange dragon embroidery and gold silk trousers, studio lighting, simple palace courtyard background, medium shot, clean lines, vibrant colors, high-quality render.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

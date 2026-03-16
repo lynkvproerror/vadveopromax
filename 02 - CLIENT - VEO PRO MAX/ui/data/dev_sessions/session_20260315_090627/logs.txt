@@ -1,0 +1,147 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260315_090627
+Total: 142 entries
+============================================================
+
+[INFO ] 09:04:24 - core.session_manager - [Session] Loaded from 2026-03-15T08:59:18.831369
+[INFO ] 09:04:24 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 09:04:24 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[DEBUG] 09:04:24 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=[]
+[INFO ] 09:04:24 - veo.tab_queue - [GroupCreate] gid=group_20260315_082141 name='TRUYỆN KIỀU/character' children=5 expanded=True
+[INFO ] 09:04:25 - veo.tab_queue - [GroupCreate] gid=group_20260315_082509 name='TRUYỆN KIỀU/scenes' children=62 expanded=True
+[DEBUG] 09:04:25 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:04:29 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:04:29 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:04:29 - veo - [VersionCheck] OK: 2.3.2 >= 2.3.0
+[DEBUG] 09:04:29 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[DEBUG] 09:04:36 - core.app_controller - Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+[INFO ] 09:04:36 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 09:04:36 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 09:04:36 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 09:04:36 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: veofidelia169@tunxelamorintesa.sbs...
+[DEBUG] 09:04:36 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for veofidelia169@tunxelamorintesa.sbs...
+[INFO ] 09:04:36 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 09:04:36 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_50d44400
+[DEBUG] 09:04:36 - core.chrome_manager - [ChromeManager] No PID file for browser_session_50d44400
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[DEBUG] 09:04:36 - core.chrome_manager - [ChromeManager] Variations seed already up-to-date for browser_session_50d44400
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_50d44400
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] Chrome launched: PID=28164, port=9223
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 28164
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400\.chrome_pid.json
+[WARNING] 09:04:36 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 09:04:36 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 09:04:36 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 09:04:37 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.3
+[INFO ] 09:04:37 - core.extension_manager - [ExtMgr] Extension v2.3.3 up-to-date — skipping
+[INFO ] 09:04:37 - core.profiles_controller - [ProfilesController] Chrome PID=28164, port=9223 (new)
+[INFO ] 09:04:37 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 60882)
+[INFO ] 09:04:37 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for veofidelia169@tunxelamorintesa.sbs (smart-hide disabled)
+[DEBUG] 09:04:37 - asyncio - Using proactor: IocpProactor
+[INFO ] 09:04:37 - core.app_controller - [AutoLaunch] ✅ veofidelia169@tunxelamorintesa.sbs browser visible (smart-hide disabled)
+[INFO ] 09:04:37 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 09:04:37 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 09:04:37 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] ⏳ Debug browser starting, waiting...
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 2: Found 4 existing page(s)
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[INFO ] 09:04:37 - core.profiles_controller - [ProfilesController] Tab cleanup: 4 tabs → closing excess
+[INFO ] 09:04:37 - core.profiles_controller - [ProfilesController] Tab cleanup: closed 2 excess tab(s)
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 09:04:37 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 09:04:37 - core.profiles_controller - [DEBUG] Step 5: Headers so far = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 09:04:37 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 09:04:37 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for veofidelia169@tunxelamorintesa.sbs (persistent, port=9223)
+[INFO ] 09:04:37 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 09:04:37 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 09:04:37 - core.multi_account - All account browsers initialized
+[INFO ] 09:04:37 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 09:04:37 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 09:04:40 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:04:40 - core.extension_bridge - [ExtensionBridge] 📧 Assigned email to extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:04:40 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:04:40 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:04:40 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['veofidelia169@tunxelamorintesa.sbs']
+[INFO ] 09:04:40 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 09:04:40 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/CDC8776BA449E88B87D86C51E1...
+[INFO ] 09:04:42 - core.extension_manager - [ExtMgr] Closed extensions tab CDC8776B... (PUT)
+[INFO ] 09:04:42 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 09:04:42 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.3
+[INFO ] 09:04:42 - core.app_controller - [AppController] Extension v2.3.3 connected via bridge for veofidelia169@tunxelamorintesa.sbs — up-to-date
+[INFO ] 09:04:42 - core.app_controller - [AppController] Extension batch check results: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected'}
+[INFO ] 09:04:42 - core.app_controller - [AutoLaunch] Extension check complete: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected'}
+[INFO ] 09:04:42 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 09:04:42 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 09:04:42 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 09:04:42 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[DEBUG] 09:04:42 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[DEBUG] 09:04:42 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:04:42 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:04:42 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 2 tab(s) reloaded
+[INFO ] 09:04:42 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:04:42 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:04:43 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:04:43 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:04:43 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:04:45 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:04:45 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:04:45 - veo - [Status] 🔑 veofidelia169@tunxelamorintesa.sbs: x-client-data received (48 chars) — tokens ready
+[DEBUG] 09:04:49 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:04:49 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:04:49 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:04:49 - veo - [Status] 🔑 veofidelia169@tunxelamorintesa.sbs: x-client-data received (48 chars) — tokens ready
+[DEBUG] 09:05:03 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:05:09 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[WARNING] 09:05:12 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 09:05:12 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=dc30f9ad)
+[WARNING] 09:05:12 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[DEBUG] 09:05:13 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:05:18 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:05:18 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:05:18 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:05:18 - veo - [Status] 🔑 veofidelia169@tunxelamorintesa.sbs: x-client-data received (48 chars) — tokens ready
+[DEBUG] 09:05:24 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 09:05:24 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:05:24 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:05:24 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 09:05:36 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=13s,cap=✅) | conns=1, pending=1
+[WARNING] 09:05:36 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs (no heartbeat for 53s) — recovery attempt 1/3
+[INFO ] 09:05:36 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for veofidelia169@tunxelamorintesa.sbs — frozen tab recovery 1/3
+[DEBUG] 09:05:36 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:05:37 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 09:05:37 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 14.9s (requestId=20557e63)
+[WARNING] 09:05:37 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[DEBUG] 09:05:42 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[DEBUG] 09:05:43 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:05:43 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:05:43 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:05:43 - veo - [Status] 🔑 veofidelia169@tunxelamorintesa.sbs: x-client-data received (48 chars) — tokens ready
+[DEBUG] 09:05:57 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:06:03 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:06:07 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:06:07 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:06:07 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:06:07 - veo - [Status] 🔑 veofidelia169@tunxelamorintesa.sbs: x-client-data received (48 chars) — tokens ready
+[DEBUG] 09:06:07 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:06:11 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:06:11 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:06:11 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:06:11 - veo - [Status] 🔑 veofidelia169@tunxelamorintesa.sbs: x-client-data received (48 chars) — tokens ready
+[DEBUG] 09:06:14 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 09:06:24 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 09:06:24 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:06:24 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:06:24 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 09:06:27 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

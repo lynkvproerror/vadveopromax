@@ -5,6 +5,7 @@ Reference: 00_DESIGN_SYSTEM.md, TAB_xx specs
 Migrated from CustomTkinter to PySide6.
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -121,6 +122,7 @@ class MainWindow(QMainWindow):
         
         # 🔄 Auto-Update check (if enabled in settings)
         self._auto_updater = None
+        self._pending_update_active = False  # ★ R2-4: flag to prevent race
         if settings and getattr(settings, 'auto_update_enabled', True):
             try:
                 from core.auto_updater import AutoUpdater
@@ -130,12 +132,13 @@ class MainWindow(QMainWindow):
                 # Check for deferred updates (saved before reboot/exit)
                 pending = AutoUpdater.check_pending_update()
                 if pending:
-                    log.info(f"Pending update found: v{pending.get('version')}")
+                    print(f"[AutoUpdate] Pending update found: v{pending.get('version')}")
+                    self._pending_update_active = True
                     QTimer.singleShot(3000, lambda: self._apply_pending_update(pending))
                 else:
                     self._auto_updater.start_periodic_check()
             except Exception as e:
-                log.debug(f"Auto-updater init failed: {e}")
+                print(f"[AutoUpdate] Auto-updater init failed: {e}")
         
         # 🔒 Min client version check (5s delay — after pending update dialog at 3s)
         QTimer.singleShot(5000, self._check_min_version)
@@ -222,8 +225,7 @@ class MainWindow(QMainWindow):
         )
         self._net_signal.connect(self._update_network_signal)
         
-        # Wire tester mode from license (if controller available)
-        self._sync_tester_mode()
+        
         
         # Update window title with subscriber name
         self._update_window_title()
@@ -315,53 +317,40 @@ class MainWindow(QMainWindow):
     
     def _bind_hotkeys(self):
         """Bind keyboard shortcuts."""
-        # Ctrl+Shift+D to toggle DevConsole
-        shortcut = QShortcut(QKeySequence("Ctrl+Shift+D"), self)
-        shortcut.activated.connect(self._toggle_dev_console)
+        pass  # No hotkeys currently needed
     
-    @Slot()
-    def _toggle_dev_console(self):
-        """Toggle DevConsole tab visibility."""
-        # 3.4: Feature gate — only TESTER role can open DevConsole
-        if not self._dev_console_visible and self.controller:
+    def _show_dev_console(self):
+        """Show DevConsole tab (auto-called on startup for Tester role).
+        
+        DevConsole is always visible for Tester — no toggle, no hide.
+        This ensures logs are captured from the very start of the app.
+        """
+        if self._dev_console_visible:
+            return  # Already showing
+        
+        # Feature gate — only TESTER role can see DevConsole
+        if self.controller:
             try:
                 from services.permissions import Feature
                 if not self.controller._permissions.has_feature(Feature.DEV_CONSOLE):
-                    return  # Silently ignore for non-TESTER
+                    return  # Not a Tester
             except Exception:
                 pass
         
-        if self._dev_console_visible:
-            # Find and remove dev console tab
-            for i in range(self.tabview.count()):
-                if "Dev Console" in self.tabview.tabText(i):
-                    self.tabview.removeTab(i)
-                    break
-            self._dev_console_visible = False
-            # Stop performance timer + disconnect from controller
-            if self.controller:
-                if hasattr(self.controller, 'stop_perf_timer'):
-                    self.controller.stop_perf_timer()
-                if hasattr(self.controller, 'dev_console'):
-                    self.controller.dev_console = None
-            self.show_toast("DevConsole hidden", "info", audience="tester")
-        else:
-            # Add dev console tab (use actual migrated TabDevConsole)
-            dev_widget = TabDevConsole(controller=self.controller)
-            
-            self.tabview.addTab(dev_widget, "🛠️ Dev Console")
-            self.tabview.setCurrentWidget(dev_widget)
-            self.tab_instances['devconsole'] = dev_widget
-            
-            # Wire to controller so it can push JSON/queue data
-            if self.controller and hasattr(self.controller, 'dev_console'):
-                self.controller.dev_console = dev_widget
-                # Immediately push current status to DevConsole
-                self.controller.push_status_updates()
-                self.controller.start_perf_timer()
-            
-            self._dev_console_visible = True
-            self.show_toast("DevConsole visible (Ctrl+Shift+D to hide)", "info", audience="tester")
+        # Add dev console tab
+        dev_widget = TabDevConsole(controller=self.controller)
+        
+        self.tabview.addTab(dev_widget, "🛠️ Dev Console")
+        self.tab_instances['devconsole'] = dev_widget
+        
+        # Wire to controller so it can push JSON/queue data
+        if self.controller and hasattr(self.controller, 'dev_console'):
+            self.controller.dev_console = dev_widget
+            # Immediately push current status to DevConsole
+            self.controller.push_status_updates()
+            self.controller.start_perf_timer()
+        
+        self._dev_console_visible = True
     
     def _connect_controller(self):
         """Connect controller callbacks for UI updates."""
@@ -388,6 +377,10 @@ class MainWindow(QMainWindow):
         # === INITIAL STATUS BAR DATA ===
         self._update_license_widget()
         self._poll_status_bar()  # Initial populate
+        
+        # === AUTO-SHOW DEV CONSOLE FOR TESTER ===
+        # Show DevConsole immediately on startup so logs are captured from the beginning
+        self._show_dev_console()
         
         # === STATUS BAR POLLING TIMER (5s) ===
         self._status_timer = QTimer(self)
@@ -769,7 +762,8 @@ class MainWindow(QMainWindow):
                 max_upscale = acc.get("max_upscale", 4)
                 self._status_widgets["workers"].setText(
                     f"👷 {active_workers}/{total_capacity} ops "
-                    f"| ▲ {active_upscale}/{max_upscale}  📋 {running}"
+                    f"| ⬆️ {active_upscale}/{max_upscale} "
+                    f"| 📋 {running}"
                 )
                 color = Theme.GREEN if running > 0 else Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
@@ -843,18 +837,6 @@ class MainWindow(QMainWindow):
         except Exception:
             return "?.?.?"
     
-    def _on_update_available(self, info):
-        """Handle update available signal from background check — show toast."""
-        try:
-            if info.update_type == "full":
-                msg = f"🆕 Full Update v{info.version} available!"
-            elif info.update_type == "ext_only":
-                msg = f"🆕 Extension v{info.ext_version} update available!"
-            else:
-                return
-            self.show_toast(msg, "info", duration=8000)
-        except Exception:
-            pass
     
     def _apply_pending_update(self, pending: dict):
         """Apply a deferred full update on startup.
@@ -865,17 +847,35 @@ class MainWindow(QMainWindow):
         try:
             from core.auto_updater import AutoUpdater, compare_versions
             from config.constants import AppConstants
+            # ★ R17-1: Import logging at top of try (was inside L855 branch → NameError
+            #   when pending version IS newer and code reaches L871/L910/L924)
+            import logging
             
             pending_ver = pending.get("version", "0.0.0")
             current_ver = AppConstants.APP_VERSION
             
             # Guard: skip if pending version <= current (already updated or would downgrade)
             if compare_versions(current_ver, pending_ver) >= 0:
-                log.info(
+                logging.getLogger('veo').info(
                     f"Pending update v{pending_ver} skipped — "
                     f"current v{current_ver} is same or newer"
                 )
                 AutoUpdater.clear_pending_update()
+                self._pending_update_active = False
+                if self._auto_updater:
+                    self._auto_updater.start_periodic_check()
+                return
+            
+            # ★ R11-5: Verify ZIP still exists before prompting user
+            zip_path = pending.get("zip_path", "")
+            if not zip_path or not os.path.exists(zip_path):
+                logging.getLogger('veo').warning(f"Pending update ZIP missing: {zip_path}")
+                self.show_toast(
+                    "❌ Pending update file missing — discarded.",
+                    "error", duration=5000
+                )
+                AutoUpdater.clear_pending_update()
+                self._pending_update_active = False
                 if self._auto_updater:
                     self._auto_updater.start_periodic_check()
                 return
@@ -890,13 +890,68 @@ class MainWindow(QMainWindow):
             )
             
             if answer and self._auto_updater:
+                # ★ R14-4: Reset flag BEFORE apply (if apply_update fails internally,
+                # flag would stay True forever, blocking _check_min_version)
+                self._pending_update_active = False
+                # ★ R6-2: Re-verify SHA-256 before applying deferred ZIP
+                expected_sha = pending.get("sha256", "")
+                if expected_sha:
+                    import hashlib
+                    sha = hashlib.sha256()
+                    try:
+                        # ★ R12-3: Use verified local zip_path (not raw dict key)
+                        with open(zip_path, "rb") as zf:
+                            while True:
+                                chunk = zf.read(1024 * 1024)
+                                if not chunk:
+                                    break
+                                sha.update(chunk)
+                        actual = sha.hexdigest()
+                        if actual.lower() != expected_sha.lower():
+                            logging.getLogger('veo').warning(
+                                f"Pending ZIP SHA mismatch! Expected {expected_sha[:16]}... got {actual[:16]}..."
+                            )
+                            self.show_toast(
+                                "❌ Pending update file corrupted — discarded.",
+                                "error", duration=5000
+                            )
+                            AutoUpdater.clear_pending_update()
+                            self._pending_update_active = False
+                            if self._auto_updater:
+                                self._auto_updater.start_periodic_check()
+                            return
+                    except Exception as e:
+                        # ★ R8-5: SHA verify exception → treat as corrupt, don't fall through
+                        logging.getLogger('veo').warning(f"SHA verify failed for pending ZIP: {e}")
+                        self.show_toast(
+                            "❌ Pending update file inaccessible — discarded.",
+                            "error", duration=5000
+                        )
+                        AutoUpdater.clear_pending_update()
+                        self._pending_update_active = False
+                        if self._auto_updater:
+                            self._auto_updater.start_periodic_check()
+                        return
+                
                 self.show_toast(
                     f"📦 Installing v{pending_ver}...", "info", duration=3000
                 )
-                self._auto_updater.apply_update(pending["zip_path"])
+                # ★ R12-3: Use verified local zip_path consistently
+                self._auto_updater.apply_update(zip_path)
+            elif answer and not self._auto_updater:
+                # ★ R17-5: User chose "Install" but updater is gone — show error, keep ZIP
+                logging.getLogger('veo').error(
+                    "User chose to install pending update but _auto_updater is None"
+                )
+                self.show_toast(
+                    "❌ Update system unavailable — restart app to retry.",
+                    "error", duration=5000
+                )
+                self._pending_update_active = False
             else:
                 # User skipped → clear pending + start normal checks
                 AutoUpdater.clear_pending_update()
+                self._pending_update_active = False
                 if self._auto_updater:
                     self._auto_updater.start_periodic_check()
         except Exception as e:
@@ -904,6 +959,7 @@ class MainWindow(QMainWindow):
             logging.getLogger('veo').error(f"Pending update apply failed: {e}")
             from core.auto_updater import AutoUpdater
             AutoUpdater.clear_pending_update()
+            self._pending_update_active = False
             if self._auto_updater:
                 self._auto_updater.start_periodic_check()
     
@@ -914,12 +970,28 @@ class MainWindow(QMainWindow):
         - min_client_version: block if current < minimum
         - maintenance_mode: block if server is in maintenance
         """
-        def _ver_tuple(v: str):
-            """Parse version string to comparable tuple."""
-            try:
-                return tuple(int(x) for x in str(v).split('.')[:3])
-            except (ValueError, AttributeError):
-                return (0, 0, 0)
+        # ★ R2-4+R6-3+R7-3: Skip if pending update dialog is active, retry in 5s (max 3 retries)
+        if getattr(self, '_pending_update_active', False):
+            retries = getattr(self, '_min_version_retries', 0)
+            if retries < 3:
+                self._min_version_retries = retries + 1
+                import logging
+                logging.getLogger('veo').debug(
+                    f"[VersionCheck] Deferred — pending update active (retry {retries+1}/3)"
+                )
+                QTimer.singleShot(5000, self._check_min_version)
+                return
+            # Max retries exhausted — proceed anyway
+            import logging
+            logging.getLogger('veo').warning(
+                "[VersionCheck] Max retries exhausted — running check despite pending flag"
+            )
+        
+        # ★ R8-1: Reset retry counter on successful entry
+        self._min_version_retries = 0
+        
+        # ★ R4-4: Use compare_versions (has E8 safe_int) instead of fragile _ver_tuple
+        from core.auto_updater import compare_versions as _cmp_ver
         
         try:
             from security.firebase_rest_client import FirebaseRESTClient
@@ -939,7 +1011,7 @@ class MainWindow(QMainWindow):
             min_ver = str(client.get_config_value("min_client_version", "1.0.0"))
             current = self._get_version()
             
-            if _ver_tuple(current) < _ver_tuple(min_ver):
+            if _cmp_ver(current, min_ver) < 0:
                 log.warning(f"[VersionCheck] App {current} < min {min_ver} — blocking!")
                 self._show_version_block(current, min_ver)
             else:
@@ -972,15 +1044,12 @@ class MainWindow(QMainWindow):
         msg.exec()
         
         if msg.clickedButton() == update_btn:
-            if self._auto_updater:
-                self._auto_updater.check_now()
-            else:
-                import webbrowser
-                webbrowser.open("https://github.com/lynkv/veo-pro-max/releases")
+            # ★ R2-1: Open browser to downloads page instead of check_now()+quit race
+            import webbrowser
+            webbrowser.open("https://github.com/lynkvproerror/vadveopromax/releases")
         
-        # Force quit — version is too old
-        from PySide6.QtWidgets import QApplication
-        QApplication.quit()
+        # ★ E2: Hard exit — QApplication.quit() can be bypassed by closeEvent.ignore()
+        QTimer.singleShot(100, lambda: os._exit(0))
     
     def _show_maintenance_block(self):
         """Show blocking dialog when server is in maintenance mode."""
@@ -998,22 +1067,26 @@ class MainWindow(QMainWindow):
         msg.addButton(t("popups.ok"), QMessageBox.AcceptRole)
         msg.exec()
         
-        # Force quit — server maintenance
-        from PySide6.QtWidgets import QApplication
-        QApplication.quit()
+        # ★ E2: Hard exit — QApplication.quit() can be bypassed by closeEvent.ignore()
+        QTimer.singleShot(100, lambda: os._exit(0))
     
     def set_status(self, message: str):
         """Update status bar message (no-op, status_label removed)."""
         pass
     
     def _on_update_available(self, info):
-        """Handle auto-update available notification (from startup check)."""
+        """Handle auto-update available notification (from startup check).
+        
+        ★ R4-1: Single canonical handler for both full and ext_only types.
+        """
         try:
-            from config.i18n import t
-            self.show_toast(
-                f"🆕 {t('settings.update_sub.new_version')}: v{info.version}",
-                "info", duration=8000
-            )
+            if info.update_type == "full":
+                msg = f"🆕 Full Update v{info.version} available!"
+            elif info.update_type == "ext_only":
+                msg = f"🆕 Extension v{info.ext_version} update available!"
+            else:
+                return
+            self.show_toast(msg, "info", duration=8000)
         except Exception:
             pass
 
@@ -1136,7 +1209,7 @@ class MainWindow(QMainWindow):
         if self.controller:
             try:
                 tabs_data = {}
-                gen_tabs = ["t2v", "i2v", "r2v", "t2i", "i2i"]
+                gen_tabs = ["t2v", "i2v", "r2v", "t2i", "i2i", "project"]
                 for key in gen_tabs:
                     tab = self.tab_instances.get(key)
                     if tab and hasattr(tab, 'save_state'):
@@ -1146,6 +1219,14 @@ class MainWindow(QMainWindow):
                 print(f"[App] Session saved ({len(tabs_data)} tabs)")
             except Exception as e:
                 print(f"[App] Session save failed: {e}")
+            
+            # Auto-export Dev Console data (per-session)
+            try:
+                dev_tab = self.tab_instances.get('devconsole')
+                if dev_tab and hasattr(dev_tab, 'auto_export_session'):
+                    dev_tab.auto_export_session()
+            except Exception as e:
+                print(f"[App] DevConsole export failed: {e}")
             
             # Kill all managed Chrome browsers on app exit
             try:

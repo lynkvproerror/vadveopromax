@@ -174,6 +174,25 @@ VOICE_REGIONS = [
     ("mien_trung", "Trung"),
 ]
 
+# D9: Camera Techniques (based on VEO 3.0 Reshoot Motion Types)
+CAMERA_TECHNIQUES = [
+    ("forward",             "🎥 Tiến tới (Forward)"),
+    ("backward",            "🔙 Lùi lại (Backward)"),
+    ("left_to_right",       "➡️ Trái → Phải"),
+    ("right_to_left",       "⬅️ Phải → Trái"),
+    ("up",                  "⬆️ Đi lên (Up)"),
+    ("down",                "⬇️ Đi xuống (Down)"),
+    ("dolly_zoom_out",      "🌀 Dolly In + Zoom Out (Vertigo)"),
+    ("dolly_zoom_in",       "🔄 Dolly Out + Zoom In"),
+    ("stationary",          "📌 Cố định (Stationary)"),
+    ("pan_left",            "↩️ Cố định + Pan Trái"),
+    ("pan_right",           "↪️ Cố định + Pan Phải"),
+    ("tilt_up",             "🔼 Cố định + Tilt Lên"),
+    ("tilt_down",           "🔽 Cố định + Tilt Xuống"),
+    ("push_forward",        "📍 Cố định + Push Forward"),
+    ("pull_backward",       "📍 Cố định + Pull Backward"),
+]
+
 # D6 → D3 auto-mapping
 PERSONA_TO_STYLE = {
     "mythos":             "documentary",
@@ -220,6 +239,20 @@ AUDIENCE_TO_TONE = {
     "teens":  "fun",
     "adults": "serious",
     "family": "warm",
+}
+
+# D0 → D9 auto-mapping: Project Type → Suggested camera techniques
+PROJECT_TYPE_TO_CAMERA = {
+    "animation":      ["forward", "pan_left", "pan_right"],
+    "action":         ["forward", "backward", "dolly_zoom_out"],
+    "documentary":    ["stationary", "pan_left", "pan_right"],
+    "philosophy":     ["stationary", "tilt_up"],
+    "slideshow":      ["left_to_right", "stationary"],
+    "storytelling":   ["forward", "pan_left", "stationary"],
+    "comedy":         ["dolly_zoom_out", "forward"],
+    "music_video":    ["dolly_zoom_out", "dolly_zoom_in", "left_to_right"],
+    "tutorial":       ["stationary", "tilt_down"],
+    "product_review": ["forward", "stationary", "dolly_zoom_out"],
 }
 
 # Video model display names
@@ -519,6 +552,16 @@ class SetupMatrixPanel(QFrame):
         self._voice_enabled.stateChanged.connect(lambda: self._emit_config())
         proj_row.addWidget(self._voice_enabled)
 
+        self._auto_confirm = QCheckBox("Auto Confirm")
+        self._auto_confirm.setChecked(False)
+        self._auto_confirm.setStyleSheet(cb_style)
+        self._auto_confirm.setToolTip(
+            "B\u1eadt: T\u1ef1 \u0111\u1ed9ng Confirm & Next qua m\u1ed7i stage (kh\u00f4ng c\u1ea7n b\u1ea5m th\u1ee7 c\u00f4ng)\n"
+            "T\u1eaft: D\u1eebng l\u1ea1i \u0111\u1ec3 user review tr\u01b0\u1edbc khi Confirm"
+        )
+        self._auto_confirm.stateChanged.connect(lambda: self._emit_config())
+        proj_row.addWidget(self._auto_confirm)
+
         self._layout.addLayout(proj_row)
 
         # ═══════════════════════════════════════
@@ -634,16 +677,18 @@ class SetupMatrixPanel(QFrame):
         self.d7_tone      = _dim_combo(t("project_builder.sidebar.tone"), TONES)
         self.d8_voice     = _dim_combo(t("project_builder.sidebar.voice_region"), VOICE_REGIONS,
                                        multi=True, max_select=4)
+        self.d9_camera    = _dim_combo("🎬 Camera Technique", CAMERA_TECHNIQUES,
+                                       multi=True, max_select=4)
 
-        # Wrap D1-D8 in a container for Auto/Manual toggle
-        # Each _dim_combo adds 2 widgets (label + combo) = 16 widgets total
+        # Wrap D1-D9 in a container for Auto/Manual toggle
+        # Each _dim_combo adds 2 widgets (label + combo) = 18 widgets total (9 dims)
         self._dims_container = QWidget()
         dims_layout = QVBoxLayout(self._dims_container)
         dims_layout.setContentsMargins(0, 0, 0, 0)
         dims_layout.setSpacing(0)
-        # Move last 16 widgets from self._layout → dims_layout
+        # Move last 18 widgets from self._layout → dims_layout
         widgets_to_move = []
-        for _ in range(16):  # 8 combos × 2 (label + combo)
+        for _ in range(18):  # 9 combos × 2 (label + combo)
             item = self._layout.takeAt(self._layout.count() - 1)
             if item and item.widget():
                 widgets_to_move.append(item.widget())
@@ -899,6 +944,9 @@ class SetupMatrixPanel(QFrame):
         }
         if pt in TYPE_TO_TONE:
             self._auto_select_combo(self.d7_tone, TYPE_TO_TONE[pt])
+        # D0 → D9: auto-suggest camera technique
+        if pt in PROJECT_TYPE_TO_CAMERA:
+            self.d9_camera.set_selected_by_data(PROJECT_TYPE_TO_CAMERA[pt])
         self._emit_config()
 
     def _on_target_duration_changed(self, *args):
@@ -1007,8 +1055,8 @@ class SetupMatrixPanel(QFrame):
 
     def get_config(self) -> dict:
         """Get full matrix configuration."""
-        img_aspect = "LANDSCAPE" if "Landscape" in self.image_aspect.currentText() else "PORTRAIT"
         vid_aspect = "LANDSCAPE" if "16:9" in self.video_aspect.currentText() else "PORTRAIT"
+        img_aspect = vid_aspect  # Synced — both use same sidebar control
 
         return {
             # Pipeline mode
@@ -1017,6 +1065,7 @@ class SetupMatrixPanel(QFrame):
             # Project type & duration
             "project_type":      self.d0_project_type.currentData(),
             "voice_enabled":     self._voice_enabled.isChecked(),
+            "auto_confirm":      self._auto_confirm.isChecked(),
             "clip_duration":     self._clip_duration.currentData() or 8,
             "scene_count":       self._scene_count.value(),
             "video_count":       self._video_count.value(),
@@ -1031,6 +1080,7 @@ class SetupMatrixPanel(QFrame):
             "persona":   self.d6_persona.currentData(),
             "tone":      [self.d7_tone.currentData()] if self.d7_tone.currentData() else [],
             "voice":     self.d8_voice.get_selected(),           # list (multi)
+            "camera_technique": self.d9_camera.get_selected(),    # list (multi)
             # Production
             "output_folder":     self.output_folder.text(),
             "image_model":       self.image_model.currentData(),
@@ -1201,6 +1251,18 @@ class SetupMatrixPanel(QFrame):
             "sư thầy": ("category", "religion"),
             "thầy chùa": ("category", "religion"),
             "hòa thượng": ("category", "religion"),
+            # ═══ Camera Technique (d9) ═══
+            "tiến tới": ("camera_technique", "forward"),
+            "forward": ("camera_technique", "forward"),
+            "lùi lại": ("camera_technique", "backward"),
+            "backward": ("camera_technique", "backward"),
+            "cố định": ("camera_technique", "stationary"),
+            "stationary": ("camera_technique", "stationary"),
+            "pan": ("camera_technique", "pan_left"),
+            "tilt": ("camera_technique", "tilt_up"),
+            "dolly": ("camera_technique", "dolly_zoom_out"),
+            "vertigo": ("camera_technique", "dolly_zoom_out"),
+            "zoom": ("camera_technique", "dolly_zoom_in"),
         }
 
         def _match(text):
@@ -1246,6 +1308,8 @@ class SetupMatrixPanel(QFrame):
                 self._on_category_changed([data_id])
             elif dim == "tone":
                 self._auto_select_combo(self.d7_tone, data_id)
+            elif dim == "camera_technique":
+                self.d9_camera.set_selected_by_data([data_id])
             elif dim == "character":
                 self._auto_select_combo(self.d4_character, data_id)
             elif dim == "audience":

@@ -143,20 +143,20 @@ class PromptExecutor:
                     )
             
             # Gap #1 fix: Validate reCAPTCHA quality
-            # Garbage tokens (<1000 chars) from extension glitches cause 403
+            # Garbage tokens (<1500 chars) from extension glitches cause 403
             # HAR verified: valid tokens are 1742-2169 chars
-            if recaptcha_token and len(recaptcha_token) < 1000:
+            if recaptcha_token and len(recaptcha_token) < 1500:
                 log.warning(
-                    f"[Worker] reCAPTCHA token too short ({len(recaptcha_token)} chars, need ≥1000), "
+                    f"[Worker] reCAPTCHA token too short ({len(recaptcha_token)} chars, need ≥1500), "
                     f"invalidating and retrying once"
                 )
                 account.invalidate_recaptcha()
                 async with account.recaptcha_lock:
                     recaptcha_token = await account.refresh_recaptcha()
-                if not recaptcha_token or len(recaptcha_token) < 1000:
+                if not recaptcha_token or len(recaptcha_token) < 1500:
                     return WorkerResult(
                         success=False,
-                        error=f"reCAPTCHA token garbage ({len(recaptcha_token or '')} chars, need ≥1000)"
+                        error=f"reCAPTCHA token garbage ({len(recaptcha_token or '')} chars, need ≥1500)"
                     )
             
             self._report_progress(task.id, 10, "✅ reCAPTCHA ready")
@@ -314,7 +314,7 @@ class PromptExecutor:
                 project_id=project_id,
                 prompt=task.prompt,
                 aspect_ratio=task.aspect_ratio,
-                model=task.model or "GEM_PIX_2",
+                model=task.model or "GEM_PIX_2",  # Sidebar default: 🔥 Nano Banana Pro
                 output_count=task.output_count,
                 paygate_tier=paygate_tier,
                 account_headers=account_headers,
@@ -363,7 +363,7 @@ class PromptExecutor:
                 project_id=project_id,
                 prompt=task.prompt,
                 aspect_ratio=task.aspect_ratio,
-                model=task.model or "GEM_PIX_2",
+                model=task.model or "GEM_PIX_2",  # Sidebar default: 🔥 Nano Banana Pro
                 output_count=task.output_count,
                 image_inputs=image_inputs,
                 paygate_tier=paygate_tier,

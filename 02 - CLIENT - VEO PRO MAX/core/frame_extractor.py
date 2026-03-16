@@ -12,8 +12,32 @@ import subprocess
 import shutil
 import tempfile
 import sys
+import logging as _logging
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+_log = _logging.getLogger(__name__)
+
+# ── App root for tool-local FFmpeg ──
+_APP_DIR = Path(__file__).resolve().parent.parent          # 02 - CLIENT - VEO PRO MAX/
+_TOOL_FFMPEG_DIR = _APP_DIR / "tools" / "ffmpeg"
+_TOOL_FFMPEG_EXE = _TOOL_FFMPEG_DIR / "ffmpeg.exe"
+_TOOL_FFPROBE_EXE = _TOOL_FFMPEG_DIR / "ffprobe.exe"
+
+# ── Module-level cache ──
+_cached_ffmpeg_path: Optional[str] = None
+
+
+def get_ffmpeg_path() -> Optional[str]:
+    """Module-level helper: return cached FFmpeg path.
+    
+    Reusable by other modules (production_pipeline, etc.)
+    without creating a FrameExtractor instance.
+    """
+    global _cached_ffmpeg_path
+    if _cached_ffmpeg_path is None:
+        _cached_ffmpeg_path = FrameExtractor._find_ffmpeg()
+    return _cached_ffmpeg_path
 
 
 class FrameExtractor:
@@ -33,30 +57,36 @@ class FrameExtractor:
     def __init__(self, temp_dir: Optional[Path] = None):
         self._temp_dir = temp_dir or Path(tempfile.gettempdir()) / "veoauto_frames"
         self._temp_dir.mkdir(parents=True, exist_ok=True)
-        
-        self._ffmpeg_path = self._find_ffmpeg()
+        self._ffmpeg_path = get_ffmpeg_path()
     
     @property
     def is_available(self) -> bool:
         """Check if FFmpeg is available."""
-        return self._ffmpeg_path is not None
+        return get_ffmpeg_path() is not None
     
     @staticmethod
     def _find_ffmpeg() -> Optional[str]:
         """Find FFmpeg executable, auto-downloading if not found.
         
         Search order:
+        0. Tool-local: <app_dir>/tools/ffmpeg/ffmpeg.exe  (bundled)
         1. System PATH
         2. Common Windows locations
-        3. Portable copy in ~/.veoauto/ffmpeg/
-        4. Auto-download portable FFmpeg (first time only)
+        3. Portable copy in ~/.veoauto/ffmpeg/  (legacy fallback)
+        4. Auto-download to tool-local folder (first time only)
         """
-        import logging
-        log = logging.getLogger(__name__)
+        global _cached_ffmpeg_path
+        
+        # 0. Tool-local (bundled with the app — highest priority)
+        if _TOOL_FFMPEG_EXE.exists():
+            _log.info(f"[FFmpeg] Found tool-local: {_TOOL_FFMPEG_EXE}")
+            _cached_ffmpeg_path = str(_TOOL_FFMPEG_EXE)
+            return _cached_ffmpeg_path
         
         # 1. System PATH
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg:
+            _cached_ffmpeg_path = ffmpeg
             return ffmpeg
         
         # 2. Common Windows locations
@@ -67,20 +97,25 @@ class FrameExtractor:
         ]
         for path in common_paths:
             if path.exists():
-                return str(path)
+                _cached_ffmpeg_path = str(path)
+                return _cached_ffmpeg_path
         
-        # 3. Portable copy in ~/.veoauto/ffmpeg/
+        # 3. Legacy portable copy in ~/.veoauto/ffmpeg/
         portable_dir = Path.home() / ".veoauto" / "ffmpeg"
         portable_ffmpeg = portable_dir / "ffmpeg.exe"
         if portable_ffmpeg.exists():
-            return str(portable_ffmpeg)
+            _cached_ffmpeg_path = str(portable_ffmpeg)
+            return _cached_ffmpeg_path
         
-        # 4. Auto-download portable FFmpeg
+        # 4. Auto-download to TOOL-LOCAL folder (not ~/.veoauto/)
         try:
-            log.info("[FFmpeg] Not found — auto-downloading portable FFmpeg...")
-            return FrameExtractor._auto_download_ffmpeg(portable_dir)
+            _log.info("[FFmpeg] Not found — auto-downloading to tool-local folder...")
+            result = FrameExtractor._auto_download_ffmpeg(_TOOL_FFMPEG_DIR)
+            if result:
+                _cached_ffmpeg_path = result
+            return result
         except Exception as e:
-            log.warning(f"[FFmpeg] Auto-download failed: {e}")
+            _log.warning(f"[FFmpeg] Auto-download failed: {e}")
             return None
     
     @staticmethod
@@ -291,12 +326,12 @@ class FrameExtractor:
         if not self._ffmpeg_path:
             return None
         
-        ffprobe = self._ffmpeg_path.replace("ffmpeg", "ffprobe")
+        # Use Path-based replacement to avoid corrupting directory names
+        ffmpeg_p = Path(self._ffmpeg_path)
+        ffprobe_name = ffmpeg_p.name.replace("ffmpeg", "ffprobe")
+        ffprobe = str(ffmpeg_p.parent / ffprobe_name)
         if not Path(ffprobe).exists():
-            # Try ffprobe in same directory
-            ffprobe = str(Path(self._ffmpeg_path).parent / "ffprobe.exe")
-            if not Path(ffprobe).exists():
-                ffprobe = shutil.which("ffprobe")
+            ffprobe = shutil.which("ffprobe")
         
         if not ffprobe:
             return None

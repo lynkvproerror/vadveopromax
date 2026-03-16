@@ -34,7 +34,8 @@ class APIEndpoints:
     
     # Status & Utils
     STATUS = "/v1/video:batchCheckAsyncVideoGenerationStatus"
-    UPLOAD = "/v1:uploadUserImage"
+    UPLOAD = "/v1/flow/uploadImage"       # F12 verified: I2I upload endpoint
+    UPLOAD_LEGACY = "/v1:uploadUserImage"  # Legacy endpoint (kept for reference)
     UPSCALE_VIDEO = "/v1/video:batchAsyncGenerateVideoUpsampleVideo"
     UPSCALE_IMAGE = "/v1/flow/upsampleImage"  # Doc §3.3: correct path
     
@@ -139,11 +140,11 @@ def resolve_model_key(
     is_portrait = "PORTRAIT" in aspect_ratio.upper()
     is_lp = "[LP]" in display_name or "Lower" in display_name
     
-    # T2I uses ImageModel, not VideoModel
-    if workflow == WorkflowType.T2I:
+    # T2I and I2I both use ImageModel, not VideoModel
+    if workflow in (WorkflowType.T2I, WorkflowType.I2I):
         if image_model and image_model in [e.value for e in ImageModel]:
             return image_model
-        return ImageModel.GEM_PIX_2.value
+        return ImageModel.GEM_PIX_2.value  # Sidebar default: 🔥 Nano Banana Pro
     
     # Model lookup table: (workflow_key, is_portrait, is_lp) → VideoModel
     _MAP = {
@@ -287,12 +288,13 @@ class TokenLifetime:
     SESSION_COOKIE = 604800     # 7 days
 
 
-# === X-CLIENT-DATA VALIDATION ===
-# Chrome Variations Service generates x-client-data header.
-# HAR-verified: valid values are 48+ chars (experiment flags).
-# After browser launch, Variations needs ~10-15s to load → short 8-char value.
-# Use this as the single threshold across ALL modules.
-MIN_VALID_XCD = 40  # Chrome Variations: valid xcd is 40+ chars; 8-char stub = not ready
+# F12 verified 2026-03-15: xcd requirements differ by task type:
+# - Video (T2V/I2V/R2V/Upscale): 40+ chars — bot detection sensitive
+# - T2I (text-only image gen): 8+ chars — works with stub, no reference images
+# - I2I (image-to-image with refs): 40+ chars — all F12 captures show 48-char xcd
+MIN_VALID_XCD = 40          # Video generation: Chrome Variations must be fully enrolled
+MIN_VALID_XCD_IMAGE = 8     # T2I (text-only): 8-char stub sufficient
+MIN_VALID_XCD_I2I = 40      # I2I (with reference images): full enrollment required
 
 # After browser restart, wait this long for Variations Service to produce
 # a valid x-client-data before falling back to borrow.
@@ -305,13 +307,16 @@ XCD_VARIATIONS_WAIT_TIMEOUT = 20  # seconds
 TIMEOUT_TIERS = [
     # Attempt 0 (first try) — normal network
     {'xcd_poll': 20.0, 'rc_wait': 25.0, 'bridge_timeout': 35.0,
-     'rc_execute_ms': 15000, 'fetch_ms': 20000},
+     'rc_execute_ms': 15000, 'fetch_ms': 20000,
+     't2i_bridge_timeout': 105.0, 't2i_fetch_ms': 90000},
     # Attempt 1 (retry) — slow network tolerance
     {'xcd_poll': 30.0, 'rc_wait': 35.0, 'bridge_timeout': 45.0,
-     'rc_execute_ms': 25000, 'fetch_ms': 30000},
+     'rc_execute_ms': 25000, 'fetch_ms': 30000,
+     't2i_bridge_timeout': 115.0, 't2i_fetch_ms': 95000},
     # Attempt 2+ (final retries) — maximum patience
     {'xcd_poll': 40.0, 'rc_wait': 45.0, 'bridge_timeout': 55.0,
-     'rc_execute_ms': 35000, 'fetch_ms': 40000},
+     'rc_execute_ms': 35000, 'fetch_ms': 40000,
+     't2i_bridge_timeout': 125.0, 't2i_fetch_ms': 100000},
 ]
 
 

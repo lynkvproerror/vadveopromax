@@ -45,7 +45,7 @@ class GeminiApiPage(QWidget):
         refresh_btn = QPushButton("🔄 Refresh")
         refresh_btn.setMinimumWidth(90)
         refresh_btn.setFixedHeight(28)
-        refresh_btn.setProperty("variant", "secondary")
+        refresh_btn.setStyleSheet(Theme.btn_style("secondary", "sm"))
         refresh_btn.clicked.connect(self.refresh_diagnostics)
         header_row.addWidget(refresh_btn)
 
@@ -53,7 +53,7 @@ class GeminiApiPage(QWidget):
         clear_btn = QPushButton("🗑️ Clear")
         clear_btn.setMinimumWidth(80)
         clear_btn.setFixedHeight(28)
-        clear_btn.setProperty("variant", "secondary")
+        clear_btn.setStyleSheet(Theme.btn_style("secondary", "sm"))
         clear_btn.clicked.connect(lambda: self._log_view.clear())
         header_row.addWidget(clear_btn)
 
@@ -245,3 +245,7 @@ class GeminiApiPage(QWidget):
         # Update stats
         lines = self._log_view.document().blockCount()
         self._stats_label.setText(f"{lines} log lines")
+
+    def get_export_data(self) -> str:
+        """Return Gemini API log text for auto-export."""
+        return self._log_view.toPlainText()

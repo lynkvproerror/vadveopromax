@@ -566,24 +566,21 @@ class Dispatcher:
         
         # Deferred items: tasks that can't go to this account (excluded)
         deferred = []
+        # Fix: Batch-count stale entries instead of logging each one individually
+        stale_dupe_count = 0
+        stale_terminal_count = 0
         
         while True:
             try:
                 priority, counter, task = self._ready_queue.get_nowait()
                 self._queued_task_ids.discard(task.id)
                 
-                # Defense-in-depth: skip stale duplicates
+                # Defense-in-depth: skip stale duplicates (batch-counted)
                 if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
-                    log.warning(
-                        f"[Dispatcher] Skipped duplicate task {task.id} "
-                        f"(already {task.state.value}) — stale queue entry"
-                    )
+                    stale_dupe_count += 1
                     continue  # Drain stale entry, try next
                 if task.state in (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED):
-                    log.debug(
-                        f"[Dispatcher] Skipped terminal task {task.id} "
-                        f"(state={task.state.value}) — stale queue entry"
-                    )
+                    stale_terminal_count += 1
                     continue  # Drain stale entry, try next
                 
                 # Smart Recovery: skip tasks that excluded this account
@@ -603,6 +600,14 @@ class Dispatcher:
                     self._per_account_running[account_email] = \
                         self._per_account_running.get(account_email, 0) + 1
                 
+                # Emit summary for stale entries drained during this pick
+                if stale_dupe_count or stale_terminal_count:
+                    log.debug(
+                        f"[Dispatcher] Drained {stale_dupe_count + stale_terminal_count} "
+                        f"stale queue entries (dupes={stale_dupe_count}, "
+                        f"terminal={stale_terminal_count})"
+                    )
+                
                 log.info(
                     f"[Dispatcher] 📋 Task {task.id} READY → RUNNING "
                     f"(account={account_email}, running_count={self._running_count})"
@@ -620,6 +625,13 @@ class Dispatcher:
                 
                 return task
             except asyncio.QueueEmpty:
+                # Emit summary for stale entries drained
+                if stale_dupe_count or stale_terminal_count:
+                    log.debug(
+                        f"[Dispatcher] Drained {stale_dupe_count + stale_terminal_count} "
+                        f"stale queue entries (dupes={stale_dupe_count}, "
+                        f"terminal={stale_terminal_count})"
+                    )
                 # Put deferred items back
                 for item in deferred:
                     self._ready_queue.put_nowait(item)
@@ -642,15 +654,21 @@ class Dispatcher:
         Returns:
             Dict with audit results for DevConsole/StatusAggregator.
         """
+        # ★ Tasks with _counter_decremented=True are still RUNNING (doing I/O)
+        # but their running_count was already decremented at 30% submit.
+        # Exclude them from "actual" to avoid audit reverting the early-decrement.
         actual_running = sum(
             1 for t in self._all_tasks.values()
             if t.state in (TaskState.RUNNING, TaskState.WAITING_POLL)
+            and not getattr(t, '_counter_decremented', False)
         )
         
         # Per-account actual counts
         actual_per_account = {}
         for t in self._all_tasks.values():
-            if t.state in (TaskState.RUNNING, TaskState.WAITING_POLL) and t.assigned_account:
+            if (t.state in (TaskState.RUNNING, TaskState.WAITING_POLL)
+                    and t.assigned_account
+                    and not getattr(t, '_counter_decremented', False)):
                 actual_per_account[t.assigned_account] = \
                     actual_per_account.get(t.assigned_account, 0) + 1
         
@@ -1556,8 +1574,18 @@ class Dispatcher:
         prev_account = task.assigned_account
         task.state = TaskState.READY
         task.error = None
+        # Reset progress and status text so UI shows clean "READY" state
+        task.progress = 0
+        task.status_text = ""
+        # Stage: reset to INIT for pre-submit tasks (T2I/I2I)
+        # Preserve checkpoint for video tasks that already submitted (SUBMITTED+)
+        # so they can resume polling on reconnect instead of re-submitting
+        _preserve_stages = {TaskStage.SUBMITTED, TaskStage.GENERATED,
+                            TaskStage.DOWNLOADED_720, TaskStage.UPSCALING,
+                            TaskStage.UPSCALED}
+        if task.stage not in _preserve_stages:
+            task.stage = TaskStage.INIT
         # NOTE: Don't increment retry_attempts — this isn't a real failure
-        # NOTE: Preserve task.stage — resume from checkpoint after reconnect
         
         # Decrement running counters if task was actually running
         # Guard: skip if engine already called decrement_running() (flag=True)
@@ -1579,6 +1607,11 @@ class Dispatcher:
             f"account={prev_account} → None, "
             f"running_count={self._running_count}"
         )
+        # ★ Fix 3: Wake sleeping foremen so they pick up the requeued task.
+        # Without this, foremen blocked on _task_available.wait() never
+        # learn that a requeued READY task exists → system stalls.
+        if self._on_task_ready:
+            self._on_task_ready(task)
         return True
     
     def migrate_tasks(self, from_account: str) -> int:

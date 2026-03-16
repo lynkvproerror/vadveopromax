@@ -154,11 +154,6 @@ class GenerationTabBase(QWidget):
         
         mode_layout.addStretch()
         
-        help_btn = QPushButton("❓")
-        help_btn.setMinimumSize(24, 24)
-        help_btn.clicked.connect(self._on_help)
-        mode_layout.addWidget(help_btn)
-        
         layout.addWidget(mode_header)
         
         # Sidebar-specific content (hook for subclass)
@@ -305,16 +300,14 @@ class GenerationTabBase(QWidget):
     
     # ── Event Handlers ───────────────────────────────────────────
     
-    def _on_help(self):
-        """Show help dialog. MUST be overridden by subclass."""
-        raise NotImplementedError("Subclass must implement _on_help()")
+
     
     def _on_text_changed(self):
         """Handle text input change — parse and update table."""
-        text = self.prompt_input.toPlainText()
-        lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
-        self.prompt_count.setText(f"{len(lines)} prompts")
         self._parse_prompts()
+        # Show actual parsed prompt count (not raw line count)
+        count = len(self.prompt_table.get_prompts())
+        self.prompt_count.setText(f"{count} prompts")
     
     def _parse_prompts(self):
         """Parse input text into prompt rows, preserving continuation state."""
@@ -588,6 +581,12 @@ class GenerationTabBase(QWidget):
             main_win = self.window()
             if hasattr(main_win, 'show_toast'):
                 main_win.show_toast(f"✅ Added {len(prompts)} prompt(s) to queue", "success")
+            # Trigger auto-start if setting enabled
+            if hasattr(main_win, 'tab_instances'):
+                queue_tab = main_win.tab_instances.get('queue')
+                if queue_tab and hasattr(queue_tab, '_auto_start_if_idle'):
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(500, queue_tab._auto_start_if_idle)
     
     # ── Session Persistence ──────────────────────────────────────
     

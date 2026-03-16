@@ -188,6 +188,48 @@ def restore_integrity_check():
         print("  [OK] Restored original integrity_check.py")
 
 
+def sync_extension_version(app_version: str) -> bool:
+    """[MANUAL USE ONLY] Sync extension manifest.json version with APP_VERSION.
+    
+    NOT used automatically in build pipeline — App and Extension versions
+    are INDEPENDENT (see BUILD_RULES.md Rule #2b). Only bump manifest.json
+    manually when extension code actually changes.
+    """
+    manifest = PROJECT_ROOT / "extension" / "manifest.json"
+    backup = manifest.with_suffix('.json.bak')
+    
+    if not manifest.exists():
+        print("  [SKIP] extension/manifest.json not found")
+        return False
+    
+    import shutil
+    shutil.copy2(manifest, backup)
+    
+    data = json.loads(manifest.read_text(encoding='utf-8'))
+    old_ver = data.get('version', '0.0.0')
+    
+    if old_ver == app_version:
+        print(f"  [OK] Extension version already synced: {app_version}")
+        backup.unlink(missing_ok=True)
+        return False  # No restore needed
+    
+    data['version'] = app_version
+    manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    print(f"  [OK] Extension version synced: {old_ver} → {app_version}")
+    return True
+
+
+def restore_extension_manifest():
+    """Restore original extension/manifest.json after compile."""
+    manifest = PROJECT_ROOT / "extension" / "manifest.json"
+    backup = manifest.with_suffix('.json.bak')
+    if backup.exists():
+        import shutil
+        shutil.copy2(backup, manifest)
+        backup.unlink()
+        print("  [OK] Restored original extension/manifest.json")
+
+
 def _read_app_version() -> str:
     """Read APP_VERSION from constants.py without importing (avoids encoding issues)."""
     import re
@@ -195,6 +237,15 @@ def _read_app_version() -> str:
     text = constants_file.read_text(encoding='utf-8')
     m = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
     return m.group(1) if m else "0.0.0"
+
+
+def _read_extension_version() -> str:
+    """Read extension version from manifest.json."""
+    manifest = PROJECT_ROOT / "extension" / "manifest.json"
+    if not manifest.exists():
+        return "0.0.0"
+    data = json.loads(manifest.read_text(encoding='utf-8'))
+    return data.get("version", "0.0.0")
 
 
 def generate_build_info(hashes: dict) -> dict:
@@ -398,12 +449,16 @@ def copy_release_files():
 
 
 def generate_version_json(build_info: dict, changelog: str = "") -> dict:
-    """Auto-generate version.json from APP_VERSION (single source of truth).
+    """Auto-generate version.json v2 with dual version tracking.
 
-    This ensures version.json on GitHub always matches the compiled APP_VERSION.
+    Tracks both APP_VERSION and extension version independently.
+    See BUILD_RULES.md Rule #2b for versioning convention.
     """
     version = build_info["app_version"]
-    download_url = f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/VEO_Pro_Max_v{version}.zip"
+    ext_version = _read_extension_version()
+    tag = f"v{version}"  # GitHub tag based on app version
+    download_url = f"https://github.com/{GITHUB_REPO}/releases/download/{tag}/VEO_Pro_Max_{tag}.zip"
+    ext_download_url = f"https://github.com/{GITHUB_REPO}/releases/download/{tag}/VEO_Extension_v{ext_version}.zip"
 
     # Read changelog from file if exists, otherwise use provided string
     changelog_file = SCRIPT_DIR / "CHANGELOG.txt"
@@ -414,10 +469,13 @@ def generate_version_json(build_info: dict, changelog: str = "") -> dict:
 
     version_data = {
         "version": version,
+        "ext_version": ext_version,
         "release_date": datetime.now().strftime("%Y-%m-%d"),
         "changelog": changelog,
         "download_url": download_url,
+        "ext_download_url": ext_download_url,
         "sha256": "",
+        "ext_sha256": "",
         "min_version": "1.0.0",
         "force_update": False,
         "build_number": build_info["build_number"],
@@ -428,8 +486,10 @@ def generate_version_json(build_info: dict, changelog: str = "") -> dict:
     with open(version_path, 'w', encoding='utf-8') as f:
         json.dump(version_data, f, indent=4, ensure_ascii=False)
 
-    print(f"  version: {version}")
+    print(f"  app_version: {version}")
+    print(f"  ext_version: {ext_version}")
     print(f"  download_url: {download_url}")
+    print(f"  ext_download_url: {ext_download_url}")
     print(f"  changelog: {changelog[:80]}..." if len(changelog) > 80 else f"  changelog: {changelog}")
 
     return version_data
@@ -491,6 +551,9 @@ def main():
     # Step 3.5: Inject integrity hashes into source BEFORE compile
     print("\n[3.5] Injecting integrity hashes into integrity_check.py...")
     hashes_injected = inject_integrity_hashes(hashes)
+
+    # NOTE: Extension version is INDEPENDENT from APP_VERSION (BUILD_RULES.md Rule #2b)
+    # Bump manifest.json manually when extension code changes, NOT auto-synced.
 
     # Step 4: Nuitka compilation
     if not args.skip_compile:
@@ -558,31 +621,45 @@ def main():
     if not args.skip_publish:
         version = build_info["app_version"]
 
-        # Step 7: Create ZIP
-        print(f"\n[7] Creating release ZIP...")
+        # Step 7: Create ZIPs (full + extension-only)
+        print(f"\n[7] Creating release ZIPs...")
         zip_path = create_release_zip(version)
-        if zip_path:
-            # Update version.json with SHA-256 of ZIP
-            sha256 = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+        ext_version = _read_extension_version()
+        ext_zip_path = create_extension_zip(ext_version)
+
+        if zip_path or ext_zip_path:
+            # Update version.json with SHA-256 of both ZIPs
             version_path = OUTPUT_DIR / "version.json"
             if version_path.exists():
                 vdata = json.loads(version_path.read_text(encoding="utf-8"))
-                vdata["sha256"] = sha256
+                if zip_path:
+                    sha256 = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+                    vdata["sha256"] = sha256
+                    print(f"  [OK] version.json sha256 (full): {sha256[:16]}...")
+                if ext_zip_path:
+                    ext_sha256 = hashlib.sha256(ext_zip_path.read_bytes()).hexdigest()
+                    vdata["ext_sha256"] = ext_sha256
+                    print(f"  [OK] version.json ext_sha256: {ext_sha256[:16]}...")
+                else:
+                    # Extension ZIP not created → clear URL to prevent 404 on client
+                    vdata["ext_download_url"] = ""
+                    vdata["ext_sha256"] = ""
+                    print("  [WARN] Extension ZIP not created — cleared ext_download_url")
                 version_path.write_text(
                     json.dumps(vdata, indent=4, ensure_ascii=False), encoding="utf-8"
                 )
-                print(f"  [OK] version.json sha256: {sha256[:16]}...")
 
         # Step 8: Git push
         print(f"\n[8] Git push to remote...")
         git_push_release(version)
 
-        # Step 9: GitHub Release
+        # Step 9: GitHub Release (upload both ZIPs)
         print(f"\n[9] Creating GitHub Release...")
-        if zip_path and zip_path.exists():
-            github_create_release(version, zip_path)
+        zip_files = [p for p in [zip_path, ext_zip_path] if p and p.exists()]
+        if zip_files:
+            github_create_release(version, zip_files)
         else:
-            print("  [SKIP] No ZIP file to upload")
+            print("  [SKIP] No ZIP files to upload")
     else:
         print("\n[SKIP] Steps 7-9 skipped (--skip-publish)")
 
@@ -596,7 +673,7 @@ def main():
 # ═══════════════════════════════════════════════════════════
 
 def create_release_zip(version: str):
-    """Create release ZIP from main.dist/ with VEO_Pro_Max/ root structure."""
+    """Create full release ZIP from main.dist/ with VEO_Pro_Max/ root structure."""
     import zipfile
 
     dist_dir = OUTPUT_DIR / "main.dist"
@@ -619,6 +696,37 @@ def create_release_zip(version: str):
 
     size_mb = zip_path.stat().st_size / (1024 * 1024)
     print(f"  [OK] {zip_path.name}: {size_mb:.1f} MB ({file_count} files)")
+    return zip_path
+
+
+def create_extension_zip(ext_version: str):
+    """Create lightweight extension-only ZIP (~50KB).
+    
+    Used for extension-only updates — client downloads this small file
+    instead of the full 67MB ZIP when only extension code changed.
+    """
+    import zipfile
+
+    ext_dir = OUTPUT_DIR / "main.dist" / "extension"
+    if not ext_dir.exists():
+        print("  [SKIP] extension/ not found in main.dist")
+        return None
+
+    zip_path = OUTPUT_DIR / f"VEO_Extension_v{ext_version}.zip"
+    if zip_path.exists():
+        zip_path.unlink()
+
+    file_count = 0
+    with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root_str, dirs, files in os.walk(str(ext_dir)):
+            for f in files:
+                fp = os.path.join(root_str, f)
+                arcname = 'extension/' + os.path.relpath(fp, str(ext_dir))
+                zf.write(fp, arcname)
+                file_count += 1
+
+    size_kb = zip_path.stat().st_size / 1024
+    print(f"  [OK] {zip_path.name}: {size_kb:.0f} KB ({file_count} files)")
     return zip_path
 
 
@@ -670,8 +778,13 @@ def git_push_release(version: str):
 #  9) GitHub Release
 # ═══════════════════════════════════════════════════════════
 
-def github_create_release(version: str, zip_path: Path):
-    """Create GitHub release via gh CLI or print manual instructions."""
+def github_create_release(version: str, zip_files: list):
+    """Create GitHub release via gh CLI or print manual instructions.
+    
+    Args:
+        version: App version string
+        zip_files: List of Path objects to upload as release assets
+    """
     tag = f"v{version}"
     changelog = ""
     changelog_file = SCRIPT_DIR / "CHANGELOG.txt"
@@ -684,14 +797,14 @@ def github_create_release(version: str, zip_path: Path):
                 "gh", "release", "create", tag,
                 "--title", f"VEO Pro Max {tag}",
                 "--notes", changelog or f"VEO Pro Max {tag}",
-                str(zip_path),
-            ]
+            ] + [str(p) for p in zip_files]
             result = subprocess.run(
                 cmd, cwd=str(BASE_DIR),
                 capture_output=True, text=True, timeout=300
             )
             if result.returncode == 0:
-                print(f"  [OK] Release {tag} created + ZIP uploaded")
+                names = ', '.join(p.name for p in zip_files)
+                print(f"  [OK] Release {tag} created + uploaded: {names}")
                 return
             else:
                 print(f"  [WARN] gh failed: {result.stderr[:200]}")
@@ -699,13 +812,14 @@ def github_create_release(version: str, zip_path: Path):
             print(f"  [WARN] gh error: {e}")
 
     # Fallback: manual instructions
+    assets = ' '.join(f'"{p}"' for p in zip_files)
     print(f"\n  ┌─────────────────────────────────────────┐")
     print(f"  │  MANUAL: gh CLI not found                │")
     print(f"  │  Install: winget install GitHub.cli       │")
     print(f"  │  Login:   gh auth login                   │")
     print(f"  └─────────────────────────────────────────┘")
     print(f"  gh release create {tag} --title \"VEO Pro Max {tag}\" \\")
-    print(f"    --notes-file \"{changelog_file}\" \"{zip_path}\"")
+    print(f"    --notes-file \"{changelog_file}\" {assets}")
     print(f"")
     print(f"  Or: https://github.com/{GITHUB_REPO}/releases/new?tag={tag}")
 

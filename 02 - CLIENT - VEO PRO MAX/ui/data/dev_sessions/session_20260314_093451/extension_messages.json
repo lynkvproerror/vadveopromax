@@ -1,0 +1,3418 @@
+[
+  {
+    "dir": "OUT",
+    "action": "refresh_headers",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.0853248,
+    "preview": {
+      "action": "refresh_headers",
+      "requestId": "2f7ab5e3-81fe-4358-a14f-ad2e7922b219",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.0859861,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454559079,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.0922382,
+    "preview": {
+      "action": "headers_refreshed",
+      "requestId": "2f7ab5e3-81fe-4358-a14f-ad2e7922b219",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabsReloaded": 1
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "probe_browser_headers",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.0931704,
+    "preview": {
+      "action": "probe_browser_headers",
+      "requestId": "26ee6289-3a41-4765-98a4-a4ef22b34b96",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "probe_browser_headers_result",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.6887286,
+    "preview": {
+      "action": "probe_browser_headers_result",
+      "requestId": "26ee6289-3a41-4765-98a4-a4ef22b34b96",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true,
+      "probeResult": "{...2 keys}",
+      "headers": "{...5 keys}",
+      "hasValidation": true,
+      "globalValidation": "2I3uSn6zgSf3hfslKpg3BonVwjk="
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.6887467,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": null
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_access_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.6900942,
+    "preview": {
+      "action": "request_access_token",
+      "requestId": "0cd4e166-39f0-40e0-9bba-6abda99b44d1",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "access_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454559.6920054,
+    "preview": {
+      "action": "access_token",
+      "requestId": "0cd4e166-39f0-40e0-9bba-6abda99b44d1",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": null,
+      "error": "Could not establish connection. Receiving end does not exist."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "register",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454563.964565,
+    "preview": {
+      "action": "register",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "version": "2.3.3"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454563.9651594,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454562843,
+      "readyState": "interactive"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454563.965173,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454569.0869253,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "e82faae6-f3fa-41e2-aeae-13c39ed38f34",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454572.4194052,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454572.8491101,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454574.8495758,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454575.9820228,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "f771697f-23c8-4366-865a-3df9ed3500a1",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454575.9841452,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "f771697f-23c8-4366-865a-3df9ed3500a1",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454577.8255885,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454580.7051346,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "db2b136d-34e6-4a6c-8e09-112d70ff587a",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454580.7074153,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "db2b136d-34e6-4a6c-8e09-112d70ff587a",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454582.8459659,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454582844,
+      "readyState": "interactive"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454583.8473744,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "437b16a4-1f69-4a2c-bc87-63c81848350d",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454583.8507502,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "437b16a4-1f69-4a2c-bc87-63c81848350d",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454587.4192092,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "e82faae6-f3fa-41e2-aeae-13c39ed38f34",
+    "ts": 1773454589.098524,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "e82faae6-f3fa-41e2-aeae-13c39ed38f34",
+      "ready": false,
+      "details": "{...1 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454593.2812781,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454597.8253071,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454599.092809,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "353d3a5a-a1bb-466a-9dfb-ee5d876e5f5d",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454602.4210382,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454609.8708777,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "854b9750-3b60-49b0-840e-756f58e47a3e",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454609.8728876,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "854b9750-3b60-49b0-840e-756f58e47a3e",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454617.4230084,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454617.8251054,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "353d3a5a-a1bb-466a-9dfb-ee5d876e5f5d",
+    "ts": 1773454619.1061265,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "353d3a5a-a1bb-466a-9dfb-ee5d876e5f5d",
+      "ready": false,
+      "details": "{...1 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454623.4522614,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454632.4247143,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454634.895184,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "1677a28c-911a-453b-b5cb-5bd7c522a69c",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454634.8971908,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "1677a28c-911a-453b-b5cb-5bd7c522a69c",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454637.5552256,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "eb9441ed-f922-43c5-93dd-89eb03ba6cc7",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454637.5572946,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "eb9441ed-f922-43c5-93dd-89eb03ba6cc7",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "tab_frozen",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454637.7869258,
+    "preview": {
+      "action": "tab_frozen",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "lastHeartbeat": 1773454582845,
+      "elapsedMs": 54940,
+      "reloadAttempt": 1
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "refresh_headers_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454637.7901287,
+    "preview": {
+      "action": "refresh_headers_lightweight",
+      "requestId": "ba64f8dd-9a15-4bf6-8a01-2f865b9c355c",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454637.7963471,
+    "preview": {
+      "action": "headers_refreshed_lightweight",
+      "requestId": "ba64f8dd-9a15-4bf6-8a01-2f865b9c355c",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454637.8250043,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454639.7974517,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "register",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454640.0230963,
+    "preview": {
+      "action": "register",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "version": "2.3.3"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454640.0330093,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454640021,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454642.4448984,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "9e8ed099-9c7d-4978-8fc7-9e91ec291442",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454642.4481535,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "9e8ed099-9c7d-4978-8fc7-9e91ec291442",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454647.4281511,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454650.0265124,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454652.0270813,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454657.8241327,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454660.0239573,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454660022,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454662.4312398,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454665.4633057,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "3dfa853f-d54e-481f-92ad-a023fbb03d08",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454665.466367,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "3dfa853f-d54e-481f-92ad-a023fbb03d08",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454669.8300502,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "7a42519c-4173-41af-859a-6cda533276f8",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454669.8316593,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "7a42519c-4173-41af-859a-6cda533276f8",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454671.9471674,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "9335ba2b-f591-4e56-946e-71b170ea0a6a",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454671.9502883,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "9335ba2b-f591-4e56-946e-71b170ea0a6a",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454677.4340987,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454677.8250425,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454680.0235994,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454680022,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454692.4372008,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454697.1107605,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "40e999a6-6efa-4fea-8626-03b4b0021bc1",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454697.1143315,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "40e999a6-6efa-4fea-8626-03b4b0021bc1",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454697.8244047,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454700.0244591,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454700022,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454700.0272899,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454701.348993,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "0f5bd136-6015-482a-b395-2b7a399e4c37",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454701.3509388,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "0f5bd136-6015-482a-b395-2b7a399e4c37",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454702.0259595,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454704.406161,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "f5310cd1-fad5-4be1-a1b4-bf3165f813bf",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454704.4076962,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "f5310cd1-fad5-4be1-a1b4-bf3165f813bf",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454707.4374115,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454717.8253314,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454720.0248506,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454720023,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454722.4218342,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "15b89771-79a0-46d4-b227-ed1c783d3111",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454722.423857,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "15b89771-79a0-46d4-b227-ed1c783d3111",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454722.437732,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454737.4427352,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454737.8253562,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454739.8074572,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454740.0248306,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454740022,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454740.4387531,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "b9001548-b920-4561-a4f7-4f931557908d",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454740.4419873,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "b9001548-b920-4561-a4f7-4f931557908d",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454742.7997756,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "70f465ed-63b3-47eb-9266-9eb4f7ca2f2a",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454742.8081577,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "70f465ed-63b3-47eb-9266-9eb4f7ca2f2a",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454746.3002274,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "15b8867f-2dbd-46c0-a2aa-8ea1a0e8198b",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454746.3037865,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "15b8867f-2dbd-46c0-a2aa-8ea1a0e8198b",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454752.445029,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454757.8249457,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454760.025822,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454760023,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454760.0288165,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454762.0302057,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454767.446766,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454768.323236,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "f412fa47-8a75-4e66-9cf4-47c8573976ac",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454768.3254848,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "f412fa47-8a75-4e66-9cf4-47c8573976ac",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454772.928452,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "0696d51b-8a48-43e2-a8c3-26b25cbd8e89",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454772.930627,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "0696d51b-8a48-43e2-a8c3-26b25cbd8e89",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "refresh_headers_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454777.7064931,
+    "preview": {
+      "action": "refresh_headers_lightweight",
+      "requestId": "4b9e2e03-6fb1-4407-9ba4-e73863227d12",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454777.7095795,
+    "preview": {
+      "action": "headers_refreshed_lightweight",
+      "requestId": "4b9e2e03-6fb1-4407-9ba4-e73863227d12",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454777.824107,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454779.7107117,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454780.024634,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454780023,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454782.4497643,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454782.7090924,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "278affed-3ff9-4b9f-9438-837fdbfcff97",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454782.717038,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "278affed-3ff9-4b9f-9438-837fdbfcff97",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": null,
+      "error": "Token too short (569 chars, need ≥1000)"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454785.7220857,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "354c9904-c4ad-4b2c-8876-307fa4e16264",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454785.7260466,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "354c9904-c4ad-4b2c-8876-307fa4e16264",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": null,
+      "error": "Token too short (569 chars, need ≥1000)"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454791.73174,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "ecd74c78-82bd-4f7c-91c8-27f296415638",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "relay_fetch",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454794.955382,
+    "preview": {
+      "action": "relay_fetch",
+      "requestId": "363ce928-8274-41a0-94eb-e53920d027f1",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "url": "https://aisandbox-pa.googleapis.com/v1:checkAppAvailability",
+      "method": "POST",
+      "body": "{...1 keys}",
+      "headers": "{...2 keys}",
+      "credentials": "omit"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "relay_fetch_result",
+    "email": "363ce928-8274-41a0-94eb-e53920d027f1",
+    "ts": 1773454795.0882304,
+    "preview": {
+      "action": "relay_fetch_result",
+      "requestId": "363ce928-8274-41a0-94eb-e53920d027f1",
+      "data": "{...1 keys}",
+      "status": 200,
+      "statusText": "",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454795.8199792,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "07f572b2-8147-421b-9463-e454e8509623",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454795.822162,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "07f572b2-8147-421b-9463-e454e8509623",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "register",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454795.9636452,
+    "preview": {
+      "action": "register",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "version": "2.3.3"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454795.9642386,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454795961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454796.322716,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "62e74e28-c065-465e-b3d0-de7f7c6961ad",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "62e74e28-c065-465e-b3d0-de7f7c6961ad",
+    "ts": 1773454796.519702,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "62e74e28-c065-465e-b3d0-de7f7c6961ad",
+      "ready": true,
+      "token": "0cAFcWeA4m1S3hJjvi0KFmzcUGxTSjagjk_K-fBkYAC5bE4aUu4fJTUtOu77egKGAaIKRDpsq7fNKRNqMDJ9eOSoR71SjU4wMj0q...",
+      "details": "{...9 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454796.742723,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "ecd74c78-82bd-4f7c-91c8-27f296415638",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": null,
+      "error": "Token too short (569 chars, need ≥1000)"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454796.7442641,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "bcfb03d1-10bc-4592-bf52-2680b4854f1f",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454796.9613342,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "bcfb03d1-10bc-4592-bf52-2680b4854f1f",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": "0cAFcWeA6L0rM_dgRkLVtA8bU06WGWColk6v7NQ7OXOeeYDB15KKi-ivaO1jcFPQ0rAWH4K7UnYpxdHPKM2EuT6MKAdasZAtj8on...",
+      "error": null
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454797.021424,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454797.4510837,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454797.8251622,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454797.964638,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "6ba78cdd-b783-493b-8d23-03294a51c0e3",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454798.1969063,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "6ba78cdd-b783-493b-8d23-03294a51c0e3",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": "0cAFcWeA6bNdjhw2cG3CrGnIpuJ0NwPX8U-0l-0JIzBLjFptmOUUZ6AnhIigyLWjiQ06eEO29hjF3GW9FquE-POPU-hqA1d-XFP0...",
+      "error": null
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454799.199386,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "bce2a531-7b5f-4abf-8dd3-d02b6e495cc2",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454799.411317,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "bce2a531-7b5f-4abf-8dd3-d02b6e495cc2",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": "0cAFcWeA5bm39EI9-9KHkfXy4mZHt3QSEUlLbViydYk3LWbl1zdQbl8XNnUKgkqQNj3sIHffwJGPXR0mJZIwQdk8Y0Gi722lJ83o...",
+      "error": null
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454799.554404,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "e5ed5ebe-dc5d-4c16-b866-3eab9ee44df7",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "e5ed5ebe-dc5d-4c16-b866-3eab9ee44df7",
+    "ts": 1773454799.789542,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "e5ed5ebe-dc5d-4c16-b866-3eab9ee44df7",
+      "ready": true,
+      "token": "0cAFcWeA53E_Yj-vIog6XgsSuQ21THHRy_oyZ9MgMp-8l4GxoaQUIHfs5GGjKDxVwvgc3J4FigkrkPOrDB1tLy7b0iK_wKUvNGy8...",
+      "details": "{...9 keys}"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "refresh_headers_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454799.792023,
+    "preview": {
+      "action": "refresh_headers_lightweight",
+      "requestId": "4e0f5304-5c6c-4f1e-8f56-9155b046af3e",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454799.7947066,
+    "preview": {
+      "action": "headers_refreshed_lightweight",
+      "requestId": "4e0f5304-5c6c-4f1e-8f56-9155b046af3e",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454801.796863,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454805.9708617,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454806.4889805,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "7a8e6baa-c02b-473d-a3dd-96e109d5ad74",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454806.4918516,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "7a8e6baa-c02b-473d-a3dd-96e109d5ad74",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "submit_prompt",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454806.7938504,
+    "preview": {
+      "action": "submit_prompt",
+      "requestId": "97633f14-dfde-4039-b382-12f9503b608e",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "endpoint": "T2I",
+      "payload": "{...1 keys}",
+      "needsRecaptcha": true,
+      "rcTimeout": 15000,
+      "fetchTimeout": 20000,
+      "attempt": 0
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454807.2557137,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "4fe4e02e-a676-4767-84c4-b3a213f56380",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "4fe4e02e-a676-4767-84c4-b3a213f56380",
+    "ts": 1773454807.4841828,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "4fe4e02e-a676-4767-84c4-b3a213f56380",
+      "ready": true,
+      "token": "0cAFcWeA5CLU--KToJ0YUYasrixDDC72HMr_0PGtCVSJSujakHuF9u_pzyDFBn83yyWsP4dCr1T91Zh8uCa9WtLmHsIop7PkO0Nb...",
+      "details": "{...9 keys}"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "refresh_headers_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454807.4862714,
+    "preview": {
+      "action": "refresh_headers_lightweight",
+      "requestId": "7c466520-471a-41bc-8ab3-a7d38525b1ef",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454807.49006,
+    "preview": {
+      "action": "headers_refreshed_lightweight",
+      "requestId": "7c466520-471a-41bc-8ab3-a7d38525b1ef",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454809.4912531,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454812.4532094,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454815.964134,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454815962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454816.6391954,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "0d12f9a3-99e1-47f4-a154-c99647f102c7",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454816.6413968,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "0d12f9a3-99e1-47f4-a154-c99647f102c7",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454817.294959,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "9b6f5cae-ef3d-42c0-a415-d65837906e33",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "9b6f5cae-ef3d-42c0-a415-d65837906e33",
+    "ts": 1773454817.550957,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "9b6f5cae-ef3d-42c0-a415-d65837906e33",
+      "ready": true,
+      "token": "0cAFcWeA75BJNlq3bbqcy8j0uJDO6gI1j5QcrPGBsfJbaJVWLcIwKJ2Z6AdZMbpjQjmcShuG0HlLD1uXM3Yjjmth7axnnjlnkoND...",
+      "details": "{...9 keys}"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "refresh_headers_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454817.5533006,
+    "preview": {
+      "action": "refresh_headers_lightweight",
+      "requestId": "6e65e95c-5d55-4ad2-983d-01333ce683f1",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454817.5568602,
+    "preview": {
+      "action": "headers_refreshed_lightweight",
+      "requestId": "6e65e95c-5d55-4ad2-983d-01333ce683f1",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454817.825291,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454819.5609741,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454824.4419856,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "6fdc2c4f-3295-42c9-90f3-a6d5ed8309a3",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454824.444444,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "6fdc2c4f-3295-42c9-90f3-a6d5ed8309a3",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454827.3333642,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "22f26534-8a9c-455d-b262-cb54fe4ce671",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454827.454825,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "22f26534-8a9c-455d-b262-cb54fe4ce671",
+    "ts": 1773454827.5652428,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "22f26534-8a9c-455d-b262-cb54fe4ce671",
+      "ready": true,
+      "token": "0cAFcWeA4jF9qXcUPiDGpzsgWm1T_YQukulSURoYgYTSJbF5QxmJxBayp39u1Js1c5V99IscL0T9PKeFlsYdEOZQloEF569YcB-C...",
+      "details": "{...9 keys}"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "refresh_headers_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454827.567015,
+    "preview": {
+      "action": "refresh_headers_lightweight",
+      "requestId": "ed6aaaa3-1b7d-422e-b167-863f49f23752",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454827.570355,
+    "preview": {
+      "action": "headers_refreshed_lightweight",
+      "requestId": "ed6aaaa3-1b7d-422e-b167-863f49f23752",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454829.572636,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454835.166948,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "2bd2f271-d602-4dcb-9883-a5962efcf9b5",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454835.1692693,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "2bd2f271-d602-4dcb-9883-a5962efcf9b5",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454835.964188,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454835962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "check_recaptcha_ready",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454837.396491,
+    "preview": {
+      "action": "check_recaptcha_ready",
+      "requestId": "76ed80a5-88bb-4487-b631-343be1e19a41",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_ready",
+    "email": "76ed80a5-88bb-4487-b631-343be1e19a41",
+    "ts": 1773454837.5602047,
+    "preview": {
+      "action": "recaptcha_ready",
+      "requestId": "76ed80a5-88bb-4487-b631-343be1e19a41",
+      "ready": true,
+      "token": "0cAFcWeA6No7ICdgFabLWz-0KptQUgBZWTKxrRAr0f97_AGMErbnfgpaB-gTEiTE1CTcDrSwtciN4dLBAxjyClJ2XqcAXKssT7aa...",
+      "details": "{...9 keys}"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "refresh_headers_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454837.56362,
+    "preview": {
+      "action": "refresh_headers_lightweight",
+      "requestId": "2f9965ba-762b-4ad7-84f1-0567fb5c4c45",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_refreshed_lightweight",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454837.566851,
+    "preview": {
+      "action": "headers_refreshed_lightweight",
+      "requestId": "2f9965ba-762b-4ad7-84f1-0567fb5c4c45",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454837.8245916,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "submit_prompt_result",
+    "email": "97633f14-dfde-4039-b382-12f9503b608e",
+    "ts": 1773454838.5698276,
+    "preview": {
+      "action": "submit_prompt_result",
+      "requestId": "97633f14-dfde-4039-b382-12f9503b608e",
+      "data": "{...2 keys}",
+      "status": 200,
+      "statusText": "",
+      "success": true,
+      "tokenLength": 2148
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "submit_prompt",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454838.5741668,
+    "preview": {
+      "action": "submit_prompt",
+      "requestId": "57e68167-68da-46a2-b13c-fb45dcba898e",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "endpoint": "T2I",
+      "payload": "{...1 keys}",
+      "needsRecaptcha": true,
+      "rcTimeout": 15000,
+      "fetchTimeout": 20000,
+      "attempt": 0
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454840.8152826,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454842.4559977,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454846.6252835,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "b7c8b491-8c39-4360-b0c2-6e61e16e75b0",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454846.6273866,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "b7c8b491-8c39-4360-b0c2-6e61e16e75b0",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454855.9640872,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454855962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454855.9662366,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454857.4565506,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454857.8253903,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454857.9658084,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "submit_prompt_result",
+    "email": "57e68167-68da-46a2-b13c-fb45dcba898e",
+    "ts": 1773454865.3021834,
+    "preview": {
+      "action": "submit_prompt_result",
+      "requestId": "57e68167-68da-46a2-b13c-fb45dcba898e",
+      "data": "{...2 keys}",
+      "status": 200,
+      "statusText": "",
+      "success": true,
+      "tokenLength": 2126
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "submit_prompt",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454865.306058,
+    "preview": {
+      "action": "submit_prompt",
+      "requestId": "fb9f5d46-1d6c-4801-bb0e-a61668f1209d",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "endpoint": "T2I",
+      "payload": "{...1 keys}",
+      "needsRecaptcha": true,
+      "rcTimeout": 15000,
+      "fetchTimeout": 20000,
+      "attempt": 0
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454867.4807577,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454872.4584515,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454875.9630384,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454875961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454877.8242774,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454887.459441,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "submit_prompt_result",
+    "email": "fb9f5d46-1d6c-4801-bb0e-a61668f1209d",
+    "ts": 1773454890.5976617,
+    "preview": {
+      "action": "submit_prompt_result",
+      "requestId": "fb9f5d46-1d6c-4801-bb0e-a61668f1209d",
+      "data": "{...2 keys}",
+      "status": 200,
+      "statusText": "",
+      "success": true,
+      "tokenLength": 2148
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "submit_prompt",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454890.604005,
+    "preview": {
+      "action": "submit_prompt",
+      "requestId": "f084c289-354a-4e25-b416-3dab5b48990a",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "endpoint": "T2I",
+      "payload": "{...1 keys}",
+      "needsRecaptcha": true,
+      "rcTimeout": 15000,
+      "fetchTimeout": 20000,
+      "attempt": 0
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454892.7876122,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454895.9635623,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454895962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454897.8253043,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454902.4608796,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454915.9631288,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454915961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454915.9648492,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454917.4627964,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454917.8240073,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "submit_prompt_result",
+    "email": "f084c289-354a-4e25-b416-3dab5b48990a",
+    "ts": 1773454918.0722542,
+    "preview": {
+      "action": "submit_prompt_result",
+      "requestId": "f084c289-354a-4e25-b416-3dab5b48990a",
+      "data": "{...2 keys}",
+      "status": 200,
+      "statusText": "",
+      "success": true,
+      "tokenLength": 2148
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "submit_prompt",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454918.0766776,
+    "preview": {
+      "action": "submit_prompt",
+      "requestId": "b32d6fb2-3e1a-470d-872d-db1db731a56b",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "endpoint": "T2I",
+      "payload": "{...1 keys}",
+      "needsRecaptcha": true,
+      "rcTimeout": 15000,
+      "fetchTimeout": 20000,
+      "attempt": 0
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454920.2538633,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454932.462654,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454935.9632034,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454935961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454937.8259096,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "submit_prompt_result",
+    "email": "b32d6fb2-3e1a-470d-872d-db1db731a56b",
+    "ts": 1773454943.1136296,
+    "preview": {
+      "action": "submit_prompt_result",
+      "requestId": "b32d6fb2-3e1a-470d-872d-db1db731a56b",
+      "data": "{...2 keys}",
+      "status": 200,
+      "statusText": "",
+      "success": true,
+      "tokenLength": 2126
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454943.1210077,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "be4c0a58-1fb5-493c-bbdb-ae12a0043a6b",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454943.3421803,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "be4c0a58-1fb5-493c-bbdb-ae12a0043a6b",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": "0cAFcWeA7fNsMefM1r0l7-KCOBmBMwhAeLyra3q87yVJw-CERJ9T_aIrPuNEQSvdAPW3uKykN2D2yz8aDYfzPeGtH0_1whQ4LL30...",
+      "error": null
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454944.4883955,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "667eb2c0-8345-4329-a2d8-8aaed5d06845",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454944.4919758,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "667eb2c0-8345-4329-a2d8-8aaed5d06845",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454947.080234,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "49b94c3f-2dbe-4660-ae24-2345ce87ce1e",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454947.0819957,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "49b94c3f-2dbe-4660-ae24-2345ce87ce1e",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454947.4633133,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "request_recaptcha",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454949.3482966,
+    "preview": {
+      "action": "request_recaptcha",
+      "requestId": "865ff823-d540-4acb-8149-49dd8395eaba",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "rcTimeout": 15000
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_token",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454949.5247588,
+    "preview": {
+      "action": "recaptcha_token",
+      "requestId": "865ff823-d540-4acb-8149-49dd8395eaba",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "token": "0cAFcWeA6rC48FHtc91IqDDuwv5gCS-Iu85a7j3w0QO8mx6sS4lILOXiWIhxAuCZQ3kPDvoWMJEawRBRD25ATdiSLUIFzKGT8oBE...",
+      "error": null
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454955.964139,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454955961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454957.8252835,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454962.466033,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454967.0971322,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "a4ba535c-3ecd-45b7-aceb-3c4588edaed4",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454967.0990157,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "a4ba535c-3ecd-45b7-aceb-3c4588edaed4",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454975.963239,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454975961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454975.968412,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454977.4657493,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454977.8253245,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454977.9678183,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773454992.4675765,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454995.962595,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773454995961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454996.119336,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "83857622-0ee0-402d-aea6-ed6fe830e5c8",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454996.1215718,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "83857622-0ee0-402d-aea6-ed6fe830e5c8",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773454997.8242738,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454998.2252402,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "d121e77a-42c6-4ee1-9ea4-bd1763dbe1a2",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773454998.2270672,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "d121e77a-42c6-4ee1-9ea4-bd1763dbe1a2",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455007.469295,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455015.963973,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455015962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455017.8254077,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455022.4701133,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455023.2517934,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "a413187a-0e20-4b19-b030-67370eb9296a",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455023.254059,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "a413187a-0e20-4b19-b030-67370eb9296a",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455035.964768,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455035962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455035.968999,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455037.471284,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455037.8239195,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455037.969702,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455046.2719648,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "183e0c67-8972-4fa4-9791-f696ab44ac05",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455046.2740054,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "183e0c67-8972-4fa4-9791-f696ab44ac05",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455051.2280576,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "49f7d044-2f3a-41b4-b84c-2e9d71694893",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455051.2318618,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "49f7d044-2f3a-41b4-b84c-2e9d71694893",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455052.474737,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455054.491061,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "d3af2ecc-550b-45a6-a421-955b1bd98f8e",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455054.493711,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "d3af2ecc-550b-45a6-a421-955b1bd98f8e",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455055.9631462,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455055961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455057.0392215,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455057.8240674,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455067.4782917,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455074.246569,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "46a7e982-01a1-4dc9-b0ef-f3250cf8e562",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455074.24873,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "46a7e982-01a1-4dc9-b0ef-f3250cf8e562",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455075.9639328,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455075962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455077.632816,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "0567ca92-a41a-4511-b19b-9738981aef78",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455077.63499,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "0567ca92-a41a-4511-b19b-9738981aef78",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455077.8250947,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455081.5666409,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "3d65118a-68d4-4c4e-93f4-b4bc2d091d0c",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455081.570498,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "3d65118a-68d4-4c4e-93f4-b4bc2d091d0c",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455082.4778368,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455095.9638848,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455095962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455095.9656322,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455097.4790144,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455097.8253362,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455099.8037755,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455104.5846286,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "3fd0dfac-efcf-4232-9df1-ee67c21b4602",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455104.5871394,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "3fd0dfac-efcf-4232-9df1-ee67c21b4602",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455112.4804735,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455115.9629643,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455115961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455117.825082,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455122.600577,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "d7a511af-2d36-4d12-bda1-94ac31b48527",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455122.602779,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "d7a511af-2d36-4d12-bda1-94ac31b48527",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455125.3585021,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "0c2c31c7-3498-4006-9fb7-1107b1fb3984",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455125.3608074,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "0c2c31c7-3498-4006-9fb7-1107b1fb3984",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455127.4812405,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455135.962613,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455135961,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455137.823885,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455142.4823115,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455145.3718977,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "d26ecf4f-f99e-4524-890c-81781a8fafda",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455145.3744705,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "d26ecf4f-f99e-4524-890c-81781a8fafda",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455155.9639387,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455155962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "recaptcha_warmth",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455155.9653225,
+    "preview": {
+      "action": "recaptcha_warmth",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "ready": true,
+      "details": "{...5 keys}"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455157.4841697,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455157.825284,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455157.9659576,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455168.3877017,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "a6ba64e3-5df4-450d-9f8a-b2287b1576a6",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455168.3916252,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "a6ba64e3-5df4-450d-9f8a-b2287b1576a6",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455171.261739,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "e236efff-f800-49bd-b1b6-01100313ea5e",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455171.2652473,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "e236efff-f800-49bd-b1b6-01100313ea5e",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455172.487712,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455175.2427936,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "f3f5ad35-5fd9-4cfc-aba3-01572754cd8d",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455175.2453935,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "f3f5ad35-5fd9-4cfc-aba3-01572754cd8d",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "content_heartbeat",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455175.9644313,
+    "preview": {
+      "action": "content_heartbeat",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "tabId": 823720917,
+      "timestamp": 1773455175962,
+      "readyState": "complete"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "headers_update",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455177.7346458,
+    "preview": {
+      "action": "headers_update",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "headers": "{...5 keys}",
+      "accessToken": "Bearer ya29.a0ATkoCc65AhgTrzu9PMEF2WafP6mxlolHf0iZ6-EzRMlhkdAe29Kgv7Z_iiHeADV6WE851z2cuTECVzuaoOYTP8..."
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "ping",
+    "email": "",
+    "ts": 1773455177.824028,
+    "preview": {
+      "action": "ping"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "pong",
+    "email": "",
+    "ts": 1773455187.4897947,
+    "preview": {
+      "action": "pong"
+    }
+  },
+  {
+    "dir": "OUT",
+    "action": "simulate_activity",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455194.808272,
+    "preview": {
+      "action": "simulate_activity",
+      "requestId": "96ba66f9-cfe6-4e67-bfa7-d2f704d67f3c",
+      "email": "veofidelia169@tunxelamorintesa.sbs"
+    }
+  },
+  {
+    "dir": "IN",
+    "action": "activity_simulated",
+    "email": "veofidelia169@tunxelamorintesa.sbs",
+    "ts": 1773455194.8100672,
+    "preview": {
+      "action": "activity_simulated",
+      "requestId": "96ba66f9-cfe6-4e67-bfa7-d2f704d67f3c",
+      "email": "veofidelia169@tunxelamorintesa.sbs",
+      "success": true
+    }
+  }
+]

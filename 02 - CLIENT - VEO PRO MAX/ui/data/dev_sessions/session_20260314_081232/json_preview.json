@@ -1,0 +1,57 @@
+{
+  "group_id": "group_20260314_073843",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260314_073843_task_0",
+      "prompt": "3D Pixar style animation, Tấm, an 18-year-old kind-hearted Vietnamese girl, stylized proportions, smooth porcelain #E8C39E soft peach skin, large expressive brown eyes, button nose, rosy cheeks, gentle smile. Her glossy #1A1A1A raven black hair is in a long thick braid with a simple hemp tie, a fresh #FFFFFF white lotus flower tucked behind her ear. She wears a rustic #8B4513 cinnamon brown yếm under a tattered #D2B48C tan tứ thân robe, and a matte #1A1A1A black long silk skirt. Vibrant saturated colors, clean lines, studio lighting, simple painted background, medium shot.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_073843_task_1",
+      "prompt": "3D Pixar style animation, Cám, a 17-year-old spoiled Vietnamese girl, stylized proportions, pampered #F5D0C5 pale ivory skin, sharp almond-shaped eyes, high arched eyebrows, thin smirk. Her jet #000000 black hair is styled in an elaborate high bun decorated with colorful pins and #FF0000 red silk hair ribbons. She wears a bright #FF69B4 hot pink yếm under a vibrant #FFD700 canary yellow outer silk robe, and a shiny #000000 black premium silk skirt. She has #FFD700 polished gold hoop earrings. Vibrant saturated colors, clean lines, studio lighting, simple painted background, medium shot.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_073843_task_2",
+      "prompt": "3D Pixar style animation, Mẹ Cám, a 45-year-old cunning and cruel Vietnamese stepmother, stylized proportions, #D2B48C warm olive skin with sharp facial contours, narrow calculating eyes, a prominent beauty mole on the chin, stern expression. Her dark #2C2C2C charcoal grey-streaked hair is wrapped in a tight #1A1A1A black mỏ quạ headscarf. She wears a deep #4B0082 indigo violet tứ thân robe with subtle patterns, and a heavy #000000 black traditional skirt. She has large ornate #FFD700 gold earrings and a #8B0000 dark red beaded necklace. Vibrant saturated colors, clean lines, studio lighting, simple painted background, medium shot.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_073843_task_3",
+      "prompt": "3D Pixar style animation, Bụt, an ancient benevolent spirit, stylized proportions, ethereal glowing #FFF5E1 pale skin radiating soft light, twinkling kind eyes, serene smile. He has long flowing #FFFFFF snow-white hair and a waist-length beard. He wears a shimmering translucent #F0F8FF white silk robe with silver embroidery and matching flowing ethereal silk pants. He holds a #8B4513 wooden whisk with white horsehair and is surrounded by a #FFD700 golden divine aura. Vibrant saturated colors, clean lines, studio lighting, simple painted background, medium shot.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_073843_task_4",
+      "prompt": "3D Pixar style animation, The King, a 22-year-old handsome and noble man, stylized proportions, healthy #E5C298 sun-kissed tan skin with a regal glow, strong jawline, deep kind eyes, dignified posture. His jet #000000 black hair is tucked neatly under a royal headpiece. He wears a brilliant #FFD700 gold silk robe with intricate #B8860B bronze dragon embroidery and matching gold silk trousers. He has a #FF0000 crimson royal belt and a #00A86B vivid jade pendant hanging from his waist. Vibrant saturated colors, clean lines, studio lighting, simple painted background, medium shot.",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

@@ -246,6 +246,27 @@ class DashboardPage(QWidget):
                 f"done={uq.get('total_completed', 0)}, "
                 f"failed={uq.get('total_failed', 0)}"
             )
+            # TRPC/FIFE download stats
+            trpc = uq.get("trpc", {})
+            fife = uq.get("fife", {})
+            trpc_a = trpc.get("attempts", 0)
+            fife_a = fife.get("attempts", 0)
+            if trpc_a > 0 or fife_a > 0:
+                trpc_rate = f"{trpc.get('success',0)}/{trpc_a}" if trpc_a else "—"
+                fife_rate = f"{fife.get('success',0)}/{fife_a}" if fife_a else "—"
+                lines.append(
+                    f"  └ TRPC: {trpc_rate} ✅  |  "
+                    f"FIFE: {fife_rate} ✅"
+                )
+                trpc_fail = trpc.get("fail", 0)
+                fife_fail = fife.get("fail", 0)
+                if trpc_fail > 0 or fife_fail > 0:
+                    lines.append(
+                        f"    TRPC fail={trpc_fail}  |  FIFE fail={fife_fail}"
+                    )
+            xcd_bypass = uq.get("xcd_bypass", 0)
+            if xcd_bypass > 0:
+                lines.append(f"  └ xcd-bypass (trial token): {xcd_bypass}×")
         else:
             lines.append("• Upscale Queue: not active")
 
@@ -258,14 +279,6 @@ class DashboardPage(QWidget):
         else:
             lines.append("• Adaptive Burst: not active")
 
-        # Workload Priority
-        wp = data.get("workload_priority", "")
-        if wp:
-            wp_display = {
-                "720p_priority": "720p First (all prompts → then upscale)",
-                "upscale_priority": "Upscale First (inline upscale)",
-            }
-            lines.append(f"• Workload: {wp_display.get(wp, wp)}")
 
         # Pre-warm stats
         pw = data.get("prewarm", {})

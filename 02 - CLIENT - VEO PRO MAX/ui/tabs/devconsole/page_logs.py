@@ -182,7 +182,7 @@ class LogsPage(QWidget):
 
         # API Debug toggle
         self._api_btn = QPushButton("📡 API Debug: ON")
-        self._api_btn.setProperty("variant", "secondary")
+        self._api_btn.setStyleSheet(Theme.btn_style("secondary", "sm"))
         self._api_btn.setCheckable(True)
         self._api_btn.setChecked(True)
         self._api_btn.clicked.connect(self._on_toggle_api_debug)
@@ -190,7 +190,7 @@ class LogsPage(QWidget):
 
         # Auto-scroll
         self._scroll_btn = QPushButton("📌 Auto-scroll: ON")
-        self._scroll_btn.setProperty("variant", "secondary")
+        self._scroll_btn.setStyleSheet(Theme.btn_style("secondary", "sm"))
         self._scroll_btn.setCheckable(True)
         self._scroll_btn.setChecked(True)
         self._scroll_btn.clicked.connect(self._on_toggle_auto_scroll)
@@ -209,12 +209,12 @@ class LogsPage(QWidget):
 
         # Actions
         clear_btn = QPushButton("🗑️ Clear")
-        clear_btn.setProperty("variant", "secondary")
+        clear_btn.setStyleSheet(Theme.btn_style("secondary", "sm"))
         clear_btn.clicked.connect(self._on_clear)
         tb_layout.addWidget(clear_btn)
 
         export_btn = QPushButton("📤 Export")
-        export_btn.setProperty("variant", "secondary")
+        export_btn.setStyleSheet(Theme.btn_style("secondary", "sm"))
         export_btn.clicked.connect(self._on_export)
         tb_layout.addWidget(export_btn)
 
@@ -487,3 +487,16 @@ class LogsPage(QWidget):
 
         except Exception as e:
             logging.getLogger(__name__).error(f"Export failed: {e}")
+
+    def get_export_data(self) -> dict:
+        """Return all log data for auto-export.
+        
+        Returns dict with 'logs' (list of messages) and 
+        'json_preview' (last submitted task text).
+        """
+        logs = [msg for _lvl, msg, _cat in self._log_buffer]
+        return {
+            "logs": logs,
+            "total_count": len(self._log_buffer),
+            "json_preview": self._json_text.toPlainText(),
+        }

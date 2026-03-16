@@ -208,8 +208,12 @@ class LicenseRequiredDialog(QDialog):
         
         copy_btn = QPushButton("📋 Copy")
         copy_btn.setMinimumSize(85, 28)
-        copy_btn.setProperty("variant", "secondary")
-        copy_btn.setProperty("btnSize", "sm")
+        copy_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; "
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"height: 26px; font-size: 11px; padding: 0 10px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background-color: {Theme.OVERLAY0}; }}"
+        )
         copy_btn.clicked.connect(self._on_copy_mid)
         self._copy_btn = copy_btn  # Store reference for feedback
         mid_row.addWidget(copy_btn)
@@ -231,7 +235,12 @@ class LicenseRequiredDialog(QDialog):
         
         activate_btn = QPushButton("✅ Kích hoạt")
         activate_btn.setFixedHeight(32)
-        activate_btn.setProperty("variant", "success")
+        activate_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"padding: 8px 16px; font-weight: bold; font-size: 13px; }}"
+            f"QPushButton:hover {{ background-color: #B8F0B2; }}"
+        )
         activate_btn.clicked.connect(self._on_activate)
         activate_btn.setDefault(True)       # Capture Enter key
         activate_btn.setAutoDefault(False)  # Don't auto-trigger accept()
@@ -410,7 +419,12 @@ class LicenseRequiredDialog(QDialog):
         exit_row.addStretch()
         exit_btn = QPushButton("❌ Thoát ứng dụng" if self._force_exit else "Đóng")
         exit_btn.setMinimumSize(180, 36)
-        exit_btn.setProperty("variant", "danger")
+        exit_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.RED}; color: {Theme.CRUST}; "
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"padding: 8px 16px; font-weight: bold; font-size: 13px; }}"
+            f"QPushButton:hover {{ background-color: #EBA0AC; }}"
+        )
         exit_btn.clicked.connect(self._on_exit)
         exit_btn.setAutoDefault(False)
         exit_row.addWidget(exit_btn)

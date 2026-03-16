@@ -502,3 +502,94 @@ class TabDevConsole(QWidget):
         if self.controller:
             status = self.controller.get_extension_status()
             self.update_extension_status(status)
+
+    # ═══════════════════════════════════════════════════════════
+    # Per-Session Auto-Export
+    # ═══════════════════════════════════════════════════════════
+
+    def auto_export_session(self):
+        """Export all Dev Console data to a timestamped session folder.
+        
+        Called automatically on app shutdown. Creates:
+        data/dev_sessions/session_YYYYMMDD_HHMMSS/
+        ├── logs.txt
+        ├── json_preview.json
+        ├── extension_messages.json
+        ├── gemini_log.txt
+        └── session_info.json
+        """
+        import json
+        
+        try:
+            # Create session folder
+            app_dir = Path(__file__).parent.parent
+            session_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_dir = app_dir / "data" / "dev_sessions" / f"session_{session_ts}"
+            session_dir.mkdir(parents=True, exist_ok=True)
+            
+            files_written = []
+            
+            # 1. Logs
+            try:
+                log_data = self._logs_page.get_export_data()
+                if log_data["total_count"] > 0:
+                    log_file = session_dir / "logs.txt"
+                    with open(log_file, "w", encoding="utf-8") as f:
+                        f.write(f"=== VEO Pro Max — Session Logs ===\n")
+                        f.write(f"Session: {session_ts}\n")
+                        f.write(f"Total: {log_data['total_count']} entries\n")
+                        f.write("=" * 60 + "\n\n")
+                        for line in log_data["logs"]:
+                            f.write(line + "\n")
+                    files_written.append("logs.txt")
+                    
+                    # JSON preview
+                    jp = log_data.get("json_preview", "")
+                    if jp and jp != "No tasks submitted yet.\n":
+                        jp_file = session_dir / "json_preview.json"
+                        with open(jp_file, "w", encoding="utf-8") as f:
+                            f.write(jp)
+                        files_written.append("json_preview.json")
+            except Exception as e:
+                print(f"[DevConsole] Logs export failed: {e}")
+            
+            # 2. Extension messages
+            try:
+                ext_data = self._extension_page.get_export_data()
+                if ext_data:
+                    ext_file = session_dir / "extension_messages.json"
+                    with open(ext_file, "w", encoding="utf-8") as f:
+                        json.dump(ext_data, f, indent=2, ensure_ascii=False, default=str)
+                    files_written.append("extension_messages.json")
+            except Exception as e:
+                print(f"[DevConsole] Extension export failed: {e}")
+            
+            # 3. Gemini API log
+            try:
+                gemini_text = self._gemini_page.get_export_data()
+                if gemini_text and gemini_text.strip():
+                    gemini_file = session_dir / "gemini_log.txt"
+                    with open(gemini_file, "w", encoding="utf-8") as f:
+                        f.write(gemini_text)
+                    files_written.append("gemini_log.txt")
+            except Exception as e:
+                print(f"[DevConsole] Gemini export failed: {e}")
+            
+            # 4. Session info
+            info_file = session_dir / "session_info.json"
+            with open(info_file, "w", encoding="utf-8") as f:
+                json.dump({
+                    "session_start": session_ts,
+                    "export_time": datetime.now().isoformat(),
+                    "files": files_written,
+                }, f, indent=2)
+            
+            if files_written:
+                print(f"[DevConsole] Session exported → {session_dir} ({len(files_written)} files)")
+            else:
+                # Nothing to export — remove empty folder
+                import shutil
+                shutil.rmtree(session_dir, ignore_errors=True)
+                
+        except Exception as e:
+            print(f"[DevConsole] Session export error: {e}")

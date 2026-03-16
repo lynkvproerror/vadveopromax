@@ -1,0 +1,192 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260313_234639
+Total: 183 entries
+============================================================
+
+[INFO ] 23:30:00 - core.session_manager - [Session] Loaded from 2026-03-13T23:29:48.294185
+[INFO ] 23:30:00 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 23:30:01 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 23:30:01 - core.extension_bridge - [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 23:30:01 - core.app_controller - [AutoLaunch] Extension status: 0 emails registered: []
+[INFO ] 23:30:01 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 23:30:01 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 23:30:01 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[INFO ] 23:30:01 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 23:30:06 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:30:06 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:30:06 - veo - [VersionCheck] OK: 2.3.2 >= 2.3.0
+[DEBUG] 23:30:06 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[INFO ] 23:30:07 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[INFO ] 23:30:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 23:30:15 - veo.key_quota - [KeyQuota] Loaded 4 key states
+[INFO ] 23:30:15 - veo.tab_project - [TabProject] Output folder auto-set: C:\Users\Linh\VEO_Production
+[DEBUG] 23:30:15 - veo.ai_factory - [AIFactory] Using Gemini client: Google
+[INFO ] 23:30:15 - veo.tab_project - [Pipeline] Multi-topic batch: 98 topics
+[DEBUG] 23:30:15 - asyncio - Using proactor: IocpProactor
+[WARNING] 23:30:15 - veo.rotation - [Rotation] pipeline: all models exhausted, forcing gemini-3.1-flash-lite-preview
+[WARNING] 23:30:15 - veo.gemini - [Gemini] Rate limited: You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+[INFO ] 23:30:15 - veo.rotation - [Rotation] pipeline: marked gemini-3.1-flash-lite-preview as exhausted
+[INFO ] 23:30:15 - veo.key_quota - [KeyQuota] Key ...5Fm-p3y8 RPM blocked (refresh in 60s)
+[INFO ] 23:30:15 - veo.pipeline - [Pipeline] Switched to key ...U-Ls0J-8
+[WARNING] 23:30:15 - veo.pipeline - [Pipeline] gemini-3.1-flash-lite-preview rate limited (429), trying next...
+[WARNING] 23:30:15 - veo.gemini - [Gemini] Rate limited: You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3-flash
+Please retry in 44.045522745s.
+[INFO ] 23:30:15 - veo.rotation - [Rotation] pipeline: marked gemini-3-flash-preview as exhausted
+[INFO ] 23:30:15 - veo.key_quota - [KeyQuota] Key ...U-Ls0J-8 RPM blocked (refresh in 60s)
+[INFO ] 23:30:15 - veo.pipeline - [Pipeline] Switched to key ...3s16-4BU
+[WARNING] 23:30:15 - veo.pipeline - [Pipeline] gemini-3-flash-preview rate limited (429), trying next...
+[INFO ] 23:30:21 - veo.pipeline - [Pipeline] Gemini OK (gemini-2.5-flash): 113 chars
+[INFO ] 23:30:21 - veo.pipeline - [Pipeline] AI detected: {'title': 'Ghi chú Kịch bản', 'scene_count': 0, 'characters': [], 'style': 'Không xác định', 'tone': 'Hướng dẫn'}
+[INFO ] 23:30:21 - veo.pipeline - [Pipeline] Stage 'duration_estimate' done → waiting for user confirm
+[INFO ] 23:30:22 - veo.pipeline - [Pipeline] Scene count edited → 8, target_duration recalculated → 64s
+[INFO ] 23:30:22 - veo.pipeline - [Pipeline] Stage 'duration_estimate' confirmed by user
+[INFO ] 23:30:22 - veo.tab_project - [Pipeline] Confirm: stage='duration_estimate', controller=YES
+[DEBUG] 23:30:22 - asyncio - Using proactor: IocpProactor
+[WARNING] 23:30:22 - veo.rotation - [Rotation] pipeline: all models exhausted, forcing gemini-3.1-flash-lite-preview
+[WARNING] 23:30:22 - veo.gemini - [Gemini] Rate limited: You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+[INFO ] 23:30:22 - veo.rotation - [Rotation] pipeline: marked gemini-3.1-flash-lite-preview as exhausted
+[INFO ] 23:30:22 - veo.key_quota - [KeyQuota] Key ...5Fm-p3y8 RPM blocked (refresh in 60s)
+[INFO ] 23:30:22 - veo.pipeline - [Pipeline] Switched to key ...3s16-4BU
+[WARNING] 23:30:22 - veo.pipeline - [Pipeline] gemini-3.1-flash-lite-preview rate limited (429), trying next...
+[INFO ] 23:30:44 - veo.rotation - [Rotation] pipeline: gemini-3-flash-preview reached RPD limit (20)
+[INFO ] 23:30:44 - veo.pipeline - [Pipeline] Gemini OK (gemini-3-flash-preview): 4240 chars
+[WARNING] 23:30:44 - veo.rotation - [Rotation] pipeline: all models exhausted, forcing gemini-3.1-flash-lite-preview
+[WARNING] 23:30:44 - veo.gemini - [Gemini] Rate limited: You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+[INFO ] 23:30:44 - veo.rotation - [Rotation] pipeline: marked gemini-3.1-flash-lite-preview as exhausted
+[INFO ] 23:30:44 - veo.key_quota - [KeyQuota] Key ...5Fm-p3y8 RPM blocked (refresh in 60s)
+[INFO ] 23:30:44 - veo.pipeline - [Pipeline] Switched to key ...3s16-4BU
+[WARNING] 23:30:44 - veo.pipeline - [Pipeline] gemini-3.1-flash-lite-preview rate limited (429), trying next...
+[INFO ] 23:30:56 - veo.rotation - [Rotation] pipeline: gemini-3-flash-preview reached RPD limit (20)
+[INFO ] 23:30:56 - veo.pipeline - [Pipeline] Gemini OK (gemini-3-flash-preview): 4836 chars
+[INFO ] 23:30:56 - veo.pipeline - [Pipeline] Stage 'script_analysis' done → waiting for user confirm
+[INFO ] 23:30:57 - veo.pipeline - [Pipeline] Stage 'script_analysis' confirmed by user
+[INFO ] 23:30:57 - veo.tab_project - [Pipeline] Confirm: stage='script_analysis', controller=YES
+[DEBUG] 23:30:57 - asyncio - Using proactor: IocpProactor
+[INFO ] 23:30:57 - veo.pipeline - [Pipeline] Char profile: **Character 1: The Mandarin (8 fields)
+[INFO ] 23:30:57 - veo.pipeline - [Pipeline] Char profile: **Character 2: The Scholar’s Wife (8 fields)
+[INFO ] 23:30:57 - veo.pipeline - [Pipeline] Extracted 2 character profiles from Bible
+[WARNING] 23:30:57 - veo.rotation - [Rotation] pipeline: all models exhausted, forcing gemini-3.1-flash-lite-preview
+[WARNING] 23:30:57 - veo.gemini - [Gemini] Rate limited: You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+[INFO ] 23:30:57 - veo.rotation - [Rotation] pipeline: marked gemini-3.1-flash-lite-preview as exhausted
+[INFO ] 23:30:57 - veo.key_quota - [KeyQuota] Key ...5Fm-p3y8 RPM blocked (refresh in 60s)
+[INFO ] 23:30:57 - veo.pipeline - [Pipeline] Switched to key ...3s16-4BU
+[WARNING] 23:30:57 - veo.pipeline - [Pipeline] gemini-3.1-flash-lite-preview rate limited (429), trying next...
+[DEBUG] 23:31:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:31:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:31:00 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:31:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:31:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 23:31:15 - veo.rotation - [Rotation] pipeline: gemini-3-flash-preview reached RPD limit (20)
+[INFO ] 23:31:15 - veo.pipeline - [Pipeline] Gemini OK (gemini-3-flash-preview): 2483 chars
+[INFO ] 23:31:15 - veo.pipeline - [Pipeline] Stage 'scene_breakdown' done → waiting for user confirm
+[INFO ] 23:31:16 - veo.pipeline - [Pipeline] Stage 'scene_breakdown' confirmed by user
+[INFO ] 23:31:16 - veo.tab_project - [Pipeline] Confirm: stage='scene_breakdown', controller=YES
+[DEBUG] 23:31:16 - asyncio - Using proactor: IocpProactor
+[WARNING] 23:31:16 - veo.rotation - [Rotation] pipeline: all models exhausted, forcing gemini-3.1-flash-lite-preview
+[WARNING] 23:31:16 - veo.gemini - [Gemini] Rate limited: You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+[INFO ] 23:31:16 - veo.rotation - [Rotation] pipeline: marked gemini-3.1-flash-lite-preview as exhausted
+[INFO ] 23:31:16 - veo.key_quota - [KeyQuota] Key ...5Fm-p3y8 RPM blocked (refresh in 60s)
+[INFO ] 23:31:16 - veo.pipeline - [Pipeline] Switched to key ...U-Ls0J-8
+[WARNING] 23:31:16 - veo.pipeline - [Pipeline] gemini-3.1-flash-lite-preview rate limited (429), trying next...
+[WARNING] 23:31:17 - veo.gemini - [Gemini] Rate limited: You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
+* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3-flash
+Please retry in 42.802116533s.
+[INFO ] 23:31:17 - veo.rotation - [Rotation] pipeline: marked gemini-3-flash-preview as exhausted
+[INFO ] 23:31:17 - veo.key_quota - [KeyQuota] Key ...U-Ls0J-8 RPM blocked (refresh in 60s)
+[INFO ] 23:31:17 - veo.pipeline - [Pipeline] Switched to key ...3s16-4BU
+[WARNING] 23:31:17 - veo.pipeline - [Pipeline] gemini-3-flash-preview rate limited (429), trying next...
+[INFO ] 23:31:31 - veo.pipeline - [Pipeline] Gemini OK (gemini-2.5-flash): 1364 chars
+[INFO ] 23:31:31 - veo.pipeline - [Pipeline] Stage 'character_gen' done → waiting for user confirm
+[INFO ] 23:31:31 - veo.tab_project - [Pipeline] Auto-confirm skipped for 'character_gen' (queue/concat stage)
+[DEBUG] 23:32:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:32:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:32:00 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:32:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:32:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:33:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:33:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:33:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:33:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:33:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:34:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:34:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:34:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:34:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:34:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:35:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:35:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:35:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:35:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:35:05 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 23:35:06 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:35:06 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[INFO ] 23:35:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:35:15 - veo.key_quota - [KeyQuota] Saved 4 key states
+[INFO ] 23:35:43 - veo.pipeline - [Pipeline] Reset from 'scene_breakdown' onward → all PENDING
+[INFO ] 23:35:44 - veo.pipeline - [Pipeline] Reset from 'scene_breakdown' onward → all PENDING
+[INFO ] 23:35:46 - veo.pipeline - [Pipeline] Reset from 'script_analysis' onward → all PENDING
+[INFO ] 23:35:47 - veo.pipeline - [Pipeline] Reset from 'duration_estimate' onward → all PENDING
+[DEBUG] 23:36:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:36:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:36:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:36:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:36:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:37:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:37:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:37:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:37:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:37:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:38:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:38:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:38:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:38:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:38:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:39:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:39:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:39:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:39:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:39:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:40:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:40:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:40:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:40:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:40:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:40:25 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 23:40:26 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:40:26 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[INFO ] 23:40:34 - veo.pipeline - [Pipeline] Reset from 'scene_breakdown' onward → all PENDING
+[DEBUG] 23:41:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:41:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:41:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:41:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:41:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:42:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:42:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:42:00 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:42:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:42:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:43:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:43:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:43:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:43:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:43:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:44:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:44:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:44:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:44:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:44:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:45:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:45:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:45:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:45:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:45:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 23:45:45 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 23:45:46 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:45:46 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 23:46:00 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 23:46:00 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 23:46:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 23:46:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 23:46:12 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 23:46:39 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

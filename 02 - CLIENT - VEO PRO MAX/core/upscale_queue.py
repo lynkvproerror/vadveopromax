@@ -138,7 +138,7 @@ class AdaptiveJobController:
     
     INITIAL = 4
     MIN = 1
-    MAX = 6
+    MAX = 4
     SCALE_UP_AFTER = 3  # consecutive successes before +1
     
     def __init__(self):
@@ -238,6 +238,7 @@ class UpscaleQueue:
         extension_bridge=None,           # engine._extension_bridge
         wake_event: asyncio.Event = None, # T1: event-driven wake from engine
         pre_submit_gate_fn: Optional[Callable] = None,  # engine._pre_submit_gate
+        zoom_crop_fn: Optional[Callable] = None,  # engine._remove_watermark_zoom_crop
     ):
         """
         Fully decoupled UpscaleQueue — no engine reference.
@@ -258,12 +259,13 @@ class UpscaleQueue:
             set_cooldown_fn: fn(email, reason) → None
             clear_cooldown_fn: fn(email) → None
             fix_client_data_fn: fn() → None
-            should_wait_fn: fn() → bool
+            should_wait_fn: fn() → bool (deprecated — always returns False)
             wait_for_circuit_fn: async fn(email) → None — wait for CB CLOSED
             record_circuit_403_fn: optional fn(email) → None — report 403 to engine CB
             on_completed: optional callback fn(task) for UI refresh
             profiles_controller: optional profiles controller for reset
             extension_bridge: optional extension bridge for reCAPTCHA
+            zoom_crop_fn: optional async fn(filepath, aspect_ratio) — zoom+crop watermark removal
         """
         # Injected dependencies (full DI — no engine reference)
         self._dispatcher = dispatcher
@@ -290,6 +292,7 @@ class UpscaleQueue:
         self._extension_bridge = extension_bridge
         self._wake_event = wake_event  # T1: event-driven wake from engine
         self._pre_submit_gate_fn = pre_submit_gate_fn  # Centralized xcd + reCAPTCHA gate
+        self._zoom_crop_fn = zoom_crop_fn  # Non-watermark zoom+crop for TRPC downloads
         
         self._queues: Dict[str, asyncio.Queue] = {}      # email → Queue[UpscaleJob]
         self._upscale_processors: Dict[str, asyncio.Task] = {}       # email → background task
@@ -311,6 +314,15 @@ class UpscaleQueue:
         self._total_completed = 0
         self._total_failed = 0
         
+        # TRPC download stats
+        self._trpc_attempts = 0
+        self._trpc_success = 0
+        self._trpc_fail = 0
+        self._fife_attempts = 0
+        self._fife_success = 0
+        self._fife_fail = 0
+        self._xcd_bypass_count = 0  # PreSubmitGate xcd-bypass via trial token
+        
         # Bug 3: Dedup set — prevent duplicate upscale submissions
         self._enqueued_ids: set = set()  # "task_id:media_id" strings
         
@@ -323,7 +335,7 @@ class UpscaleQueue:
         # discarded. Populated by cancel_task_jobs(), checked by _process_job.
         self._cancelled_task_ids: set = set()  # task_id strings
         
-        # Counter for active image upscale jobs (bypass 720p_priority pause)
+        # Counter for active image upscale jobs
         self._active_image_jobs: int = 0
         
         # Fix #4: reCAPTCHA health check for account failover
@@ -335,6 +347,26 @@ class UpscaleQueue:
         """Mark queue as running."""
         self._running = True
         log.info("[UpscaleQueue] Started — background upscale decoupled from workers")
+    
+    def get_stats(self) -> dict:
+        """Return stats dict for Engine Dashboard."""
+        return {
+            "pending_jobs": sum(q.qsize() for q in self._queues.values()),
+            "total_enqueued": self._total_enqueued,
+            "total_completed": self._total_completed,
+            "total_failed": self._total_failed,
+            "trpc": {
+                "attempts": self._trpc_attempts,
+                "success": self._trpc_success,
+                "fail": self._trpc_fail,
+            },
+            "fife": {
+                "attempts": self._fife_attempts,
+                "success": self._fife_success,
+                "fail": self._fife_fail,
+            },
+            "xcd_bypass": self._xcd_bypass_count,
+        }
     
     def stop(self):
         """Stop all background workers gracefully."""
@@ -491,77 +523,17 @@ class UpscaleQueue:
         q = self._queues[email]
         active_jobs: List[asyncio.Task] = []
         
-        _was_paused = False  # Transition flag: log only on state change
-        _ramp_up_remaining = 0  # Post-pause ramp-up: run N jobs serially before normal concurrency
-        
         while self._running:
             try:
                 # Clean up completed job tasks
                 done_count = sum(1 for t in active_jobs if t.done())
                 active_jobs = [t for t in active_jobs if not t.done()]
                 
-                # Decrement ramp-up counter based on completed jobs
-                if _ramp_up_remaining > 0 and done_count > 0:
-                    _ramp_up_remaining = max(0, _ramp_up_remaining - done_count)
-                    if _ramp_up_remaining == 0:
-                        log.info(f"[UpscaleQueue] {email}: ramp-up complete → normal concurrency")
+                # (720p_priority pause logic removed — UpscaleQueue runs independently)
                 
-                # Workload priority: pause if 720p_priority mode active
-                # Skip pause when image upscale jobs are active or pending
-                _has_image_work = self._active_image_jobs > 0
-                if not _has_image_work:
-                    try:
-                        if not q.empty():
-                            _peek = q._queue[0]
-                            if getattr(_peek, 'job_type', 'video') == 'image':
-                                _has_image_work = True
-                    except Exception:
-                        pass
-                
-                if self._should_wait() and not _has_image_work:
-                    if not _was_paused:
-                        log.info(f"[UpscaleQueue] {email}: pausing — 720p_priority mode")
-                        _was_paused = True
-                    # T1: Event-driven wake — instant instead of 5s poll
-                    if self._wake_event:
-                        try:
-                            await asyncio.wait_for(
-                                self._wake_event.wait(), timeout=5.0
-                            )
-                        except asyncio.TimeoutError:
-                            pass
-                        self._wake_event.clear()
-                    else:
-                        await asyncio.sleep(5)
-                    continue
-                if _was_paused:
-                    log.info(f"[UpscaleQueue] {email}: resuming — all 720p downloads complete")
-                    _was_paused = False
-                    _ramp_up_remaining = 3  # First 3 jobs: serial (one at a time)
-                    log.info(f"[UpscaleQueue] {email}: ramp-up mode — next 3 jobs run serially")
-                    # V2 Fix: Warmup after extended idle during 720p_priority pause
-                    _acct = self._get_account(email)
-                    if _acct:
-                        _eb = getattr(_acct, 'extension_bridge', None)
-                        if _eb and _eb.is_connected(email):
-                            try:
-                                await _eb.simulate_activity(email, timeout=3.0)
-                                log.info(f"[UpscaleQueue] {email}: post-pause warmup — waiting 8s for trust score")
-                                await asyncio.sleep(8)
-                            except Exception:
-                                pass
-                        try:
-                            await self._wait_recaptcha_fn(_acct, max_wait=20.0)
-                        except Exception:
-                            pass
-                
-                # Adaptive job concurrency (AIMD): starts at 4, scales 2-8
+                # Adaptive job concurrency (AIMD): starts at 4, max 4
                 # record_success/record_failure called at end of _process_job
                 max_jobs = self._job_controller.get_limit(email)
-                
-                # Post-pause ramp-up: force serial mode for first N jobs
-                if _ramp_up_remaining > 0:
-                    max_jobs = 1
                 
                 if len(active_jobs) >= max_jobs:
                     if active_jobs:
@@ -599,7 +571,7 @@ class UpscaleQueue:
                         await asyncio.sleep(delay_remaining)
                 
                 task = asyncio.create_task(
-                    self._process_job(job),
+                    self._process_job_tracked(job),
                     name=f"upscale-{job.task_id[:8]}"
                 )
                 active_jobs.append(task)
@@ -637,6 +609,25 @@ class UpscaleQueue:
                 await asyncio.gather(*active_jobs, return_exceptions=True)
         
         log.info(f"[UpscaleQueue] Worker {email} exiting")
+    
+    async def _process_job_tracked(self, job: UpscaleJob):
+        """Wrapper that tracks active_bg_upscale counter on session.
+        
+        Uses active_bg_upscale (display only) instead of active_upscale_workers
+        (which affects ops capacity). This makes status bar ⬆️ N/M accurately
+        reflect real upscale activity without starving engine workers.
+        """
+        upscale_count = len(job.media_ids) if job.media_ids else 1
+        account = self._get_account(job.account_email)
+        if account and hasattr(account, 'session'):
+            account.session.active_bg_upscale += upscale_count
+        try:
+            await self._process_job(job)
+        finally:
+            if account and hasattr(account, 'session'):
+                account.session.active_bg_upscale = max(
+                    0, account.session.active_bg_upscale - upscale_count
+                )
     
     async def _process_job(self, job: UpscaleJob):
         """Process a single upscale job.
@@ -992,10 +983,10 @@ class UpscaleQueue:
                         # Validate token quality — short tokens from
                         # uninitialized grecaptcha widget after browser restart
                         # HAR verified: valid tokens are 1742-2169 chars
-                        if recaptcha_token and len(recaptcha_token) < 1000:
+                        if recaptcha_token and len(recaptcha_token) < 1500:
                             log.warning(
                                 f"Upscale {video_label}: garbage reCAPTCHA token "
-                                f"({len(recaptcha_token)} chars < 1000), skipping submit"
+                                f"({len(recaptcha_token)} chars < 1500), skipping submit"
                             )
                             account.invalidate_recaptcha()
                             if attempt < max_submit_retries - 1:
@@ -1132,11 +1123,18 @@ class UpscaleQueue:
                                 except Exception:
                                     pass
                             elif attempt == 2:
-                                # M3 Phase 2: Hard recovery — full browser restart
+                                # M3 Phase 2: Extended soft recovery (no browser kill)
                                 try:
-                                    await account.restart_browser()
+                                    await account.soft_recover_browser()
+                                    # Simulate activity to rebuild trust score
+                                    _eb = getattr(account, 'extension_bridge', None)
+                                    if _eb and _eb.is_connected(account.email):
+                                        try:
+                                            await _eb.simulate_activity(account.email, timeout=3.0)
+                                        except Exception:
+                                            pass
                                     self._fix_client_data()
-                                    await asyncio.sleep(10)
+                                    await asyncio.sleep(15)
                                     await self._wait_recaptcha_fn(
                                         account, max_wait=30.0
                                     )
@@ -1158,9 +1156,9 @@ class UpscaleQueue:
                                             account, max_wait=40.0
                                         )
                                     else:
-                                        await account.restart_browser()
+                                        await account.soft_recover_browser()
                                         self._fix_client_data()
-                                        await asyncio.sleep(10)
+                                        await asyncio.sleep(20)
                                         await self._wait_recaptcha_fn(
                                             account, max_wait=30.0
                                         )
@@ -1202,6 +1200,14 @@ class UpscaleQueue:
                 # Extract operation ID
                 ops = resp.data.get("operations", [])
                 if not ops:
+                    # ★ Debug: log actual response data to diagnose silent API rejection
+                    import json as _json
+                    _data_keys = list(resp.data.keys()) if isinstance(resp.data, dict) else type(resp.data).__name__
+                    _data_preview = _json.dumps(resp.data, default=str, ensure_ascii=False)[:500] if resp.data else "None"
+                    log.warning(
+                        f"Upscale {video_label}: HTTP 200 OK but NO operations returned! "
+                        f"data_keys={_data_keys}, preview={_data_preview}"
+                    )
                     if orig_idx < len(task.video_outputs):
                         task.video_outputs[orig_idx].upscale_status = "failed"
                         task.video_outputs[orig_idx].upscale_error = "No operation returned"
@@ -1209,16 +1215,141 @@ class UpscaleQueue:
                 
                 op_name = ops[0].get("operation", {}).get("name", "")
                 scene_id = ops[0].get("sceneId", "")
-                if not op_name:
+                raw_bytes = ops[0].get("rawBytes")
+                re_upscale_mgid = ops[0].get("mediaGenerationId", "")
+                re_upscale_status = ops[0].get("status", "")
+                
+                if not op_name and raw_bytes is not None:
+                    # ★ Re-Upscale fast path: video already upscaled on server
+                    # Response: {'mediaGenerationId': '<b64 protobuf>', 'rawBytes': '<small ID>', 'status': '...'}
+                    # rawBytes is just a small binary ID (15 bytes), NOT video data.
+                    # The actual download ID is in mediaGenerationId (protobuf containing UUIDs).
+                    # Protobuf structure: field1=version(5), field2=project_UUID, field3=video_UUID
+                    # TRPC download: media.getMediaUrlRedirect?name=video_UUID_upsampled
+                    log.info(
+                        f"Upscale {video_label}: ✅ Re-Upscale detected — "
+                        f"video already upscaled (status={re_upscale_status})"
+                    )
+                    
+                    # Decode mediaGenerationId protobuf to extract per-video UUID
+                    re_op_name = ""
+                    if re_upscale_mgid:
+                        try:
+                            import base64 as _b64
+                            _mgid = re_upscale_mgid
+                            _pad = len(_mgid) % 4
+                            if _pad:
+                                _mgid += '=' * (4 - _pad)
+                            _pb_data = _b64.b64decode(_mgid)
+                            
+                            # Minimal protobuf parser: extract string fields (UUID-like)
+                            _pb_strings = []
+                            _pos = 0
+                            while _pos < len(_pb_data):
+                                _tb = _pb_data[_pos]
+                                _fn = _tb >> 3
+                                _wt = _tb & 7
+                                _pos += 1
+                                if _wt == 0:  # varint
+                                    while _pos < len(_pb_data) and _pb_data[_pos] & 0x80:
+                                        _pos += 1
+                                    _pos += 1
+                                elif _wt == 2:  # length-delimited (string)
+                                    _ln = _pb_data[_pos]
+                                    _pos += 1
+                                    _val = _pb_data[_pos:_pos+_ln]
+                                    _pos += _ln
+                                    try:
+                                        _s = _val.decode('utf-8')
+                                        _pb_strings.append((_fn, _s))
+                                    except Exception:
+                                        pass
+                                else:
+                                    break
+                            
+                            log.debug(
+                                f"Upscale {video_label}: mediaGenerationId decoded — "
+                                f"fields: {[f'f{fn}={s}' for fn, s in _pb_strings]}"
+                            )
+                            
+                            # Priority 1: Find field that already contains '_upsampled'
+                            # (field 5 typically has the exact TRPC download op_name)
+                            _upsampled_fields = [
+                                s for _, s in _pb_strings
+                                if '_upsampled' in s
+                            ]
+                            
+                            if _upsampled_fields:
+                                re_op_name = _upsampled_fields[0]
+                                log.info(
+                                    f"Upscale {video_label}: found _upsampled field "
+                                    f"→ {re_op_name}"
+                                )
+                            else:
+                                # Priority 2: Extract UUID and append _upsampled
+                                import re as _re
+                                _uuid_pattern = _re.compile(
+                                    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-'
+                                    r'[0-9a-f]{4}-[0-9a-f]{12}$'
+                                )
+                                _video_uuids = [
+                                    s for _, s in _pb_strings
+                                    if _uuid_pattern.match(s)
+                                ]
+                                if len(_video_uuids) >= 2:
+                                    re_op_name = f"{_video_uuids[-1]}_upsampled"
+                                elif _video_uuids:
+                                    re_op_name = f"{_video_uuids[0]}_upsampled"
+                                
+                                log.info(
+                                    f"Upscale {video_label}: UUIDs={_video_uuids}, "
+                                    f"op_name={re_op_name}"
+                                )
+                        except Exception as e:
+                            log.warning(
+                                f"Upscale {video_label}: Failed to decode mediaGenerationId: {e}"
+                            )
+                    
+                    if re_op_name:
+                        log.info(
+                            f"[UpscaleQueue] Re-Upscale {video_label}: "
+                            f"fast path → {re_op_name} (skip polling, TRPC download)"
+                        )
+                        if orig_idx < len(task.video_outputs):
+                            task.video_outputs[orig_idx].upscale_status = "completed"
+                        # Add to pending_ops — skip polling, go to TRPC download in Phase 3
+                        pending_ops.append((orig_idx, re_op_name, scene_id, media_id))
+                        if not hasattr(self, '_re_upscale_ready'):
+                            self._re_upscale_ready = set()
+                        self._re_upscale_ready.add(re_op_name)
+                    else:
+                        log.warning(
+                            f"Upscale {video_label}: Re-Upscale detected but could not "
+                            f"extract download UUID from mediaGenerationId"
+                        )
+                        if orig_idx < len(task.video_outputs):
+                            task.video_outputs[orig_idx].upscale_status = "failed"
+                            task.video_outputs[orig_idx].upscale_error = "No UUID in mediaGenerationId"
+                        continue
+                    
+                elif not op_name:
+                    log.warning(
+                        f"Upscale {video_label}: operations present but no op_name! "
+                        f"ops[0]_keys={list(ops[0].keys()) if ops else 'N/A'}"
+                    )
                     if orig_idx < len(task.video_outputs):
                         task.video_outputs[orig_idx].upscale_status = "failed"
                     continue
+                else:
+                    # Normal upscale: op_name present → will need polling
+                    pass
                 
-                log.info(f"[UpscaleQueue] Upscale {video_label} submitted: op={op_name}")
-                if orig_idx < len(task.video_outputs):
-                    task.video_outputs[orig_idx].upscale_status = "polling"
-                    task.video_outputs[orig_idx].upscale_poll_count = 0  # Reset for fresh poll
-                pending_ops.append((orig_idx, op_name, scene_id, media_id))
+                if op_name:
+                    log.info(f"[UpscaleQueue] Upscale {video_label} submitted: op={op_name}")
+                    if orig_idx < len(task.video_outputs):
+                        task.video_outputs[orig_idx].upscale_status = "polling"
+                        task.video_outputs[orig_idx].upscale_poll_count = 0
+                    pending_ops.append((orig_idx, op_name, scene_id, media_id))
                 # Update progress per-video submit
                 submitted = len(pending_ops)
                 self._dispatcher.update_progress(
@@ -1344,9 +1475,21 @@ class UpscaleQueue:
             """
             video_label = f"{idx + 1}/{total}"
             
+            # ★ Re-Upscale fast path: skip polling for already-completed ops
+            _re_ready = getattr(self, '_re_upscale_ready', set())
+            if op_name in _re_ready:
+                log.info(
+                    f"[UpscaleQueue] Poll {video_label}: Re-Upscale fast path — "
+                    f"skip polling (already upscaled)"
+                )
+                if idx < len(task.video_outputs):
+                    task.video_outputs[idx].upscale_status = "success"
+                # Return None URI — Phase 3 will use TRPC download with op_name
+                return (idx, None, op_name)
+            
             # BUG-23: Exit immediately if stopped
             if not self._running:
-                return (idx, None)
+                return (idx, None, op_name)
             
             # Acquire burst-controlled poll slot
             await self._burst.acquire()
@@ -1362,7 +1505,7 @@ class UpscaleQueue:
                     if idx < len(task.video_outputs):
                         task.video_outputs[idx].upscale_status = "success"
                     await self._burst.record_success()
-                    return (idx, result[0])
+                    return (idx, result[0], op_name)
                 
                 # Poll failed — record failure for adaptive scaling
                 error_text = getattr(task, 'upscale_error', '') or ''
@@ -1454,7 +1597,7 @@ class UpscaleQueue:
                                         if idx < len(task.video_outputs):
                                             task.video_outputs[idx].upscale_status = "success"
                                         await self._burst.record_success()
-                                        return (idx, result2[0])
+                                        return (idx, result2[0], op2)
                     except Exception as e:
                         log.error(f"Upscale {video_label} re-submit error: {e}")
                         await self._burst.record_failure()
@@ -1463,7 +1606,7 @@ class UpscaleQueue:
                 if idx < len(task.video_outputs):
                     task.video_outputs[idx].upscale_status = "failed"
                     task.video_outputs[idx].upscale_error = task._upscale_error or "Poll failed"
-                return (idx, None)
+                return (idx, None, op_name)
             finally:
                 self._burst.release()
         
@@ -1474,26 +1617,218 @@ class UpscaleQueue:
         ]
         poll_results = await asyncio.gather(*poll_tasks, return_exceptions=True)
         
-        # Collect upscaled URIs
+        # Collect upscaled URIs + op_names (for TRPC ZIP download)
         upscaled_uris = [None] * total
+        upscale_op_names = [None] * total  # op_name per video for TRPC download
         for result in poll_results:
             if isinstance(result, Exception):
                 log.error(f"[UpscaleQueue] Poll task exception: {result}")
                 continue
-            idx, uri = result
+            idx, uri, result_op_name = result
             upscaled_uris[idx] = uri
+            upscale_op_names[idx] = result_op_name
+            log.debug(
+                f"[UpscaleQueue] Poll result: idx={idx}, "
+                f"uri={'yes' if uri else 'None'}, "
+                f"op_name={result_op_name[:50] if result_op_name else 'None'}"
+            )
         
         # =====================================================
-        # PHASE 3: Batch Download
+        # PHASE 3: Batch Download (TRPC-first for 1080p)
         # =====================================================
         upscale_paths = [None] * total
         uris_to_download = [(i, u) for i, u in enumerate(upscaled_uris) if u]
+        
+        # ★ Re-Upscale fast path: add entries with TRPC op_name for download
+        _re_ready = getattr(self, '_re_upscale_ready', set())
+        if _re_ready:
+            for i, op_n in enumerate(upscale_op_names):
+                if op_n and op_n in _re_ready and i not in [x[0] for x in uris_to_download]:
+                    uris_to_download.append((i, None))  # None URI = TRPC-only
+                    log.info(
+                        f"[UpscaleQueue] Phase 3: Re-upscale video {i+1} "
+                        f"→ TRPC download (op={op_n[:50]})"
+                    )
+            self._re_upscale_ready = set()
+        
+        # Debug: summary of collected op_names for TRPC
+        log.debug(
+            f"[UpscaleQueue] Phase 3 start: "
+            f"uris={len(uris_to_download)}/{total}, "
+            f"op_names=[{', '.join(str(n[:30] if n else 'None') for n in upscale_op_names)}], "
+            f"is_free_upscale={is_free_upscale}"
+        )
         
         if uris_to_download:
             # BUG-24: Skip download if stopped
             if not self._running:
                 log.info(f"[UpscaleQueue] Stopped — skipping upscale download")
+            elif is_free_upscale:
+                # ★ 1080p download strategy:
+                # - Normal tasks: FIFE-only (reliable, no extra deps)
+                # - Re-upscale (right-click): TRPC ZIP first → FIFE fallback
+                #   (re-upscale has no FIFE URI, must use TRPC)
+                is_re_upscale_job = not fife_uri if uris_to_download else False
+                # Better detection: check if ANY entry has None URI (re-upscale signature)
+                _has_re_upscale_entries = any(u is None for _, u in uris_to_download)
+                
+                if _has_re_upscale_entries:
+                    # Re-upscale path: TRPC ZIP first → FIFE fallback
+                    self._dispatcher.update_progress(
+                        task.id, 95, f"⬇️ Re-upscale: downloading {len(uris_to_download)} videos (TRPC→FIFE)"
+                    )
+                else:
+                    # Normal task: FIFE-only
+                    self._dispatcher.update_progress(
+                        task.id, 95, f"⬇️ Downloading {len(uris_to_download)} upscaled videos (FIFE)"
+                    )
+                
+                for dl_idx, (orig_idx, fife_uri) in enumerate(uris_to_download):
+                    if not self._running:
+                        break
+                    op_name_for_dl = upscale_op_names[orig_idx]
+                    downloaded = False
+                    # Determine if THIS specific entry is a re-upscale
+                    is_re_upscale_entry = fife_uri is None
+                    log.debug(
+                        f"[UpscaleQueue] DL video {orig_idx+1}/{total}: "
+                        f"re_upscale={is_re_upscale_entry}, "
+                        f"op_name={'yes('+op_name_for_dl[:40]+')' if op_name_for_dl else 'None'}, "
+                        f"fife_uri={fife_uri[:60] if fife_uri else 'None'}..."
+                    )
+                    
+                    if is_re_upscale_entry:
+                        # ★ Re-upscale: TRPC ZIP first → FIFE fallback (4 attempts)
+                        for attempt in range(4):
+                            if not self._running:
+                                break
+                            use_trpc = (attempt % 2 == 0)  # 0,2 = TRPC; 1,3 = FIFE
+                            method = "TRPC ZIP" if use_trpc else "FIFE"
+                            
+                            log.info(
+                                f"[UpscaleQueue] Re-upscale video {orig_idx+1}/{total}: "
+                                f"attempt {attempt+1}/4 via {method}"
+                            )
+                            
+                            if use_trpc and op_name_for_dl:
+                                # TRPC ZIP download
+                                self._trpc_attempts += 1
+                                try:
+                                    path = await self._download_via_trpc_zip(
+                                        task, account, orig_idx, op_name_for_dl,
+                                        job.target_quality, total,
+                                    )
+                                    if path:
+                                        upscale_paths[orig_idx] = path
+                                        downloaded = True
+                                        self._trpc_success += 1
+                                        log.info(
+                                            f"[UpscaleQueue] ✅ TRPC ZIP download success: "
+                                            f"video {orig_idx+1}/{total} (re-upscale)"
+                                        )
+                                        break
+                                    self._trpc_fail += 1
+                                    log.warning(
+                                        f"[UpscaleQueue] TRPC ZIP attempt {attempt+1} failed "
+                                        f"for video {orig_idx+1}/{total}"
+                                    )
+                                except Exception as e:
+                                    self._trpc_fail += 1
+                                    log.warning(
+                                        f"[UpscaleQueue] TRPC ZIP error (attempt {attempt+1}): {e}"
+                                    )
+                            elif use_trpc and not op_name_for_dl:
+                                # No op_name — skip TRPC attempt
+                                log.info(
+                                    f"[UpscaleQueue] No op_name for video {orig_idx+1} — "
+                                    f"skipping TRPC, trying FIFE"
+                                )
+                                continue
+                            else:
+                                # FIFE fallback (for re-upscale, URI is None → skip)
+                                if not fife_uri:
+                                    log.warning(
+                                        f"[UpscaleQueue] FIFE skipped for video {orig_idx+1} — "
+                                        f"no FIFE URI (re-upscale)"
+                                    )
+                                    continue
+                                self._fife_attempts += 1
+                                try:
+                                    dl_paths = await self._download_fn(
+                                        task, [fife_uri],
+                                        quality_subfolder=job.target_quality,
+                                        generate_thumbnails=False,
+                                    )
+                                    if dl_paths and dl_paths[0]:
+                                        upscale_paths[orig_idx] = dl_paths[0]
+                                        downloaded = True
+                                        self._fife_success += 1
+                                        log.info(
+                                            f"[UpscaleQueue] ✅ FIFE download success: "
+                                            f"video {orig_idx+1}/{total} (re-upscale fallback)"
+                                        )
+                                        break
+                                    self._fife_fail += 1
+                                except Exception as e:
+                                    self._fife_fail += 1
+                                    log.warning(
+                                        f"[UpscaleQueue] FIFE error (attempt {attempt+1}): {e}"
+                                    )
+                            
+                            if attempt < 3:
+                                await asyncio.sleep(3)
+                        
+                        if not downloaded:
+                            log.error(
+                                f"[UpscaleQueue] ❌ Re-upscale download failed for "
+                                f"video {orig_idx+1}/{total} (4 tries: TRPC→FIFE→TRPC→FIFE)"
+                            )
+                    else:
+                        # ★ Normal task: FIFE-only (up to 4 attempts)
+                        for attempt in range(4):
+                            if not self._running:
+                                break
+                            log.info(
+                                f"[UpscaleQueue] Download video {orig_idx+1}/{total}: "
+                                f"attempt {attempt+1}/4 via FIFE"
+                            )
+                            self._fife_attempts += 1
+                            try:
+                                dl_paths = await self._download_fn(
+                                    task, [fife_uri],
+                                    quality_subfolder=job.target_quality,
+                                    generate_thumbnails=False,
+                                )
+                                if dl_paths and dl_paths[0]:
+                                    upscale_paths[orig_idx] = dl_paths[0]
+                                    downloaded = True
+                                    self._fife_success += 1
+                                    log.info(
+                                        f"[UpscaleQueue] ✅ FIFE download success: "
+                                        f"video {orig_idx+1}/{total}"
+                                    )
+                                    break
+                                self._fife_fail += 1
+                                log.warning(
+                                    f"[UpscaleQueue] FIFE attempt {attempt+1} failed "
+                                    f"for video {orig_idx+1}/{total}"
+                                )
+                            except Exception as e:
+                                self._fife_fail += 1
+                                log.warning(
+                                    f"[UpscaleQueue] FIFE error (attempt {attempt+1}): {e}"
+                                )
+                            
+                            if attempt < 3:
+                                await asyncio.sleep(3)
+                        
+                        if not downloaded:
+                            log.error(
+                                f"[UpscaleQueue] ❌ All FIFE download attempts failed for "
+                                f"video {orig_idx+1}/{total}"
+                            )
             else:
+                # 4K: FIFE download only (no TRPC)
                 self._dispatcher.update_progress(
                     task.id, 95, f"⬇️ Downloading {len(uris_to_download)} upscaled videos"
                 )
@@ -1578,6 +1913,257 @@ class UpscaleQueue:
             "outputs": len(task.output_uris or []),
             "parallel_polls": len(pending_ops),
         }, source="upscale_queue")
+    
+    async def _download_via_trpc_zip(
+        self,
+        task,
+        account,
+        video_idx: int,
+        op_name: str,
+        target_quality: str,
+        total_videos: int,
+    ) -> Optional[str]:
+        """Download upscaled video via TRPC ZIP endpoint.
+        
+        Flow:
+        1. Get GCS signed URL via TRPCClient.get_media_download_url(op_name)
+        2. Download ZIP file via aiohttp
+        3. Extract MP4 from ZIP
+        4. Rename to match naming convention
+        5. Apply zoom+crop if settings.download_non_watermark
+        6. Clean up ZIP
+        
+        Args:
+            task: Task object (for naming, output folder)
+            account: Account with browser session for TRPC cookies
+            video_idx: Original video index (0-based)
+            op_name: Operation name from poll result
+            target_quality: "1080p" or "4K"
+            total_videos: Total number of videos in this task
+            
+        Returns:
+            Local file path string, or None if failed
+        """
+        import aiohttp
+        import zipfile
+        import tempfile
+        from pathlib import Path
+        
+        video_label = f"{video_idx + 1}/{total_videos}"
+        
+        # Step 1: Get TRPCClient from account's browser session
+        log.debug(
+            f"[TRPC-DL] {video_label}: Starting — op_name={op_name[:60]}, "
+            f"quality={target_quality}, account={getattr(account, 'email', 'unknown')[:30]}"
+        )
+        
+        page = None
+        browser_session = getattr(account, '_browser_session', None)
+        log.debug(f"[TRPC-DL] {video_label}: _browser_session={'exists' if browser_session else 'None'}")
+        if browser_session:
+            page = getattr(browser_session, '_page', None)
+            log.debug(f"[TRPC-DL] {video_label}: _browser_session._page={'exists' if page else 'None'}")
+        if not page:
+            # Fallback: try account.session
+            session = getattr(account, 'session', None)
+            log.debug(f"[TRPC-DL] {video_label}: account.session={'exists' if session else 'None'}")
+            if session:
+                page = getattr(session, '_page', None) or getattr(session, 'page', None)
+                log.debug(f"[TRPC-DL] {video_label}: session page={'exists' if page else 'None'}")
+        
+        if not page:
+            log.warning(f"[TRPC-DL] {video_label}: No browser page available for TRPC call")
+            return None
+        
+        log.debug(f"[TRPC-DL] {video_label}: ✅ Got browser page — creating TRPCClient")
+        from core.trpc_client import TRPCClient
+        trpc_client = TRPCClient(page)
+        
+        # Step 2: Get GCS signed URL
+        # Warm-up: ensure browser page session is ready for TRPC fetch
+        # (first attempt can fail if page cookies/auth state not yet initialized)
+        try:
+            ready_state = await page.evaluate("document.readyState")
+            if ready_state != "complete":
+                log.debug(f"[TRPC-DL] {video_label}: Page readyState={ready_state}, waiting...")
+                await asyncio.sleep(2.0)
+        except Exception:
+            pass
+        
+        log.info(f"[TRPC-DL] {video_label}: Getting download URL for {op_name[:50]}...")
+        download_url = await trpc_client.get_media_download_url(op_name)
+        
+        if not download_url:
+            log.warning(f"[TRPC-DL] {video_label}: Failed to get download URL")
+            return None
+        
+        # Step 3: Determine output path
+        from config.settings import get_settings
+        settings = get_settings()
+        
+        output_folder = (getattr(task, 'output_folder', '') or settings.output_folder or '').strip()
+        if not output_folder:
+            log.warning(f"[TRPC-DL] {video_label}: No output_folder configured")
+            return None
+        
+        project_name = (getattr(task, 'project_name', '') or "Untitled").strip()
+        output_path = Path(output_folder) / project_name / target_quality.strip()
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Build filename (same convention as _download_outputs_inner)
+        prompt_num = getattr(task, 'prompt_index', 0) + 1
+        idx_str = str(prompt_num).zfill(3)
+        variant_letters = "abcdefghijklmnopqrstuvwxyz"
+        task_output_count = getattr(task, 'output_count', 1) or 1
+        is_multi = total_videos > 1 or task_output_count > 1
+        
+        parts = []
+        if is_multi and video_idx < len(variant_letters):
+            parts.append(f"{idx_str}{variant_letters[video_idx]}")
+        else:
+            parts.append(idx_str)
+        
+        if settings.include_quality:
+            parts.append(target_quality)
+        if settings.include_model:
+            model_short = task.model.replace("veo_3_1_", "v31_").replace("_fast_", "_")
+            parts.append(model_short)
+        
+        sep = settings.separator
+        filename = sep.join(parts) + ".mp4"
+        filepath = output_path / filename
+        
+        # Avoid overwrite
+        counter = 1
+        while filepath.exists():
+            filepath = output_path / f"{sep.join(parts)}_{counter}.mp4"
+            counter += 1
+        
+        # Step 4: Download file from GCS (may be MP4 directly or ZIP)
+        dl_path = None
+        try:
+            dl_timeout = aiohttp.ClientTimeout(total=180, sock_read=90)
+            async with aiohttp.ClientSession(timeout=dl_timeout) as session:
+                log.info(f"[TRPC-DL] {video_label}: Downloading from GCS...")
+                async with session.get(download_url) as resp:
+                    if resp.status != 200:
+                        log.warning(
+                            f"[TRPC-DL] {video_label}: GCS download failed — "
+                            f"HTTP {resp.status}"
+                        )
+                        return None
+                    
+                    content_type = resp.headers.get("Content-Type", "")
+                    log.debug(
+                        f"[TRPC-DL] {video_label}: Content-Type={content_type}, "
+                        f"Content-Length={resp.headers.get('Content-Length', '?')}"
+                    )
+                    
+                    # Save to temp file first
+                    dl_path = Path(tempfile.mktemp(suffix=".tmp", prefix="veo_trpc_"))
+                    with open(dl_path, "wb") as f:
+                        async for chunk in resp.content.iter_chunked(8192):
+                            f.write(chunk)
+            
+            dl_size = dl_path.stat().st_size
+            if dl_size < 100_000:  # < 100KB = probably an error response
+                log.warning(
+                    f"[TRPC-DL] {video_label}: Download too small ({dl_size:,} bytes) — "
+                    f"likely error response"
+                )
+                return None
+            
+            log.info(f"[TRPC-DL] {video_label}: Downloaded ({dl_size:,} bytes)")
+            
+            # Step 5: Detect file type — check magic bytes
+            with open(dl_path, "rb") as f:
+                magic = f.read(4)
+            
+            is_zip = (magic[:2] == b'PK')  # ZIP magic: PK\x03\x04
+            is_mp4 = (magic[:4] in (b'\x00\x00\x00\x18', b'\x00\x00\x00\x1c', b'\x00\x00\x00\x20'))
+            # ftyp box detection — more robust MP4 check
+            if not is_mp4 and not is_zip:
+                with open(dl_path, "rb") as f:
+                    header = f.read(12)
+                    is_mp4 = b'ftyp' in header
+            
+            if is_zip:
+                # ZIP archive — extract MP4
+                log.info(f"[TRPC-DL] {video_label}: File is ZIP — extracting...")
+                with zipfile.ZipFile(dl_path, 'r') as zf:
+                    mp4_files = [fn for fn in zf.namelist() if fn.lower().endswith('.mp4')]
+                    if not mp4_files:
+                        mp4_files = [
+                            fn for fn in zf.namelist()
+                            if fn.lower().endswith(('.mp4', '.webm', '.mov'))
+                        ]
+                    
+                    if not mp4_files:
+                        log.warning(
+                            f"[TRPC-DL] {video_label}: No video files found in ZIP "
+                            f"(contents: {zf.namelist()[:5]})"
+                        )
+                        return None
+                    
+                    source_name = mp4_files[0]
+                    temp_extract = Path(tempfile.mktemp(suffix=".mp4", prefix="veo_extract_"))
+                    with zf.open(source_name) as src, open(temp_extract, 'wb') as dst:
+                        import shutil
+                        shutil.copyfileobj(src, dst)
+                
+                extract_size = temp_extract.stat().st_size
+                if extract_size < 500_000:  # < 500KB = suspicious
+                    log.warning(
+                        f"[TRPC-DL] {video_label}: Extracted MP4 too small "
+                        f"({extract_size:,} bytes)"
+                    )
+                    temp_extract.unlink(missing_ok=True)
+                    return None
+                
+                import shutil
+                shutil.move(str(temp_extract), str(filepath))
+                log.info(
+                    f"[TRPC-DL] {video_label}: ✅ Extracted {source_name} → "
+                    f"{filepath.name} ({extract_size:,} bytes)"
+                )
+            else:
+                # Direct MP4 file — rename to final path
+                log.info(f"[TRPC-DL] {video_label}: File is direct MP4 — saving...")
+                import shutil
+                shutil.move(str(dl_path), str(filepath))
+                dl_path = None  # Prevent cleanup
+                log.info(
+                    f"[TRPC-DL] {video_label}: ✅ Saved direct MP4 → "
+                    f"{filepath.name} ({dl_size:,} bytes)"
+                )
+            
+            # Step 6: Apply zoom+crop if enabled
+            if self._zoom_crop_fn and settings.download_non_watermark:
+                try:
+                    await self._zoom_crop_fn(filepath, task.aspect_ratio)
+                except Exception as wm_err:
+                    log.warning(
+                        f"[TRPC-DL] {video_label}: zoom+crop failed: {wm_err}"
+                    )
+            
+            return str(filepath)
+            
+        except Exception as e:
+            log.error(f"[TRPC-DL] {video_label}: Error: {e}")
+            # Clean up partial file
+            if filepath.exists():
+                try:
+                    filepath.unlink()
+                except OSError:
+                    pass
+            return None
+        finally:
+            # Clean up temp download
+            if dl_path and dl_path.exists():
+                try:
+                    dl_path.unlink()
+                except OSError:
+                    pass
     
     async def _process_image_upscale(self, job: UpscaleJob):
         """Process image upscale job — synchronous API (no poll phase).

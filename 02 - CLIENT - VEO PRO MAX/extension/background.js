@@ -358,10 +358,10 @@ async function handleAppMessage(msg) {
             // Use async/await for proper Promise resolution by chrome.scripting
             try {
               const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
-              if (token && token.length >= 1000) {
+              if (token && token.length >= 1500) {
                 return { token, tokenLength: token.length };
               }
-              return { token: null, error: `Token too short (${token ? token.length : 0} chars, need ≥1000)`, tokenLength: token ? token.length : 0 };
+              return { token: null, error: `Token too short (${token ? token.length : 0} chars, need ≥1500)`, tokenLength: token ? token.length : 0 };
             } catch (err) {
               return { token: null, error: err.message, tokenLength: 0 };
             }
@@ -903,15 +903,42 @@ async function handleAppMessage(msg) {
               }
             }
 
+            // ── Step 1.5: Simulate human behavior before reCAPTCHA ─────────
+            // reCAPTCHA Enterprise scores based on behavioral signals collected
+            // before execute(). Without prior user events, the execution context
+            // looks suspicious (no mouse, no scroll, no timing signals).
+            // F12 analysis: web has natural interaction before each token request.
+            if (needsRecaptcha) {
+              try {
+                // 1. Mouse events (move → click pattern — realistic coordinates)
+                const randomX = Math.floor(Math.random() * window.innerWidth * 0.6 + window.innerWidth * 0.2);
+                const randomY = Math.floor(Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.2);
+                ['mousemove', 'mouseover', 'mousedown', 'mouseup', 'click'].forEach(type => {
+                  document.dispatchEvent(new MouseEvent(type, {
+                    bubbles: true, clientX: randomX, clientY: randomY,
+                    view: window, detail: type === 'click' ? 1 : 0,
+                  }));
+                });
+                // 2. Small random scroll (mimics reading behavior)
+                window.scrollBy(0, Math.floor(Math.random() * 50) - 25);
+                // 3. Focus signals (tab attention)
+                document.dispatchEvent(new Event('focus'));
+                window.dispatchEvent(new Event('focus'));
+                // 4. Natural human delay (200-600ms reaction time)
+                await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 400)));
+              } catch (_simErr) {
+                // Non-fatal — proceed even if simulation fails
+              }
+            }
+
             // ── Step 2: Generate reCAPTCHA token ───────
             // ★ rcTimeoutMs comes from function parameter (progressive tier from Python)
+            // HAR verified: T2I/UPSCALE_IMAGE use IMAGE_GENERATION, video endpoints use VIDEO_GENERATION
+            const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
+            const rcAction = needsRecaptcha ? (imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION') : null;
             let recaptchaToken = null;
             if (needsRecaptcha) {
               try {
-                // HAR verified: T2I/UPSCALE_IMAGE use IMAGE_GENERATION, video endpoints use VIDEO_GENERATION
-                // UPSCALE_IMAGE is an image-domain operation (upsampleImage API), same reCAPTCHA action as T2I
-                const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
-                const rcAction = imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
                 const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
                 const rcTimeout_ = new Promise((_, reject) =>
                   setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s)`)), rcTimeoutMs)
@@ -919,10 +946,10 @@ async function handleAppMessage(msg) {
                 recaptchaToken = await Promise.race([rcPromise, rcTimeout_]);
                 // HAR verified: valid tokens are 1742-2169 chars
                 // A 538-char token passed old threshold (500) but was rejected by Google
-                if (!recaptchaToken || recaptchaToken.length < 1000) {
+                if (!recaptchaToken || recaptchaToken.length < 1500) {
                   return {
                     success: false,
-                    error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1000)`,
+                    error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1500)`,
                     tokenLength: recaptchaToken ? recaptchaToken.length : 0,
                   };
                 }
@@ -931,21 +958,42 @@ async function handleAppMessage(msg) {
               }
             }
 
-            // ── Step 3: Build request body ────────────────────────────────
+            // ── Step 3: Build request body with per-request tokens ────────
+            // F12 analysis: web generates a FRESH reCAPTCHA token per image
+            // request (reload → submit → clr → reload → submit → clr...).
+            // Match this pattern: first request uses initial token, subsequent
+            // requests get fresh tokens with small delays between them.
             const body = payload.body || {};
             if (needsRecaptcha && recaptchaToken) {
-              const rcCtx = {
+              // Top-level clientContext gets first token
+              if (!body.clientContext) body.clientContext = {};
+              body.clientContext.recaptchaContext = {
                 token: recaptchaToken,
                 applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
               };
-              // Top-level clientContext
-              if (!body.clientContext) body.clientContext = {};
-              body.clientContext.recaptchaContext = rcCtx;
-              // Per-request clientContext (HAR: T2I/I2I requires nested reCAPTCHA)
+              // Per-request clientContext: each gets its own fresh token
               if (Array.isArray(body.requests)) {
-                for (const req of body.requests) {
+                for (let i = 0; i < body.requests.length; i++) {
+                  const req = body.requests[i];
+                  let itemToken = recaptchaToken; // First uses initial token
+                  if (i > 0 && req.clientContext) {
+                    // Generate fresh token for subsequent requests (match web pattern)
+                    try {
+                      // Small delay between requests — web has reload/clr cycle (~300-500ms)
+                      await new Promise(r => setTimeout(r, 300 + Math.floor(Math.random() * 200)));
+                      itemToken = await grecaptcha.enterprise.execute(siteKey, { action: rcAction });
+                      if (!itemToken || itemToken.length < 1500) {
+                        itemToken = recaptchaToken; // Fallback to first token
+                      }
+                    } catch (_freshErr) {
+                      itemToken = recaptchaToken; // Fallback to first token on error
+                    }
+                  }
                   if (req.clientContext) {
-                    req.clientContext.recaptchaContext = rcCtx;
+                    req.clientContext.recaptchaContext = {
+                      token: itemToken,
+                      applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+                    };
                   }
                 }
               }
@@ -1012,6 +1060,23 @@ async function handleAppMessage(msg) {
                 responseData = JSON.parse(responseText);
               } catch (e) {
                 responseData = { raw: responseText.substring(0, 1000) };
+              }
+
+              // ── Step 6: recaptcha/enterprise/clr — Report completion ────
+              // F12 analysis (definitive): Web calls recaptcha/enterprise/clr
+              // after EVERY successful submit (reload → submit → clr cycle).
+              // This builds reCAPTCHA trust score for subsequent requests.
+              // Fire-and-forget: don't block on response, don't fail on error.
+              if (siteKey && recaptchaToken) {
+                try {
+                  fetch(`https://www.google.com/recaptcha/enterprise/clr?k=${siteKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-protobuffer' },
+                    credentials: 'include',
+                    mode: 'no-cors',  // F12: sec-fetch-mode: no-cors
+                    body: `\n(${siteKey}`,  // Minimal protobuf: field 5 (site key)
+                  }).catch(() => {}); // Truly fire-and-forget
+                } catch (_clrErr) { /* non-fatal */ }
               }
 
               return {

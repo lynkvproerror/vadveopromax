@@ -1,0 +1,354 @@
+{
+  "group_id": "group_20260313_084757",
+  "workflow": "T2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_t2v_fast_ultra_relaxed",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260313_084757_task_0",
+      "prompt": "Đây bác tạo theo kiểu như thế này ạ",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_1",
+      "prompt": "[",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_2",
+      "prompt": "{",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_3",
+      "prompt": "\"scene_number\": 1,",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_4",
+      "prompt": "\"duration\": \"8s\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_5",
+      "prompt": "\"prompt_en\": \"chalkboard background, white stickman slowly improving himself step by step, small upward arrow showing progress, hand drawn animation, simple doodle style\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_6",
+      "prompt": "\"description_vi\": \"Nhân vật người que đứng trước bảng đen, từng bước leo lên các bậc nhỏ tượng trưng cho việc cải thiện bản thân mỗi ngày.\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_7",
+      "prompt": "\"narration_vi\": \"Cuộc sống không cần hoàn hảo, chỉ cần mỗi ngày ta cố gắng tốt hơn hôm qua một chút là đủ rồi\"",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_8",
+      "prompt": "},",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_9",
+      "prompt": "{",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_10",
+      "prompt": "\"scene_number\": 2,",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_11",
+      "prompt": "\"duration\": \"8s\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_12",
+      "prompt": "\"prompt_en\": \"chalkboard background, white stickman facing obstacles like rocks then becoming stronger and standing tall, hand drawn stickman animation\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_13",
+      "prompt": "\"description_vi\": \"Người que gặp các tảng đá cản đường, sau đó đẩy qua và trở nên mạnh mẽ hơn.\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_14",
+      "prompt": "\"narration_vi\": \"Khó khăn đôi khi xuất hiện không phải để quật ngã bạn mà để rèn luyện trái tim mạnh mẽ hơn mỗi ngày\"",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_15",
+      "prompt": "},",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_16",
+      "prompt": "{",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_17",
+      "prompt": "\"scene_number\": 3,",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_18",
+      "prompt": "\"duration\": \"8s\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_19",
+      "prompt": "\"prompt_en\": \"chalkboard background, white stickman noticing small stars, heart and little objects around him, showing appreciation, hand drawn style\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_20",
+      "prompt": "\"description_vi\": \"Người que nhìn thấy những ngôi sao và trái tim nhỏ xung quanh, mỉm cười trân trọng những điều giản dị.\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_21",
+      "prompt": "\"narration_vi\": \"Hãy trân trọng những điều nhỏ bé quanh mình vì chính chúng âm thầm góp lại thành hạnh phúc lớn mỗi ngày\"",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_22",
+      "prompt": "},",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_23",
+      "prompt": "{",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_24",
+      "prompt": "\"scene_number\": 4,",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_25",
+      "prompt": "\"duration\": \"8s\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_26",
+      "prompt": "\"prompt_en\": \"chalkboard background, sunrise drawn in chalk, white stickman opening a blank book and starting to write, hand drawn animation\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_27",
+      "prompt": "\"description_vi\": \"Mặt trời mọc trên bảng đen, người que mở một cuốn sách trắng và bắt đầu viết câu chuyện mới.\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_28",
+      "prompt": "\"narration_vi\": \"Mỗi buổi sáng thức dậy cuộc đời lại trao cho ta một trang giấy mới để tiếp tục viết ước mơ hôm nay\"",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_29",
+      "prompt": "},",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_30",
+      "prompt": "{",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_31",
+      "prompt": "\"scene_number\": 5,",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_32",
+      "prompt": "\"duration\": \"8s\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_33",
+      "prompt": "\"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_34",
+      "prompt": "\"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\",",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_35",
+      "prompt": "\"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_36",
+      "prompt": "}",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260313_084757_task_37",
+      "prompt": "]",
+      "model": "veo_3_1_t2v_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

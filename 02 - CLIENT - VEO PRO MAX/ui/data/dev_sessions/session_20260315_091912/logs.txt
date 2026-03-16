@@ -1,0 +1,908 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260315_091912
+Total: 899 entries
+============================================================
+
+[INFO ] 09:13:48 - core.session_manager - [Session] Loaded from 2026-03-15T09:06:27.001852
+[INFO ] 09:13:48 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 09:13:48 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[DEBUG] 09:13:48 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=[]
+[INFO ] 09:13:48 - veo.tab_queue - [GroupCreate] gid=group_20260315_082141 name='TRUYỆN KIỀU/character' children=5 expanded=True
+[INFO ] 09:13:49 - veo.tab_queue - [GroupCreate] gid=group_20260315_082509 name='TRUYỆN KIỀU/scenes' children=62 expanded=True
+[DEBUG] 09:13:49 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:13:53 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:13:53 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:13:53 - veo - [VersionCheck] OK: 2.3.2 >= 2.3.0
+[DEBUG] 09:13:53 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[DEBUG] 09:14:00 - core.app_controller - Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+[INFO ] 09:14:00 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 09:14:00 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 09:14:00 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 09:14:00 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: veofidelia169@tunxelamorintesa.sbs...
+[DEBUG] 09:14:00 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for veofidelia169@tunxelamorintesa.sbs...
+[INFO ] 09:14:00 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 09:14:00 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 09:14:00 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 63523)
+[INFO ] 09:14:00 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_50d44400
+[INFO ] 09:14:00 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 52559)
+[INFO ] 09:14:00 - core.chrome_manager - [ChromeManager] 🔗 Reconnected to Chrome PID=40332, port=9223, 1 tab(s)
+[INFO ] 09:14:00 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 55823)
+[DEBUG] 09:14:00 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 09:14:00 - core.chrome_manager - [ChromeManager] Reconnected — extension already loaded on port 9223
+[INFO ] 09:14:00 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 53564)
+[INFO ] 09:14:00 - core.profiles_controller - [ProfilesController] Chrome PID=40332, port=9223 (reconnected)
+[INFO ] 09:14:00 - core.profiles_controller - [ProfilesController] 2 HWND(s) — hidden for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:14:00 - asyncio - Using proactor: IocpProactor
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[INFO ] 09:14:00 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.3
+[INFO ] 09:14:00 - core.extension_manager - [ExtMgr] Extension v2.3.3 up-to-date — skipping
+[INFO ] 09:14:00 - core.profiles_controller - [DEBUG] Step 1b: Extension install → ✅
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 2: Found 1 existing page(s)
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 09:14:00 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 09:14:00 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[INFO ] 09:14:01 - core.app_controller - [AutoLaunch] ✅ veofidelia169@tunxelamorintesa.sbs browser hidden
+[INFO ] 09:14:01 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 09:14:01 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 09:14:01 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] ⏳ Debug browser starting, waiting...
+[DEBUG] 09:14:01 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 09:14:01 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 63090)
+[INFO ] 09:14:02 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 60611)
+[INFO ] 09:14:04 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 57860)
+[INFO ] 09:14:05 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 49252)
+[INFO ] 09:14:05 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 63523) still unregistered after 5s
+[INFO ] 09:14:05 - core.app_controller - [AutoAssign] 📧 Late-assign email: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:05 - core.extension_bridge - [ExtensionBridge] 📧 Assigned email to extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:05 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:05 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:14:05 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 52559) still unregistered after 5s
+[INFO ] 09:14:05 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 55823) still unregistered after 5s
+[INFO ] 09:14:05 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 53564) still unregistered after 5s
+[INFO ] 09:14:06 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 63090) still unregistered after 5s
+[INFO ] 09:14:07 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 60611) still unregistered after 5s
+[INFO ] 09:14:09 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 57860) still unregistered after 5s
+[INFO ] 09:14:09 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 52350)
+[DEBUG] 09:14:10 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[INFO ] 09:14:10 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 49252) still unregistered after 5s
+[INFO ] 09:14:10 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 59886)
+[INFO ] 09:14:11 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 61928)
+[INFO ] 09:14:14 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 52350) still unregistered after 5s
+[WARNING] 09:14:15 - core.extension_bridge - [ExtensionBridge] Header refresh timed out (10s) — non-fatal, CDP may capture headers directly
+[WARNING] 09:14:15 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: refresh_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=bdf72c4d)
+[INFO ] 09:14:15 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:15 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 59886) still unregistered after 5s
+[ERROR] 09:14:15 - core.profiles_controller - [DEBUG] Step 5: Reload error: Page.reload: Timeout 15000ms exceeded.
+Call log:
+  - waiting for navigation until "load"
+    - navigated to "https://labs.google/fx/vi/tools/flow"
+
+[INFO ] 09:14:15 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 09:14:15 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for veofidelia169@tunxelamorintesa.sbs (persistent, port=9223)
+[INFO ] 09:14:15 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 09:14:15 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 09:14:15 - core.multi_account - All account browsers initialized
+[INFO ] 09:14:15 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 09:14:15 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 09:14:16 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 61928) still unregistered after 5s
+[INFO ] 09:14:16 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 56175)
+[INFO ] 09:14:16 - core.profiles_controller - [ProfilesController] 🔇 Post-setup re-hide: 2 HWND(s) hidden for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:16 - core.profiles_controller - [ProfilesController] 🔇 Browser hidden for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:17 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 60661)
+[INFO ] 09:14:18 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['veofidelia169@tunxelamorintesa.sbs']
+[INFO ] 09:14:18 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 09:14:18 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/E4286BEC088547745E2AA5227C...
+[INFO ] 09:14:20 - core.extension_manager - [ExtMgr] Closed extensions tab E4286BEC... (PUT)
+[INFO ] 09:14:20 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 09:14:20 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.3
+[INFO ] 09:14:20 - core.app_controller - [AppController] Extension v2.3.3 connected via bridge for veofidelia169@tunxelamorintesa.sbs — up-to-date
+[INFO ] 09:14:20 - core.app_controller - [AppController] Extension batch check results: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected'}
+[INFO ] 09:14:20 - core.app_controller - [AutoLaunch] Extension check complete: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected'}
+[INFO ] 09:14:20 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 09:14:20 - core.app_controller - [AutoLaunch] 🔇 Final re-hide sweep: 1 browser(s)
+[INFO ] 09:14:20 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 09:14:20 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 09:14:20 - core.app_controller - [AutoLaunch] 📸 Image Library pre-upload: 25 images × 1 accounts (25 pending)
+[DEBUG] 09:14:20 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:14:20 - services.image_library - [ImageLibrary] Pre-uploading 25 image(s) for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:20 - core.profiles_controller - [ProfilesController] 🔇 Browser hidden for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:20 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Access token invalid/expired, refreshing...
+[INFO ] 09:14:21 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 56175) still unregistered after 5s
+[INFO ] 09:14:22 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 60661) still unregistered after 5s
+[INFO ] 09:14:22 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 62501)
+[INFO ] 09:14:24 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 53653)
+[INFO ] 09:14:24 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:14:24 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:24 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:14:24 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:14:24 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:14:24 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:14:24 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:24 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:24 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[DEBUG] 09:14:25 - core.extension_bridge - [ExtensionBridge] Browser header probe timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:14:25 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: probe_browser_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=8024d2c0)
+[WARNING] 09:14:25 - core.app_controller - [ExtensionBridge] ⚠️ x-browser-validation NOT captured — API requests may get 403
+[INFO ] 09:14:25 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:26 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 62817)
+[INFO ] 09:14:26 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:14:26 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:26 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:14:26 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:14:26 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:14:26 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:26 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:14:26 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:14:26 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:27 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 55828)
+[INFO ] 09:14:27 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 09:14:27 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 11.9s (requestId=c2889b30)
+[WARNING] 09:14:27 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 09:14:27 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:27 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:27 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:27 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:27 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 62501) still unregistered after 5s
+[DEBUG] 09:14:29 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:14:29 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:14:29 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:14:30 - core.extension_bridge - [ExtensionBridge] ⚠️ 10 unregistered connection(s) detected — triggering auto-assign
+[ERROR] 09:14:30 - core.extension_bridge - [ExtensionBridge] Access token request timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:14:30 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: request_access_token for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=186fc062)
+[INFO ] 09:14:30 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Page token stale, triggering tab reload...
+[INFO ] 09:14:30 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[DEBUG] 09:14:31 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:14:31 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:14:31 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:14:32 - core.extension_bridge - [ExtensionBridge] ⏰ Connection from ('127.0.0.1', 55828) still unregistered after 5s
+[ERROR] 09:14:43 - core.extension_bridge - [ExtensionBridge] Access token request timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:14:43 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: request_access_token for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=8b7d812b)
+[DEBUG] 09:14:43 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 09:14:45 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:14:45 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:14:45 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:45 - core.extension_bridge - [ExtensionBridge] ⚠️ 14 unregistered connection(s) detected — triggering auto-assign
+[DEBUG] 09:14:48 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 09:14:48 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:14:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:14:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 09:14:49 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 63631)
+[WARNING] 09:14:49 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs (no heartbeat for 59s) — recovery attempt 1/3
+[INFO ] 09:14:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for veofidelia169@tunxelamorintesa.sbs — frozen tab recovery 1/3
+[INFO ] 09:14:49 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:49 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:14:49 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:14:49 - core.extension_bridge - [ExtensionBridge] 🔄 Frozen counter reset for veofidelia169@tunxelamorintesa.sbs (was 1)
+[INFO ] 09:14:49 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:14:49 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:14:49 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:14:49 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 09:14:49 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 15.2s (requestId=71859faf)
+[INFO ] 09:14:49 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[WARNING] 09:14:49 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[WARNING] 09:14:49 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[INFO ] 09:14:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:14:49 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:14:52 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:14:52 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:14:52 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:14:54 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:14:54 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Tấm.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "d2301431-b828-43a2-a261-0c5e9e00a4c7", "workflowId": "d828d3b7-c380-48ba-858e-bc0aab01b4fd", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:14:44.764088Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "d828d3b7-c380-48ba-858e-bc0aab01b4fd", "metadata": {"displayNam
+[DEBUG] 09:14:55 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:14:59 - core.extension_bridge - [ExtensionBridge] Lightweight refresh timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:14:59 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: refresh_headers_lightweight for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=f3084469)
+[DEBUG] 09:14:59 - core.extension_bridge - [ExtensionBridge] Browser header probe timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:14:59 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: probe_browser_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=97e9c88b)
+[WARNING] 09:14:59 - core.app_controller - [ExtensionBridge] ⚠️ x-browser-validation NOT captured — API requests may get 403
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 60s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 60s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 60s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 59s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 58s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 56s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 55s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 51s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 50s)
+[WARNING] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 49s)
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:00 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=10s,cap=❌), veofidelia16=✅(hb=10s,cap=❌), veofidelia16=✅(hb=10s,cap=❌) | conns=7, pending=2
+[INFO ] 09:15:00 - core.extension_bridge - [ExtensionBridge] ⚠️ 4 unregistered connection(s) detected — triggering auto-assign
+[INFO ] 09:15:05 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:15:05 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Cám.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "9b6c57bc-4049-4f16-b06a-ab83ecaa135e", "workflowId": "ffa1c6a3-8bfd-42fb-b42e-7af0420db49f", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:14:56.102696Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "ffa1c6a3-8bfd-42fb-b42e-7af0420db49f", "metadata": {"displayNam
+[DEBUG] 09:15:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:15:09 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 56704)
+[INFO ] 09:15:09 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:15:09 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:09 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:09 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:15:09 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:15:09 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:15:09 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:09 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:09 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:15:09 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:09 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[ERROR] 09:15:09 - core.extension_bridge - [ExtensionBridge] Access token request timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:15:09 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: request_access_token for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=3ddb3d32)
+[INFO ] 09:15:10 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 09:15:10 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 10.4s (requestId=822e0153)
+[WARNING] 09:15:10 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[WARNING] 09:15:10 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[INFO ] 09:15:10 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:10 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:12 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:12 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:15:12 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:14 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:14 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:15:14 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 09:15:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 59s)
+[WARNING] 09:15:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 58s)
+[WARNING] 09:15:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 53s)
+[WARNING] 09:15:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 50s)
+[WARNING] 09:15:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: [] (no activity 48s)
+[INFO ] 09:15:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:15:15 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:15:15 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[INFO ] 09:15:16 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:15:16 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Mẹ Cám.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "b720e79c-6453-4388-9a0c-b21769b1bfe5", "workflowId": "863a9f1d-f075-4af2-9709-15135417c29f", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:15:06.810634Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "863a9f1d-f075-4af2-9709-15135417c29f", "metadata": {"displayNam
+[DEBUG] 09:15:16 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:15:17 - core.engine - [TabKeepalive] Pinged 1 tab(s) — Chrome freeze prevention OK
+[INFO ] 09:15:23 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 50475)
+[INFO ] 09:15:23 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:15:23 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:23 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:23 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:15:23 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:15:23 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:15:23 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:25 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:15:25 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Bụt.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "4e4ebd34-06e5-4df2-9ea0-b0544a2de472", "workflowId": "fb6c9fd8-42c8-4ac4-9d7e-892ee449ed59", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:15:17.692772Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "fb6c9fd8-42c8-4ac4-9d7e-892ee449ed59", "metadata": {"displayNam
+[DEBUG] 09:15:25 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:25 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:15:25 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:25 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 09:15:30 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 60s)
+[INFO ] 09:15:30 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:15:30 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:15:30 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:33 - core.extension_bridge - [ExtensionBridge] Browser header probe timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:15:33 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: probe_browser_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=49065660)
+[WARNING] 09:15:33 - core.app_controller - [ExtensionBridge] ⚠️ x-browser-validation NOT captured — API requests may get 403
+[INFO ] 09:15:35 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 59571)
+[INFO ] 09:15:35 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:15:35 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:35 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:15:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:15:35 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:15:35 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:35 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:35 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:15:35 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:35 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:15:35 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:35 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:15:35 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Nhà vua.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "3690bfd0-80c2-40bd-9c7d-17135dc7da2b", "workflowId": "690dd9bc-c44d-4ec3-9b4c-525ecf70305d", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:15:27.009118Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "690dd9bc-c44d-4ec3-9b4c-525ecf70305d", "metadata": {"displayNam
+[INFO ] 09:15:35 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 09:15:35 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 15.9s (requestId=a1281f79)
+[WARNING] 09:15:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[WARNING] 09:15:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[WARNING] 09:15:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[DEBUG] 09:15:36 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:15:36 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:36 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:39 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:39 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:15:39 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 09:15:45 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 54s)
+[INFO ] 09:15:45 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:15:45 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:15:45 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:45 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:15:45 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 2.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "ed4f23a6-bb6f-460c-8914-565b7cbd3721", "workflowId": "c577ef1d-9c5e-4816-956c-6c61e0a7b73e", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:15:37.026130Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "c577ef1d-9c5e-4816-956c-6c61e0a7b73e", "metadata": {"displayNam
+[DEBUG] 09:15:46 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[ERROR] 09:15:46 - core.extension_bridge - [ExtensionBridge] Access token request timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:15:46 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: request_access_token for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=eaa3181a)
+[DEBUG] 09:15:48 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 09:15:48 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:15:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:15:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 09:15:49 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 60846)
+[WARNING] 09:15:49 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs (no heartbeat for 60s) — recovery attempt 1/3
+[INFO ] 09:15:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for veofidelia169@tunxelamorintesa.sbs — frozen tab recovery 1/3
+[INFO ] 09:15:49 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:15:49 - core.extension_bridge - [ExtensionBridge] 🔄 Frozen counter reset for veofidelia169@tunxelamorintesa.sbs (was 1)
+[INFO ] 09:15:49 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:49 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:49 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:15:49 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:15:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:15:49 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:50 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:50 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[DEBUG] 09:15:50 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:50 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:50 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:15:50 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:15:51 - core.engine - [TabKeepalive] Pinged 1 tab(s) — Chrome freeze prevention OK
+[DEBUG] 09:15:54 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:54 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:15:54 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:15:54 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:15:54 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 4.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "a3b4eb9e-87be-4131-86ba-ab4858526281", "workflowId": "43afd167-c8de-4306-b567-3eca7e28099e", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:15:47.023952Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "43afd167-c8de-4306-b567-3eca7e28099e", "metadata": {"displayNam
+[DEBUG] 09:15:55 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:15:57 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:15:57 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:15:57 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 09:16:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:16:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:16:00 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:16:00 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:00 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=11s,cap=❌), veofidelia16=✅(hb=11s,cap=❌), veofidelia16=✅(hb=11s,cap=❌) | conns=3, pending=1
+[INFO ] 09:16:04 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:16:04 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 1.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "bdf8d78f-b649-438b-9a39-95802bc429fa", "workflowId": "f7ad912f-f043-4825-8216-cb3ee918a463", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:15:56.419110Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "f7ad912f-f043-4825-8216-cb3ee918a463", "metadata": {"displayNam
+[DEBUG] 09:16:04 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:16:05 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 62717)
+[INFO ] 09:16:05 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:16:05 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:05 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:05 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:16:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:16:05 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:16:05 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:05 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:05 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[WARNING] 09:16:05 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 09:16:05 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=27a73f19)
+[WARNING] 09:16:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[WARNING] 09:16:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[WARNING] 09:16:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 09:16:05 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:05 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:16:07 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs (no heartbeat for 80s) — recovery attempt 1/3
+[INFO ] 09:16:07 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for veofidelia169@tunxelamorintesa.sbs — frozen tab recovery 1/3
+[DEBUG] 09:16:07 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:07 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:07 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:16:07 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:13 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:13 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:16:13 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:16:13 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:16:13 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 8.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "2926fe95-f302-42fe-9e4f-695f81acf97e", "workflowId": "35581a71-6be3-4358-95c6-e853bb83762e", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:16:05.914026Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "35581a71-6be3-4358-95c6-e853bb83762e", "metadata": {"displayNam
+[DEBUG] 09:16:14 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 09:16:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 48s)
+[INFO ] 09:16:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:16:15 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:16:15 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:19 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 09:16:19 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 09:16:20 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 50748)
+[INFO ] 09:16:20 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:16:20 - core.extension_bridge - [ExtensionBridge] 🔄 Frozen counter reset for veofidelia169@tunxelamorintesa.sbs (was 1)
+[INFO ] 09:16:20 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:20 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:20 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:16:20 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:16:20 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:20 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:16:20 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:16:20 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:20 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:20 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:21 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:21 - core.profiles_controller - [ProfilesController] ⏳ JS eval paused for veofidelia169@tunxelamorintesa.sbs (page navigating — soft recovery)
+[DEBUG] 09:16:21 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat skipped (no browser page)
+[INFO ] 09:16:23 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:16:23 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 5.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "720800ad-2605-4a65-b977-d7e0bde597fd", "workflowId": "1d97669d-41ae-4eb0-b846-94a287846e69", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:16:14.998689Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "1d97669d-41ae-4eb0-b846-94a287846e69", "metadata": {"displayNam
+[DEBUG] 09:16:23 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:16:24 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:24 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:16:24 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[ERROR] 09:16:27 - core.extension_bridge - [ExtensionBridge] 💀 Tab DEAD for veofidelia169@tunxelamorintesa.sbs — 3 reload attempts failed. Browser restart recommended.
+[INFO ] 09:16:27 - core.app_controller - [AppController] Tab dead for veofidelia169@tunxelamorintesa.sbs but engine stopped — skipping auto-restart
+[WARNING] 09:16:30 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:16:30 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:16:30 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:16:30 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:32 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:16:32 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 3.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "e5da4e7a-2953-4202-86a6-41c1549c4302", "workflowId": "44e377e8-5c79-4616-9d6e-aca252984522", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:16:24.680883Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "44e377e8-5c79-4616-9d6e-aca252984522", "metadata": {"displayNam
+[DEBUG] 09:16:33 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:16:35 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 57945)
+[INFO ] 09:16:35 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:16:35 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:35 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:16:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:16:35 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:16:35 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:35 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:35 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:16:35 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 09:16:35 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=c0c39b27)
+[WARNING] 09:16:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[WARNING] 09:16:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 09:16:35 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:35 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:37 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:37 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:16:37 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:40 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:40 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:16:40 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:41 - core.engine - [TabKeepalive] Pinged 1 tab(s) — Chrome freeze prevention OK
+[INFO ] 09:16:42 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:16:42 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 6.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "fdfcd774-aa9b-4553-8384-9111f1fc960e", "workflowId": "af03314a-b9ca-4ef3-a864-4b0894fc01eb", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:16:34.129269Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "af03314a-b9ca-4ef3-a864-4b0894fc01eb", "metadata": {"displayNam
+[DEBUG] 09:16:42 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:16:43 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:43 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:16:43 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 09:16:45 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:16:45 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:16:45 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:16:45 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:48 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 09:16:48 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:16:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:16:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 09:16:49 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 63406)
+[INFO ] 09:16:49 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:16:49 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:49 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:16:49 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:16:49 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:16:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:16:49 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:49 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:49 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:16:50 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:50 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:50 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:16:51 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:16:51 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 7.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "f3fd04fc-c9e3-43e0-9721-6f2165a41346", "workflowId": "0f9434d6-d06b-48d3-9462-8465392b46f7", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:16:43.551224Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "0f9434d6-d06b-48d3-9462-8465392b46f7", "metadata": {"displayNam
+[DEBUG] 09:16:52 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:16:53 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:16:53 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:16:53 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 09:17:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:17:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:17:00 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:17:00 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:00 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=⚠️(hb=53s,cap=❌), veofidelia16=⚠️(hb=53s,cap=❌), veofidelia16=⚠️(hb=53s,cap=❌) | conns=3, pending=1
+[INFO ] 09:17:01 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:17:01 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 15.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "4b81e958-ef7d-4a50-ac7a-b8661e6f6ea0", "workflowId": "c3d438a4-9d6c-4703-a87d-8580d7dd858d", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:16:53.527669Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "c3d438a4-9d6c-4703-a87d-8580d7dd858d", "metadata": {"displayNam
+[DEBUG] 09:17:02 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:17:05 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 52648)
+[INFO ] 09:17:05 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:17:05 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:05 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:05 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:17:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:17:05 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:05 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:17:05 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:17:05 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:17:05 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 09:17:05 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=7cc13277)
+[WARNING] 09:17:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[WARNING] 09:17:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 09:17:05 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:05 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:07 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:07 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:07 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:10 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:10 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:10 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:12 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 09:17:13 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:13 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:13 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:17:13 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:17:13 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 9.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "fb8afc82-1ee6-4f58-b420-1836850646a9", "workflowId": "a529b210-761f-47c5-9e67-5a26462e3704", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:17:03.331318Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "a529b210-761f-47c5-9e67-5a26462e3704", "metadata": {"displayNam
+[DEBUG] 09:17:14 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 09:17:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:17:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:17:15 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:17:15 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:20 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 58437)
+[INFO ] 09:17:20 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:17:20 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:20 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:20 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:17:20 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:17:20 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:17:20 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:20 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:20 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:17:20 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:20 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:21 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:22 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:17:22 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 10.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "3292f811-6939-4b73-b9c8-e8b7d58ad91f", "workflowId": "86025019-b70e-49d8-b73c-0b634c9c2442", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:17:15.098975Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "86025019-b70e-49d8-b73c-0b634c9c2442", "metadata": {"displayNam
+[DEBUG] 09:17:23 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:17:24 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:24 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:24 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 09:17:30 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:17:30 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:17:30 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:17:30 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:31 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:31 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:31 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:17:33 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:17:33 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 11.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "600ae765-458f-4d9a-b660-51d9c8cdad1d", "workflowId": "2106e46e-299e-4572-8676-f2315f854423", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:17:24.603073Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "2106e46e-299e-4572-8676-f2315f854423", "metadata": {"displayNam
+[DEBUG] 09:17:33 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:17:35 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 52181)
+[INFO ] 09:17:35 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:17:35 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:35 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:17:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:17:35 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:17:35 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:35 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:35 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[WARNING] 09:17:35 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 09:17:35 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=c23eae01)
+[WARNING] 09:17:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[WARNING] 09:17:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 09:17:35 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:35 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:37 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:37 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:37 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:39 - core.engine - [TabKeepalive] Pinged 1 tab(s) — Chrome freeze prevention OK
+[DEBUG] 09:17:40 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:40 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:40 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:17:42 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:17:42 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 12.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "e515d421-e770-4121-b389-33ed50f36abe", "workflowId": "f5979681-e63e-4ccf-9169-fbe848537b72", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:17:34.616024Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "f5979681-e63e-4ccf-9169-fbe848537b72", "metadata": {"displayNam
+[DEBUG] 09:17:43 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:43 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:43 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:43 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 09:17:45 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:17:45 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:17:45 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:17:45 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:48 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 09:17:48 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:17:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:17:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 09:17:49 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 54857)
+[INFO ] 09:17:49 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:17:49 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:49 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:49 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:17:49 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:17:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:17:49 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:49 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:49 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:17:50 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:50 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:50 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:17:53 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:17:53 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 13.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "971c3951-1761-4c8e-8924-c1bb022e1d01", "workflowId": "9cf99eeb-bf65-4a8e-83f5-a2d2b536ad92", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:17:44.485739Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "9cf99eeb-bf65-4a8e-83f5-a2d2b536ad92", "metadata": {"displayNam
+[DEBUG] 09:17:53 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:17:53 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:17:53 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:17:53 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:17:58 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 09:17:58 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 09:17:58 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[DEBUG] 09:17:58 - asyncio - Using proactor: IocpProactor
+[WARNING] 09:17:58 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 09:17:58 - core.engine - [Engine] Workload priority → upscale_priority
+[INFO ] 09:17:58 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 09:17:58 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 09:17:58 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 09:17:58 - core.app_controller - [Engine] Processing started
+[INFO ] 09:17:58 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 09:17:58 - core.multi_account - All account browsers initialized
+[INFO ] 09:17:58 - core.multi_account - ⏳ No account has good x-client-data yet (best=8 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 09:17:58 - core.engine - Engine starting: 1 accounts, 54 ready tasks in queue
+[INFO ] 09:17:58 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[INFO ] 09:17:58 - core.engine - [ImageLibrary] Pre-upload: 25 images × 1 accounts (25 pending uploads)
+[INFO ] 09:17:58 - core.engine - [G1:veofidelia169@tunxelamorintesa.sbs] max_foremen=-1, raw_foreman=8, existing=0
+[INFO ] 09:17:58 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Spawned CHỦ + 8 Foremen (max_workers=20, output=1, retry=3, timeout=120s)
+[INFO ] 09:17:58 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Started
+[INFO ] 09:17:58 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Refreshing browser headers...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-0] Waiting for supervisor startup...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-1] Waiting for supervisor startup...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-2] Waiting for supervisor startup...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-3] Waiting for supervisor startup...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-4] Waiting for supervisor startup...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-5] Waiting for supervisor startup...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-6] Waiting for supervisor startup...
+[DEBUG] 09:17:58 - core.engine - [foreman-veofidel-7] Waiting for supervisor startup...
+[INFO ] 09:17:58 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 09:17:58 - core.engine - [CreditWindow] Recovery timer started
+[INFO ] 09:17:58 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=600s, POLL timeout=900s, scan every 30s
+[INFO ] 09:17:58 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[INFO ] 09:17:58 - services.image_library - [ImageLibrary] Pre-uploading 25 image(s) for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:58 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:17:58 - core.engine - [TabKeepalive] Engine processing — yielding...
+[DEBUG] 09:17:58 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:17:58 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:17:59 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 09:18:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:18:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:18:00 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:18:00 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:00 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=❌(hb=113s,cap=❌), veofidelia16=❌(hb=113s,cap=❌), veofidelia16=❌(hb=113s,cap=❌) | conns=3, pending=1
+[DEBUG] 09:18:00 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:01 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:02 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:18:03 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:03 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 14.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "a45b0ced-8e43-4521-8a0c-d7843ed9b85e", "workflowId": "aae79911-d3fd-41ac-9a4d-58c8bbeaa387", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:17:54.842466Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "aae79911-d3fd-41ac-9a4d-58c8bbeaa387", "metadata": {"displayNam
+[DEBUG] 09:18:03 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:18:03 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:03 - core.extension_bridge - [ExtensionBridge] Tab idle >60s for veofidelia169@tunxelamorintesa.sbs — simulating activity before reCAPTCHA
+[DEBUG] 09:18:03 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:04 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:18:05 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 59593)
+[INFO ] 09:18:05 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:18:05 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:05 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:05 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:18:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:18:05 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:18:05 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:05 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:05 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[WARNING] 09:18:05 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 09:18:05 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=2da27d7c)
+[WARNING] 09:18:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[WARNING] 09:18:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[DEBUG] 09:18:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:18:05 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:05 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:06 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:07 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:18:07 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:07 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Tấm.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "a8ac5c9b-8e10-4405-ae4d-318f2b78fbaa", "workflowId": "48323ddd-f19a-4074-aadb-e76c3e3e0c2f", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:00.027251Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "48323ddd-f19a-4074-aadb-e76c3e3e0c2f", "metadata": {"displayNam
+[DEBUG] 09:18:07 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:07 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:18:07 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:08 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:08 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:18:08 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:09 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:10 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:10 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:18:10 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:10 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:11 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 09:18:12 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:12 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Thúy Kiều.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "85b0c2b5-89a6-451b-9bc1-bd1c001a3ebf", "workflowId": "b2497cda-f4ae-4389-800e-6de37b9c8db2", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:04.735473Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "b2497cda-f4ae-4389-800e-6de37b9c8db2", "metadata": {"displayNam
+[DEBUG] 09:18:12 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:13 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:13 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:18:13 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:13 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:13 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:18:13 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[WARNING] 09:18:15 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:18:15 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:18:15 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:18:15 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:15 - core.extension_bridge - [ExtensionBridge] Cleared 1 pending request(s) for disconnected connection
+[INFO ] 09:18:15 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for veofidelia169@tunxelamorintesa.sbs — content heartbeat missing 128s
+[WARNING] 09:18:15 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: Extension disconnected
+[INFO ] 09:18:15 - core.extension_bridge - [ExtBridge] ⏱️ Response: request_recaptcha for veofidelia169@tunxelamorintesa.sbs took 9.5s
+[WARNING] 09:18:15 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Extension bridge returned no reCAPTCHA token (attempt 1)
+[INFO ] 09:18:15 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Retrying reCAPTCHA in 3s...
+[INFO ] 09:18:16 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] checkAppAvailability: trying via Extension bridge
+[INFO ] 09:18:17 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:17 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Cám.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "4394db4e-7612-4eb1-858a-fc8a6dd4aab9", "workflowId": "7fe55eaf-28ec-46e3-8e1d-d247b62c0014", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:09.443519Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "7fe55eaf-28ec-46e3-8e1d-d247b62c0014", "metadata": {"displayNam
+[DEBUG] 09:18:18 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:18 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[INFO ] 09:18:20 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 64238)
+[DEBUG] 09:18:20 - core.extension_bridge - [ExtensionBridge] ✅ relay_fetch for veofidelia169@tunxelamorintesa.sbs: HTTP 200 → https://aisandbox-pa.googleapis.com/v1:checkAppAvailability
+[INFO ] 09:18:20 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ checkAppAvailability via Extension: AVAILABLE
+[INFO ] 09:18:20 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:18:20 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:20 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:20 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:18:20 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:18:20 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:20 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:18:20 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:18:20 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:20 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 09:18:20 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 09:18:21 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:21 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:21 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:21 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:21 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Thúy Vân.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "24ab2de4-0475-4c34-b251-4eb28c957aa6", "workflowId": "f6344a25-88bc-47b9-948f-932330bc6540", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:14.357987Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "f6344a25-88bc-47b9-948f-932330bc6540", "metadata": {"displayNam
+[DEBUG] 09:18:22 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:22 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 09:18:22 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 09:18:22 - core.trpc_client - TRPC: Page origin is 'None', expected labs.google
+[WARNING] 09:18:22 - core.trpc_client - TRPC: Page not on labs.google domain (attempt 1/3)
+[DEBUG] 09:18:23 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:18:23 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 09:18:23 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 09:18:24 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:24 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:18:24 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:25 - core.extension_bridge - [ExtensionBridge] Lightweight refresh timed out for veofidelia169@tunxelamorintesa.sbs
+[WARNING] 09:18:25 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: refresh_headers_lightweight for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=d09b0198)
+[DEBUG] 09:18:26 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 09:18:26 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 09:18:26 - core.trpc_client - TRPC: Page origin is 'None', expected labs.google
+[WARNING] 09:18:26 - core.trpc_client - TRPC: Page not on labs.google domain (attempt 2/3)
+[INFO ] 09:18:26 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:26 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Mẹ Cám.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "8a15c2fd-cee3-4c19-bd8e-dde412bb91d2", "workflowId": "bd1ce664-c2bd-444a-ac77-661f417c3d9f", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:19.012481Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "bd1ce664-c2bd-444a-ac77-661f417c3d9f", "metadata": {"displayNam
+[DEBUG] 09:18:27 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:28 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 09:18:28 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 09:18:28 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:18:28 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 09:18:30 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[WARNING] 09:18:30 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:18:30 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:18:30 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:18:30 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:30 - core.extension_bridge - [ExtensionBridge] Cleared 1 pending request(s) for disconnected connection
+[WARNING] 09:18:30 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: Extension disconnected
+[WARNING] 09:18:30 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: request_recaptcha for veofidelia169@tunxelamorintesa.sbs took 12.0s (requestId=069f71be)
+[WARNING] 09:18:30 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Extension bridge returned no reCAPTCHA token (attempt 2)
+[INFO ] 09:18:30 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Retrying reCAPTCHA in 6s...
+[DEBUG] 09:18:30 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 09:18:30 - core.profiles_controller - [ProfilesController] ✅ JS eval recovered for veofidelia169@tunxelamorintesa.sbs (was paused for 4 calls)
+[INFO ] 09:18:30 - core.trpc_client - TRPC: Created project 'TRUYỆN KIỀU/character' → 0f281462-ffa2-4851-b51d-fb89f267a4d8
+[INFO ] 09:18:30 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] ✅ Project ready: 0f281462-ffa2-4851-b51d-fb89f267a4d8
+[INFO ] 09:18:30 - core.engine - [Supervisor:veofidelia169@tunxelamorintesa.sbs] Pre-warming reCAPTCHA...
+[INFO ] 09:18:31 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:31 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Kim Trọng.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "244349e1-848c-41ac-a942-b02f03d4f164", "workflowId": "0984d7f7-a388-4849-84ae-e410e570db53", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:23.281532Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "0984d7f7-a388-4849-84ae-e410e570db53", "metadata": {"displayNam
+[DEBUG] 09:18:32 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:33 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[INFO ] 09:18:35 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 49282)
+[INFO ] 09:18:35 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2105 chars)
+[DEBUG] 09:18:35 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for veofidelia169@tunxelamorintesa.sbs (pool=1/2)
+[DEBUG] 09:18:35 - core.app_controller - [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2105 chars) → AM + Pool
+[DEBUG] 09:18:35 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2105 chars)
+[WARNING] 09:18:35 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 19.7s (requestId=3335bb8f)
+[INFO ] 09:18:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ✅ reCAPTCHA ready on retry
+[INFO ] 09:18:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+[INFO ] 09:18:35 - veo - [Status] ✅ veofidelia169@tunxelamorintesa.sbs: reCAPTCHA ready — account prepared
+[INFO ] 09:18:35 - core.engine - [Foreman:veofidelia169@tunxelamorintesa.sbs] ✅ grecaptcha ready (attempt #1, waited 1.0s)
+[INFO ] 09:18:35 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:18:35 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:35 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:18:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:18:35 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:18:35 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:35 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:18:35 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 09:18:35 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:35 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for veofidelia169@tunxelamorintesa.sbs: 2190 chars
+[INFO ] 09:18:35 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 09:18:35 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for veofidelia169@tunxelamorintesa.sbs (1/2, 2190 chars)
+[INFO ] 09:18:36 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:36 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:36 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:36 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Bụt.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "1b77d4a3-ad51-4249-86d1-d0d7d4b200d9", "workflowId": "09e275f2-62e1-492e-b500-99431869870a", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:28.485642Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "09e275f2-62e1-492e-b500-99431869870a", "metadata": {"displayNam
+[DEBUG] 09:18:36 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:38 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:38 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:18:38 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:38 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[INFO ] 09:18:41 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:41 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Mã Giám Sinh.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "65dae67b-e38b-4750-9380-4bc74033335c", "workflowId": "5a32df00-5237-4960-82a2-d7f84023a8a7", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:33.310629Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "5a32df00-5237-4960-82a2-d7f84023a8a7", "metadata": {"displayNam
+[DEBUG] 09:18:41 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:41 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:18:41 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:41 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:43 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[WARNING] 09:18:45 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 47s)
+[INFO ] 09:18:45 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:18:45 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:18:45 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:45 - core.extension_bridge - [ExtensionBridge] Cleared 1 pending request(s) for disconnected connection
+[WARNING] 09:18:45 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: Extension disconnected
+[INFO ] 09:18:45 - core.extension_bridge - [ExtBridge] ⏱️ Response: request_recaptcha for veofidelia169@tunxelamorintesa.sbs took 9.0s
+[WARNING] 09:18:45 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Extension bridge returned no reCAPTCHA token (attempt 3)
+[WARNING] 09:18:45 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] ❌ reCAPTCHA refresh failed all 3 attempts (consecutive failures: 1)
+[INFO ] 09:18:46 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:46 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Nhà vua.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "ac1e5d74-c3c6-491f-b05d-550cb4f29498", "workflowId": "5df65beb-4f7b-4273-8ed3-e2302d14af19", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:37.841470Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "5df65beb-4f7b-4273-8ed3-e2302d14af19", "metadata": {"displayNam
+[DEBUG] 09:18:46 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:48 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 09:18:48 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 09:18:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:18:48 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:18:48 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[INFO ] 09:18:49 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 49224)
+[INFO ] 09:18:49 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:18:49 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:49 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:18:49 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[DEBUG] 09:18:49 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[INFO ] 09:18:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:18:49 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:49 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:49 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:18:50 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:50 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:50 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:18:52 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:52 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Từ Hải.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "ac2c990d-5c8e-454f-addf-caf2578b9860", "workflowId": "0d75994c-3724-4b50-957d-f2389b810382", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:42.760200Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 768, "height": 1376}}}, "workflow": {"name": "0d75994c-3724-4b50-957d-f2389b810382", "metadata": {"displayNam
+[INFO ] 09:18:52 - services.image_library - [ImageLibrary] Pre-upload done for veofidelia169@tunxelamorintesa.sbs: 0/25
+[DEBUG] 09:18:53 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:18:53 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:18:53 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:18:53 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:18:55 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:18:55 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 2.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "6ac40457-5459-46c7-908c-627f1a02afc3", "workflowId": "4ccf1871-3e33-4ee9-bcc5-728d4a04318e", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:47.904747Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "4ccf1871-3e33-4ee9-bcc5-728d4a04318e", "metadata": {"displayNam
+[DEBUG] 09:18:56 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:18:58 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:18:58 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[WARNING] 09:19:00 - core.extension_bridge - [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+[INFO ] 09:19:00 - core.extension_bridge - [ExtensionBridge] 💀 Dead/zombie connection cleaned up
+[DEBUG] 09:19:00 - core.extension_bridge - [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+[INFO ] 09:19:00 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:19:00 - core.extension_bridge - [ExtensionBridge] Cleared 1 pending request(s) for disconnected connection
+[WARNING] 09:19:00 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: Extension disconnected
+[WARNING] 09:19:00 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: request_recaptcha for veofidelia169@tunxelamorintesa.sbs took 15.0s (requestId=21c5162b)
+[WARNING] 09:19:00 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Extension bridge returned no reCAPTCHA token (attempt 1)
+[INFO ] 09:19:00 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Retrying reCAPTCHA in 3s...
+[INFO ] 09:19:00 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=25s,cap=❌), veofidelia16=✅(hb=25s,cap=❌), veofidelia16=✅(hb=25s,cap=❌) | conns=3, pending=1
+[DEBUG] 09:19:03 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[WARNING] 09:19:05 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 09:19:05 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=37ddc247)
+[WARNING] 09:19:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 09:19:05 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 62621)
+[INFO ] 09:19:05 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.3)
+[INFO ] 09:19:05 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:19:05 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:19:05 - core.extension_bridge - [ExtensionBridge] Extension v2.3.3 matches local v2.3.3
+[INFO ] 09:19:05 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 09:19:05 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:19:05 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 09:19:05 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 09:19:05 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:19:05 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[WARNING] 09:19:05 - services.image_library - [ImageLibrary] Upload OK but no mediaId: Scene 4.png (veofidelia169@tunxelamorintesa.sbs): {"media": {"name": "9b510075-ba54-4a13-a513-337279ce755b", "workflowId": "4d6fe7af-760e-4436-8c47-8222b51dd984", "workflowStepId": "CAE", "mediaMetadata": {"createTime": "2026-03-15T02:18:57.284253Z", "requestData": {"clientPlatform": "CLIENT_PLATFORM_WEB"}, "visibility": "PRIVATE"}, "image": {"userUploadedImage": {"aspectRatio": "IMAGE_ASPECT_RATIO_UNSPECIFIED"}, "dimensions": {"width": 1376, "height": 768}}}, "workflow": {"name": "4d6fe7af-760e-4436-8c47-8222b51dd984", "metadata": {"displayNam
+[WARNING] 09:19:05 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for veofidelia169@tunxelamorintesa.sbs: None
+[WARNING] 09:19:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Extension bridge returned no reCAPTCHA token (attempt 2)
+[INFO ] 09:19:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Retrying reCAPTCHA in 6s...
+[INFO ] 09:19:06 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 09:19:06 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 09:19:06 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 09:19:08 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:19:08 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:19:08 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:19:08 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 09:19:08 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 09:19:08 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 09:19:08 - veo.tab_queue - [QueueRefresh] 2 groups, 67 total tasks, existing_groups=['group_20260315_082141', 'group_20260315_082509']
+[DEBUG] 09:19:11 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 09:19:11 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
+[INFO ] 09:19:11 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 09:19:12 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

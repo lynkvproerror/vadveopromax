@@ -42,7 +42,7 @@ from datetime import datetime
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.constants import MIN_VALID_XCD
+from config.constants import MIN_VALID_XCD, MIN_VALID_XCD_IMAGE
 
 try:
     import websockets
@@ -197,10 +197,13 @@ class ExtensionBridge:
         if not self.is_connected(email):
             return (False, "extension_disconnected")
         
-        # Check 2: x-client-data ≥ 50?
+        # Check 2: x-client-data length check
+        # When extension is connected, Chrome auto-injects real x-client-data
+        # in page-context fetch(). Python-side stub (8 chars) is sufficient.
         headers = self.get_cached_headers(email, max_age_seconds=0)  # any age OK
         xcd = (headers or {}).get('x-client-data', '') or ''
-        if len(xcd) < MIN_VALID_XCD:
+        _min_xcd = MIN_VALID_XCD_IMAGE if self.is_connected(email) else MIN_VALID_XCD
+        if len(xcd) < _min_xcd:
             return (False, f"xcd_short ({len(xcd)} chars)")
         
         # Check 3: reCAPTCHA warm? (from content heartbeat)
@@ -417,6 +420,40 @@ class ExtensionBridge:
             if email in conn.access_tokens:
                 return conn.access_tokens[email]
         return None
+
+    def invalidate_cached_headers(self, email: str):
+        """Clear all cached headers + reCAPTCHA readiness for an account.
+        
+        Call this after 403 to force re-fetch of fresh x-client-data
+        and reCAPTCHA state on the next submit gate check.
+        
+        Clears:
+        - conn.headers[email] (live connection cache)
+        - _preserved_headers[email] (disconnect fallback)
+        - _check_ready_cache[email] (reCAPTCHA readiness cache)
+        - _short_token_counts[email] (reset consecutive counter)
+        """
+        cleared = []
+        for conn in self._connections:
+            if email in conn.headers:
+                conn.headers[email] = {}
+                cleared.append("conn.headers")
+            if email in conn.headers_updated_at:
+                del conn.headers_updated_at[email]
+                cleared.append("headers_updated_at")
+        if email in self._preserved_headers:
+            del self._preserved_headers[email]
+            cleared.append("preserved_headers")
+        if email in self._check_ready_cache:
+            del self._check_ready_cache[email]
+            cleared.append("check_ready_cache")
+        self._short_token_counts[email] = 0
+        
+        if cleared:
+            log.info(
+                f"[ExtensionBridge] 🧹 Invalidated cached headers for {email}: "
+                f"{', '.join(cleared)}"
+            )
 
     # Port fallback list: try primary → backup1 → backup2
     FALLBACK_PORTS = [8765, 8766, 8767]
@@ -830,6 +867,8 @@ class ExtensionBridge:
                 rc_timeout_ms = tier['rc_execute_ms']
                 fetch_timeout_ms = tier['fetch_ms']
                 bridge_timeout = tier['bridge_timeout']
+                # ★ Use caller-provided timeout when larger (T2I sync: 105-125s)
+                effective_timeout = max(timeout, bridge_timeout)
                 
                 await self._ws_send(conn, {
                     'action': 'submit_prompt',
@@ -843,7 +882,7 @@ class ExtensionBridge:
                     'attempt': attempt,                # ★ For Extension logging
                 })
 
-                result = await asyncio.wait_for(future, timeout=bridge_timeout)
+                result = await asyncio.wait_for(future, timeout=effective_timeout)
 
                 success = result.get('success', False)
                 status = result.get('status', 0)

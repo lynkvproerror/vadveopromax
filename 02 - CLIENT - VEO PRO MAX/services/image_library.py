@@ -3,28 +3,42 @@ VEO Pro Max - Image Library Service
 
 Reference: 02_IMAGE_LIBRARY_SYSTEM.md
 Manages image library with tags for use in I2V, I2I, and R2V workflows.
+Includes per-account upload cache to avoid redundant API uploads.
 """
 
 import json
 import shutil
+import hashlib
+import asyncio
+import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field, asdict
 import uuid
 
+log = logging.getLogger(__name__)
+
 
 @dataclass
 class LibraryImage:
-    """Represents an image in the library."""
+    """Represents an image in the library.
+    
+    Fields:
+        media_ids: Per-account upload cache {email: mediaGenerationId}
+        content_hash: MD5 hash for dedup across paths
+    """
     id: str
     filename: str
     path: str
     tags: List[str]
     category: str = "All"
     notes: str = ""
+    content_hash: str = ""
+    media_ids: Dict[str, str] = field(default_factory=dict)  # email → mediaId
     
     @classmethod
-    def create(cls, path: str, tags: List[str], category: str = "All") -> "LibraryImage":
+    def create(cls, path: str, tags: List[str], category: str = "All",
+               content_hash: str = "") -> "LibraryImage":
         """Create a new LibraryImage from a file path."""
         return cls(
             id=str(uuid.uuid4()),
@@ -32,6 +46,7 @@ class LibraryImage:
             path=path,
             tags=tags,
             category=category,
+            content_hash=content_hash,
         )
 
 
@@ -175,12 +190,77 @@ class ImageLibrary:
         # Normalize tags — strip brackets if user named file like [tag].jpg
         normalized_tags = [t.lower().strip().strip('[]') for t in tags]
         
-        image = LibraryImage.create(final_path, normalized_tags, category)
+        # Compute content hash for dedup
+        c_hash = self._compute_hash(final_path)
+        
+        image = LibraryImage.create(final_path, normalized_tags, category,
+                                    content_hash=c_hash)
         self._images.append(image)
         self._save_index()
         self._notify_change()
         
         return image
+    
+    def update_or_add_image(
+        self,
+        source_path: str,
+        tags: List[str],
+        category: str = "All",
+        copy_to_library: bool = True,
+    ) -> tuple:
+        """Add image, or UPDATE existing if tag already exists.
+        
+        When a tag collision is detected:
+        - Updates the existing image's path to the new file
+        - Clears all cached media_ids (old UUIDs are invalid for new image)
+        - Updates content_hash
+        - Triggers re-upload on next pre-upload cycle
+        
+        Returns:
+            (LibraryImage, was_updated: bool)
+        """
+        normalized_tags = [t.lower().strip().strip('[]') for t in tags]
+        
+        # Check for tag collision
+        for tag in normalized_tags:
+            existing = self.resolve_tag(tag)
+            if existing:
+                old_path = existing.path
+                new_path = str(Path(source_path))
+                
+                # Update path
+                existing.path = new_path
+                existing.filename = Path(new_path).name
+                
+                # Clear stale media_ids — image content changed, old UUIDs invalid
+                if existing.media_ids:
+                    log.info(
+                        f"[ImageLibrary] Tag [{tag}] updated: "
+                        f"cleared {len(existing.media_ids)} cached mediaId(s) "
+                        f"(old={Path(old_path).name} → new={Path(new_path).name})"
+                    )
+                    existing.media_ids.clear()
+                else:
+                    log.info(
+                        f"[ImageLibrary] Tag [{tag}] path updated: "
+                        f"{Path(old_path).name} → {Path(new_path).name}"
+                    )
+                
+                # Update content hash
+                existing.content_hash = self._compute_hash(new_path)
+                
+                # Merge any new tags not already present
+                for t in normalized_tags:
+                    if t not in existing.tags:
+                        existing.tags.append(t)
+                
+                self._save_index()
+                self._notify_change()
+                return (existing, True)
+        
+        # No collision — normal add
+        image = self.add_image(source_path, tags, category, copy_to_library)
+        return (image, False)
     
     @staticmethod
     def _convert_to_png(source_path: str, dest_path: str):
@@ -379,6 +459,203 @@ class ImageLibrary:
     def image_count(self) -> int:
         """Get total image count."""
         return len(self._images)
+    
+    # === Upload Cache API ===
+    
+    @staticmethod
+    def _compute_hash(path: str) -> str:
+        """Compute MD5 hash of file for content dedup."""
+        try:
+            h = hashlib.md5()
+            with open(path, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    h.update(chunk)
+            return h.hexdigest()
+        except Exception:
+            return ""
+    
+    def get_media_id(self, path: str, account_email: str) -> Optional[str]:
+        """Get cached mediaId for a specific image + account.
+        
+        Lookup strategy:
+          1. Exact path match
+          2. Content hash match (same image, different path)
+        
+        Returns:
+            mediaGenerationId if cached, None otherwise
+        """
+        # 1. Exact path match
+        for img in self._images:
+            if img.path == path and account_email in img.media_ids:
+                return img.media_ids[account_email]
+        
+        # 2. Content hash match
+        target_hash = self._compute_hash(path)
+        if target_hash:
+            for img in self._images:
+                if img.content_hash == target_hash and account_email in img.media_ids:
+                    return img.media_ids[account_email]
+        
+        return None
+    
+    def set_media_id(self, path: str, account_email: str, media_id: str):
+        """Store uploaded mediaId for a specific image + account.
+        
+        Also matches by content hash so the same image under different
+        paths shares the upload result.
+        """
+        matched = False
+        target_hash = self._compute_hash(path)
+        
+        for img in self._images:
+            if img.path == path or (target_hash and img.content_hash == target_hash):
+                img.media_ids[account_email] = media_id
+                matched = True
+        
+        if matched:
+            self._save_index()
+    
+    def get_pending_uploads(self, account_email: str) -> List[LibraryImage]:
+        """Get library images that haven't been uploaded for this account."""
+        return [
+            img for img in self._images
+            if account_email not in img.media_ids
+            and Path(img.path).exists()
+        ]
+    
+    def get_all_pending_accounts(self, account_emails: List[str]) -> Dict[str, List[LibraryImage]]:
+        """Get pending uploads grouped by account.
+        
+        Returns:
+            {email: [LibraryImage, ...]} for accounts with pending uploads
+        """
+        result = {}
+        for email in account_emails:
+            pending = self.get_pending_uploads(email)
+            if pending:
+                result[email] = pending
+        return result
+    
+    async def trigger_pre_upload(
+        self,
+        accounts: list,
+        api_client,
+    ) -> Dict[str, int]:
+        """Pre-upload all library images to all accounts in parallel.
+        
+        Multi-account: each account uploads concurrently.
+        Within each account: images upload sequentially (rate limit safety).
+        
+        Args:
+            accounts: List of AccountManager instances
+            api_client: VeoAPIClient instance
+        
+        Returns:
+            {email: count_uploaded} summary
+        """
+        from core.media_handler import MediaHandler
+        
+        results = {}
+        
+        async def _upload_for_account(account):
+            """Upload all pending images for one account."""
+            email = account.email
+            pending = self.get_pending_uploads(email)
+            if not pending:
+                return
+            
+            log.info(f"[ImageLibrary] Pre-uploading {len(pending)} image(s) for {email}")
+            uploaded = 0
+            
+            for img in pending:
+                try:
+                    result = MediaHandler.image_to_base64(img.path)
+                    if not result:
+                        log.warning(f"[ImageLibrary] Failed to encode: {img.filename}")
+                        continue
+                    
+                    img_b64, mime_type = result
+                    token = account.get_access_token()
+                    if not token:
+                        token = await account.ensure_valid_token()
+                    if not token:
+                        log.warning(f"[ImageLibrary] No token for {email}, stopping pre-upload")
+                        break
+                    
+                    resp = await api_client.upload_image(
+                        access_token=token,
+                        recaptcha_token="",
+                        image_base64=img_b64,
+                        mime_type=mime_type,
+                        file_name=img.filename,
+                        account_headers=account.get_api_headers(),
+                    )
+                    
+                    if resp.success:
+                        # Multi-format mediaId extraction (API changed 2026-03)
+                        media_id = ""
+                        # Format 1: Old {mediaGenerationId: {mediaGenerationId: "..."}}
+                        mgid = resp.data.get("mediaGenerationId")
+                        if mgid:
+                            if isinstance(mgid, dict):
+                                media_id = mgid.get("mediaGenerationId", "")
+                            elif isinstance(mgid, str):
+                                media_id = mgid
+                        # Format 2: New {media: {name: "uuid", ...}, workflow: ...}
+                        if not media_id:
+                            media = resp.data.get("media")
+                            if isinstance(media, dict):
+                                media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
+                            elif isinstance(media, list) and media:
+                                first = media[0]
+                                if isinstance(first, dict):
+                                    media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
+                        
+                        if media_id:
+                            self.set_media_id(img.path, email, media_id)
+                            uploaded += 1
+                            log.info(f"[ImageLibrary] ✅ {img.filename} → {media_id[:30]}... ({email})")
+                        else:
+                            import json as _json
+                            try:
+                                dump = _json.dumps(resp.data, default=str, ensure_ascii=False)[:500]
+                            except Exception:
+                                dump = str(list(resp.data.keys()))
+                            log.warning(f"[ImageLibrary] Upload OK but no mediaId: {img.filename} ({email}): {dump}")
+                    else:
+                        log.warning(f"[ImageLibrary] Upload failed: {img.filename} ({email}): {resp.error}")
+                    
+                    # Small delay between uploads for rate limiting
+                    await asyncio.sleep(0.5)
+                    
+                except Exception as e:
+                    log.warning(f"[ImageLibrary] Pre-upload error: {img.filename} ({email}): {e}")
+            
+            results[email] = uploaded
+            log.info(f"[ImageLibrary] Pre-upload done for {email}: {uploaded}/{len(pending)}")
+        
+        # Launch all accounts in parallel
+        if accounts:
+            await asyncio.gather(
+                *[_upload_for_account(acc) for acc in accounts],
+                return_exceptions=True,
+            )
+        
+        return results
+    
+    def clear_media_ids(self, account_email: Optional[str] = None):
+        """Clear cached mediaIds.
+        
+        Args:
+            account_email: If provided, clear only for this account.
+                          If None, clear ALL cached mediaIds.
+        """
+        for img in self._images:
+            if account_email:
+                img.media_ids.pop(account_email, None)
+            else:
+                img.media_ids.clear()
+        self._save_index()
 
 
 # Singleton instance

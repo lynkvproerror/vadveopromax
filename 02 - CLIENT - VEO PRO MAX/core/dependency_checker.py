@@ -18,15 +18,47 @@ from typing import Callable, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
-# ── Required pip packages: (pip_name, import_name) ──
-REQUIRED_PACKAGES = [
-    ("PySide6", "PySide6"),
-    ("Pillow", "PIL"),
-    ("playwright", "playwright"),
-    ("aiohttp", "aiohttp"),
-    ("requests", "requests"),
-    ("websocket-client", "websocket"),
-]
+# ── Import name overrides (pip_name → import_name) ──
+# Only needed when pip install name ≠ Python import name.
+# All other packages: import name = pip_name.lower().replace("-", "_")
+_IMPORT_NAME_MAP = {
+    "PySide6": "PySide6",
+    "Pillow": "PIL",
+    "opencv-python": "cv2",
+    "python-docx": "docx",
+    "websocket-client": "websocket",
+}
+
+
+def _parse_requirements() -> list:
+    """Parse requirements.txt → list of (pip_name, import_name).
+
+    Single source of truth: just edit requirements.txt,
+    startup auto-install picks it up automatically.
+    Skips comments, blank lines, commented-out optional packages.
+    """
+    req_file = Path(__file__).resolve().parent.parent / "requirements.txt"
+    if not req_file.exists():
+        log.warning(f"[DependencyChecker] requirements.txt not found: {req_file}")
+        return list(_IMPORT_NAME_MAP.items())
+
+    packages = []
+    try:
+        for line in req_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Extract package name before version specifiers (>=, ==, <, ~=, [)
+            pip_name = line.split(">=")[0].split("==")[0].split("<")[0].split("~=")[0].split("[")[0].strip()
+            if not pip_name:
+                continue
+            import_name = _IMPORT_NAME_MAP.get(pip_name, pip_name.lower().replace("-", "_"))
+            packages.append((pip_name, import_name))
+    except Exception as e:
+        log.error(f"[DependencyChecker] Failed to parse requirements.txt: {e}")
+        return list(_IMPORT_NAME_MAP.items())
+
+    return packages
 
 # Google Chrome silent installer URL (Enterprise MSI — always latest stable)
 CHROME_INSTALLER_URL = (
@@ -225,7 +257,7 @@ def check_all_dependencies(callback: Optional[Callable] = None):
     
     # ── Phase 1: pip packages (0-60%) ──
     missing_packages = []
-    for pip_name, import_name in REQUIRED_PACKAGES:
+    for pip_name, import_name in _parse_requirements():
         if not _is_package_installed(import_name):
             missing_packages.append(pip_name)
     

@@ -228,6 +228,7 @@ class ContextManager:
             "persona":   "Director Persona",
             "tone":      "Tone",
             "voice":     "Voice Region",
+            "camera_technique": "Camera Technique",
         }
         for key, label in dim_map.items():
             val = matrix_config.get(key)
@@ -246,6 +247,8 @@ class ContextManager:
         previous_output: str = "",
         matrix_config: Optional[Dict] = None,
         prompt_format: str = "text",
+        scene_count: int = 0,
+        clip_duration: int = 8,
     ) -> str:
         """Build system prompt for a processing step.
 
@@ -327,7 +330,10 @@ class ContextManager:
                 f"Generate VEO video prompts for topic: \"{topic}\"\n\n"
                 "CRITICAL RULES:\n"
                 "- One prompt per line, BLANK LINE between prompts\n"
-                "- 10-12 prompts preferred (NOT fixed 9)\n\n"
+                + (f"- EXACTLY {scene_count} prompts required (1 prompt = 1 VEO clip of {clip_duration}s, total {scene_count * clip_duration}s)\n\n"
+                   if scene_count > 0
+                   else "- 10-12 prompts preferred\n\n"
+                ) +
                 "FORMAT CONVENTION:\n"
                 "- Use () for metadata: (N SEG), (Giọng: region, age)\n"
                 "- Use [] ONLY for character name tags: [Mẹ Năm], [Bé Na]\n"
@@ -353,6 +359,14 @@ class ContextManager:
                 "no deformed limbs, no mutated faces, no extra fingers, "
                 "no melting geometry, no color shifts, no texture distortion\n"
                 "SUFFIX: no text, no subtitles, no labels, no watermarks\n\n"
+                "CAMERA DIRECTION — Match camera movement to each scene's emotion:\n"
+                "Available techniques: Forward, Backward, Left-to-Right, Right-to-Left, "
+                "Up, Down, Dolly In+Zoom Out (Vertigo), Dolly Out+Zoom In, "
+                "Stationary, Pan Left/Right, Tilt Up/Down, Push Forward, Pull Backward.\n"
+                "Include camera direction in EVERY prompt, e.g.: "
+                "'camera slowly pushes forward revealing...', "
+                "'stationary shot, camera fixed on...', "
+                "'dolly zoom creating vertigo effect as...'\n\n"
                 "Use TEXT descriptions ONLY (NO HEX colors in prompts)."
             ),
             "Prompts_json": (
@@ -837,6 +851,10 @@ class ProjectBuilder:
                 text = re.sub(r'^```(?:json)?\s*', '', text)
                 text = re.sub(r'```\s*$', '', text)
                 text = text.strip()
+
+            # Sanitize: handle [tag] prefix, concatenated arrays, bare objects
+            from core.batch_parser import BatchParser
+            text = BatchParser._sanitize_json_text(text)
 
             data = json.loads(text)
             if not isinstance(data, list):

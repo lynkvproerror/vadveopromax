@@ -1,0 +1,66 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260316_002856
+Total: 61 entries
+============================================================
+
+[INFO ] 00:28:41 - core.session_manager - [Session] Loaded from 2026-03-16T00:28:28.601451
+[INFO ] 00:28:41 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 00:28:41 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[DEBUG] 00:28:41 - veo.tab_queue - [QueueRefresh] 2 groups, 130 total tasks, existing_groups=[]
+[INFO ] 00:28:41 - veo.tab_queue - [GroupCreate] gid=group_20260316_002052 name='Untitled' children=65 expanded=True
+[INFO ] 00:28:42 - veo.tab_queue - [GroupCreate] gid=group_20260316_002059 name='Untitled' children=65 expanded=True
+[INFO ] 00:28:42 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Truyện Kiều: 6 completed stage(s), current=concat
+[DEBUG] 00:28:42 - veo.tab_queue - [QueueRefresh] 2 groups, 130 total tasks, existing_groups=['group_20260316_002052', 'group_20260316_002059']
+[DEBUG] 00:28:46 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 00:28:46 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 00:28:46 - veo - [VersionCheck] OK: 2.3.2 >= 2.3.0
+[DEBUG] 00:28:46 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[INFO ] 00:28:50 - core.dispatcher - [Dispatcher] Cleared all: 130 tasks removed
+[INFO ] 00:28:50 - core.app_controller - [Controller] Queue cleared: 130 tasks, session file deleted
+[DEBUG] 00:28:50 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 00:28:53 - core.app_controller - Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+[INFO ] 00:28:53 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 00:28:53 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 00:28:53 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 00:28:53 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: veofidelia169@tunxelamorintesa.sbs...
+[DEBUG] 00:28:53 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for veofidelia169@tunxelamorintesa.sbs...
+[INFO ] 00:28:53 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 00:28:53 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_50d44400
+[DEBUG] 00:28:53 - core.chrome_manager - [ChromeManager] No PID file for browser_session_50d44400
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[DEBUG] 00:28:53 - core.chrome_manager - [ChromeManager] Variations seed already up-to-date for browser_session_50d44400
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_50d44400
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] Chrome launched: PID=35456, port=9223
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 35456
+[INFO ] 00:28:53 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400\.chrome_pid.json
+[WARNING] 00:28:53 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 00:28:54 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 00:28:54 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 00:28:54 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 00:28:54 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.4
+[INFO ] 00:28:54 - core.extension_manager - [ExtMgr] Extension v2.3.4 up-to-date — skipping
+[INFO ] 00:28:54 - core.profiles_controller - [ProfilesController] Chrome PID=35456, port=9223 (new)
+[INFO ] 00:28:54 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 56306)
+[INFO ] 00:28:54 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for veofidelia169@tunxelamorintesa.sbs (smart-hide disabled)
+[DEBUG] 00:28:54 - asyncio - Using proactor: IocpProactor
+[INFO ] 00:28:54 - core.app_controller - [AutoLaunch] ✅ veofidelia169@tunxelamorintesa.sbs browser visible (smart-hide disabled)
+[INFO ] 00:28:54 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 00:28:54 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 00:28:54 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] ⏳ Debug browser starting, waiting...
+[INFO ] 00:28:55 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.4)
+[INFO ] 00:28:55 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 00:28:55 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 00:28:55 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[INFO ] 00:28:55 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 00:28:55 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 00:28:55 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 00:28:56 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[INFO ] 00:28:56 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 00:28:56 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 00:28:56 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 00:28:56 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

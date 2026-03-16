@@ -38,7 +38,6 @@ class SettingsPipelineEnhancerMixin:
             'pool_size': getattr(_s, 'recaptcha_pool_size', 2),
             'watchdog_timeout_min': getattr(_s, 'watchdog_timeout_min', 10),
             'journal_save_interval_sec': getattr(_s, 'journal_save_interval_sec', 30),
-            'workload_priority': getattr(_s, 'workload_priority', '720p_priority'),
         }
 
         def _update(key):
@@ -158,36 +157,6 @@ class SettingsPipelineEnhancerMixin:
         jr_row.addStretch()
         layout.addLayout(jr_row)
 
-        # --- Workload Priority ---
-        wp_row = QHBoxLayout()
-        wp_label = QLabel(t("pipeline.workload_priority"))
-        wp_label.setFixedWidth(150)
-        wp_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
-        wp_row.addWidget(wp_label)
-        self.workload_priority = QComboBox()
-        self.workload_priority.addItems([
-            "📥 720p Priority",
-            "⬆️ Upscale Priority"
-        ])
-        self.workload_priority.setFixedWidth(160)
-        # Map display names to engine values
-        self._wp_map = {0: '720p_priority', 1: 'upscale_priority'}
-        current_wp = ps.get('workload_priority', '720p_priority')
-        # Migration: map old names to new
-        _migration = {'prompts_first': '720p_priority', 'balanced': '720p_priority', 'upscale_first': 'upscale_priority'}
-        current_wp = _migration.get(current_wp, current_wp)
-        reverse_map = {v: k for k, v in self._wp_map.items()}
-        self.workload_priority.setCurrentIndex(reverse_map.get(current_wp, 0))
-        self.workload_priority.currentIndexChanged.connect(
-            lambda idx: _update('workload_priority')(self._wp_map.get(idx, '720p_priority'))
-        )
-        wp_row.addWidget(self.workload_priority)
-        wp_hint = QLabel(t("pipeline.workload_hint"))
-        wp_hint.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 10px; margin-left: 8px;")
-        wp_row.addWidget(wp_hint)
-        wp_row.addStretch()
-        layout.addLayout(wp_row)
-
         # --- Auto-Retry Download ---
         self.auto_retry_dl_switch = self._create_enable_row(
             "🔄 Auto-Retry Download:", checked=getattr(_s, 'auto_retry_download', True),
@@ -286,9 +255,6 @@ class SettingsPipelineEnhancerMixin:
             settings.recaptcha_pool_size = self.pool_size.value()
             settings.watchdog_timeout_min = self.watchdog_timeout.value()
             settings.journal_save_interval_sec = self.journal_interval.value()
-            settings.workload_priority = self._wp_map.get(
-                self.workload_priority.currentIndex(), '720p_priority'
-            )
             if hasattr(self, 'auto_retry_dl_switch'):
                 settings.auto_retry_download = self.auto_retry_dl_switch.isToggled()
             if hasattr(self, 'dl_retry_max'):

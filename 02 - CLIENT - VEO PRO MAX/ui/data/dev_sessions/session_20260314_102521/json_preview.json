@@ -1,0 +1,147 @@
+{
+  "group_id": "group_20260314_101811",
+  "workflow": "I2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260314_101811_task_0",
+      "prompt": "Opening scene, daily life. Wide shot, static. 3D Stylized Animation. Rural hut yard. [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, sweeping dusty ground with a straw broom, wiping sweat — [Cám] Cám, 17-year-old lazy and spoiled stepsister, 1.58m, pale, slightly pinkish skin, well-maintained, Sharp features, slanted cat-like eyes, thin smirking lips, jet black, styled in an elaborate high bun with colorful silk ribbons, bright hot pink \"yếm\" with vibrant floral embroidery, deep indigo silk skirt, shiny and new, flashy gold hairpins and multiple beaded necklaces, reclining on a swinging hammock, lazily eating a mango. Audio of sweeping sounds and birds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_1",
+      "prompt": "Conflict initiation, task given. Medium shot, low angle. 3D Stylized Animation. Mud-walled cottage. [Mẹ Cám] Mẹ Cám, 45-year-old cruel and calculating stepmother, 1.62m, rigid posture, weathered tan skin with prominent frown lines, High cheekbones, narrow suspicious eyes, a small beauty mark above the lip, dark charcoal grey-streaked hair pulled into a very tight, severe bun, dark maroon traditional robe with stiff collar, solid matte black wide-leg silk trousers, large silver hoop earrings and a heavy silver ring, pointing sternly toward the river, mouth open speaking firmly — [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, bowing her head with an attentive listening expression while taking a basket. Audio of wind rustling bamboo, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_2",
+      "prompt": "Labor vs. Idleness. Long shot, panning. 3D Stylized Animation. Sunny riverbank. [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, wading in knee-deep water, catching small fish with quick hands — [Cám] Cám, 17-year-old lazy and spoiled stepsister, 1.58m, pale, slightly pinkish skin, well-maintained, Sharp features, slanted cat-like eyes, thin smirking lips, jet black, styled in an elaborate high bun with colorful silk ribbons, bright hot pink \"yếm\" with vibrant floral embroidery, deep indigo silk skirt, shiny and new, flashy gold hairpins and multiple beaded necklaces, sitting on a rock, splashing water and picking wild flowers. Audio of splashing water, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_3",
+      "prompt": "The Betrayal. Close-up to Medium shot. 3D Stylized Animation. Riverbank. [Cám] Cám, 17-year-old lazy and spoiled stepsister, 1.58m, pale, slightly pinkish skin, well-maintained, Sharp features, slanted cat-like eyes, thin smirking lips, jet black, styled in an elaborate high bun with colorful silk ribbons, bright hot pink \"yếm\" with vibrant floral embroidery, deep indigo silk skirt, shiny and new, flashy gold hairpins and multiple beaded necklaces, pointing behind [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, with a devious grin — [Cám] Cám, 17-year-old lazy and spoiled stepsister, 1.58m, pale, slightly pinkish skin, well-maintained, Sharp features, slanted cat-like eyes, thin smirking lips, jet black, styled in an elaborate high bun with colorful silk ribbons, bright hot pink \"yếm\" with vibrant floral embroidery, deep indigo silk skirt, shiny and new, flashy gold hairpins and multiple beaded necklaces, pouring fish from [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress,'s basket into her own and running away. Audio of running footsteps on mud, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_4",
+      "prompt": "Despair and Magic. Medium shot, slow zoom. 3D Stylized Animation. Lonely riverbank. [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, looking at her empty basket and sobbing into her hands — [Bụt] Bụt, Ancient mystical spirit/deity, 1.75m (often seen floating slightly above ground), ethereal glowing ivory skin, radiating soft light, Long flowing white beard, serene closed eyes, benevolent smile, pure snow-white long hair and waist-length beard, shimmering golden-white celestial silk robe that flows like water, matching flowing silk trousers hidden by the robe, vibrant cyan glowing aura and a gnarled wooden staff, appearing in a burst of golden magical particles. Audio of soft magical chimes, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_5",
+      "prompt": "Hope restored. Close-up. 3D Stylized Animation. Riverbank. [Bụt] Bụt, Ancient mystical spirit/deity, 1.75m (often seen floating slightly above ground), ethereal glowing ivory skin, radiating soft light, Long flowing white beard, serene closed eyes, benevolent smile, pure snow-white long hair and waist-length beard, shimmering golden-white celestial silk robe that flows like water, matching flowing silk trousers hidden by the robe, vibrant cyan glowing aura and a gnarled wooden staff, smiling kindly and pointing to the basket — [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, looking down to see a small, glowing Bống fish swimming in a puddle. Audio of gentle water ripples, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_6",
+      "prompt": "Secret friendship. Medium shot, warm lighting. 3D Stylized Animation. Stone well. [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, leaning over the well, dropping grains of rice into the water and smiling warmly. Audio of [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, humming a soft melody, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_7",
+      "prompt": "Villainous observation. Medium shot, high contrast. 3D Stylized Animation. Behind a bamboo thicket. [Mẹ Cám] Mẹ Cám, 45-year-old cruel and calculating stepmother, 1.62m, rigid posture, weathered tan skin with prominent frown lines, High cheekbones, narrow suspicious eyes, a small beauty mark above the lip, dark charcoal grey-streaked hair pulled into a very tight, severe bun, dark maroon traditional robe with stiff collar, solid matte black wide-leg silk trousers, large silver hoop earrings and a heavy silver ring, peering through leaves, eyes narrowing with a cruel expression. Audio of rustling leaves, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_8",
+      "prompt": "Loss. Close-up. 3D Stylized Animation. Stone well at dusk. [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, staring into the dark, empty well with tears streaming down her face, clutching her chest. Audio of a mournful flute, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_9",
+      "prompt": "The Impossible Task. Medium shot. 3D Stylized Animation. Hut interior. [Mẹ Cám] Mẹ Cám, 45-year-old cruel and calculating stepmother, 1.62m, rigid posture, weathered tan skin with prominent frown lines, High cheekbones, narrow suspicious eyes, a small beauty mark above the lip, dark charcoal grey-streaked hair pulled into a very tight, severe bun, dark maroon traditional robe with stiff collar, solid matte black wide-leg silk trousers, large silver hoop earrings and a heavy silver ring, mixing a bowl of rice and beans together, throwing them onto the floor — [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, kneeling, looking overwhelmed. Audio of grains hitting the floor, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_10",
+      "prompt": "Miraculous help. Wide shot, dynamic. 3D Stylized Animation. Hut yard. A flock of colorful sparrows landing around [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress,, their beaks rapidly sorting grains into two piles. Audio of many birds chirping and fluttering wings, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_11",
+      "prompt": "Transformation. Medium shot, swirling camera. 3D Stylized Animation. Garden. [Bụt] Bụt, Ancient mystical spirit/deity, 1.75m (often seen floating slightly above ground), ethereal glowing ivory skin, radiating soft light, Long flowing white beard, serene closed eyes, benevolent smile, pure snow-white long hair and waist-length beard, shimmering golden-white celestial silk robe that flows like water, matching flowing silk trousers hidden by the robe, vibrant cyan glowing aura and a gnarled wooden staff, waving a wooden staff — [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, spinning as her rags turn into a shimmering gold silk dress. Audio of a magical whoosh, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_12",
+      "prompt": "The Accident. Slow motion, low angle. 3D Stylized Animation. Stone bridge. [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, running toward the festival lights — a small golden slipper falling from her foot into the river below. Audio of a soft splash, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_13",
+      "prompt": "The Discovery. Close-up. 3D Stylized Animation. Royal festival grounds. [Nhà Vua] Nhà Vua, 22-year-old handsome and noble monarch, 1.80m, athletic and regal build, smooth sun-kissed skin, Strong jawline, kind but commanding dark eyes, straight nose, sleek black hair neatly tucked under a royal crown, royal gold tunic with intricate red dragon embroidery, matching gold trousers with silk sash, crimson royal cape with gold trim; ornate gold crown, holding the tiny golden slipper, looking at it with intense curiosity and wonder. Audio of festival drums in the distance, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260314_101811_task_14",
+      "prompt": "The Happy Ending. Medium shot, bright lighting. 3D Stylized Animation. Palace courtyard. [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress, sliding her foot into the slipper as it fits perfectly — [Nhà Vua] Nhà Vua, 22-year-old handsome and noble monarch, 1.80m, athletic and regal build, smooth sun-kissed skin, Strong jawline, kind but commanding dark eyes, straight nose, sleek black hair neatly tucked under a royal crown, royal gold tunic with intricate red dragon embroidery, matching gold trousers with silk sash, crimson royal cape with gold trim; ornate gold crown, taking [Tấm] Tấm, 18-year-old kind-hearted orphan girl, 1.60m, slender and graceful, soft porcelain skin with a warm, healthy glow, Large expressive almond-shaped eyes, gentle smile, soft rounded chin, deep espresso black, long thick braid with soft stray wisps, rustic saddle brown traditional \"yếm\" (halter top) under a faded beige outer tunic, soft matte black long silk skirt, slightly worn at the hem, simple hemp headband; later shimmering gold embroidered festival dress,'s hand and smiling. Audio of triumphant orchestral music, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion, cinematic composition, detailed illustration, professional lighting, 4K, highly detailed",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

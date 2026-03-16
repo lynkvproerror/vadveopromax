@@ -1,0 +1,193 @@
+Found batchGenerateImages at lines (0-indexed): [485, 547, 609, 671]
+
+=== batchGenerateImages #1 at line 486 ===
+URL line: curl 'https://aisandbox-pa.googleapis.com/v1/projects/e79cb1c4-6d83-4193-ab03-4df149848a5c/flowMedia:batchGenerateImages' \
+Payload length: 5658 chars
+clientContext: {
+  recaptchaContext: {
+    token: "<string len=2233>"
+    applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+  }
+  projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+  tool: 'PINHOLE'
+  sessionId: ';1773534295014'
+}
+mediaGenerationContext: {
+  batchId: '20921c04-21aa-4176-aafd-717f599743e7'
+}
+useNewMedia: True
+requests: [len=1]
+  [0]: {
+    clientContext: {
+      recaptchaContext: {
+        token: "<string len=2233>"
+        applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+      }
+      projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+      tool: 'PINHOLE'
+      sessionId: ';1773534295014'
+    }
+    imageModelName: 'NARWHAL'
+    imageAspectRatio: 'IMAGE_ASPECT_RATIO_LANDSCAPE'
+    structuredPrompt: {
+      parts: [len=1]
+        [0]: {
+          text: 'Cuộc gặp gặp tại bàn trà của 5 người trong các bức ảnh trên!'
+        }
+    }
+    seed: 226485
+    imageInputs: [len=5]
+      [0]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: 'd8314b31-d3c9-452a-9589-a6da5d449ecf'
+      }
+      [1]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: '4970ef87-f7ad-4836-9aa6-4cf95b4d38e3'
+      }
+      ... (3 more)
+  }
+
+=== batchGenerateImages #2 at line 548 ===
+URL line: curl 'https://aisandbox-pa.googleapis.com/v1/projects/e79cb1c4-6d83-4193-ab03-4df149848a5c/flowMedia:batchGenerateImages' \
+Payload length: 5530 chars
+clientContext: {
+  recaptchaContext: {
+    token: "<string len=2169>"
+    applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+  }
+  projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+  tool: 'PINHOLE'
+  sessionId: ';1773534295014'
+}
+mediaGenerationContext: {
+  batchId: '20921c04-21aa-4176-aafd-717f599743e7'
+}
+useNewMedia: True
+requests: [len=1]
+  [0]: {
+    clientContext: {
+      recaptchaContext: {
+        token: "<string len=2169>"
+        applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+      }
+      projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+      tool: 'PINHOLE'
+      sessionId: ';1773534295014'
+    }
+    imageModelName: 'NARWHAL'
+    imageAspectRatio: 'IMAGE_ASPECT_RATIO_LANDSCAPE'
+    structuredPrompt: {
+      parts: [len=1]
+        [0]: {
+          text: 'Cuộc gặp gặp tại bàn trà của 5 người trong các bức ảnh trên!'
+        }
+    }
+    seed: 192243
+    imageInputs: [len=5]
+      [0]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: 'd8314b31-d3c9-452a-9589-a6da5d449ecf'
+      }
+      [1]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: '4970ef87-f7ad-4836-9aa6-4cf95b4d38e3'
+      }
+      ... (3 more)
+  }
+
+=== batchGenerateImages #3 at line 610 ===
+URL line: curl 'https://aisandbox-pa.googleapis.com/v1/projects/e79cb1c4-6d83-4193-ab03-4df149848a5c/flowMedia:batchGenerateImages' \
+Payload length: 5488 chars
+clientContext: {
+  recaptchaContext: {
+    token: "<string len=2148>"
+    applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+  }
+  projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+  tool: 'PINHOLE'
+  sessionId: ';1773534295014'
+}
+mediaGenerationContext: {
+  batchId: '20921c04-21aa-4176-aafd-717f599743e7'
+}
+useNewMedia: True
+requests: [len=1]
+  [0]: {
+    clientContext: {
+      recaptchaContext: {
+        token: "<string len=2148>"
+        applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+      }
+      projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+      tool: 'PINHOLE'
+      sessionId: ';1773534295014'
+    }
+    imageModelName: 'NARWHAL'
+    imageAspectRatio: 'IMAGE_ASPECT_RATIO_LANDSCAPE'
+    structuredPrompt: {
+      parts: [len=1]
+        [0]: {
+          text: 'Cuộc gặp gặp tại bàn trà của 5 người trong các bức ảnh trên!'
+        }
+    }
+    seed: 641193
+    imageInputs: [len=5]
+      [0]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: 'd8314b31-d3c9-452a-9589-a6da5d449ecf'
+      }
+      [1]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: '4970ef87-f7ad-4836-9aa6-4cf95b4d38e3'
+      }
+      ... (3 more)
+  }
+
+=== batchGenerateImages #4 at line 672 ===
+URL line: curl 'https://aisandbox-pa.googleapis.com/v1/projects/e79cb1c4-6d83-4193-ab03-4df149848a5c/flowMedia:batchGenerateImages' \
+Payload length: 5488 chars
+clientContext: {
+  recaptchaContext: {
+    token: "<string len=2148>"
+    applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+  }
+  projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+  tool: 'PINHOLE'
+  sessionId: ';1773534295014'
+}
+mediaGenerationContext: {
+  batchId: '20921c04-21aa-4176-aafd-717f599743e7'
+}
+useNewMedia: True
+requests: [len=1]
+  [0]: {
+    clientContext: {
+      recaptchaContext: {
+        token: "<string len=2148>"
+        applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB'
+      }
+      projectId: 'e79cb1c4-6d83-4193-ab03-4df149848a5c'
+      tool: 'PINHOLE'
+      sessionId: ';1773534295014'
+    }
+    imageModelName: 'NARWHAL'
+    imageAspectRatio: 'IMAGE_ASPECT_RATIO_LANDSCAPE'
+    structuredPrompt: {
+      parts: [len=1]
+        [0]: {
+          text: 'Cuộc gặp gặp tại bàn trà của 5 người trong các bức ảnh trên!'
+        }
+    }
+    seed: 838153
+    imageInputs: [len=5]
+      [0]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: 'd8314b31-d3c9-452a-9589-a6da5d449ecf'
+      }
+      [1]: {
+        imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE'
+        name: '4970ef87-f7ad-4836-9aa6-4cf95b4d38e3'
+      }
+      ... (3 more)
+  }

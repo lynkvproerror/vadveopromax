@@ -34,7 +34,7 @@ from ui.tabs.settings_components import (
 # ToggleSwitch — compact on/off widget used throughout settings
 # ─────────────────────────────────────────────────────────────
 class ToggleSwitch(QWidget):
-    """Custom toggle switch widget with on/off state and signal."""
+    """Custom toggle switch widget with clear on/off visual states."""
     toggled_signal = Signal(bool)
 
     def __init__(self, checked: bool = False, parent=None):
@@ -58,21 +58,46 @@ class ToggleSwitch(QWidget):
         self.toggled_signal.emit(self._checked)
 
     def paintEvent(self, event):
-        from PySide6.QtGui import QPainter, QColor, QPen
+        from PySide6.QtGui import QPainter, QColor, QPen, QFont
         from PySide6.QtCore import QRectF
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Track
-        track_color = QColor(Theme.GREEN) if self._checked else QColor(Theme.SURFACE2)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(track_color)
-        p.drawRoundedRect(QRectF(0, 2, 48, 20), 10, 10)
+        w, h = self.width(), self.height()
+        radius = h / 2
+        thumb_margin = 3
+        thumb_size = h - thumb_margin * 2
 
-        # Thumb
-        thumb_x = 28 if self._checked else 2
-        p.setBrush(QColor(Theme.TEXT))
-        p.drawEllipse(QRectF(thumb_x, 4, 16, 16))
+        if self._checked:
+            # ON — bright green track
+            track_color = QColor(Theme.GREEN)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(track_color)
+            p.drawRoundedRect(QRectF(0, 0, w, h), radius, radius)
+
+            # White thumb (right side)
+            thumb_x = w - thumb_size - thumb_margin
+            p.setBrush(QColor("#FFFFFF"))
+            p.drawEllipse(QRectF(thumb_x, thumb_margin, thumb_size, thumb_size))
+
+            # Checkmark inside thumb
+            p.setPen(QPen(QColor(Theme.GREEN), 2.0))
+            cx = thumb_x + thumb_size / 2
+            cy = thumb_margin + thumb_size / 2
+            p.drawLine(int(cx - 4), int(cy), int(cx - 1), int(cy + 3))
+            p.drawLine(int(cx - 1), int(cy + 3), int(cx + 4), int(cy - 3))
+        else:
+            # OFF — dark track with visible border
+            p.setPen(QPen(QColor("#555555"), 1.5))
+            p.setBrush(QColor("#2a2a2a"))
+            p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), radius, radius)
+
+            # Gray thumb (left side)
+            thumb_x = thumb_margin
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#888888"))
+            p.drawEllipse(QRectF(thumb_x, thumb_margin, thumb_size, thumb_size))
+
         p.end()
 
 
@@ -699,12 +724,17 @@ class TabSettings(
         return section
 
     def _save_gemini_ai_settings(self, *args):
-        """Persist Gemini AI + Project Builder AI settings to AppSettings."""
+        """Persist Gemini AI + Project Builder AI settings to AppSettings.
+        
+        Hot-reload: Updates in-memory singleton immediately so pipeline
+        picks up new keys on next Gemini call without restart.
+        """
         if getattr(self, '_initializing', False):
             return
         try:
             from config.settings import get_settings, save_settings
             import logging
+            _log = logging.getLogger('veo.settings')
             s = get_settings()
             # Queue toggles
             if hasattr(self, 'gemini_enable_switch'):
@@ -724,7 +754,27 @@ class TabSettings(
                 s.pb_ai_base_url = self._pb_baseurl_edit.text().strip()
             if hasattr(self, '_pb_keys_edit'):
                 text = self._pb_keys_edit.toPlainText().strip()
-                s.pb_ai_custom_keys = [k.strip() for k in text.split('\n') if k.strip()]
+                old_keys = set(s.pb_ai_custom_keys)
+                new_keys = [k.strip() for k in text.split('\n') if k.strip()]
+                s.pb_ai_custom_keys = new_keys
+                # Hot-reload: reset quota for newly added keys
+                added = set(new_keys) - old_keys
+                if added:
+                    try:
+                        from services.key_quota_manager import get_quota_manager
+                        qm = get_quota_manager()
+                        for k in added:
+                            state = qm._get_state(k)
+                            state.rpm_blocked_at = None
+                            state.rpd_blocked_at = None
+                        _log.info(
+                            f"[Settings] 🔑 Hot-reload: {len(added)} new key(s) added, "
+                            f"total {len(new_keys)} keys (quota reset for new keys)"
+                        )
+                    except Exception:
+                        pass
+                if len(new_keys) != len(old_keys):
+                    _log.info(f"[Settings] 🔑 API keys updated: {len(old_keys)} → {len(new_keys)}")
             save_settings()
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save Gemini AI settings: {e}')
@@ -1132,7 +1182,7 @@ class TabSettings(
             if hasattr(self, 'gemini_auto_fix'):
                 s.prompt_auto_fix = self.gemini_auto_fix.isToggled()
             
-            # ── Project Builder AI ──
+            # ── Project Builder AI (hot-reload keys) ──
             if hasattr(self, '_pb_src_custom'):
                 s.pb_ai_source = "custom" if self._pb_src_custom.isChecked() else "account"
             if hasattr(self, '_pb_provider_combo'):
@@ -1143,7 +1193,26 @@ class TabSettings(
                 s.pb_ai_base_url = self._pb_baseurl_edit.text().strip()
             if hasattr(self, '_pb_keys_edit'):
                 text = self._pb_keys_edit.toPlainText().strip()
-                s.pb_ai_custom_keys = [k.strip() for k in text.split("\n") if k.strip()]
+                old_keys = set(s.pb_ai_custom_keys)
+                new_keys = [k.strip() for k in text.split("\n") if k.strip()]
+                s.pb_ai_custom_keys = new_keys
+                # Hot-reload: reset quota for newly added keys
+                added = set(new_keys) - old_keys
+                if added:
+                    try:
+                        from services.key_quota_manager import get_quota_manager
+                        qm = get_quota_manager()
+                        for k in added:
+                            state = qm._get_state(k)
+                            state.rpm_blocked_at = None
+                            state.rpd_blocked_at = None
+                        log.info(
+                            f"[Settings] 🔑 Hot-reload: {len(added)} new key(s), "
+                            f"total {len(new_keys)} (quota reset)"
+                        )
+                    except Exception:
+                        pass
+                log.info(f"[Settings] 🔑 Saved {len(new_keys)} API key(s)")
             
             # REMOVED: Project Builder settings — section hidden from UI
             # if hasattr(self, '_project_scenes_spin'):
@@ -1170,10 +1239,7 @@ class TabSettings(
                 s.watchdog_timeout_min = self.watchdog_timeout.value()
             if hasattr(self, 'journal_interval'):
                 s.journal_save_interval_sec = self.journal_interval.value()
-            if hasattr(self, 'workload_priority') and hasattr(self, '_wp_map'):
-                s.workload_priority = self._wp_map.get(
-                    self.workload_priority.currentIndex(), '720p_priority'
-                )
+
             if hasattr(self, 'auto_retry_dl_switch'):
                 s.auto_retry_download = self.auto_retry_dl_switch.isToggled()
             if hasattr(self, 'dl_retry_max'):
@@ -1327,8 +1393,7 @@ class TabSettings(
                 self.watchdog_timeout.setValue(10)
             if hasattr(self, 'journal_interval'):
                 self.journal_interval.setValue(30)
-            if hasattr(self, 'workload_priority'):
-                self.workload_priority.setCurrentIndex(0)  # 720p_priority
+
             if hasattr(self, 'auto_retry_dl_switch'):
                 self.auto_retry_dl_switch.setToggled(True)
             if hasattr(self, 'dl_retry_max'):
@@ -1485,11 +1550,7 @@ class TabSettings(
             self.watchdog_timeout.setValue(int(settings["watchdog_timeout_min"]))
         if "journal_save_interval_sec" in settings and hasattr(self, 'journal_interval'):
             self.journal_interval.setValue(int(settings["journal_save_interval_sec"]))
-        if "workload_priority" in settings and hasattr(self, 'workload_priority') and hasattr(self, '_wp_map'):
-            # Reverse-map value → index
-            rev = {v: k for k, v in self._wp_map.items()}
-            idx = rev.get(settings["workload_priority"], 1)
-            self.workload_priority.setCurrentIndex(idx)
+
         # Language
         if "language" in settings and hasattr(self, 'lang_menu'):
             self.lang_menu.setCurrentText(settings["language"])
@@ -1586,7 +1647,7 @@ class TabSettings(
             "recaptcha_pool_size": self.pool_size.value() if hasattr(self, 'pool_size') else 2,
             "watchdog_timeout_min": self.watchdog_timeout.value() if hasattr(self, 'watchdog_timeout') else 10,
             "journal_save_interval_sec": self.journal_interval.value() if hasattr(self, 'journal_interval') else 30,
-            "workload_priority": self._wp_map.get(self.workload_priority.currentIndex(), '720p_priority') if hasattr(self, '_wp_map') and hasattr(self, 'workload_priority') else '720p_priority',
+
             "auto_retry_download": self.auto_retry_dl_switch.isToggled() if hasattr(self, 'auto_retry_dl_switch') else True,
             "auto_retry_download_max": self.dl_retry_max.value() if hasattr(self, 'dl_retry_max') else 3,
             "prewarm_enabled": self.prewarm_switch.isToggled() if hasattr(self, 'prewarm_switch') else True,

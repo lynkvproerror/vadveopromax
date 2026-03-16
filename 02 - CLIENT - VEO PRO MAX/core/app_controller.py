@@ -106,6 +106,7 @@ class AppController:
             api_client=self._api_client,
         )
         self._engine._app_controller = self  # Fix A: direct reference (replaces _account_manager._app_controller chain)
+        self._engine_gen = 0  # ★ Shutdown race guard: incremented on each start_processing()
         
         # Task persistence (crash recovery) + stuck task detection
         from core.task_journal import TaskJournal
@@ -136,6 +137,8 @@ class AppController:
         self._on_status_changed: Optional[Callable[[str], None]] = None
         self._on_group_completed: Optional[Callable] = None  # Group completion notification
         self._notified_groups: set = set()  # Track notified group IDs
+        self._pipeline_awaiting_queue: bool = False  # Pipeline mid-transition (defer auto-stop)
+        self._pipeline_mode_active: bool = False  # True while ANY pipeline stage is running
         
         # DevConsole reference (set by UI via set_dev_console)
         self._dev_console = None
@@ -454,6 +457,21 @@ class AppController:
             # Proactive reCAPTCHA warm-up: schedule after page settles (~10s)
             # This pre-caches a valid token so "Start All" works instantly.
             asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+            
+            # ★ Image Library: auto pre-upload for newly connected account
+            # So hot-added accounts get all library images uploaded immediately
+            if account:
+                try:
+                    from services.image_library import get_image_library
+                    _lib = get_image_library()
+                    pending = _lib.get_pending_uploads(email)
+                    if pending:
+                        log.info(f"[ExtensionBridge] 📸 Image Library: {len(pending)} pending upload(s) for {email}")
+                        asyncio.ensure_future(
+                            _lib.trigger_pre_upload([account], self._api_client)
+                        )
+                except Exception as e:
+                    log.debug(f"[ExtensionBridge] Image Library pre-upload skipped for {email}: {e}")
         except RuntimeError:
             asyncio.run(self._refresh_extension_data(email))
         except Exception as e:
@@ -872,6 +890,36 @@ class AppController:
                 
                 log.info("[AutoLaunch] ✅ Background browser launch complete")
                 self._notify_status("🌐 Browsers launched — waiting for extension connection...")
+                
+                # Step 8: Auto pre-upload Image Library images
+                # Upload all library images immediately so they're cached before Start All
+                try:
+                    from services.image_library import get_image_library
+                    _lib = get_image_library()
+                    _enabled = [
+                        acc for acc in self._multi_account._accounts
+                        if acc.is_enabled
+                    ]
+                    if _lib.image_count > 0 and _enabled:
+                        _pending = sum(
+                            len(_lib.get_pending_uploads(acc.email))
+                            for acc in _enabled
+                        )
+                        if _pending > 0:
+                            log.info(
+                                f"[AutoLaunch] 📸 Image Library pre-upload: "
+                                f"{_lib.image_count} images × {len(_enabled)} accounts "
+                                f"({_pending} pending)"
+                            )
+                            asyncio.ensure_future(
+                                _lib.trigger_pre_upload(_enabled, self._api_client)
+                            )
+                        else:
+                            log.info(f"[AutoLaunch] 📸 Image Library: {_lib.image_count} images, all already uploaded")
+                    elif _lib.image_count == 0:
+                        log.debug("[AutoLaunch] 📸 Image Library: empty, skipping pre-upload")
+                except Exception as e:
+                    log.debug(f"[AutoLaunch] Image Library pre-upload skipped: {e}")
                     
             except Exception as e:
                 log.error(f"[AutoLaunch] Failed to launch browsers: {e}")
@@ -1165,10 +1213,60 @@ class AppController:
                 
                 log.info(f"[AppController] 🔄 Auto-restarting browser for {email}...")
                 try:
-                    self.restart_browser_for(email)
+                    ok = self.restart_browser_for(email)
+                    if not ok:
+                        log.error(f"[AppController] ❌ restart_browser_for returned False for {email}")
+                        return
                     log.info(f"[AppController] ✅ Browser auto-restarted for {email}")
+                    
                     # Re-run extension ensure after restart
                     self.ensure_all_extensions()
+                    
+                    # ★ Post-restart reconnection (mirrors _hot_add_profile Steps 4-6)
+                    # Without these, tasks stay stuck on stale extension bridge connections
+                    if self._loop:
+                        import asyncio
+                        async def _post_restart_reconnect():
+                            try:
+                                # Step 1: Reconnect AccountManager to new browser
+                                acc = self._multi_account.get_account(email) if self._multi_account else None
+                                if acc:
+                                    try:
+                                        await acc.ensure_browser(headless=True)
+                                        log.info(f"[AutoRestart] ✅ AccountManager reconnected: {email}")
+                                    except Exception as e:
+                                        log.warning(f"[AutoRestart] Browser reconnect error (non-fatal): {e}")
+                                
+                                # Step 2: Assign email to extension bridge
+                                await asyncio.sleep(3)  # Wait for extension to load
+                                if self._extension_bridge:
+                                    if not self._extension_bridge.is_connected(email):
+                                        await self._extension_bridge.assign_email(email)
+                                        log.info(f"[AutoRestart] 📧 Email assigned to extension: {email}")
+                                    else:
+                                        log.info(f"[AutoRestart] ✅ Extension already connected: {email}")
+                                
+                                # Step 3: reCAPTCHA warm-up
+                                if (self._extension_bridge 
+                                        and self._extension_bridge.is_connected(email)):
+                                    asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+                                    log.info(f"[AutoRestart] 🔥 reCAPTCHA warm-up scheduled: {email}")
+                                
+                                # Step 4: Smart-hide browser
+                                from config.settings import get_settings as _gs
+                                s = _gs()
+                                if getattr(s, 'smart_hide_enabled', True) or getattr(s, 'hide_all_browsers', False):
+                                    if self._profiles_controller:
+                                        self._profiles_controller.hide_debug_browser(email)
+                                
+                                self._push_browser_status()
+                                self._push_extension_status()
+                                log.info(f"[AutoRestart] ✅ Post-restart reconnection complete: {email}")
+                            except Exception as e:
+                                log.error(f"[AutoRestart] ❌ Post-restart reconnect failed: {e}")
+                        
+                        asyncio.run_coroutine_threadsafe(_post_restart_reconnect(), self._loop)
+                    
                 except Exception as e:
                     log.error(f"[AppController] ❌ Auto-restart failed for {email}: {e}")
             
@@ -1571,7 +1669,8 @@ class AppController:
         """Enable or disable an account.
         
         Called from Settings UI when user toggles the account switch.
-        When re-enabling, auto-reconnects extension if disconnected.
+        - Disable: stops browser + extension for this account
+        - Enable: relaunches browser + reconnects extension
         """
         # Update profile on disk
         if self._profiles_controller:
@@ -1582,25 +1681,83 @@ class AppController:
         if acc:
             if enabled:
                 acc.enable()
-                # ★ Auto-reconnect: check if extension is still connected
-                # If browser/extension died while disabled, restart it
-                ext_connected = (
-                    self._extension_bridge and
-                    self._extension_bridge.is_connected(email)
-                )
-                if not ext_connected:
-                    log.info(f"[AppController] Re-enable {email}: extension disconnected — triggering reconnect")
-                    import threading
-                    threading.Thread(
-                        target=self._reconnect_account_bg,
-                        args=(email,),
-                        daemon=True,
-                        name=f"reconnect-{email[:8]}",
-                    ).start()
             else:
                 acc.disable()
         
+        # ★ Browser lifecycle: close on disable, relaunch on enable
+        import threading
+        if enabled:
+            # Check if extension/browser is already running
+            ext_connected = (
+                self._extension_bridge and
+                self._extension_bridge.is_connected(email)
+            )
+            if not ext_connected:
+                log.info(f"[AppController] Re-enable {email}: launching browser...")
+                threading.Thread(
+                    target=self._relaunch_account_browser_bg,
+                    args=(email,),
+                    daemon=True,
+                    name=f"relaunch-{email[:8]}",
+                ).start()
+        else:
+            log.info(f"[AppController] Disabling {email}: closing browser...")
+            threading.Thread(
+                target=self._close_account_browser_bg,
+                args=(email,),
+                daemon=True,
+                name=f"close-{email[:8]}",
+            ).start()
+        
         log.info(f"[AppController] Account {email} {'enabled' if enabled else 'disabled'}")
+    
+    def _close_account_browser_bg(self, email: str):
+        """Background: close browser + disconnect extension for a disabled account."""
+        try:
+            pc = self._profiles_controller
+            if pc:
+                pc.kill_debug_browser(email)
+                log.info(f"[AppController] ✅ Browser closed for disabled account {email}")
+        except Exception as e:
+            log.warning(f"[AppController] ⚠️ Failed to close browser for {email}: {e}")
+    
+    def _relaunch_account_browser_bg(self, email: str):
+        """Background: relaunch browser for a re-enabled account.
+        
+        Works even if account is not in runtime _multi_account.
+        Uses ProfilesController.open_browser_for_debug() directly.
+        """
+        try:
+            pc = self._profiles_controller
+            if not pc:
+                log.error(f"[Relaunch] {email}: no ProfilesController")
+                return
+            
+            # Check if browser is already running
+            state = pc.get_debug_browser_state(email)
+            if state in ("visible", "hidden"):
+                log.info(f"[Relaunch] {email}: browser already running ({state})")
+                return
+            
+            # Launch browser (hidden by default)
+            from config.settings import get_settings
+            _s = get_settings()
+            headless = getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False)
+            
+            log.info(f"[Relaunch] {email}: launching browser (headless={headless})...")
+            pc.open_browser_for_debug(
+                email,
+                on_state_change=self._on_debug_browser_state_change,
+            )
+            log.info(f"[Relaunch] {email}: ✅ browser launched")
+            
+            # If runtime account exists, trigger full reconnect
+            acc = self._multi_account.get_account(email)
+            if acc:
+                self._reconnect_account_bg(email)
+                
+        except Exception as e:
+            log.error(f"[Relaunch] {email}: ❌ failed — {e}")
     
     def _reconnect_account_bg(self, email: str):
         """Background: reconnect browser + extension for a re-enabled account."""
@@ -2481,7 +2638,7 @@ class AppController:
     def _default_model(workflow: "WorkflowType") -> str:
         """Return correct default model for workflow type."""
         if workflow in (WorkflowType.T2I, WorkflowType.I2I):
-            return "GEM_PIX_2"
+            return "GEM_PIX_2"  # Sidebar default: 🔥 Nano Banana Pro
         return "veo_3_1_t2v_fast_ultra"
     
     def submit_prompts(
@@ -2490,6 +2647,7 @@ class AppController:
         workflow: WorkflowType,
         images: Optional[List[str]] = None,
         per_prompt_images: Optional[Dict[int, List[str]]] = None,  # Bug 2: per-prompt image mapping
+        per_prompt_workflows: Optional[Dict[int, str]] = None,  # Per-task workflow override (e.g., I2V/R2V per scene)
         settings: Optional[Dict] = None,
         continuation_map: Optional[Dict[int, int]] = None,  # index -> parent_index
         per_prompt_durations: Optional[Dict[int, int]] = None,  # index -> duration_seconds (from JSON scenes)
@@ -2508,6 +2666,31 @@ class AppController:
             log.warning("[License] Generation blocked — license expired or invalid")
             self._notify_status("License expired — please activate a license key")
             return ""
+        
+        # G1: Warn if no account has valid x-client-data (>= 40 chars)
+        # Tasks are ALWAYS created and queued — engine checks x-client-data at execution time.
+        # This ensures Add-to-Queue always works and displays tasks in Queue tab.
+        has_valid_xcd = False
+        for acc in list(self._multi_account._accounts):
+            # Path 1: Bridge cache with 120s expiry (detects stale data after idle)
+            bridge = getattr(acc, 'extension_bridge', None)
+            if bridge:
+                cached = bridge.get_cached_headers(acc.email, max_age_seconds=120)
+                if cached:
+                    xcd = (cached.get('x-client-data', '') or '')
+                    if len(xcd) >= 40:
+                        has_valid_xcd = True
+                        break
+            # Path 2: Session memory fallback (may be stale but non-zero = extension was connected)
+            xcd = getattr(acc._session, 'client_data', '') or ''
+            if len(xcd) >= 40:
+                has_valid_xcd = True
+                break
+        if not has_valid_xcd:
+            log.warning("[Submit] x-client-data not ready — tasks queued but may fail until extension provides fresh headers")
+            self._notify_status(
+                "⚠️ x-client-data not ready — tasks queued, waiting for browser extension."
+            )
         
         # Apply batch size limit from role
         max_batch = self._permissions.limits.max_prompts_per_batch
@@ -2545,7 +2728,7 @@ class AppController:
             
             task = Task(
                 id=task_id,
-                workflow_type=workflow.name,  # "T2V" not WorkflowType.T2V
+                workflow_type=(per_prompt_workflows or {}).get(i, workflow.name),
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 model=model,
@@ -2631,7 +2814,8 @@ class AppController:
             
             elif not has_images and task.workflow_type == "I2I":
                 task.workflow_type = "T2I"
-                # T2I/I2I both use GEM_PIX_2 — no model change needed
+                # F12 verified: T2I/I2I both accept GEM_PIX_2, NARWHAL, IMAGEN_3_5
+                # — no model change needed on downgrade
                 log.info(f"  [AUTO] I2I → T2I (no images, task {i})")
             
             # Upgrade: T2V/R2V → I2V (continuation needs a start frame)
@@ -2642,18 +2826,29 @@ class AppController:
                 log.info(f"  [AUTO] {old_wf} → I2V (continuation, task {i})")
             # === End auto-switch ===
             
+            # === Image workflow output_count ===
+            # T2I/I2I: generate_image() handles 1-request-per-image loop internally.
+            # output_count controls how many images to generate (1-4, from UI sidebar).
+            # Do NOT force output_count=1 — it would override user's "4 Images" setting.
+            
             tasks.append(task)
         
-        # === Continuation constraint: force output_count=1 for entire group ===
-        # When ANY task in the group is a continuation, the whole chain must
-        # produce exactly 1 video per prompt (last frame → next prompt's start).
-        # Workers: dependency chain already ensures serial execution —
-        # only 1 task from the chain is in ready queue at any time.
-        has_any_continuation = any(t.parent_task_id is not None for t in tasks)
-        if has_any_continuation:
-            for t in tasks:
+        # === Continuation constraint: force output_count=1 for chain tasks only ===
+        # Only tasks IN a continuation chain must produce exactly 1 video
+        # (last frame → next prompt's start). Other tasks in the same group
+        # keep the user's configured output_count.
+        parent_ids = {t.parent_task_id for t in tasks if t.parent_task_id}
+        cont_forced = 0
+        for t in tasks:
+            # Force output_count=1 if: (a) task IS a continuation, or (b) task is a parent of one
+            if t.parent_task_id is not None or t.id in parent_ids:
                 t.output_count = 1
-            log.info(f"  [CONT] Continuation detected → output_count forced to 1 for all {len(tasks)} tasks")
+                cont_forced += 1
+        if cont_forced > 0:
+            log.info(
+                f"  [CONT] Continuation detected → output_count=1 forced for "
+                f"{cont_forced}/{len(tasks)} chain tasks (others keep user setting)"
+            )
         
         project_name = (settings or {}).get("project_name", "")
         group_display = project_name if project_name else f"Batch {len(tasks)}"
@@ -2666,7 +2861,7 @@ class AppController:
         log.info(f"  model      : {model_display!r} → {model}")
         log.info(f"  aspect_ratio: {raw_ar} → {aspect_ratio}")
         log.info(f"  dual_frame : {dual_frame}")
-        log.info(f"  output_count: {1 if has_any_continuation else output_count}{' (continuation override)' if has_any_continuation else ''}")
+        log.info(f"  output_count: {output_count} ({cont_forced} chain tasks forced to 1)")
         log.info(f"  tasks      : {len(tasks)}")
         for t in tasks:
             cont = f" (cont→{t.parent_task_id})" if t.parent_task_id else ""
@@ -2885,17 +3080,107 @@ class AppController:
             continuation_map=continuation_map if continuation_map else None
         )
     
+    def get_group_status(self, group_id: str) -> Optional[dict]:
+        """Get completion status of a task group for pipeline progress tracking.
+        
+        Returns dict with total/completed/failed counts and completed task details
+        (prompt_index, best_file, thumbnail) — used by Tab Project Builder to
+        populate image_path/video_path back into pipeline state.
+        
+        Returns None if group_id not found.
+        """
+        from core.dispatcher import TaskState
+        groups = self._dispatcher.get_task_groups()
+        group = groups.get(group_id)
+        if not group:
+            return None
+        tasks = group.tasks
+        completed = [t for t in tasks if t.state == TaskState.COMPLETED]
+        failed = [t for t in tasks if t.state == TaskState.FAILED]
+        return {
+            "group_id": group_id,
+            "total": len(tasks),
+            "completed": len(completed),
+            "failed": len(failed),
+            "is_done": len(completed) + len(failed) >= len(tasks),
+            "completed_tasks": [
+                {
+                    "task_id": t.id,
+                    "prompt_index": t.prompt_index,
+                    "best_file": t.video_outputs[0].best_file if t.video_outputs else "",
+                    "thumbnail": t.video_outputs[0].thumbnail_path if t.video_outputs else "",
+                }
+                for t in completed
+            ],
+        }
+    
     def add_t2i_batch(self, prompts: List, settings: Dict) -> str:
         """Add Text-to-Image batch to queue.
         
+        Handles reference_images from pipeline settings:
+        - If reference_images provided → per_prompt_images → I2I workflow
+        - Otherwise → T2I workflow (text-only)
+        
         Args:
-            prompts: List of PromptRow objects
-            settings: Sidebar settings dict
+            prompts: List of PromptRow objects or plain strings
+            settings: Sidebar settings dict (may include 'reference_images')
         """
+        prompt_texts = [p.text if hasattr(p, 'text') else str(p) for p in prompts]
+        
+        # Check for per-prompt images (from pipeline Stage 5 per-scene char matching)
+        per_prompt_images_map = settings.pop("per_prompt_images", None) if settings else None
+        reference_images = settings.pop("reference_images", None) if settings else None
+        per_prompt_images = None
+        target_workflow = WorkflowType.T2I
+        
+        if per_prompt_images_map and isinstance(per_prompt_images_map, dict):
+            # Per-scene character images — each scene gets only its matched characters
+            resolved_map = {}
+            for idx, imgs in per_prompt_images_map.items():
+                resolved = self._resolve_tags_to_paths(imgs)
+                if resolved:
+                    resolved_map[int(idx)] = resolved
+            if resolved_map:
+                per_prompt_images = resolved_map
+                target_workflow = WorkflowType.I2I
+                log.info(
+                    f"  [T2I→I2I] Per-scene char refs: "
+                    f"{len(resolved_map)}/{len(prompt_texts)} scenes with images"
+                )
+        elif reference_images and isinstance(reference_images, list):
+            # Flat list → apply same reference images to ALL prompts (character ref → I2I)
+            resolved = self._resolve_tags_to_paths(reference_images)
+            if resolved:
+                per_prompt_images = {i: resolved for i in range(len(prompt_texts))}
+                target_workflow = WorkflowType.I2I
+                log.info(
+                    f"  [T2I→I2I] {len(resolved)} reference image(s) → "
+                    f"applied to {len(prompt_texts)} prompts"
+                )
+        
+        # Also check per-prompt image_tags (from PromptRow objects)
+        if not per_prompt_images:
+            per_prompt_imgs = {}
+            for i, p in enumerate(prompts):
+                resolved = []
+                if hasattr(p, 'image_tags') and p.image_tags:
+                    resolved = self._resolve_tags_to_paths(list(p.image_tags))
+                if not resolved and hasattr(p, 'image_path') and p.image_path:
+                    from pathlib import Path as _P
+                    if _P(p.image_path).exists():
+                        resolved = [p.image_path]
+                if resolved:
+                    per_prompt_imgs[i] = resolved
+            if per_prompt_imgs:
+                per_prompt_images = per_prompt_imgs
+                target_workflow = WorkflowType.I2I
+                log.info(f"  [T2I→I2I] Per-prompt images for {len(per_prompt_imgs)} prompts")
+        
         return self.submit_prompts(
-            prompts=[p.text if hasattr(p, 'text') else str(p) for p in prompts],
-            workflow=WorkflowType.T2I,
-            settings=settings
+            prompts=prompt_texts,
+            workflow=target_workflow,
+            per_prompt_images=per_prompt_images,
+            settings=settings,
         )
     
     def add_i2i_batch(self, prompts: List, settings: Dict) -> str:
@@ -3133,6 +3418,7 @@ class AppController:
             return
         
         self.state.is_processing = True
+        self._engine_gen += 1  # ★ Race guard: old _shutdown_engine_bg will see stale gen
         
         # ★ Pause Tab Keepalive — engine takes over tab management
         # Prevents conflict: both keepalive and engine use executeScript
@@ -3253,16 +3539,19 @@ class AppController:
         
         # Heavy shutdown in background thread (blocks up to 28s)
         import threading
+        _shutdown_gen = self._engine_gen  # snapshot for race guard
         threading.Thread(
             target=self._shutdown_engine_bg,
+            args=(_shutdown_gen,),
             name="engine-shutdown",
             daemon=True,
         ).start()
     
-    def _shutdown_engine_bg(self):
+    def _shutdown_engine_bg(self, shutdown_gen: int = 0):
         """Background shutdown — runs blocking .result() calls off UI thread.
         
         Called by stop_processing() in a daemon thread.
+        Uses shutdown_gen to detect if a new engine was started during shutdown.
         """
         try:
             # Wait for engine.start() TaskGroup to fully complete
@@ -3275,6 +3564,12 @@ class AppController:
                 except Exception:
                     pass
                 self._engine_future = None
+            
+            # ★ Race guard: if start_processing() was called during our shutdown,
+            # skip teardown — the new engine owns these resources now.
+            if self._engine_gen != shutdown_gen:
+                log.info(f"[Shutdown] Engine re-started (gen {shutdown_gen}→{self._engine_gen}) — skipping teardown")
+                return
             
             # Stop Watchdog
             try:
@@ -3315,6 +3610,25 @@ class AppController:
             self._log_exporter.stop()
             
             log.info("[AppController] Engine shutdown complete")
+            
+            # ★ Post-shutdown restart: check if new tasks arrived during shutdown
+            # Race condition: Pipeline Stage 4 completes → AutoStop → Stage 5 adds
+            # tasks during the ~30s shutdown window → those tasks never get processed.
+            # Fix: after full shutdown, re-check ready_count and auto-restart if needed.
+            try:
+                if self._dispatcher.ready_count > 0:
+                    from config.settings import get_settings
+                    s = get_settings()
+                    if getattr(s, 'auto_start_queue', False):
+                        pending = self._dispatcher.ready_count
+                        log.info(f"[AutoStop→Restart] {pending} new tasks found after shutdown — scheduling restart")
+                        from PySide6.QtCore import QTimer
+                        # Schedule restart on main thread with 2s delay for clean state
+                        QTimer.singleShot(2000, self.start_processing)
+                    else:
+                        log.info(f"[AutoStop] {self._dispatcher.ready_count} new tasks found but auto_start_queue=False — skipping restart")
+            except Exception as e:
+                log.warning(f"[AutoStop→Restart] Post-shutdown check failed: {e}")
         except Exception as e:
             log.error(f"[AppController] Shutdown error: {e}")
         finally:
@@ -3433,13 +3747,23 @@ class AppController:
         Prevents engine from running forever after all work is done,
         which would cause reCAPTCHA request accumulation + Chrome tab freeze.
         
-        ★ Fix: Also checks UpscaleQueue — defers stop if upscales are
-        still pending/active (prevents killing in-flight upscale API calls).
+        ★ Fix: Pipeline guard checked FIRST to prevent race condition
+        where AutoStop fires before pipeline adds next-stage tasks.
         """
         if not self.state.is_processing:
             return  # Already stopped
         
         try:
+            # ★ PRIORITY 1: Don't auto-stop if pipeline is mid-transition
+            # Race condition: Stage 4 completes → auto-stop fires → Stage 5 adds
+            # tasks during shutdown → engine gen 2 gets killed by gen 1's shutdown.
+            # This check MUST come first — before any task state inspection.
+            if self._pipeline_awaiting_queue or self._pipeline_mode_active:
+                log.info("[AutoStop] Deferred — pipeline active "
+                         f"(queue_flag={self._pipeline_awaiting_queue}, "
+                         f"mode_flag={self._pipeline_mode_active})")
+                return
+            
             terminal_states = {'completed', 'failed', 'cancelled'}
             
             # Check ready queue first (fast path)
@@ -3465,6 +3789,31 @@ class AppController:
             self.stop_processing()
         except Exception as e:
             log.warning(f"[AutoStop] Check failed: {e}")
+    
+    def set_pipeline_queue_active(self, active: bool):
+        """Called by TabProject when pipeline starts/stops queue polling.
+        
+        Prevents AutoStop from killing engine during pipeline stage transitions
+        (e.g. Stage 4 queue done → Stage 5 adds new tasks).
+        """
+        was_active = self._pipeline_awaiting_queue
+        self._pipeline_awaiting_queue = active
+        if active:
+            log.info("[AutoStop] Pipeline queue ACTIVE — auto-stop deferred")
+        elif was_active:
+            log.info("[AutoStop] Pipeline queue INACTIVE — auto-stop allowed")
+    
+    def set_pipeline_mode_active(self, active: bool):
+        """Called by TabProject when pipeline starts/finishes all stages.
+        
+        Redundant guard: keeps auto-stop deferred while ANY pipeline stage
+        is running, not just during queue polling.
+        """
+        self._pipeline_mode_active = active
+        if active:
+            log.info("[AutoStop] Pipeline mode ACTIVE — auto-stop deferred")
+        else:
+            log.info("[AutoStop] Pipeline mode INACTIVE — auto-stop allowed")
     
     def _handle_progress(self, task_id: str, progress: int, status_text: str = ""):
         """Handle progress update from engine callback.
