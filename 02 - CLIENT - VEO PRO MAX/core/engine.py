@@ -746,11 +746,12 @@ class Engine:
         self._download_count = 0   # Total successful downloads
         self._error_count = 0      # Total task failures
         
-        # ★ T2I output concurrency cap: max 12 outputs active simultaneously
-        # When 12 slots full, subsequent T2I tasks queue at semaphore.acquire()
-        self._t2i_output_semaphore = asyncio.Semaphore(12)
-        self._t2i_slot_lock = asyncio.Lock()  # Prevents concurrent partial allocation
-        self._t2i_active_outputs = 0   # Counter for dashboard stats
+        # ★ T2I output concurrency cap: max 12 outputs active per account
+        # Each account independently limits to 12 concurrent image outputs.
+        # When an account's 12 slots are full, its T2I tasks queue at semaphore.acquire()
+        self._t2i_output_semaphores: Dict[str, asyncio.Semaphore] = {}  # email → Semaphore(12)
+        self._t2i_slot_locks: Dict[str, asyncio.Lock] = {}              # email → Lock
+        self._t2i_active_outputs: Dict[str, int] = {}                   # email → count
         
         # Bug 4 fix: Per-task download lock — prevents concurrent duplicate downloads
         self._download_locks: Dict[str, asyncio.Lock] = {}
@@ -5026,24 +5027,39 @@ class Engine:
 
 
     
-    async def _acquire_t2i_slots(self, count: int):
-        """Acquire exactly `count` T2I output slots atomically.
+    def _get_t2i_resources(self, email: str):
+        """Lazily create per-account T2I semaphore + lock.
+        
+        Returns (Semaphore(12), Lock) for the given account.
+        Thread-safe: dict.setdefault is atomic in CPython.
+        """
+        if email not in self._t2i_output_semaphores:
+            self._t2i_output_semaphores[email] = asyncio.Semaphore(12)
+            self._t2i_slot_locks[email] = asyncio.Lock()
+            self._t2i_active_outputs[email] = 0
+        return (self._t2i_output_semaphores[email],
+                self._t2i_slot_locks[email])
+    
+    async def _acquire_t2i_slots(self, count: int, email: str):
+        """Acquire exactly `count` T2I output slots atomically for one account.
         
         Prevents partial-allocation deadlock: either acquire ALL
         slots at once or wait and retry. A lock serializes attempts
         so two tasks don't race for the same partial pool.
+        Each account has its own Semaphore(12) — independent limits.
         """
+        sem, lock = self._get_t2i_resources(email)
         while True:
-            async with self._t2i_slot_lock:
+            async with lock:
                 # Check if enough slots are available (non-blocking peek)
-                if self._t2i_output_semaphore._value >= count:
+                if sem._value >= count:
                     # Grab all slots while holding the lock
                     for _ in range(count):
-                        await self._t2i_output_semaphore.acquire()
+                        await sem.acquire()
                     return  # All slots acquired atomically
             # Not enough slots — wait for one to free up, then retry
-            await self._t2i_output_semaphore.acquire()
-            self._t2i_output_semaphore.release()
+            await sem.acquire()
+            sem.release()
             await asyncio.sleep(0.5)
     
     # ═══════════════════════════════════════════════════════════════
@@ -5073,16 +5089,16 @@ class Engine:
         
         _t2i_slots_held = 0
         try:
-            # ★ T2I Concurrency Cap: max 12 active outputs globally
+            # ★ T2I Concurrency Cap: max 12 active outputs per account
             # Uses atomic acquisition to prevent partial-allocation deadlock
             _oc = task.output_count or 4
-            await self._acquire_t2i_slots(_oc)
+            await self._acquire_t2i_slots(_oc, account.email)
             _t2i_slots_held = _oc
-            self._t2i_active_outputs += _oc
+            self._t2i_active_outputs[account.email] = self._t2i_active_outputs.get(account.email, 0) + _oc
             log.info(
                 f"[T2I-Worker:{account.email}] Task {task.id}: "
                 f"acquired {_oc} output slots "
-                f"(active={self._t2i_active_outputs})"
+                f"(active={self._t2i_active_outputs.get(account.email, 0)})"
             )
             
             # ★ BUG FIX: T2I multi-image loop
@@ -5423,13 +5439,16 @@ class Engine:
         finally:
             # ★ Release T2I output slots (only if NOT transferred to background)
             if _t2i_slots_held > 0:
+                sem = self._t2i_output_semaphores.get(account.email)
                 for _ in range(_t2i_slots_held):
-                    self._t2i_output_semaphore.release()
-                self._t2i_active_outputs = max(0, self._t2i_active_outputs - _t2i_slots_held)
+                    if sem: sem.release()
+                self._t2i_active_outputs[account.email] = max(
+                    0, self._t2i_active_outputs.get(account.email, 0) - _t2i_slots_held
+                )
                 log.info(
                     f"[T2I-Worker:{account.email}] Task {task.id}: "
                     f"released {_t2i_slots_held} output slots "
-                    f"(active={self._t2i_active_outputs})"
+                    f"(active={self._t2i_active_outputs.get(account.email, 0)})"
                 )
             # ★ Release workers if still held (only if NOT transferred)
             if worker_count > 0:
@@ -5494,12 +5513,12 @@ class Engine:
                 return
             
             # === Stage 1: Download 1K images ===
-            # ★ Wait 60s after submit for server to generate high-quality images
+            # ★ Wait 45s after submit for server to generate high-quality images
             self._dispatcher.update_progress(
                 task.id, 75, f"🎨 Generating..."
             )
-            log.info(f"[T2I-Pipeline] Task {task.id}: waiting 60s before download check")
-            await asyncio.sleep(60)
+            log.info(f"[T2I-Pipeline] Task {task.id}: waiting 45s before download check")
+            await asyncio.sleep(45)
             
             # ★ Download with retry: 3 attempts, 20s apart
             local_paths = []
@@ -5670,13 +5689,16 @@ class Engine:
                 account.release_workers(worker_count)
             # ★ Release T2I output semaphore slots (transferred from submit pipeline)
             if t2i_slots_held > 0:
+                sem = self._t2i_output_semaphores.get(account.email)
                 for _ in range(t2i_slots_held):
-                    self._t2i_output_semaphore.release()
-                self._t2i_active_outputs = max(0, self._t2i_active_outputs - t2i_slots_held)
+                    if sem: sem.release()
+                self._t2i_active_outputs[account.email] = max(
+                    0, self._t2i_active_outputs.get(account.email, 0) - t2i_slots_held
+                )
                 log.info(
                     f"[T2I-Pipeline:{account.email}] Task {task.id}: "
                     f"released {t2i_slots_held} output slots "
-                    f"(active={self._t2i_active_outputs})"
+                    f"(active={self._t2i_active_outputs.get(account.email, 0)})"
                 )
 
     async def _t2i_upscale_bg(

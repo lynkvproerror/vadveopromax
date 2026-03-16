@@ -30,7 +30,7 @@ class TaskWatchdog:
     """
     
     # Timeout thresholds (seconds)
-    RUNNING_TIMEOUT = 600       # 10min — task should not stay RUNNING this long
+    RUNNING_TIMEOUT = 900       # 15min — T2I serial submit can take 5-7min
     POLL_TIMEOUT = 900          # 15min — poll should not exceed MAX_POLL_TIME
     SCAN_INTERVAL = 30          # Check every 30s
     
@@ -152,6 +152,11 @@ class TaskWatchdog:
         assigned_account = task.assigned_account
         task.assigned_account = None
         task.operation_name = None
+        
+        # Clear partial results so UI doesn't show stale thumbnails on READY
+        task.output_uris = []
+        task.thumbnail_paths = []
+        task.video_outputs = []
         
         # Re-queue in dispatcher
         self._dispatcher.requeue_task(task)

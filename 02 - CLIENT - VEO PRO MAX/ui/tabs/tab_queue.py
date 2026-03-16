@@ -931,8 +931,16 @@ class TabQueue(
             widget.status_label = status_label
             layout.addWidget(status_label)
         else:
-            # Normal status label
-            display_status = f"{cfg['icon']} {item.status.upper()}"
+            # Normal status label — use i18n for terminal states
+            _status_i18n = {
+                "completed": "queue_extra.completed",
+                "failed": "queue_extra.label_failed",
+            }
+            _i18n_key = _status_i18n.get(item.status)
+            if _i18n_key:
+                display_status = t(_i18n_key)
+            else:
+                display_status = f"{cfg['icon']} {item.status.upper()}"
             tooltip_text = ""
             display_color = cfg['color']
             
