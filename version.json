@@ -5,10 +5,10 @@
     "changelog": "v2.3.5 — Sửa lỗi Upscale video\n\n⬆️ Upscale\n• Sửa lỗi chỉ upscale video đầu tiên trong mỗi task — giờ tất cả video (a, b, c, d) đều được upscale đúng\n• Sửa lỗi crash khi download file upscale (fife_uri)\n• Thumbnail hiển thị đúng trạng thái upscale cho từng video\n\n🔧 Ổn định\n• Cải thiện xử lý đồng thời khi upscale nhiều video\n• Tối ưu quy trình upscale background",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.6/VEO_Pro_Max_v2.3.6.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.6/VEO_Extension_v2.3.6.zip",
-    "sha256": "d83483a538a9bfa8be05201ecbeea178b5f5a94a55a634e8aa7a7abd4782c987",
-    "ext_sha256": "57004e31d9c30914fd547046cb491e0c09fe83ca965175801494aa994260f1f3",
+    "sha256": "d9df161b055c79fce342ba3814a361e4fa25f5cd98f8fad88d3d16f4a4948326",
+    "ext_sha256": "4e3d55c3e1f844604bf745bc1dc2ef5c21ba1c463dc2878bdcc4d89ba2b0c6ca",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1773656761,
-    "build_time": "2026-03-16T17:26:01.766374"
+    "build_number": 1773661192,
+    "build_time": "2026-03-16T18:39:52.756312"
 }
