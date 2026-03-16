@@ -4581,6 +4581,10 @@ class Engine:
             if task.download_quality != "720p" and media_id:
                 # Always delegate upscale to background UpscaleQueue (decoupled)
                 # Submit workers release immediately after 720p download
+                #
+                # ★ BUG-FIX: Pass retry_indices=[video_index] so _process_job
+                # maps this single media_id to the correct task.video_outputs
+                # slot. Without this, all per-worker jobs write to index 0.
                 from core.upscale_queue import UpscaleJob
                 self._upscale_queue.enqueue(UpscaleJob(
                     task_id=task.id,
@@ -4590,6 +4594,7 @@ class Engine:
                     output_uris=[fife_url],
                     target_quality=task.download_quality,
                     aspect_ratio=task.aspect_ratio,
+                    retry_indices=[video_index],
                 ))
                 log.info(f"{log_prefix} Delegated upscale → UpscaleQueue")
 

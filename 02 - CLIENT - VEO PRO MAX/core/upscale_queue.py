@@ -1618,8 +1618,11 @@ class UpscaleQueue:
         poll_results = await asyncio.gather(*poll_tasks, return_exceptions=True)
         
         # Collect upscaled URIs + op_names (for TRPC ZIP download)
-        upscaled_uris = [None] * total
-        upscale_op_names = [None] * total  # op_name per video for TRPC download
+        # ★ BUG-FIX: Use dicts instead of fixed-size lists to support
+        # retry_indices mapping where orig_idx can exceed total
+        # (e.g., per-worker jobs with media_ids=[mid], retry_indices=[3])
+        upscaled_uris = {}   # orig_idx → fife_uri
+        upscale_op_names = {}  # orig_idx → op_name for TRPC download
         for result in poll_results:
             if isinstance(result, Exception):
                 log.error(f"[UpscaleQueue] Poll task exception: {result}")
@@ -1636,13 +1639,13 @@ class UpscaleQueue:
         # =====================================================
         # PHASE 3: Batch Download (TRPC-first for 1080p)
         # =====================================================
-        upscale_paths = [None] * total
-        uris_to_download = [(i, u) for i, u in enumerate(upscaled_uris) if u]
+        upscale_paths = {}   # orig_idx → downloaded path
+        uris_to_download = [(i, u) for i, u in upscaled_uris.items() if u]
         
         # ★ Re-Upscale fast path: add entries with TRPC op_name for download
         _re_ready = getattr(self, '_re_upscale_ready', set())
         if _re_ready:
-            for i, op_n in enumerate(upscale_op_names):
+            for i, op_n in upscale_op_names.items():
                 if op_n and op_n in _re_ready and i not in [x[0] for x in uris_to_download]:
                     uris_to_download.append((i, None))  # None URI = TRPC-only
                     log.info(
@@ -1655,7 +1658,7 @@ class UpscaleQueue:
         log.debug(
             f"[UpscaleQueue] Phase 3 start: "
             f"uris={len(uris_to_download)}/{total}, "
-            f"op_names=[{', '.join(str(n[:30] if n else 'None') for n in upscale_op_names)}], "
+            f"op_names=[{', '.join(str(n[:30] if n else 'None') for n in upscale_op_names.values())}], "
             f"is_free_upscale={is_free_upscale}"
         )
         
@@ -1685,7 +1688,7 @@ class UpscaleQueue:
                 for dl_idx, (orig_idx, fife_uri) in enumerate(uris_to_download):
                     if not self._running:
                         break
-                    op_name_for_dl = upscale_op_names[orig_idx]
+                    op_name_for_dl = upscale_op_names.get(orig_idx)
                     downloaded = False
                     # Determine if THIS specific entry is a re-upscale
                     is_re_upscale_entry = fife_uri is None
@@ -1844,8 +1847,9 @@ class UpscaleQueue:
         
         # Merge upscaled paths with existing 720p paths
         for i in range(len(task.video_outputs)):
-            if i < len(upscale_paths) and upscale_paths[i]:
-                task.video_outputs[i].file_upscaled = upscale_paths[i]
+            _up_path = upscale_paths.get(i)
+            if _up_path:
+                task.video_outputs[i].file_upscaled = _up_path
                 task.video_outputs[i].quality = job.target_quality
         
         # Update final output_uris (prefer upscaled)
@@ -1872,7 +1876,7 @@ class UpscaleQueue:
             return
         
         from core.dispatcher import TaskStage
-        any_success = any(p for p in upscale_paths if p)
+        any_success = any(p for p in upscale_paths.values() if p)
         task.stage = TaskStage.COMPLETED
         
         if any_success:
