@@ -749,6 +749,7 @@ class Engine:
         # ★ T2I output concurrency cap: max 12 outputs active simultaneously
         # When 12 slots full, subsequent T2I tasks queue at semaphore.acquire()
         self._t2i_output_semaphore = asyncio.Semaphore(12)
+        self._t2i_slot_lock = asyncio.Lock()  # Prevents concurrent partial allocation
         self._t2i_active_outputs = 0   # Counter for dashboard stats
         
         # Bug 4 fix: Per-task download lock — prevents concurrent duplicate downloads
@@ -5025,6 +5026,26 @@ class Engine:
 
 
     
+    async def _acquire_t2i_slots(self, count: int):
+        """Acquire exactly `count` T2I output slots atomically.
+        
+        Prevents partial-allocation deadlock: either acquire ALL
+        slots at once or wait and retry. A lock serializes attempts
+        so two tasks don't race for the same partial pool.
+        """
+        while True:
+            async with self._t2i_slot_lock:
+                # Check if enough slots are available (non-blocking peek)
+                if self._t2i_output_semaphore._value >= count:
+                    # Grab all slots while holding the lock
+                    for _ in range(count):
+                        await self._t2i_output_semaphore.acquire()
+                    return  # All slots acquired atomically
+            # Not enough slots — wait for one to free up, then retry
+            await self._t2i_output_semaphore.acquire()
+            self._t2i_output_semaphore.release()
+            await asyncio.sleep(0.5)
+    
     # ═══════════════════════════════════════════════════════════════
     # T2I WORKER SUBMIT PIPELINE (synchronous — foreman awaits)
     # ═══════════════════════════════════════════════════════════════
@@ -5053,9 +5074,9 @@ class Engine:
         _t2i_slots_held = 0
         try:
             # ★ T2I Concurrency Cap: max 12 active outputs globally
+            # Uses atomic acquisition to prevent partial-allocation deadlock
             _oc = task.output_count or 4
-            for _ in range(_oc):
-                await self._t2i_output_semaphore.acquire()
+            await self._acquire_t2i_slots(_oc)
             _t2i_slots_held = _oc
             self._t2i_active_outputs += _oc
             log.info(
