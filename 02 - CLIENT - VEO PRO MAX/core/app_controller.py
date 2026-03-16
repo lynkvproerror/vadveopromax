@@ -1536,6 +1536,120 @@ class AppController:
         self._push_extension_status()
         return results
     
+    def on_extension_hot_updated(self):
+        """★ Post-update handler: reload extension on ALL running browsers.
+        
+        Called after auto_updater hot-replaces extension/ folder on disk.
+        Runs in background thread to avoid blocking UI.
+        
+        Strategy per Chrome type:
+        - Branded Chrome: CDP reinstall (uninstall old → install new from disk)
+        - CfT: restart browser (--load-extension only loads at launch time)
+        
+        After reload, verifies installed version matches local version.
+        """
+        import threading
+        
+        def _reload_all():
+            import time
+            
+            pc = self._profiles_controller
+            if not pc or not hasattr(pc, '_debug_browsers'):
+                log.info("[ExtHotUpdate] No running browsers — skip reload")
+                return
+            
+            from core.chrome_manager import is_branded_chrome, _load_pid_file
+            from pathlib import Path
+            
+            running_emails = list(pc._debug_browsers.keys())
+            if not running_emails:
+                log.info("[ExtHotUpdate] No running browsers — skip reload")
+                return
+            
+            log.info(
+                f"[ExtHotUpdate] Reloading extension on {len(running_emails)} "
+                f"browser(s): {running_emails}"
+            )
+            
+            results = {}
+            for email in running_emails:
+                try:
+                    # Determine Chrome type
+                    chrome_exe = ""
+                    profile = pc.get_profile(email)
+                    if profile and profile.browser_profile_path:
+                        pid_data = _load_pid_file(profile.browser_profile_path)
+                        if pid_data:
+                            chrome_exe = pid_data.get("chrome_exe", "")
+                    
+                    if is_branded_chrome(chrome_exe):
+                        # ★ Branded Chrome: reload via existing method
+                        # (tries WebSocket hot-reload first, then CDP reinstall)
+                        log.info(f"[ExtHotUpdate] {email}: Branded Chrome — reloading extension...")
+                        ok = self.reload_extension_for(email)
+                        if ok:
+                            results[email] = "✅ reloaded"
+                        else:
+                            # Fallback: full ensure (catches version mismatch)
+                            log.warning(f"[ExtHotUpdate] {email}: reload failed — trying ensure_all...")
+                            ensure_result = self.ensure_all_extensions()
+                            results[email] = ensure_result.get(email, "⚠️ ensure fallback")
+                    else:
+                        # ★ CfT: must restart browser (--load-extension only loads at launch)
+                        log.info(f"[ExtHotUpdate] {email}: CfT — restarting browser for extension reload...")
+                        ok = self.restart_browser_for(email)
+                        if ok:
+                            # Wait for extension to reconnect
+                            bridge = getattr(self, '_extension_bridge', None)
+                            if bridge:
+                                try:
+                                    import asyncio
+                                    loop = getattr(self, '_loop', None)
+                                    if loop:
+                                        asyncio.run_coroutine_threadsafe(
+                                            bridge.wait_for_extension(email, timeout=15.0),
+                                            loop,
+                                        ).result(timeout=20)
+                                except Exception:
+                                    pass
+                            results[email] = "✅ restarted"
+                        else:
+                            results[email] = "❌ restart failed"
+                    
+                    # ★ Fix 4: Version verify after reload
+                    entry = pc._debug_browsers.get(email, {})
+                    cdp_port = entry.get("cdp_port")
+                    if cdp_port:
+                        from core.extension_manager import (
+                            get_local_extension_version,
+                            _get_installed_version_fast,
+                            install_if_needed,
+                        )
+                        local_ver = get_local_extension_version()
+                        installed_ver = _get_installed_version_fast(cdp_port)
+                        if local_ver and installed_ver and installed_ver != local_ver:
+                            log.warning(
+                                f"[ExtHotUpdate] {email}: version mismatch after reload "
+                                f"(installed={installed_ver}, local={local_ver}) — reinstalling"
+                            )
+                            _client_dir = Path(__file__).resolve().parent.parent
+                            _extension_dir = _client_dir / "extension"
+                            install_if_needed(cdp_port, str(_extension_dir))
+                            results[email] = "🔄 reinstalled (version mismatch)"
+                        elif local_ver and installed_ver:
+                            log.info(f"[ExtHotUpdate] {email}: ✅ verified v{installed_ver}")
+                
+                except Exception as e:
+                    results[email] = f"❌ {e}"
+                    log.error(f"[ExtHotUpdate] {email}: error — {e}")
+            
+            log.info(f"[ExtHotUpdate] Results: {results}")
+            self._push_extension_status()
+        
+        threading.Thread(
+            target=_reload_all, daemon=True, name="ext-hot-update-reload"
+        ).start()
+    
     # NOTE: reload_extension_for() defined above (line ~799) — Chrome-type-aware
     # version with WebSocket hot-reload + Branded/CfT fallback strategies.
     # A simpler duplicate was here previously and has been removed.

@@ -1217,10 +1217,10 @@ class SettingsSectionsMixin:
                 pass
     
     def _on_ext_update_applied(self):
-        """Extension hot-updated — update version label + show success toast."""
+        """Extension hot-updated — update version label + reload on running browsers."""
         self._update_now_btn.setVisible(False)
         self._changelog_label.setVisible(False)
-        self._update_status_label.setText("✅ Extension updated!")
+        self._update_status_label.setText("✅ Extension updated! Reloading browsers...")
         self._update_status_label.setStyleSheet(
             f"color: {Theme.GREEN}; font-size: 12px; margin-left: 12px;"
         )
@@ -1234,11 +1234,17 @@ class SettingsSectionsMixin:
             )
         except Exception:
             pass
+        
+        # ★ Fix 2+3: Trigger extension reload on ALL running browsers
+        # Branded Chrome: CDP reinstall, CfT: browser restart
+        if self.controller and hasattr(self.controller, 'on_extension_hot_updated'):
+            self.controller.on_extension_hot_updated()
+        
         try:
             main_win = self.window()
             if main_win and hasattr(main_win, 'show_toast'):
                 main_win.show_toast(
-                    "✅ Extension updated! No restart needed.",
+                    "✅ Extension updated! Reloading on all browsers...",
                     "success", duration=5000
                 )
         except Exception:

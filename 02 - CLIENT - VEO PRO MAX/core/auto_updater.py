@@ -1003,6 +1003,14 @@ class _ExtUpdateWorker(QThread):
             except Exception:
                 pass
             
+            # ★ Fix: Clear stale %TEMP%\veo_extension cache
+            # _get_safe_path() copies extension to this temp dir for folder picker.
+            # After hot-update, old copy is stale → Chrome may load outdated version.
+            _stale_temp = os.path.join(tempfile.gettempdir(), "veo_extension")
+            if os.path.isdir(_stale_temp):
+                shutil.rmtree(_stale_temp, ignore_errors=True)
+                log.info(f"Cleared stale extension temp cache: {_stale_temp}")
+            
             log.info("Extension hot-updated successfully (no restart needed)")
             self.ext_done.emit()
             
