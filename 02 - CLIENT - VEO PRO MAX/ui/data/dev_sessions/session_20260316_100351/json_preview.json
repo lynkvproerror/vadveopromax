@@ -1,0 +1,102 @@
+{
+  "group_id": "group_20260316_094120",
+  "workflow": "T2I",
+  "model_display": "GEM_PIX_2",
+  "model_api_key": "GEM_PIX_2",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 4,
+  "tasks": [
+    {
+      "id": "group_20260316_094120_task_0",
+      "prompt": "{\"scene_number\": 1, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman slowly improving himself step by step, small upward arrow showing progress, hand drawn animation, simple doodle style\", \"description_vi\": \"Nhân vật người que đứng trước bảng đen, từng bước leo lên các bậc nhỏ tượng trưng cho việc cải thiện bản thân mỗi ngày.\", \"narration_vi\": \"Cuộc sống không cần hoàn hảo, chỉ cần mỗi ngày ta cố gắng tốt hơn hôm qua một chút là đủ rồi\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_1",
+      "prompt": "{\"scene_number\": 2, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman facing obstacles like rocks then becoming stronger and standing tall, hand drawn stickman animation\", \"description_vi\": \"Người que gặp các tảng đá cản đường, sau đó đẩy qua và trở nên mạnh mẽ hơn.\", \"narration_vi\": \"Khó khăn đôi khi xuất hiện không phải để quật ngã bạn mà để rèn luyện trái tim mạnh mẽ hơn mỗi ngày\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_2",
+      "prompt": "{\"scene_number\": 3, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman noticing small stars, heart and little objects around him, showing appreciation, hand drawn style\", \"description_vi\": \"Người que nhìn thấy những ngôi sao và trái tim nhỏ xung quanh, mỉm cười trân trọng những điều giản dị.\", \"narration_vi\": \"Hãy trân trọng những điều nhỏ bé quanh mình vì chính chúng âm thầm góp lại thành hạnh phúc lớn mỗi ngày\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_3",
+      "prompt": "{\"scene_number\": 4, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, sunrise drawn in chalk, white stickman opening a blank book and starting to write, hand drawn animation\", \"description_vi\": \"Mặt trời mọc trên bảng đen, người que mở một cuốn sách trắng và bắt đầu viết câu chuyện mới.\", \"narration_vi\": \"Mỗi buổi sáng thức dậy cuộc đời lại trao cho ta một trang giấy mới để tiếp tục viết ước mơ hôm nay\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_4",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_5",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_6",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_7",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_8",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260316_094120_task_9",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\"}",
+      "model": "GEM_PIX_2",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}
