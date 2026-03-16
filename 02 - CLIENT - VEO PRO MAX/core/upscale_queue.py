@@ -1760,6 +1760,7 @@ class UpscaleQueue:
                                         task, [fife_uri],
                                         quality_subfolder=job.target_quality,
                                         generate_thumbnails=False,
+                                        video_index=orig_idx,
                                     )
                                     if dl_paths and dl_paths[0]:
                                         upscale_paths[orig_idx] = dl_paths[0]
@@ -1800,6 +1801,7 @@ class UpscaleQueue:
                                     task, [fife_uri],
                                     quality_subfolder=job.target_quality,
                                     generate_thumbnails=False,
+                                    video_index=orig_idx,
                                 )
                                 if dl_paths and dl_paths[0]:
                                     upscale_paths[orig_idx] = dl_paths[0]
