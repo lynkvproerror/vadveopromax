@@ -271,3 +271,115 @@
 22:08:00 [DEBUG] [RECAP ] [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (425 chars)
 22:08:00 [INFO ] [WS    ] [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
 22:08:33 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+
+======================================================================
+  Session: 2026-03-11 17:15:52
+  Account: veofidelia169@tunxelamorintesa.sbs
+======================================================================
+
+17:15:52 [INFO ] [ENGINE] [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+17:15:52 [DEBUG] [WS    ] [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+17:59:12 [INFO ] [ENGINE] [AutoAssign] 📧 Late-assign email: veofidelia169@tunxelamorintesa.sbs
+17:59:12 [DEBUG] [WS    ] [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+20:22:20 [INFO ] [ENGINE] [AutoAssign] 📧 Late-assign email: veofidelia169@tunxelamorintesa.sbs
+20:22:20 [INFO ] [WS    ] [ExtensionBridge] 📧 Assigned email to extension: veofidelia169@tunxelamorintesa.sbs
+20:22:20 [INFO ] [WS    ] [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+20:22:20 [INFO ] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+20:22:21 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.0)
+20:22:21 [INFO ] [WS    ] [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+20:22:21 [DEBUG] [WS    ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+20:22:21 [INFO ] [WS    ] [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+20:22:21 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:22:21 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+20:22:23 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:22:23 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:22:24 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.0)
+20:22:24 [INFO ] [WS    ] [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+20:22:24 [INFO ] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+20:22:24 [INFO ] [WS    ] [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+20:22:24 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:22:24 [INFO ] [WS    ] [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+20:22:24 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:22:24 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+20:22:24 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:22:24 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:22:26 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.0)
+20:22:26 [INFO ] [WS    ] [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+20:22:26 [DEBUG] [WS    ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+20:22:26 [INFO ] [WS    ] [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+20:22:26 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:22:26 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+20:22:26 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:22:26 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:22:30 [DEBUG] [RECAP ] [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+20:22:30 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:22:30 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:22:30 [WARNING] [ENGINE] [ExtBridge] ⏱️ SLOW response: refresh_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=b17a16dc)
+20:22:30 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+20:22:30 [INFO ] [RECAP ] [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2169 chars)
+20:22:30 [DEBUG] [RECAP ] [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2169 chars) → AM + Pool
+20:22:30 [DEBUG] [RECAP ] [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2169 chars)
+20:22:30 [INFO ] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+20:22:31 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:22:31 [INFO ] [WS    ] [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+20:22:31 [DEBUG] [WS    ] [ExtensionBridge] Browser header probe timed out for veofidelia169@tunxelamorintesa.sbs
+20:22:31 [WARNING] [ENGINE] [ExtBridge] ⏱️ SLOW response: probe_browser_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=644a4196)
+20:22:34 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:22:34 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:22:34 [INFO ] [RECAP ] [ExtensionBridge] ✅ grecaptcha ready for veofidelia169@tunxelamorintesa.sbs (trial token: 2148 chars)
+20:22:34 [DEBUG] [RECAP ] [ReadinessToken] Cached trial token for veofidelia169@tunxelamorintesa.sbs (2148 chars) → AM + Pool
+20:22:34 [DEBUG] [RECAP ] [ExtensionBridge] Cached readiness-check token for veofidelia169@tunxelamorintesa.sbs (2148 chars)
+20:22:34 [INFO ] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+20:22:46 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+20:22:46 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+20:23:07 [WARNING] [WS    ] [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 53s)
+20:23:07 [WARNING] [WS    ] [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 46s)
+20:23:07 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+20:23:07 [DEBUG] [WS    ] [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+20:23:07 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+20:23:22 [WARNING] [WS    ] [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 58s)
+20:23:22 [DEBUG] [WS    ] [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+20:23:22 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+20:23:52 [WARNING] [WS    ] [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 45s)
+20:23:52 [DEBUG] [WS    ] [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+20:23:52 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+
+======================================================================
+  Session: 2026-03-11 20:31:28
+  Account: veofidelia169@tunxelamorintesa.sbs
+======================================================================
+
+20:31:28 [INFO ] [ENGINE] [AutoAssign] 📧 Late-assign email: veofidelia169@tunxelamorintesa.sbs
+20:31:29 [DEBUG] [WS    ] [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+20:31:29 [INFO ] [ENGINE] [AutoAssign] 📧 Late-assign email: veofidelia169@tunxelamorintesa.sbs
+20:31:29 [DEBUG] [WS    ] [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+20:31:46 [INFO ] [ENGINE] [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+20:31:46 [DEBUG] [WS    ] [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+01:33:21 [INFO ] [ENGINE] [AutoAssign] 📧 Late-assign email: veofidelia169@tunxelamorintesa.sbs
+01:33:21 [INFO ] [WS    ] [ExtensionBridge] 📧 Assigned email to extension: veofidelia169@tunxelamorintesa.sbs
+01:33:21 [INFO ] [WS    ] [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+01:33:21 [INFO ] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+01:33:21 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.2)
+01:33:21 [INFO ] [WS    ] [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+01:33:21 [DEBUG] [WS    ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+01:33:21 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+01:33:21 [INFO ] [WS    ] [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+01:33:30 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+01:33:30 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+01:33:31 [DEBUG] [WS    ] [ExtensionBridge] Browser header probe timed out for veofidelia169@tunxelamorintesa.sbs
+01:33:31 [WARNING] [ENGINE] [ExtBridge] ⏱️ SLOW response: probe_browser_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=e7cd44bb)
+01:33:31 [DEBUG] [WS    ] [ExtensionBridge] Browser header probe timed out for veofidelia169@tunxelamorintesa.sbs
+01:33:31 [WARNING] [ENGINE] [ExtBridge] ⏱️ SLOW response: probe_browser_headers for veofidelia169@tunxelamorintesa.sbs took 10.0s (requestId=2c9d6139)
+01:33:37 [INFO ] [RECAP ] [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=True enterprise=True execute=False page=False tokenLen=0
+01:33:37 [INFO ] [RECAP ] [ExtBridge] ⏱️ Response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 6.5s
+01:33:37 [WARNING] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+01:33:37 [INFO ] [ENGINE] [ExtBridge] ⏱️ Response: request_access_token for veofidelia169@tunxelamorintesa.sbs took 6.5s
+01:33:37 [INFO ] [ENGINE] [ExtBridge] ⏱️ Response: request_access_token for veofidelia169@tunxelamorintesa.sbs took 6.5s
+01:33:40 [DEBUG] [WS    ] [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+01:33:40 [DEBUG] [WS    ] [ExtensionBridge] No account found for veofidelia169@tunxelamorintesa.sbs (headers ignored)
+01:33:47 [INFO ] [RECAP ] [ExtensionBridge] ⏳ grecaptcha NOT ready for veofidelia169@tunxelamorintesa.sbs: loaded=True enterprise=True execute=False page=False tokenLen=0
+01:33:47 [WARNING] [RECAP ] [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+01:34:08 [WARNING] [WS    ] [ExtensionBridge] ⚠️ Zombie connection: ['veofidelia169@tunxelamorintesa.sbs'] (no activity 53s)
+01:34:08 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs
+01:34:53 [DEBUG] [WS    ] [ExtensionBridge] Preserved 5 headers for veofidelia169@tunxelamorintesa.sbs on disconnect
+01:34:53 [INFO ] [WS    ] [ExtensionBridge] 📧 Extension disconnected: veofidelia169@tunxelamorintesa.sbs

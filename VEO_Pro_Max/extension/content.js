@@ -3,7 +3,7 @@ if (window.__veoContentLoaded) {
 try { detectAndRegister(); } catch (e) { }
 } else {
 window.__veoContentLoaded = true;
-const MAX_EMAIL_RETRIES = 5;
+const MAX_EMAIL_RETRIES = 12;
 const EMAIL_RETRY_INTERVAL = 3000;
 const HEARTBEAT_INTERVAL = 20000;
 const MOUSE_SIM_MIN = 30000;
@@ -16,6 +16,7 @@ let _heartbeatTimer = null;
 let _mouseSimTimer = null;
 let _scrollTimer = null;
 let _recaptchaWarmTimer = null;
+let _emailObserver = null;
 function detectAndRegister(retryCount = 0) {
 if (window.location.hostname === 'accounts.google.com' ||
 window.location.href.includes('accounts.google.com/ServiceLogin') ||
@@ -27,6 +28,7 @@ const email = extractEmail();
 if (email) {
 _registeredEmail = email;
 chrome.runtime.sendMessage({ action: 'register_tab', email });
+if (_emailObserver) { _emailObserver.disconnect(); _emailObserver = null; }
 startAntiIdle();
 return;
 }
@@ -35,13 +37,34 @@ if (retryCount === 0) {
 if (retryCount < MAX_EMAIL_RETRIES) {
 setTimeout(() => detectAndRegister(retryCount + 1), EMAIL_RETRY_INTERVAL);
 } else {
-chrome.runtime.sendMessage({
-action: String.fromCharCode(0x74,0x61,0x62,0x5f,0x6c,0x6f,0x67,0x6f,0x75,0x74),
-reason: String.fromCharCode(0x65,0x6d,0x61,0x69,0x6c,0x5f,0x6e,0x6f,0x74,0x5f,0x66,0x6f,0x75,0x6e,0x64),
-url: window.location.href,
-});
+startEmailObserver();
 startAntiIdle();
 }
+}
+function startEmailObserver() {
+if (_emailObserver) return;
+const startTime = Date.now();
+const MAX_OBSERVE_MS = 120000;
+_emailObserver = new MutationObserver(() => {
+if (Date.now() - startTime > MAX_OBSERVE_MS) {
+_emailObserver.disconnect();
+_emailObserver = null;
+return;
+}
+const email = extractEmail();
+if (email) {
+_registeredEmail = email;
+chrome.runtime.sendMessage({ action: 'register_tab', email });
+_emailObserver.disconnect();
+_emailObserver = null;
+}
+});
+_emailObserver.observe(document.documentElement, {
+childList: true,
+subtree: true,
+attributes: true,
+attributeFilter: ['data-email', 'aria-label'],
+});
 }
 function extractEmail() {
 const nextDataEl = document.getElementById('__NEXT_DATA__');
