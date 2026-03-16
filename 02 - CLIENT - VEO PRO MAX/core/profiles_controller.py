@@ -1814,21 +1814,15 @@ class ProfilesController:
                     log.error(f"[ProfilesController] Debug browser error: {e}")
                     import traceback
                     traceback.print_exc()
-                    # Kill orphaned Chrome if CDP connect failed
-                    # (prevents zombie Chrome windows after reboot/timeout)
-                    try:
-                        if chrome_pid:
-                            kill_chrome(str(profile_path))
-                            log.error(f"[ProfilesController] 🔒 Killed orphaned Chrome PID={chrome_pid} (CDP connect failed)")
-                    except Exception:
-                        pass
+                    # Chrome may still be alive — leave it running (no orphan kill)
+                    # User only kills browsers on app shutdown
                 finally:
                     self._debug_browsers.pop(email, None)
                     state = "closed" if kill_on_exit else "disconnected"
                     log.debug(f"[ProfilesController] Debug browser {state} for {email}")
                     if on_state_change:
                         try:
-                            on_state_change(email, "closed")
+                            on_state_change(email, state)
                         except Exception:
                             pass
             
@@ -2113,7 +2107,8 @@ class ProfilesController:
             profile_path.mkdir(parents=True, exist_ok=True)
             log.info(f"[ProfilesController] NEW browser profile: {profile_path}")
         
-        # ── Kill any existing Chrome for this profile ──
+        # ── Disconnect any existing Playwright session for this profile ──
+        # (Chrome stays alive — launch_or_reconnect will reconnect to it)
         try:
             if hasattr(self, '_debug_browsers') and session_email in self._debug_browsers:
                 entry = self._debug_browsers[session_email]
@@ -2123,13 +2118,10 @@ class ProfilesController:
                 except Exception:
                     pass
                 self._debug_browsers[session_email] = {"context": None, "playwright": None}
-            
-            from core.chrome_manager import kill_chrome
-            kill_chrome(str(profile_path))
         except Exception as e:
-            log.warning(f"[ProfilesController] Chrome kill warning: {e}")
+            log.warning(f"[ProfilesController] Disconnect warning: {e}")
         
-        time.sleep(2)
+        time.sleep(1)
         
         # ── Initialize debug browser tracking ──
         if not hasattr(self, '_debug_browsers'):
@@ -3051,10 +3043,10 @@ class ProfilesController:
         
         profile_path = Path(profile.browser_profile_path)
         
-        # Step 1: Kill any Chrome using this profile
-        log.info(f"[ProfilesController] Step 1: Killing Chrome for {profile_path.name}...")
+        # Step 1: Disconnect Playwright (Chrome stays alive)
+        log.info(f"[ProfilesController] Step 1: Disconnecting Playwright for {profile_path.name}...")
         try:
-            self.kill_debug_browser(email)
+            self.close_debug_browser(email)
         except Exception:
             pass
         

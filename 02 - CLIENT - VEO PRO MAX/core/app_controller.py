@@ -157,6 +157,7 @@ class AppController:
         self._engine_future = None  # Track engine.start() Future for clean shutdown
         self._keepalive_future = None  # Track keepalive loop Future
         self._warmup_in_progress: set = set()  # Dedup proactive reCAPTCHA warmups
+        self._restart_tracker: Dict[str, dict] = {}  # email → {count, last_time} — anti-loop guard
         
         # ProfilesController — shared singleton (also used by tab_settings)
         from core.profiles_controller import get_profiles_controller
@@ -678,31 +679,13 @@ class AppController:
     def _on_tab_dead(self, email: str, reason: str):
         """Callback from ExtensionBridge when a VEO tab is declared dead.
         
-        GAP #1 fix: Auto-trigger browser restart instead of just logging.
-        Runs in background thread to avoid blocking the event loop.
+        Log only — do NOT kill or restart browser.
+        Chrome stays alive; extension may reconnect on its own.
         """
-        # ★ Guard: don't auto-restart if engine was intentionally stopped
-        if hasattr(self, '_engine') and self._engine and not self._engine.is_running:
-            log.info(f"[AppController] Tab dead for {email} but engine stopped — skipping auto-restart")
-            return
-        
-        log.warning(f"[AppController] 💀 Tab dead: {email} (reason: {reason}) — auto-restarting browser")
+        log.warning(f"[AppController] 💀 Tab dead: {email} (reason: {reason}) — browser stays alive")
         try:
             self._push_browser_status()
             self._push_extension_status()
-            
-            # GAP #1: Auto-restart browser in background thread
-            import threading
-            def _restart():
-                try:
-                    result = self.restart_browser_for(email)
-                    if result:
-                        log.info(f"[AppController] ✅ Browser auto-restarted for {email} after tab death")
-                    else:
-                        log.error(f"[AppController] ❌ Browser auto-restart failed for {email}")
-                except Exception as e:
-                    log.error(f"[AppController] Auto-restart error for {email}: {e}")
-            threading.Thread(target=_restart, name=f"tab-dead-restart-{email}", daemon=True).start()
         except Exception as e:
             log.debug(f"[AppController] Status push failed after tab death: {e}")
     
@@ -1149,128 +1132,17 @@ class AppController:
             )
     
     def _on_debug_browser_state_change(self, email: str, state: str):
-        """Callback when a debug browser changes state (visible/hidden/closed).
+        """Callback when a debug browser changes state (visible/hidden/closed/disconnected).
         
         Called from background browser thread. Thread-safe via _push_browser_status.
+        Log only — do NOT kill or restart browser automatically.
         """
         self._push_browser_status()
         self._push_session_data()
         self._push_extension_status()
         
-        # Auto-restart if browser closed unexpectedly
-        if state == "closed":
-            # ★ Guard: don't auto-restart if engine was intentionally stopped
-            if hasattr(self, '_engine') and self._engine and not self._engine.is_running:
-                log.info(f"[AppController] Browser closed for {email} but engine stopped — skipping auto-restart")
-                return
-            
-            log.warning(f"[AppController] 🔴 Browser closed for {email} — scheduling auto-restart in 5s")
-            import threading
-            
-            def _auto_restart():
-                import time
-                time.sleep(5)
-                
-                # ★ Re-check after 5s sleep — engine may have stopped while waiting
-                if hasattr(self, '_engine') and self._engine and not self._engine.is_running:
-                    log.info(f"[AppController] Engine stopped during wait — cancelling auto-restart for {email}")
-                    return
-                # Verify Chrome is really dead (not just Playwright disconnect)
-                pc = self._profiles_controller
-                if pc:
-                    profile = pc.get_profile(email) if hasattr(pc, 'get_profile') else None
-                    if profile and getattr(profile, 'browser_profile_path', ''):
-                        from pathlib import Path
-                        pid_file = Path(profile.browser_profile_path) / ".chrome_pid.json"
-                        if pid_file.exists():
-                            try:
-                                import json as _json, os as _os
-                                data = _json.loads(pid_file.read_text())
-                                pid = data.get("pid")
-                                if pid:
-                                    _os.kill(pid, 0)  # Signal 0 = check existence
-                                    # PID alive — but is it actually chrome.exe?
-                                    is_chrome = False
-                                    try:
-                                        import subprocess as _sp
-                                        result = _sp.run(
-                                            ['tasklist', '/FI', f'PID eq {pid}', '/FO', 'CSV', '/NH'],
-                                            capture_output=True, text=True, timeout=3
-                                        )
-                                        is_chrome = 'chrome.exe' in result.stdout.lower()
-                                    except Exception:
-                                        is_chrome = True  # Can't verify — assume alive
-                                    
-                                    if is_chrome:
-                                        log.info(f"[AppController] Chrome PID={pid} still alive — skip restart for {email}")
-                                        return
-                                    else:
-                                        log.info(f"[AppController] PID={pid} alive but NOT chrome — proceeding with restart for {email}")
-                            except (ProcessLookupError, PermissionError):
-                                pass  # Process dead — proceed with restart
-                            except Exception:
-                                pass
-                
-                log.info(f"[AppController] 🔄 Auto-restarting browser for {email}...")
-                try:
-                    ok = self.restart_browser_for(email)
-                    if not ok:
-                        log.error(f"[AppController] ❌ restart_browser_for returned False for {email}")
-                        return
-                    log.info(f"[AppController] ✅ Browser auto-restarted for {email}")
-                    
-                    # Re-run extension ensure after restart
-                    self.ensure_all_extensions()
-                    
-                    # ★ Post-restart reconnection (mirrors _hot_add_profile Steps 4-6)
-                    # Without these, tasks stay stuck on stale extension bridge connections
-                    if self._loop:
-                        import asyncio
-                        async def _post_restart_reconnect():
-                            try:
-                                # Step 1: Reconnect AccountManager to new browser
-                                acc = self._multi_account.get_account(email) if self._multi_account else None
-                                if acc:
-                                    try:
-                                        await acc.ensure_browser(headless=True)
-                                        log.info(f"[AutoRestart] ✅ AccountManager reconnected: {email}")
-                                    except Exception as e:
-                                        log.warning(f"[AutoRestart] Browser reconnect error (non-fatal): {e}")
-                                
-                                # Step 2: Assign email to extension bridge
-                                await asyncio.sleep(3)  # Wait for extension to load
-                                if self._extension_bridge:
-                                    if not self._extension_bridge.is_connected(email):
-                                        await self._extension_bridge.assign_email(email)
-                                        log.info(f"[AutoRestart] 📧 Email assigned to extension: {email}")
-                                    else:
-                                        log.info(f"[AutoRestart] ✅ Extension already connected: {email}")
-                                
-                                # Step 3: reCAPTCHA warm-up
-                                if (self._extension_bridge 
-                                        and self._extension_bridge.is_connected(email)):
-                                    asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
-                                    log.info(f"[AutoRestart] 🔥 reCAPTCHA warm-up scheduled: {email}")
-                                
-                                # Step 4: Smart-hide browser
-                                from config.settings import get_settings as _gs
-                                s = _gs()
-                                if getattr(s, 'smart_hide_enabled', True) or getattr(s, 'hide_all_browsers', False):
-                                    if self._profiles_controller:
-                                        self._profiles_controller.hide_debug_browser(email)
-                                
-                                self._push_browser_status()
-                                self._push_extension_status()
-                                log.info(f"[AutoRestart] ✅ Post-restart reconnection complete: {email}")
-                            except Exception as e:
-                                log.error(f"[AutoRestart] ❌ Post-restart reconnect failed: {e}")
-                        
-                        asyncio.run_coroutine_threadsafe(_post_restart_reconnect(), self._loop)
-                    
-                except Exception as e:
-                    log.error(f"[AppController] ❌ Auto-restart failed for {email}: {e}")
-            
-            threading.Thread(target=_auto_restart, daemon=True, name=f"auto-restart-{email}").start()
+        if state in ("closed", "disconnected"):
+            log.info(f"[AppController] Browser {state} for {email} — no auto-restart (by design)")
     
     def restart_browser_for(self, email: str) -> bool:
         """Kill and relaunch Chrome browser for a specific account.
