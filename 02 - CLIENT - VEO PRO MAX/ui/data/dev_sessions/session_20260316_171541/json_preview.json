@@ -1,0 +1,21 @@
+{
+  "group_id": "group_20260316_170942",
+  "workflow": "R2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_r2v_fast_portrait_ultra_relaxed",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260316_170942_task_0",
+      "prompt": "Ba mẹ con ngồi nói chuyện với nhau [thúy kiều] [thúy vân] [kim trọng]",
+      "model": "veo_3_1_r2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

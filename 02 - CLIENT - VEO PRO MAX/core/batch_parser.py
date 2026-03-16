@@ -281,6 +281,12 @@ class BatchParser:
         if m and m.start() > 0:
             text = text[m.start():]
         
+        # ── Case 1.5: Strip [tag] patterns inside JSON objects ──
+        # Handles: {[tấm] "scene_number": 1} → {"scene_number": 1}
+        # Pattern: [word] where word contains no quotes/colons/braces
+        # Avoids stripping actual JSON array values like [1, 2, 3]
+        text = re.sub(r'\[([^\[\]":{}\d][^\[\]":{}]{0,49})\](?=\s*["{,}\]])', '', text)
+        
         # ── Case 2+3: Concatenated arrays → merge
         # First try simple whitespace-only concat: "]  ["
         if re.search(r'\]\s*\[', text):
@@ -311,8 +317,25 @@ class BatchParser:
             if re.search(r'\}\s*,\s*\{', text_stripped):
                 text = '[' + text_stripped + ']'
         
-        # ── Case 6: Trailing comma before ] → remove
+        # ── Case 5.5: Stray non-JSON characters between structural tokens ──
+        # Handles AI copy-paste artifacts:
+        #   {2"key" → {"key"       (stray digit after {)
+        #   ,4"key" → ,"key"       (stray digit after ,)
+        #   ,;"key" → ,"key"       (stray semicolon)
+        #   : 5,"key" → :,"key"    (stray before ,)
+        # Safe: only removes non-whitespace chars between {, and the next "
+        text = re.sub(r'(?<=[{,])\s*[^"\s{}\[\]:,]+\s*(?=")', ' ', text)
+        # Replace semicolons ONLY between structural JSON tokens (not inside strings)
+        # Pattern: after a value-end (", digit, }, ]) + ; + before next key (")
+        text = re.sub(r'(?<=["\d}\]])\s*;\s*(?=")', ', ', text)
+        # Also handle ;{ patterns (between objects)
+        text = re.sub(r'(?<=[}\]])\s*;\s*(?=[{\[])', ', ', text)
+        # Clean up double commas that might result from above
+        text = re.sub(r',\s*,', ',', text)
+        
+        # ── Case 6: Trailing comma before ] or } → remove
         text = re.sub(r',\s*\]', ']', text)
+        text = re.sub(r',\s*\}', '}', text)
         
         # ── Case 7: Last resort — extract individual {...} objects by brace depth ──
         # Handles malformed AI output: broken arrays, duplicate [, stray text between objects.
@@ -349,7 +372,16 @@ class BatchParser:
                             json.loads(fragment)  # validate
                             objects.append(fragment)
                         except (json.JSONDecodeError, ValueError):
-                            pass
+                            # Try deeper sanitization on this fragment
+                            frag = re.sub(r'(?<=[{,])\s*[^"\s{}\[\]:,]+\s*(?=")', ' ', fragment)
+                            frag = re.sub(r'(?<=["\d}\]])\s*;\s*(?=")', ', ', frag)
+                            frag = re.sub(r',\s*,', ',', frag)
+                            frag = re.sub(r',\s*([}\]])', r'\1', frag)
+                            try:
+                                json.loads(frag)
+                                objects.append(frag)
+                            except (json.JSONDecodeError, ValueError):
+                                pass
                         start = -1
             if objects:
                 text = '[' + ', '.join(objects) + ']'

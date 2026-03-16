@@ -1207,6 +1207,9 @@ class _DraggableImageCard(QFrame):
         self._tag_text = tag_text
         self._image_id = image_id
         self._drag_start_pos = None
+        self._is_manual_dragging = False
+        self._popup_hwnd = None
+        self._had_stay_on_top = False
         
         self.setFixedSize(thumb_size + 16, thumb_size + 50)
         self.setStyleSheet(f"""
@@ -1230,6 +1233,7 @@ class _DraggableImageCard(QFrame):
         self.thumb.setFixedSize(thumb_size, thumb_size)
         self.thumb.setAlignment(Qt.AlignCenter)
         self.thumb.setStyleSheet("border: none; background: transparent;")
+        self.thumb.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.card_layout.addWidget(self.thumb)
         
         # Tag label
@@ -1237,6 +1241,7 @@ class _DraggableImageCard(QFrame):
         self.tag_label.setAlignment(Qt.AlignCenter)
         self.tag_label.setStyleSheet(f"color: {Theme.TEXT}; font-size: 10px; border: none;")
         self.tag_label.setWordWrap(False)
+        self.tag_label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.card_layout.addWidget(self.tag_label)
     
     def mousePressEvent(self, event):
@@ -1254,27 +1259,88 @@ class _DraggableImageCard(QFrame):
         if distance < QApplication.startDragDistance():
             return
         
-        from PySide6.QtGui import QDrag, QPixmap
-        from PySide6.QtCore import QMimeData, QUrl
+        # Already in manual drag mode — let mouseMoveEvent continue tracking
+        if self._is_manual_dragging:
+            return
         
-        drag = QDrag(self)
-        mime = QMimeData()
+        print(f"[DragCard] MANUAL DRAG START: tag={self._tag_text}, path={self._image_path}")
+        self._is_manual_dragging = True
         
-        # Set file URL so ImageSlotWidget can accept it
-        mime.setUrls([QUrl.fromLocalFile(self._image_path)])
-        mime.setText(self._tag_text)
-        # Include library image ID for internal category drag
-        if self._image_id:
-            mime.setData(self.MIME_LIBRARY_IMAGE_ID, self._image_id.encode('utf-8'))
-        drag.setMimeData(mime)
+        # Lower popup so widgetAt() can find main window widgets
+        import ctypes
+        popup = self.window()
+        self._popup_hwnd = int(popup.winId())
+        self._had_stay_on_top = bool(popup.windowFlags() & Qt.WindowStaysOnTopHint)
         
-        # Create drag pixmap from thumbnail
-        if self.thumb.pixmap() and not self.thumb.pixmap().isNull():
-            drag.setPixmap(self.thumb.pixmap().scaled(
-                64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        SWP_NOACTIVATE = 0x0010
+        if self._had_stay_on_top:
+            ctypes.windll.user32.SetWindowPos(
+                self._popup_hwnd, -2,  # HWND_NOTOPMOST
+                0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+            )
         
-        drag.exec(Qt.CopyAction | Qt.MoveAction)
+        # Grab mouse globally — all mouse events come to this widget
+        self.grabMouse(Qt.DragCopyCursor)
+        print("[DragCard] grabMouse + popup lowered")
+    
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self._is_manual_dragging:
+            self.releaseMouse()
+            self._is_manual_dragging = False
+            
+            from PySide6.QtWidgets import QApplication
+            from PySide6.QtGui import QCursor
+            
+            global_pos = QCursor.pos()
+            target = QApplication.widgetAt(global_pos)
+            
+            print(f"[DragCard] MANUAL DROP: globalPos={global_pos}, target={type(target).__name__ if target else 'None'}")
+            
+            # Walk up widget tree — check ImageSlotWidget FIRST (it's inside table cells)
+            drop_handled = False
+            widget = target
+            while widget:
+                cls_name = type(widget).__name__
+                # Check for ImageSlotWidget (has set_image_path + image_changed)
+                if hasattr(widget, 'set_image_path') and hasattr(widget, 'image_changed'):
+                    print(f"[DragCard] Found ImageSlotWidget: {cls_name}")
+                    widget.set_image_path(self._image_path, auto_tag=self._tag_text)
+                    drop_handled = True
+                    break
+                # Check for _DroppableTable (prompt table's inner table)
+                if hasattr(widget, 'image_dropped_on_row') and hasattr(widget, 'rowAt'):
+                    local_pos = widget.mapFromGlobal(global_pos)
+                    row_idx = widget.rowAt(local_pos.y())
+                    print(f"[DragCard] Found DroppableTable: row={row_idx}")
+                    widget.image_dropped_on_row.emit(row_idx, self._image_path, self._tag_text)
+                    drop_handled = True
+                    break
+                widget = widget.parent() if hasattr(widget, 'parent') else None
+            
+            if drop_handled:
+                print(f"[DragCard] MANUAL DROP SUCCESS: tag={self._tag_text}")
+            else:
+                print(f"[DragCard] MANUAL DROP CANCELLED (no target found)")
+            
+            # Restore popup topmost status
+            if self._had_stay_on_top:
+                import ctypes
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_NOACTIVATE = 0x0010
+                ctypes.windll.user32.SetWindowPos(
+                    self._popup_hwnd, -1,  # HWND_TOPMOST
+                    0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+                )
+                print("[DragCard] Popup restored to topmost")
+            
+            self._drag_start_pos = None
+            return
+        
         self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
 
 
 class _DroppableGridWidget(QWidget):

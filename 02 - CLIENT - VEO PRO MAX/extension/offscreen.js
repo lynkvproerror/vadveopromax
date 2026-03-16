@@ -15,13 +15,14 @@
 // ── Config ─────────────────────────────────────────────────────────────
 const WEBSOCKET_PORTS = [8765, 8766, 8767];
 const RECONNECT_BASE_MS = 3000;
-const RECONNECT_MAX_MS = 15000;
+const RECONNECT_MAX_MS = 60000;
 
 let ws = null;
 let wsConnected = false;
 let currentPortIndex = 0;
 let reconnectDelay = RECONNECT_BASE_MS;
 let reconnectTimer = null;
+let _reconnectScheduled = false;  // Prevent keepalive from competing
 
 // ── WebSocket Connection ───────────────────────────────────────────────
 
@@ -98,7 +99,10 @@ function connectWebSocket() {
         };
 
         ws.onerror = () => {
-            console.debug(`[Offscreen] WebSocket connection refused on port ${port}`);
+            // Only log if NOT in fast scan (avoids spam)
+            if (!_fastScanActive) {
+                console.debug(`[Offscreen] WebSocket connection refused on port ${port}`);
+            }
         };
     } catch (e) {
         console.debug('[Offscreen] WebSocket connection failed:', e.message);
@@ -153,10 +157,14 @@ async function fastPortScan() {
 
 function scheduleReconnect() {
     if (reconnectTimer) clearTimeout(reconnectTimer);
+    _reconnectScheduled = true;
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
+        _reconnectScheduled = false;
         connectWebSocket();
     }, reconnectDelay);
+    // Apply backoff for NEXT cycle (after full port rotation)
+    reconnectDelay = Math.min(reconnectDelay * 1.5, RECONNECT_MAX_MS);
 }
 
 function wsSend(data) {
@@ -204,7 +212,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
         wsSend({ action: 'ping' });
-    } else {
+    } else if (!_reconnectScheduled && !_fastScanActive) {
+        // Only reconnect if no other reconnect is already scheduled
         connectWebSocket();
     }
 }, 20000);

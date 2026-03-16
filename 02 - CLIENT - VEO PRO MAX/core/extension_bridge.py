@@ -123,6 +123,10 @@ class ExtensionBridge:
         self._FROZEN_WINDOW = 300  # 5 min window for counting frozen events
         self._refresh_cooldown_times: Dict[str, float] = {}  # email → last refresh trigger timestamp (centralized)
 
+        # Tab reload grace period: when extension reloads a tab, suspend zombie
+        # detection for that email to avoid false-positive disconnects
+        self._reload_grace: Dict[str, float] = {}  # email → grace expiry timestamp
+
         # Round-trip timing: track when each request was sent
         self._pending_request_times: Dict[str, float] = {}  # requestId → time.time() when sent
         self._pending_request_actions: Dict[str, str] = {}  # requestId → action name
@@ -1873,6 +1877,19 @@ class ExtensionBridge:
                     level="lightweight" if count == 1 else "full"
                 ))
 
+        elif action == 'tab_reloading':
+            # Extension is reloading a tab — suspend zombie detection for grace period
+            email = msg.get('email', '')
+            grace_ms = msg.get('gracePeriodMs', 60000)
+            reason = msg.get('reason', 'unknown')
+            if email:
+                self._reload_grace[email] = time.time() + (grace_ms / 1000)
+                conn.last_activity = time.time()  # Reset activity to prevent immediate zombie
+                log.info(
+                    f"[ExtensionBridge] ⏸️ Tab reloading for {email} — "
+                    f"zombie detection suspended {grace_ms // 1000}s (reason: {reason})"
+                )
+
         elif action == 'recaptcha_ready':
             # Layer 1: Response to check_recaptcha_ready request
             request_id = msg.get('requestId')
@@ -2143,10 +2160,23 @@ class ExtensionBridge:
                         dead.append(conn)
                         continue
                     
-                    # Zombie detection: no activity for 45s+ (reduced from 90s
-                    # because content.js now sends heartbeats every 20s)
+                    # Zombie detection: no activity for 90s
+                    # Content.js heartbeats every 20s. Tab reload takes 20-40s for
+                    # email detection + reCAPTCHA init. 90s = safe margin for recovery.
                     since_last = time.time() - conn.last_activity
-                    if since_last > 45:
+                    if since_last > 90:
+                        # Check reload grace: if any email on this connection is
+                        # in grace period (tab reloading), skip zombie detection
+                        now_check = time.time()
+                        in_grace = any(
+                            self._reload_grace.get(email, 0) > now_check
+                            for email in conn.registered_emails
+                        )
+                        if in_grace:
+                            # Extend last_activity to prevent re-triggering
+                            conn.last_activity = now_check
+                            continue
+
                         log.warning(
                             f"[ExtensionBridge] ⚠️ Zombie connection: "
                             f"{conn.registered_emails} (no activity {since_last:.0f}s)"

@@ -290,8 +290,7 @@ class GenerationTabBase(QWidget):
         self.prompt_table = PromptTable(**table_kwargs)
         self.prompt_table.edit_clicked.connect(self._on_edit_prompt)
         self.prompt_table.delete_clicked.connect(self._on_delete_prompt)
-        if self.IMAGE_MODE is not None:
-            self.prompt_table.slot_image_changed.connect(self._on_slot_changed)
+        self.prompt_table.slot_image_changed.connect(self._on_slot_changed)
         if self.SHOW_CONTINUATION:
             self.prompt_table.continuation_toggled.connect(self._on_continuation_checkbox_toggled)
         layout.addWidget(self.prompt_table)
@@ -332,13 +331,22 @@ class GenerationTabBase(QWidget):
         prompts = []
         for i, p in enumerate(parsed):
             idx = i + 1
+            # For TEXT format: use raw_line (preserves [tag] references)
+            # For JSON format: use p.text (json.dumps of scene object)
+            is_json = bool(getattr(p, 'scene_number', None) is not None
+                          or getattr(p, 'metadata', {}))
+            display_text = p.text if is_json else (p.raw_line or p.text)
             row = PromptRow(
                 index=idx,
-                text=p.text,
+                text=display_text,
                 continuation_from=old_cont.get(idx) if self.SHOW_CONTINUATION else None,
                 duration=getattr(p, 'duration', None),
                 metadata=getattr(p, 'metadata', {}),
             )
+            # Wire ParsedPrompt.images → PromptRow.image_tags
+            # (BatchParser extracts from [tag], {tag}, @tag, and JSON image/images fields)
+            if getattr(p, 'images', None):
+                row.image_tags = list(p.images)
             prompts.append(row)
         
         self.prompt_table.set_prompts(prompts)

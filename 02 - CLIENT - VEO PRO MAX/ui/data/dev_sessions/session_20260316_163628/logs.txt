@@ -1,0 +1,842 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260316_163628
+Total: 834 entries
+============================================================
+
+[INFO ] 16:18:20 - core.session_manager - [Session] Loaded from 2026-03-16T15:15:57.905750
+[INFO ] 16:18:20 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[DEBUG] 16:18:20 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=[]
+[INFO ] 16:18:20 - veo.tab_queue - [GroupCreate] gid=group_20260316_145937 name='Untitled' children=1 expanded=True
+[DEBUG] 16:18:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:18:25 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:18:26 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:18:26 - veo - [VersionCheck] OK: 2.3.5 >= 2.3.0
+[DEBUG] 16:18:26 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[DEBUG] 16:18:32 - core.app_controller - Sync levanlinh.kma@gmail.com: timeout (browser not ready yet)
+[INFO ] 16:18:32 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 16:18:32 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 16:18:32 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 16:18:32 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: levanlinh.kma@gmail.com...
+[DEBUG] 16:18:32 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for levanlinh.kma@gmail.com...
+[INFO ] 16:18:32 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 16:18:32 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[DEBUG] 16:18:32 - core.chrome_manager - [ChromeManager] No PID file for browser_session_fed78075
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] ✅ Variations seed copied to browser_session_fed78075 (seed=58736 chars, 6 keys)
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_fed78075
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] Chrome launched: PID=48472, port=9223
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 48472
+[INFO ] 16:18:32 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 16:18:32 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 16:18:33 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 16:18:33 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 16:18:33 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 16:18:33 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.4
+[INFO ] 16:18:33 - core.extension_manager - [ExtMgr] Extension v2.3.4 up-to-date — skipping
+[INFO ] 16:18:33 - core.profiles_controller - [ProfilesController] Chrome PID=48472, port=9223 (new)
+[INFO ] 16:18:33 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 60861)
+[INFO ] 16:18:33 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[DEBUG] 16:18:33 - asyncio - Using proactor: IocpProactor
+[INFO ] 16:18:33 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser visible (smart-hide disabled)
+[INFO ] 16:18:33 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 16:18:33 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 16:18:33 - core.account_manager - [levanlinh.kma@gmail.com] ⏳ Debug browser starting, waiting...
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 16:18:34 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 16:18:34 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 16:18:35 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.4)
+[INFO ] 16:18:35 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 16:18:35 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[DEBUG] 16:18:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[INFO ] 16:18:35 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 16:18:35 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 16:18:35 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[DEBUG] 16:18:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[INFO ] 16:18:36 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 16:18:36 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 16:18:36 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[DEBUG] 16:18:38 - core.profiles_controller - [DEBUG] Step 5: Reload done. Headers = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 16:18:38 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 16:18:38 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for levanlinh.kma@gmail.com (persistent, port=9223)
+[INFO ] 16:18:38 - core.account_manager - [levanlinh.kma@gmail.com] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 16:18:38 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 16:18:38 - core.multi_account - All account browsers initialized
+[INFO ] 16:18:38 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 16:18:38 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[DEBUG] 16:18:38 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[DEBUG] 16:18:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:18:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:18:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 16:18:41 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 16:18:41 - core.extension_bridge - [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 16:18:41 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['levanlinh.kma@gmail.com']
+[INFO ] 16:18:41 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 16:18:41 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/8B9E0ABDFF6A910BA6B4F43906...
+[INFO ] 16:18:42 - core.extension_manager - [ExtMgr] Closed extensions tab 8B9E0ABD... (PUT)
+[INFO ] 16:18:42 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 16:18:42 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.4
+[INFO ] 16:18:42 - core.app_controller - [AppController] Extension v2.3.4 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 16:18:42 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 16:18:42 - core.app_controller - [AutoLaunch] Extension check complete: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 16:18:42 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 16:18:42 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 16:18:42 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 16:18:42 - core.app_controller - [AutoLaunch] 📸 Image Library: 30 images, all already uploaded
+[DEBUG] 16:18:42 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: already in progress, skipping duplicate
+[DEBUG] 16:18:42 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:18:42 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:18:42 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 16:18:45 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2169 chars)
+[DEBUG] 16:18:45 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2169 chars) → AM + Pool
+[DEBUG] 16:18:45 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2169 chars)
+[INFO ] 16:18:45 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+[INFO ] 16:18:45 - veo - [Status] ✅ levanlinh.kma@gmail.com: reCAPTCHA ready — account prepared
+[DEBUG] 16:18:45 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:18:49 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:18:49 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:18:49 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:18:56 - core.engine - [TabKeepalive] Pinged 1 tab(s) — Chrome freeze prevention OK
+[INFO ] 16:19:08 - core.app_controller - Profile sync complete: 1 accounts, 1 ready
+[INFO ] 16:19:08 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 16:19:08 - core.app_controller - Profile sync complete: 1 accounts, 1 ready
+[DEBUG] 16:19:08 - asyncio - Using proactor: IocpProactor
+[WARNING] 16:19:08 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 16:19:08 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 16:19:08 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 16:19:08 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 16:19:08 - core.app_controller - [Engine] Processing started
+[INFO ] 16:19:08 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 16:19:08 - core.multi_account - All account browsers initialized
+[INFO ] 16:19:08 - core.multi_account - ⏳ No account has good x-client-data yet (best=8 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 16:19:08 - core.engine - Engine starting: 1 accounts, 1 ready tasks in queue
+[INFO ] 16:19:08 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[INFO ] 16:19:08 - core.engine - [G1:levanlinh.kma@gmail.com] max_foremen=-1, raw_foreman=8, existing=0
+[INFO ] 16:19:08 - core.engine - [Foreman:levanlinh.kma@gmail.com] Capped foremen 8 → 1 (only 1 task(s) in queue)
+[INFO ] 16:19:08 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Spawned CHỦ + 1 Foremen (max_workers=20, output=1, retry=3, timeout=120s)
+[INFO ] 16:19:08 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Started
+[INFO ] 16:19:08 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Refreshing browser headers...
+[DEBUG] 16:19:08 - core.engine - [foreman-levanlin-0] Waiting for supervisor startup...
+[INFO ] 16:19:08 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 16:19:08 - core.engine - [CreditWindow] Recovery timer started
+[INFO ] 16:19:08 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=900s, POLL timeout=900s, scan every 30s
+[INFO ] 16:19:08 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[DEBUG] 16:19:08 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for levanlinh.kma@gmail.com
+[DEBUG] 16:19:08 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:09 - core.engine - [TabKeepalive] Engine processing — yielding...
+[DEBUG] 16:19:09 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:10 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:11 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:12 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:19:12 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:19:12 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:19:12 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:13 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:19:13 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 16:19:14 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 16:19:14 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:19:14 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=1/2)
+[DEBUG] 16:19:14 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 16:19:15 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 16:19:15 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:19:15 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:19:15 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:16 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:17 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:18 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:19:18 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:19 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:19:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:19:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:19:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:19:20 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:21 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:22 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:23 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:19:23 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 16:19:24 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 16:19:24 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ checkAppAvailability: AVAILABLE
+[INFO ] 16:19:24 - core.trpc_client - TRPC: Created project 'My Video Project' → 34d25a61-9888-4d6d-86cd-4ab2ec50ca8e
+[INFO ] 16:19:24 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Project ready: 34d25a61-9888-4d6d-86cd-4ab2ec50ca8e
+[INFO ] 16:19:24 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Pre-warming reCAPTCHA...
+[INFO ] 16:19:24 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2169 chars)
+[DEBUG] 16:19:24 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:19:24 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2169 chars) → AM + Pool
+[DEBUG] 16:19:24 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2169 chars)
+[INFO ] 16:19:24 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 16:19:25 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 16:19:25 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 16:19:25 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2126 chars)
+[INFO ] 16:19:26 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 16:19:26 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 16:19:26 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2126 chars)
+[INFO ] 16:19:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 16:19:27 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 1/2) — validating reCAPTCHA token...
+[INFO ] 16:19:27 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 16:19:27 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 ✅ Probe OK — reCAPTCHA token valid (2105 chars)
+[INFO ] 16:19:27 - core.engine - [PreUpload:levanlinh.kma@gmail.com] Uploading 3 unique image(s) for R2V batch
+[DEBUG] 16:19:27 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:28 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:19:28 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:19:28 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:19:28 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:19:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:19:33 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:19:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 16:19:38 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 16:19:38 - core.engine - [PreUpload]   Cám.png → da74ada9-a873-4658-ac37-bca234aa66b2...
+[DEBUG] 16:19:38 - core.adaptive_burst - [AdaptiveBurst] levanlinh.kma@gmail.com: waiting 4.8s (base=5.5s)
+[DEBUG] 16:19:38 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:19:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:19:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:19:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:19:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:19:43 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:19:43 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:19:48 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:19:53 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:19:54 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 16:19:54 - core.engine - [PreUpload]   Mẹ Cám.png → 2a915612-9508-4a56-b514-9535af9cccd7...
+[DEBUG] 16:19:54 - core.adaptive_burst - [AdaptiveBurst] levanlinh.kma@gmail.com: waiting 6.7s (base=5.5s)
+[DEBUG] 16:19:58 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:01 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:20:03 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:08 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:20:10 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 16:20:10 - core.engine - [PreUpload]   Tấm.png → 8efdfd31-9ee9-4413-9c7c-b4a91772dcc7...
+[INFO ] 16:20:10 - core.engine - [PreUpload:levanlinh.kma@gmail.com] Done: 3/3 uploaded in 42.7s
+[INFO ] 16:20:10 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Startup complete — unblocking foremen
+[DEBUG] 16:20:10 - core.engine - [foreman-levanlin-0] Supervisor startup done — entering main loop
+[INFO ] 16:20:10 - core.dispatcher - [Dispatcher] 📋 Task group_20260316_145937_task_0 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=1)
+[INFO ] 16:20:10 - core.engine - [foreman-levanlin-0] Picked task group_20260316_145937_task_0 [running/init] progress=0% prompt_idx=0 workflow=R2V
+[DEBUG] 16:20:10 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 16:20:10 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260316_145937_task_0: uploading 3 image(s) [init] progress=0%
+[DEBUG] 16:20:10 - core.adaptive_burst - [AdaptiveBurst] levanlinh.kma@gmail.com: waiting 4.5s (base=5.5s)
+[DEBUG] 16:20:13 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:20:14 - core.engine - Uploading 3 image(s) for task group_20260316_145937_task_0 (parallel, v2)
+[INFO ] 16:20:14 - core.engine -   Path hit: Tấm.png → 8efdfd31-9ee9-4413-9c7c-b4a91772dcc7 (skip upload)
+[INFO ] 16:20:14 - core.engine -   Path hit: Cám.png → da74ada9-a873-4658-ac37-bca234aa66b2 (skip upload)
+[INFO ] 16:20:14 - core.engine -   Path hit: Mẹ Cám.png → 2a915612-9508-4a56-b514-9535af9cccd7 (skip upload)
+[INFO ] 16:20:14 - core.engine -   ✅ 3/3 uploaded, 0 failed (parallel v2)
+[DEBUG] 16:20:14 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:20:14 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] xcd cache=8 chars (OK — Extension fetch auto-injects real xcd)
+[INFO ] 16:20:15 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2148 chars)
+[DEBUG] 16:20:15 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:20:15 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2148 chars) → AM + Pool
+[DEBUG] 16:20:15 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2148 chars)
+[INFO ] 16:20:15 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.3s)
+[INFO ] 16:20:15 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 16:20:15 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 16:20:15 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2105 chars)
+[INFO ] 16:20:16 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 16:20:16 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 16:20:16 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2105 chars)
+[INFO ] 16:20:17 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 16:20:17 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 0)
+[INFO ] 16:20:17 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260316_145937_task_0: adaptive delay (5.5s base) → submit attempt 1/11 [init] progress=5%
+[DEBUG] 16:20:17 - core.adaptive_burst - [AdaptiveBurst] levanlinh.kma@gmail.com: waiting 4.3s (base=5.5s)
+[DEBUG] 16:20:17 - core.task_journal - [TaskJournal] Snapshot saved — 1 tasks, save #1
+[DEBUG] 16:20:18 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:20:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:20:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:20:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 16:20:21 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260316_145937_task_0: submitting via Extension (page context fetch)
+[INFO ] 16:20:21 - core.engine - [Foreman:levanlinh.kma@gmail.com] 📦 Request body for R2V:
+  endpoint = R2V
+  body keys = ['mediaGenerationContext', 'clientContext', 'requests', 'useV2ModelConfig']
+  timeout = 120s
+[DEBUG] 16:20:21 - core.engine - [Foreman:levanlinh.kma@gmail.com] body summary: prompt='{"scene_number": 5, "duration": "8s", "prompt_en": "chalkboa', model=veo_3_1_r2v_fast_portrait_ultra_relaxed, outputs=1
+[DEBUG] 16:20:23 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:27 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:20:27 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:20:27 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:20:28 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:20:32 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt R2V for levanlinh.kma@gmail.com: HTTP 200 (token 2190 chars)
+[WARNING] 16:20:32 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 10.3s (requestId=977ec96b)
+[INFO ] 16:20:32 - core.engine - [T2I-Parse] 0 image(s), mediaIds=[], media keys=[['mediaMetadata', 'name', 'workflowId', 'workflowStepId']]
+[DEBUG] 16:20:32 - core.account_manager - [levanlinh.kma@gmail.com] reCAPTCHA token invalidated (single-use consumed)
+[INFO ] 16:20:32 - core.engine - [Engine] Task group_20260316_145937_task_0: result.success=True, operation_name=093b5f21-7669-4e92-b524-c6fce3ffe5c0
+[INFO ] 16:20:32 - core.engine - [Foreman:levanlinh.kma@gmail.com] Submitted 1 ops → concurrent pipeline (first=093b5f21-766...)
+[INFO ] 16:20:32 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260316_145937_task_0: Slot #0 ← Worker #1 ← op 093b5f21-7669-4e...
+[INFO ] 16:20:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:20:33 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:20:38 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=1, accounts={'levanlinh.kma@gmail.com': 1}
+[DEBUG] 16:20:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:20:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:20:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:20:43 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:48 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:50 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 16:20:51 - core.api_client - [API RESPONSE] 200 keys=['operations']
+[INFO ] 16:20:51 - core.api_client - [API RESPONSE] operations count=1
+[INFO ] 16:20:51 - core.api_client - [API RESPONSE] ops[0] keys=['operation', 'sceneId', 'status']
+[INFO ] 16:20:51 - core.api_client - [API RESPONSE] ops[0] = {"operation": {"name": "093b5f21-7669-4e92-b524-c6fce3ffe5c0"}, "sceneId": "", "status": "MEDIA_GENERATION_STATUS_ACTIVE"}
+[INFO ] 16:20:51 - core.engine - [Worker:levanlinh.kma@gmail.com:#0] MEDIA_GENERATION_STATUS_PENDING → MEDIA_GENERATION_STATUS_ACTIVE
+[DEBUG] 16:20:53 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:20:58 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:21:03 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:21:08 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 16:21:08 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:21:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=1, accounts={'levanlinh.kma@gmail.com': 1}
+[INFO ] 16:21:09 - core.api_client - [API RESPONSE] 200 keys=['operations', 'remainingCredits']
+[INFO ] 16:21:09 - core.api_client - [API RESPONSE] operations count=1
+[INFO ] 16:21:09 - core.api_client - [API RESPONSE] ops[0] keys=['operation', 'sceneId', 'mediaGenerationId', 'status']
+[INFO ] 16:21:09 - core.api_client - [API RESPONSE] ops[0] = {"operation": {"name": "093b5f21-7669-4e92-b524-c6fce3ffe5c0", "error": {"code": 13, "message": "PUBLIC_ERROR_HIGH_TRAFFIC"}}, "sceneId": "", "mediaGenerationId": "CAUSJDM0ZDI1YTYxLTk4ODgtNGQ2ZC04NmNkLTRhYjJlYzUwY2E4ZRokOTRjNTJhMmYtNDkzNy00MzMyLWFjNGItOTFhMmViMGI2MWY1IgNDQUUqJDA5M2I1ZjIxLTc2NjktNGU5Mi1iNTI0LWM2ZmNlM2ZmZTVjMA", "status": "MEDIA_GENERATION_STATUS_FAILED"}
+[WARNING] 16:21:09 - core.engine - [Worker:levanlinh.kma@gmail.com:#0] Op FAILED: PUBLIC_ERROR_HIGH_TRAFFIC
+[WARNING] 16:21:09 - core.engine - [Worker:levanlinh.km:V0] Poll returned no result (failed/timeout): PUBLIC_ERROR_HIGH_TRAFFIC
+[INFO ] 16:21:09 - core.engine - [Finalizer:levanlinh.kma@gmail.com] Task group_20260316_145937_task_0: 0/1 succeeded, 1 failed
+[WARNING] 16:21:09 - core.dispatcher - [Dispatcher] ❌ Task group_20260316_145937_task_0 → FAILED (account=levanlinh.kma@gmail.com, error=PUBLIC_ERROR_HIGH_TRAFFIC, running_count=0)
+[INFO ] 16:21:09 - core.app_controller - [AutoStop] All tasks finished — stopping engine automatically
+[INFO ] 16:21:09 - core.app_controller - [TabKeepalive] Resumed — engine stopped
+[INFO ] 16:21:09 - veo - [Status] Stopping…
+[INFO ] 16:21:09 - core.engine - Engine stop requested — signaling workers to exit
+[INFO ] 16:21:09 - core.upscale_queue - [UpscaleQueue] Stopped — completed=0, failed=0
+[INFO ] 16:21:09 - core.engine - UpscaleQueue stopped
+[INFO ] 16:21:09 - core.engine - Engine stop signal sent — waiting for pipelines to finish
+[INFO ] 16:21:09 - core.engine - [TabKeepalive] Engine idle — resuming tab keepalive
+[DEBUG] 16:21:09 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:21:10 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Stopped
+[DEBUG] 16:21:13 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:21:14 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 16:21:17 - core.task_journal - [TaskJournal] Snapshot saved — 1 tasks, save #2
+[INFO ] 16:21:18 - core.engine - [CircuitBreaker] Monitor stopped
+[DEBUG] 16:21:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:21:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:21:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:21:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:21:24 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:21:26 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 16:21:26 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 16:21:26 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 16:21:26 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 16:21:26 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 16:21:26 - core.app_controller - [Engine] Processing started
+[INFO ] 16:21:26 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=900s, POLL timeout=900s, scan every 30s
+[DEBUG] 16:21:26 - core.engine - [TabKeepalive] Engine processing — yielding...
+[DEBUG] 16:21:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:21:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:21:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:21:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:21:37 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:21:37 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:21:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:21:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:21:39 - core.app_controller - [Shutdown] Engine re-started (gen 1→2) — skipping teardown
+[INFO ] 16:21:39 - veo - [Status] Processing stopped
+[DEBUG] 16:21:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:21:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:21:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:21:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:21:41 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 16:21:41 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:21:41 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:21:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:21:48 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 1998 chars
+[INFO ] 16:21:48 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:21:48 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:21:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:21:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:21:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:22:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:22:08 - core.engine - [CreditWindow] Recovery timer stopped
+[INFO ] 16:22:08 - core.engine - Engine stopped — worker/foreman tracking reset
+[DEBUG] 16:22:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:22:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:22:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:22:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:22:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:22:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:22:24 - core.dispatcher - [ForceRetryVideo] Task group_20260316_145937_task_0 video 0: quality=failed, upscale_status=
+[INFO ] 16:22:24 - core.dispatcher - [ForceRetryVideo] Reset video_outputs[0] for task group_20260316_145937_task_0
+[INFO ] 16:22:24 - core.dispatcher - [ForceRetryVideo] Added replacement to group 'Untitled' (now 2 tasks)
+[INFO ] 16:22:24 - core.dispatcher - [ForceRetryVideo] Created replacement task group_20260316_145937_task_0_retry_v0_162224364424 (1 video, prompt_index=9000) → will replace video_outputs[0]
+[INFO ] 16:22:24 - core.dispatcher - [Dispatcher] ♻️ force_retry_all_failed_videos: retried 1 video(s)
+[DEBUG] 16:22:24 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:22:24 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:22:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:22:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:22:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:22:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:22:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:22:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:22:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:22:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:22:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:22:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:22:59 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:23:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:23:09 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:23:09 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:23:09 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:23:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:23:15 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 16:23:15 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:23:15 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:23:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:23:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:23:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:23:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:23:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:23:24 - core.dispatcher - [ForceRetry] Cancelled orphan replacement group_20260316_145937_task_0_retry_v0_162224364424
+[INFO ] 16:23:24 - core.dispatcher - [ForceRetry] Cleaned 1 replacement task(s) for group_20260316_145937_task_0
+[INFO ] 16:23:24 - core.dispatcher - [ForceRetry] Task group_20260316_145937_task_0: found 0 children: []
+[INFO ] 16:23:24 - core.dispatcher - [ForceRetry] Task group_20260316_145937_task_0: state=ready, prompt_index=0 preserved, all generated data purged
+[INFO ] 16:23:24 - core.dispatcher - [ForceRetry] Task group_20260316_145937_task_0 fully purged and re-queued
+[DEBUG] 16:23:24 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:23:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:23:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[INFO ] 16:23:34 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:23:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:23:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:23:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:23:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:23:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:23:40 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 16:23:41 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:23:41 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 16:23:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:23:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:24:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:24:09 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:24:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:24:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:24:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:24:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:24:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:24:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:24:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:24:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:24:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:24:36 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:24:36 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:24:36 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:24:37 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:24:37 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:24:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:24:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:24:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:24:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:24:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:24:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:24:43 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:24:43 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:24:43 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[INFO ] 16:24:44 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:24:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:24:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:25:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:25:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:25:19 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:25:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:25:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:25:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:25:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:25:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:25:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:25:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:25:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:25:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:25:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:25:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:25:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:25:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:25:54 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:25:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:25:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:26:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:26:04 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2212 chars
+[INFO ] 16:26:04 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:26:04 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:26:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:26:10 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 16:26:10 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:26:10 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:26:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:26:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:26:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:26:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:26:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:26:29 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:26:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:26:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:26:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:26:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:26:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:26:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:26:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:26:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:26:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:26:59 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:27:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:27:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:27:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:27:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:27:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:27:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:27:29 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:27:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:27:32 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2212 chars
+[INFO ] 16:27:32 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:27:32 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[INFO ] 16:27:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:27:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:27:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:37 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:27:37 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:27:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 16:27:38 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 16:27:38 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:27:38 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:27:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:27:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:27:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:27:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:27:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:27:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:27:59 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:28:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:28:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:28:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:28:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:28:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:28:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:28:29 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:28:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:28:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:28:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:28:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:28:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:28:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:28:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:28:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:50 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 16:28:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:28:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 16:28:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:28:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:28:59 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:28:59 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:28:59 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:29:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:29:04 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[INFO ] 16:29:05 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:29:05 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:29:05 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:29:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:29:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:29:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:29:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:29:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:29:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:29:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:29:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:29:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:29:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:29:39 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:29:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:29:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:29:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:29:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:29:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:30:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:30:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:30:14 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:30:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:30:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:30:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:30:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:30:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:30:27 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2212 chars
+[INFO ] 16:30:27 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:30:27 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:30:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:30:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[INFO ] 16:30:33 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:30:33 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:30:33 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:30:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:30:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:37 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:30:37 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:30:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:30:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:30:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:30:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:30:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:30:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:30:44 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:30:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:30:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:31:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:31:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:31:14 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:31:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:31:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:31:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:31:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:31:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:31:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:31:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:31:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:31:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:31:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:31:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:31:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:31:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:31:44 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:31:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:31:54 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:31:54 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:31:54 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:31:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:31:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:32:00 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 16:32:00 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:32:00 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:32:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:32:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:32:19 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:32:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:32:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:32:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:32:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:32:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:32:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:32:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:32:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:32:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:32:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:32:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:32:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:32:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:32:54 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:32:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:32:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:33:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:33:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:33:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:33:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:33:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:33:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:33:22 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 16:33:22 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:33:22 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[INFO ] 16:33:24 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:33:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:33:28 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2233 chars
+[INFO ] 16:33:28 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:33:28 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:33:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:33:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:33:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:33:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:37 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:33:37 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:33:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:33:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:33:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:33:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:33:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:33:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:33:54 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:33:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:33:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:34:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:34:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:15 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 16:34:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:34:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 16:34:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:34:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:34:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:34:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:34:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:34:24 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:34:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:34:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:34:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:34:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:34:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:34:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:34:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:34:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:34:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:34:49 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2190 chars
+[INFO ] 16:34:49 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:34:49 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:34:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:34:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:34:56 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 16:34:56 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:34:56 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[INFO ] 16:34:59 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:35:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:09 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:35:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:35:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:35:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:35:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:35:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:35:29 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:35:31 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:35:32 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=17s,cap=✅) | conns=1, pending=0
+[DEBUG] 16:35:35 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 16:35:36 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:39 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:35:39 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:35:39 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 16:35:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 16:35:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:35:56 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:35:59 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 16:36:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:36:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:36:09 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 16:36:11 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:36:16 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:36:17 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2233 chars
+[INFO ] 16:36:17 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:36:17 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:36:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 16:36:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 16:36:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:36:21 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 16:36:21 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[INFO ] 16:36:23 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 16:36:23 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 16:36:23 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 16:36:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_145937']
+[DEBUG] 16:36:26 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 16:36:28 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

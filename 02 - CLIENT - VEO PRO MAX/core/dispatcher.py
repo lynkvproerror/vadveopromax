@@ -129,6 +129,7 @@ class Task:
     
     # Image references (for I2V, R2V, I2I)
     image_uris: List[str] = field(default_factory=list)
+    image_uris_account: Optional[str] = None  # Email of account that uploaded image_uris
     image_paths: List[str] = field(default_factory=list)  # Local paths from [tag] resolution
     
     # Continuation
@@ -1262,6 +1263,7 @@ class Dispatcher:
             "output_count": task.output_count,
             "duration_seconds": task.duration_seconds,
             "image_uris": list(task.image_uris),
+            "image_uris_account": task.image_uris_account,
             "image_paths": list(task.image_paths),
             "download_quality": task.download_quality,
             "output_folder": task.output_folder,
@@ -1435,8 +1437,9 @@ class Dispatcher:
         task.progress = 0
         task.retry_attempts += 1
         # Clear stale media IDs so engine re-uploads from image_paths.
-        # MediaIds are account-bound and expire between sessions.
+        # MediaIds are account-bound — cross-account retry needs fresh upload.
         task.image_uris.clear()
+        task.image_uris_account = None
         task.image_upload_status = ""
         # DD1: Relaxed D2 — allow cross-account retry
         task.required_account = None
@@ -1831,6 +1834,7 @@ class Dispatcher:
         task.continuation_frame_uri = None  # Force fresh extraction
         task.continuation_frame_local_path = None  # Force fresh extraction
         task.image_uris.clear()             # Force re-upload of images
+        task.image_uris_account = None
         # State depends on parent dependency
         if task.parent_task_id:
             parent = self._all_tasks.get(task.parent_task_id)
@@ -1968,6 +1972,7 @@ class Dispatcher:
                 child.continuation_frame_uri = None
                 child.continuation_frame_local_path = None
                 child.image_uris.clear()
+                child.image_uris_account = None
                 child.image_upload_status = ""
                 child.output_uris.clear()
                 child.thumbnail_paths.clear()
@@ -2335,6 +2340,7 @@ class Dispatcher:
                     duration_seconds=td.get("duration_seconds", 8),
                     seed=td.get("seed"),
                     image_uris=td.get("image_uris", []),
+                    image_uris_account=td.get("image_uris_account"),
                     image_paths=td.get("image_paths", []),
                     parent_task_id=td.get("parent_task_id"),
                     continuation_frame_uri=td.get("continuation_frame_uri"),
@@ -2442,6 +2448,7 @@ class Dispatcher:
                     # from local files when available.
                     if task.image_paths:
                         task.image_uris = []
+                        task.image_uris_account = None
                         task.image_upload_status = ""
                     self._enqueue_task(task)
                 

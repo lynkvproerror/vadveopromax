@@ -662,6 +662,12 @@ def main():
             github_create_release(version, zip_files)
         else:
             print("  [SKIP] No ZIP files to upload")
+
+        # Step 9.5: Push version.json to PUBLIC repo (vadveopromax)
+        # Origin = private repo (veo-pro-max), but clients fetch from PUBLIC repo.
+        # Without this step, clients would never see the update!
+        print(f"\n[9.5] Pushing version.json to PUBLIC repo (vadveopromax)...")
+        push_version_to_public_repo()
     else:
         print("\n[SKIP] Steps 7-9 skipped (--skip-publish)")
 
@@ -824,6 +830,94 @@ def github_create_release(version: str, zip_files: list):
     print(f"    --notes-file \"{changelog_file}\" {assets}")
     print(f"")
     print(f"  Or: https://github.com/{GITHUB_REPO}/releases/new?tag={tag}")
+
+
+# ═══════════════════════════════════════════════════════════
+#  9.5) Push version.json to PUBLIC repo
+# ═══════════════════════════════════════════════════════════
+
+def push_version_to_public_repo():
+    """Push version.json to the PUBLIC distribution repo (vadveopromax).
+    
+    The private repo (origin=veo-pro-max) and public repo (vadveopromax)
+    have UNRELATED git histories, so normal `git push` won't work.
+    Instead, use GitHub Contents API via `gh` CLI to update the file.
+    
+    This is CRITICAL: without this, clients will never see the update!
+    """
+    version_path = OUTPUT_DIR / "version.json"
+    if not version_path.exists():
+        print("  [SKIP] version.json not found in output")
+        return
+    
+    if not shutil.which("gh"):
+        print("  [WARN] gh CLI not found — update version.json on vadveopromax manually!")
+        print(f"  File: {version_path}")
+        return
+    
+    try:
+        import base64
+        
+        # Read local version.json content
+        content_bytes = version_path.read_bytes()
+        content_b64 = base64.b64encode(content_bytes).decode("ascii")
+        
+        # Get current file SHA from public repo (required for update)
+        result = subprocess.run(
+            ["gh", "api", f"repos/{GITHUB_REPO}/contents/version.json",
+             "--jq", ".sha"],
+            capture_output=True, text=True, timeout=30,
+            env={**os.environ, "GH_PROMPT_DISABLED": "true"},
+        )
+        
+        if result.returncode != 0:
+            print(f"  [ERR] Cannot get current SHA: {result.stderr[:100]}")
+            return
+        
+        current_sha = result.stdout.strip()
+        
+        # Read version for commit message
+        vdata = json.loads(content_bytes.decode("utf-8"))
+        version = vdata.get("version", "?")
+        
+        # Build API request body
+        body = json.dumps({
+            "message": f"Update version.json to v{version}",
+            "content": content_b64,
+            "sha": current_sha,
+        })
+        
+        # Write body to temp file (avoid shell escaping issues)
+        body_path = os.path.join(tempfile.gettempdir(), "gh_version_body.json")
+        with open(body_path, "w", encoding="utf-8") as f:
+            f.write(body)
+        
+        # Update via GitHub Contents API
+        result = subprocess.run(
+            ["gh", "api", f"repos/{GITHUB_REPO}/contents/version.json",
+             "--method", "PUT",
+             "--input", body_path,
+             "--jq", ".commit.sha"],
+            capture_output=True, text=True, timeout=30,
+            env={**os.environ, "GH_PROMPT_DISABLED": "true"},
+        )
+        
+        # Cleanup temp file
+        try:
+            os.unlink(body_path)
+        except Exception:
+            pass
+        
+        if result.returncode == 0:
+            commit_sha = result.stdout.strip()[:12]
+            print(f"  [OK] version.json v{version} pushed to {GITHUB_REPO} (commit: {commit_sha})")
+        else:
+            print(f"  [ERR] API update failed: {result.stderr[:200]}")
+            print(f"  Manual: update version.json at https://github.com/{GITHUB_REPO}")
+            
+    except Exception as e:
+        print(f"  [ERR] Push to public repo failed: {e}")
+        print(f"  Manual: copy {version_path} to https://github.com/{GITHUB_REPO}")
 
 
 if __name__ == "__main__":

@@ -580,3 +580,110 @@ Logic: restore chỉ merge files mới — nếu new ZIP đã bundle ffmpeg thì
 - Chỉ cần update khi có security fix hoặc feature mới cần hỗ trợ
 - Để update: download mới → replace `02/tools/ffmpeg/ffmpeg.exe` + `ffprobe.exe` → rebuild
 
+---
+
+## 📌 Rule #12: Extension Runtime Lifecycle (Auto-Update → Reload)
+
+> **Status**: ✅ ĐÃ TRIỂN KHAI — 3 layers tự động, không cần user can thiệp.
+
+### 12a. Tổng quan Pipeline
+
+```
+[Remote Check] → [Download] → [Disk Hot-Replace] → [Browser Reload] → [Version Verify]
+     30min          ~50KB       no restart needed     per Chrome type     CDP fast check
+```
+
+### 12b. Layer 1 — Remote Check + Download (`auto_updater.py`)
+
+| Step | Function | Mô tả |
+|------|----------|-------|
+| 1 | `check_now()` | Fetch `version.json` từ GitHub CDN (cache-bust) |
+| 2 | `_on_check_result()` | So sánh `APP_VERSION` + `ext_version` với local |
+| 3 | `download_update()` | Download `ext_download_url` (~50KB) + SHA-256 verify |
+
+**Version check logic:**
+
+| APP_VERSION | ext_version | Kết quả |
+|-------------|-------------|---------|
+| `app < remote` | any | `"full"` — download full ZIP (~67MB) |
+| `app == remote` | `ext < remote` | `"ext_only"` — download ext ZIP (~50KB) |
+| `app == remote` | `ext == remote` | `"up_to_date"` — skip |
+
+### 12c. Layer 2 — Disk Hot-Replace (`_ExtUpdateWorker`)
+
+Chạy trong QThread, KHÔNG block UI:
+
+```
+1. Validate ZIP (testzip)
+2. Extract → temp dir
+3. Delete old extension/ (3 retries for file locks)
+4. Copy new extension/
+5. Clear stale %TEMP%\veo_extension cache
+6. Emit ext_done signal
+```
+
+> ⚠️ **KHÔNG restart app.** Extension files thay thế trên ổ đĩa, Chrome giữ code CŨ trong memory
+> cho đến khi Layer 3 (browser reload) thực hiện.
+
+### 12d. Layer 3 — Browser Reload (`app_controller.on_extension_hot_updated()`)
+
+**Signal chain** (tự động, full):
+
+```
+_ExtUpdateWorker.ext_done
+  → AutoUpdater._on_ext_update_done()
+    → AutoUpdater.ext_update_applied.emit()
+      → settings_sections._on_ext_update_applied()
+        → controller.on_extension_hot_updated()   ← reload ALL browsers
+```
+
+**Per Chrome type:**
+
+| Chrome type | Strategy | Restart? |
+|-------------|----------|----------|
+| **Branded Chrome** | WS `chrome.runtime.reload()` → CDP reinstall fallback | ❌ No |
+| **CfT** | `restart_browser_for()` (--load-extension only loads at launch) | ✅ Yes |
+
+**Post-reload:** `_get_installed_version_fast()` → nếu mismatch → `install_if_needed()` tự fixup.
+
+### 12e. Startup Extension Check (`extension_manager.py`)
+
+Khi Chrome mới launch (startup hoặc reconnect), `install_if_needed()` tự động:
+
+```
+1. is_extension_loaded(port)?     → No → reinstall_extension()
+2. Version match (fast CDP)?      → Mismatch → _update_unpacked_extension()
+3. Fast update failed?            → reinstall_extension() (full)
+```
+
+Batch check qua `app_controller.ensure_all_extensions()` — iterate ALL Branded Chrome profiles.
+
+### 12f. Key Files
+
+| File | Vai trò |
+|------|---------|
+| `core/auto_updater.py` | Remote check, download, hot-replace |
+| `core/extension_manager.py` | CDP install/uninstall/version check |
+| `core/app_controller.py` | Orchestrator: `on_extension_hot_updated()`, `reload_extension_for()` |
+| `core/extension_bridge.py` | WS hot-reload, version mismatch detection |
+| `extension/background.js` | Service Worker: handle `reload_extension` action |
+
+### 12g. Debugging Extension Issues
+
+**Service Worker crash (Status code: 2):**
+- Nguyên nhân phổ biến: **syntax error** hoặc **duplicate case label** trong `background.js`
+- Chrome MV3 strict mode reject toàn bộ SW nếu có lỗi parse
+- Fix: kiểm tra `chrome://extensions` → Errors button → xem chi tiết
+
+**reCAPTCHA fail sau extension update:**
+- SW crash → extension không register → reCAPTCHA widget không init
+- Check: bridge logs `[ExtensionBridge] Extension registered` có xuất hiện không
+
+**Extension không reload trên browser:**
+- Verify signal chain: `ext_update_applied` emit → `on_extension_hot_updated()` called
+- Check: logs `[ExtHotUpdate] Reloading extension on N browser(s)`
+
+> [!IMPORTANT]
+> **Khi sửa `background.js`:** PHẢI kiểm tra KHÔNG có duplicate case labels trong switch statement.
+> Chrome MV3 strict mode sẽ reject toàn bộ Service Worker nếu có duplicate.
+

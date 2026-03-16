@@ -156,6 +156,20 @@ async function safeTabReload(tabId, reason, bypassCache = false) {
   }
 
   try {
+    // ★ Notify Python to suspend zombie detection for this tab's email
+    // Tab reload kills content.js → 20-40s email detection gap → Python would
+    // false-positive zombie-detect and kill the WS connection
+    const state = tabState[tabId];
+    if (state && state.email) {
+      wsSend({
+        action: 'tab_reloading',
+        email: state.email,
+        tabId: tabId,
+        gracePeriodMs: 60000, // 60s grace for reload + email detect + reCAPTCHA init
+        reason: reason,
+      });
+    }
+
     await chrome.tabs.reload(tabId, { bypassCache });
     tabLastReloadTime[tabId] = now;
     console.log(`[VEO Bridge] 🔄 Reloaded tab ${tabId} (reason: ${reason})`);
@@ -163,6 +177,38 @@ async function safeTabReload(tabId, reason, bypassCache = false) {
   } catch (e) {
     console.debug(`[VEO Bridge] Tab ${tabId} reload failed: ${e.message}`);
     return false;
+  }
+}
+
+
+/**
+ * Send a message to a content script with auto-retry on failure.
+ * If first attempt fails (content script not loaded), re-injects content.js
+ * and retries after 3s.
+ */
+async function sendMessageWithRetry(tabId, message, maxRetries = 1) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await chrome.tabs.sendMessage(tabId, message);
+    } catch (e) {
+      if (attempt < maxRetries) {
+        console.log(
+          `[VEO Bridge] 🔁 sendMessage failed for tab ${tabId}, ` +
+          `re-injecting content.js (retry ${attempt + 1}/${maxRetries})`
+        );
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content.js'],
+          });
+          await new Promise(r => setTimeout(r, 3000)); // Wait for content.js to init
+        } catch (injectErr) {
+          console.debug(`[VEO Bridge] Re-inject failed: ${injectErr.message}`);
+        }
+      } else {
+        throw e;
+      }
+    }
   }
 }
 
@@ -619,20 +665,6 @@ async function handleAppMessage(msg) {
       break;
     }
 
-    case 'reload_extension': {
-      // Reload extension via chrome.runtime.reload()
-      // Called from Python extension_bridge when extension code is updated.
-      console.log('[VEO Bridge] 🔄 Reloading extension...');
-      wsSend({
-        action: 'extension_reloading',
-        requestId: msg.requestId || '',
-      });
-      // Brief delay to let the response send before reload
-      setTimeout(() => {
-        chrome.runtime.reload();
-      }, 500);
-      break;
-    }
 
     case 'check_recaptcha_ready': {
       // Layer 1: Deep readiness check — trial-execute a real token.
@@ -2515,13 +2547,13 @@ async function lightweightRefreshAll() {
   for (const [tabId, state] of Object.entries(tabState)) {
     if (!state.email) continue;
     try {
-      await chrome.tabs.sendMessage(parseInt(tabId), { action: 'lightweight_header_refresh' });
+      await sendMessageWithRetry(parseInt(tabId), { action: 'lightweight_header_refresh' });
       console.log(`[VEO Bridge] 🔄 Lightweight refresh for tab ${tabId} (${state.email})`);
     } catch (e) {
-      // Content script not responding — try full reload as fallback
+      // Content script not responding even after retry — try full reload as fallback
       console.debug(`[VEO Bridge] Lightweight refresh failed for tab ${tabId}, using full reload`);
       try {
-        await chrome.tabs.reload(parseInt(tabId), { bypassCache: false });
+        await safeTabReload(parseInt(tabId), 'lightweight-refresh-failed');
       } catch (re) {
         console.debug(`[VEO Bridge] Full reload also failed for tab ${tabId}: ${re.message}`);
       }

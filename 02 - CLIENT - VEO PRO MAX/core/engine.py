@@ -3478,21 +3478,34 @@ class Engine:
                         # BUG-35: Check stop before image upload sequence
                         if self._stop_event.is_set():
                             break
-                        if task.image_uris:
-                            log.info(
-                                f"[Foreman:{account.email}] Task {task.id}: clearing {len(task.image_uris)} "
-                                f"stale image_uris — will re-upload from image_paths"
+                        # Smart reuse: skip upload if same account already uploaded
+                        if task.image_uris and task.image_uris_account == account.email:
+                            log.debug(
+                                f"[Foreman:{account.email}] Task {task.id}: reusing "
+                                f"{len(task.image_uris)} existing image_uris "
+                                f"(uploaded by same account)"
                             )
-                            task.image_uris.clear()
-                        log.info(
-                            f"[Foreman:{account.email}] Task {task.id}: uploading {len(task.image_paths)} image(s) "
-                            f"[{task.stage.value}] progress={task.progress}%"
-                        )
-                        async with self._account_rate_locks[account.email]:
-                            # Fix G7: Anti-detect delay before image upload
-                            if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
-                                await self._burst_controller.wait(account.email)
-                            await self._resolve_image_paths(task, account)
+                        else:
+                            # Different account or no image_uris → upload fresh
+                            if task.image_uris:
+                                log.info(
+                                    f"[Foreman:{account.email}] Task {task.id}: account changed "
+                                    f"({task.image_uris_account} → {account.email}) — "
+                                    f"re-uploading {len(task.image_paths)} image(s)"
+                                )
+                                task.image_uris.clear()
+                                task.image_uris_account = None
+                            else:
+                                log.info(
+                                    f"[Foreman:{account.email}] Task {task.id}: uploading "
+                                    f"{len(task.image_paths)} image(s) "
+                                    f"[{task.stage.value}] progress={task.progress}%"
+                                )
+                            async with self._account_rate_locks[account.email]:
+                                # Fix G7: Anti-detect delay before image upload
+                                if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
+                                    await self._burst_controller.wait(account.email)
+                                await self._resolve_image_paths(task, account)
                     
                     # Guard: I2V/R2V/F2V must have images after upload step
                     # If image_uris is still empty here, the task can never succeed.
@@ -4901,6 +4914,29 @@ class Engine:
                         f"auto-fix error (attempt {_fix_attempts + 1}/3): {fix_err}"
                     )
             
+            # ★ Transient server error retry (HIGH_TRAFFIC, timeout, rate limit, etc.)
+            is_transient = any(self._is_transient_error(e) for e in all_errors)
+            _transient_attempts = getattr(task, '_transient_retry_attempts', 0)
+            FINALIZER_MAX_TRANSIENT_RETRIES = 3
+            
+            if is_transient and not is_policy and _transient_attempts < FINALIZER_MAX_TRANSIENT_RETRIES:
+                task._transient_retry_attempts = _transient_attempts + 1
+                delay = min(15 * (2 ** _transient_attempts), 120)  # 15s, 30s, 60s
+                log.warning(
+                    f"🔄 [Finalizer:{email}] Task {task.id}: "
+                    f"transient error '{all_errors[0][:60]}' — "
+                    f"auto-retry {_transient_attempts + 1}/{FINALIZER_MAX_TRANSIENT_RETRIES} "
+                    f"in {delay}s"
+                )
+                await asyncio.sleep(delay)
+                # Reset operation state for fresh submit
+                task.operation_names.clear()
+                task.stage = TaskStage.INIT
+                task.state = TaskState.RUNNING
+                self._dispatcher.requeue_task(task)
+                self._task_available.set()
+                return  # Don't fail — task will be retried
+            
             # Fall through: fail the task
             error_detail = all_errors[0] if all_errors else "All video operations failed"
             if is_policy:
@@ -4908,6 +4944,11 @@ class Engine:
                     f"⛔ Prompt Policy Violation — unfixable after "
                     f"{_fix_attempts}/3 auto-fix attempts. "
                     f"Original error: {all_errors[0][:80] if all_errors else 'unknown'}"
+                )
+            elif is_transient:
+                error_detail = (
+                    f"⚠️ Transient error after {_transient_attempts}/{FINALIZER_MAX_TRANSIENT_RETRIES} retries: "
+                    f"{all_errors[0][:80] if all_errors else 'unknown'}"
                 )
             self._dispatcher.fail_task(task.id, error_detail)
             self._error_count += 1
@@ -6886,8 +6927,16 @@ class Engine:
             # Fix 2: Upload does NOT need reCAPTCHA (HAR verified).
             task.image_upload_status = "uploading"
             self._dispatcher.update_progress(task.id, task.progress, "📤 Uploading frame...")
+            
+            # Fix 401: ensure valid access token before upload
+            access_token = await account.ensure_valid_token()
+            if not access_token:
+                log.error(f"[ContinuationFrame] Token refresh failed for {account.email}")
+                task.image_upload_status = "error"
+                return None
+            
             upload_resp = await self._api_client.upload_image(
-                access_token=account.get_access_token(),
+                access_token=access_token,
                 recaptcha_token="",  # HAR: upload does NOT send recaptcha
                 image_base64=frame_b64,
                 mime_type=frame_mime,
@@ -6895,12 +6944,24 @@ class Engine:
             )
             
             if upload_resp.success:
-                # HAR verified: response is {"mediaGenerationId": {"mediaGenerationId": "..."}}
-                mgid = upload_resp.data.get("mediaGenerationId", {})
-                if isinstance(mgid, dict):
-                    media_id = mgid.get("mediaGenerationId")
-                else:
-                    media_id = mgid  # Fallback if flat string
+                # Multi-format mediaId extraction (API changed 2026-03)
+                media_id = ""
+                # Format 1: Old {mediaGenerationId: {mediaGenerationId: "..."}}
+                mgid = upload_resp.data.get("mediaGenerationId")
+                if mgid:
+                    if isinstance(mgid, dict):
+                        media_id = mgid.get("mediaGenerationId", "")
+                    elif isinstance(mgid, str):
+                        media_id = mgid
+                # Format 2: New {media: {name: "uuid", ...}, workflow: ...}
+                if not media_id:
+                    media = upload_resp.data.get("media")
+                    if isinstance(media, dict):
+                        media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
+                    elif isinstance(media, list) and media:
+                        first = media[0]
+                        if isinstance(first, dict):
+                            media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
                 task.image_upload_status = "ready"
                 log.info(f"Continuation frame uploaded: {media_id}")
                 return (media_id, frame_path)
@@ -7000,8 +7061,19 @@ class Engine:
             )
             
             if upload_resp.success:
-                mgid = upload_resp.data.get("mediaGenerationId", {})
-                media_id = mgid.get("mediaGenerationId") if isinstance(mgid, dict) else mgid
+                # Multi-format mediaId extraction (API changed 2026-03)
+                media_id = ""
+                mgid = upload_resp.data.get("mediaGenerationId")
+                if mgid:
+                    media_id = mgid.get("mediaGenerationId", "") if isinstance(mgid, dict) else mgid
+                if not media_id:
+                    media = upload_resp.data.get("media")
+                    if isinstance(media, dict):
+                        media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
+                    elif isinstance(media, list) and media:
+                        first = media[0]
+                        if isinstance(first, dict):
+                            media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
                 if media_id:
                     task.image_upload_status = "ready"
                     log.info(f"[ReUpload] Fresh mediaId for task {task.id}: {media_id}")
@@ -7348,6 +7420,12 @@ class Engine:
         t0 = _time.monotonic()
         uploaded = 0
         
+        # Fix 401: ensure valid access token ONCE before upload loop
+        access_token = await account.ensure_valid_token()
+        if not access_token:
+            log.error(f"[PreUpload:{account.email}] Token refresh failed — aborting uploads")
+            return
+        
         for path in sorted(unique_paths):
             if self._stop_event.is_set():
                 break
@@ -7368,17 +7446,27 @@ class Engine:
                 
                 # Upload (HAR verified: always IMAGE_ASPECT_RATIO_LANDSCAPE)
                 upload_resp = await self._api_client.upload_image(
-                    access_token=account.get_access_token(),
+                    access_token=access_token,
                     recaptcha_token="",
                     image_base64=img_b64,
                     mime_type=mime_type,
-                    aspect_ratio="IMAGE_ASPECT_RATIO_LANDSCAPE",
                     account_headers=account.get_api_headers(),
                 )
                 
                 if upload_resp.success:
-                    mgid = upload_resp.data.get("mediaGenerationId", {})
-                    media_id = mgid.get("mediaGenerationId") if isinstance(mgid, dict) else mgid
+                    # Multi-format mediaId extraction (API changed 2026-03)
+                    media_id = ""
+                    mgid = upload_resp.data.get("mediaGenerationId")
+                    if mgid:
+                        media_id = mgid.get("mediaGenerationId", "") if isinstance(mgid, dict) else mgid
+                    if not media_id:
+                        media = upload_resp.data.get("media")
+                        if isinstance(media, dict):
+                            media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
+                        elif isinstance(media, list) and media:
+                            first = media[0]
+                            if isinstance(first, dict):
+                                media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
                     if media_id:
                         cache_key = f"{path}:{account.email}"
                         async with self._upload_cache_lock:
@@ -7484,6 +7572,14 @@ class Engine:
                 return ""
             img_b64, mime_type = result
             
+            # Fix 401: ensure valid access token before upload retries
+            access_token = await account.ensure_valid_token()
+            if not access_token:
+                slot.status = "error"
+                slot.error = "auth_failed"
+                log.error(f"  Token refresh failed for {account.email} — skipping {Path(slot.path).name}")
+                return ""
+            
             # Retry loop for upload
             for attempt in range(1, MAX_RETRIES + 1):
                 if self._stop_event.is_set():
@@ -7494,17 +7590,27 @@ class Engine:
                 slot.retry_count = attempt
                 try:
                     upload_resp = await self._api_client.upload_image(
-                        access_token=account.get_access_token(),
+                        access_token=access_token,
                         recaptcha_token="",
                         image_base64=img_b64,
                         mime_type=mime_type,
-                        aspect_ratio="IMAGE_ASPECT_RATIO_LANDSCAPE",
                         account_headers=account.get_api_headers(),
                     )
                     
                     if upload_resp.success:
-                        mgid = upload_resp.data.get("mediaGenerationId", {})
-                        media_id = mgid.get("mediaGenerationId") if isinstance(mgid, dict) else mgid
+                        # Multi-format mediaId extraction (API changed 2026-03)
+                        media_id = ""
+                        mgid = upload_resp.data.get("mediaGenerationId")
+                        if mgid:
+                            media_id = mgid.get("mediaGenerationId", "") if isinstance(mgid, dict) else mgid
+                        if not media_id:
+                            media = upload_resp.data.get("media")
+                            if isinstance(media, dict):
+                                media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
+                            elif isinstance(media, list) and media:
+                                first = media[0]
+                                if isinstance(first, dict):
+                                    media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
                         if media_id:
                             slot.media_id = media_id
                             slot.status = "ready"
@@ -7556,6 +7662,7 @@ class Engine:
         
         if uploaded_uris:
             task.image_uris = uploaded_uris
+            task.image_uris_account = account.email  # Track which account owns these mediaIds
             task.image_upload_status = "ready"
             log.info(f"  ✅ {ok}/{n_images} uploaded, {fail} failed (parallel v2)")
         else:
@@ -9315,6 +9422,7 @@ class Engine:
             "timeout", "timed out", "network", "connection",
             "temporarily", "unavailable", "overloaded",
             "token too short", "captcha",
+            "high_traffic", "high traffic",
         ]
         return any(kw in lower for kw in transient_keywords)
     

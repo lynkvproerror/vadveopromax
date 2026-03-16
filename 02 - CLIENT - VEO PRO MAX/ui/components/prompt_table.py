@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QPushButton, QHeaderView, QAbstractItemView, QLabel, QCheckBox
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QDragEnterEvent, QDragMoveEvent, QDropEvent
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
@@ -48,6 +48,77 @@ class PromptStatus(Enum):
 #   @tag_name.png   → tag_name.png  (@ with extension)
 #   @"my tag"       → my tag        (@ with quoted tag for spaces)
 _TAG_PATTERN = re.compile(r'\[([^\]]+)\](\.\w+)?|@"([^"]+)"|@([\w\-]+(?:\.\w+)?)')
+
+
+class _DroppableTable(QTableWidget):
+    """QTableWidget subclass that accepts external image drops.
+    
+    Qt's QAbstractItemView has 3 layers of drag-drop handling:
+    1. QAbstractScrollArea routes viewport events via viewportEvent()
+    2. QAbstractItemView.viewportEvent() delegates to dragEnterEvent() etc.
+    3. But it can also REJECT events before our override sees them
+    
+    We must intercept at the viewportEvent() level to guarantee reception.
+    """
+    
+    IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff'}
+    image_dropped_on_row = Signal(int, str, str)  # row_idx, image_path, tag
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DropOnly)
+        self.setDefaultDropAction(Qt.CopyAction)
+        self.viewport().setAcceptDrops(True)
+        print(f"[DroppableTable] init: acceptDrops={self.acceptDrops()}, viewport.acceptDrops={self.viewport().acceptDrops()}")
+    
+    def _has_image_urls(self, mime):
+        """Check if MIME data contains image file URLs."""
+        if mime and mime.hasUrls():
+            for url in mime.urls():
+                if url.isLocalFile():
+                    ext = Path(url.toLocalFile()).suffix.lower()
+                    if ext in self.IMAGE_EXTENSIONS:
+                        return True
+        return False
+    
+    def viewportEvent(self, event):
+        """Intercept drag events at viewport level before QAbstractItemView can reject them."""
+        from PySide6.QtCore import QEvent
+        
+        if event.type() == QEvent.DragEnter:
+            mime = event.mimeData()
+            print(f"[DroppableTable] viewportEvent DragEnter: hasUrls={mime.hasUrls() if mime else 'None'}")
+            if self._has_image_urls(mime):
+                event.acceptProposedAction()
+                print("[DroppableTable] viewportEvent DragEnter ACCEPTED")
+                return True
+        
+        elif event.type() == QEvent.DragMove:
+            mime = event.mimeData()
+            if self._has_image_urls(mime):
+                event.acceptProposedAction()
+                return True
+        
+        elif event.type() == QEvent.Drop:
+            mime = event.mimeData()
+            print(f"[DroppableTable] viewportEvent Drop: hasUrls={mime.hasUrls() if mime else 'None'}")
+            if mime and mime.hasUrls():
+                pos = event.position().toPoint() if hasattr(event.position(), 'toPoint') else event.pos()
+                row_idx = self.rowAt(pos.y())
+                auto_tag = mime.text().strip() if mime.hasText() else ""
+                for url in mime.urls():
+                    if url.isLocalFile():
+                        path = url.toLocalFile()
+                        ext = Path(path).suffix.lower()
+                        if ext in self.IMAGE_EXTENSIONS:
+                            tag = auto_tag or Path(path).stem
+                            print(f"[DroppableTable] Drop PROCESSING: row={row_idx}, path={path}, tag={tag}")
+                            self.image_dropped_on_row.emit(row_idx, path, tag)
+                            event.acceptProposedAction()
+                            return True
+        
+        return super().viewportEvent(event)
 
 
 @dataclass
@@ -91,7 +162,7 @@ class PromptRow:
         return "🔒"
     
     def extract_tags(self):
-        """Extract [tag], @tag, and @"quoted tag" references from text."""
+        """Extract [tag], @tag, @"quoted tag", and JSON "image"/"images" references from text."""
         matches = _TAG_PATTERN.findall(self.text)
         tags = []
         for bracket_name, bracket_ext, at_quoted, at_tag in matches:
@@ -103,6 +174,35 @@ class PromptRow:
                 tags.append(at_quoted)
             elif at_tag:
                 tags.append(at_tag)
+        
+        # Also extract from JSON "image" / "images" fields
+        if self.text.strip().startswith('{'):
+            try:
+                import json as _json
+                import re as _re
+                # Full sanitization: stray chars, semicolons, trailing commas
+                _sanitized = self.text.strip()
+                _sanitized = _re.sub(r'(?<=[{,])\s*[^"\s{}\[\]:,]+\s*(?=")', ' ', _sanitized)
+                _sanitized = _re.sub(r'(?<=["\d}\]])\s*;\s*(?=")', ', ', _sanitized)
+                _sanitized = _re.sub(r',\s*,', ',', _sanitized)
+                _sanitized = _re.sub(r',\s*([}\]])', r'\1', _sanitized)
+                obj = _json.loads(_sanitized)
+                if isinstance(obj, dict):
+                    # "image": "tag_name"
+                    img_val = obj.get('image', '')
+                    if isinstance(img_val, str) and img_val.strip():
+                        tags.append(img_val.strip())
+                    # "images": ["tag1", "tag2"]
+                    imgs_val = obj.get('images', [])
+                    if isinstance(imgs_val, list):
+                        for v in imgs_val:
+                            if isinstance(v, str) and v.strip():
+                                tags.append(v.strip())
+                    elif isinstance(imgs_val, str) and imgs_val.strip():
+                        tags.append(imgs_val.strip())
+            except (ValueError, Exception):
+                pass
+        
         # Deduplicate while preserving first-occurrence order
         # (same tag referenced multiple times → only one image slot)
         self.image_tags = list(dict.fromkeys(tags))
@@ -148,6 +248,7 @@ class PromptTable(QWidget):
         show_continuation: bool = True,
     ):
         super().__init__(parent)
+        self.setAcceptDrops(True)  # Also accept drops on wrapper for fallback
         
         self.on_edit = on_edit
         self.on_delete = on_delete
@@ -218,7 +319,7 @@ class PromptTable(QWidget):
         columns = self._build_columns()
         
         # Create table
-        self.table = QTableWidget()
+        self.table = _DroppableTable()
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels(columns)
         
@@ -273,6 +374,9 @@ class PromptTable(QWidget):
         
         # Edit triggers
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        
+        # Connect drop signal from _DroppableTable subclass
+        self.table.image_dropped_on_row.connect(self._on_row_image_dropped)
         
         layout.addWidget(self.table)
     
@@ -523,6 +627,9 @@ class PromptTable(QWidget):
                 slot.image_changed.connect(
                     lambda new_tag, r=row_idx, s=i: self._on_slot_image_changed(r, s, new_tag)
                 )
+                slot.image_cleared.connect(
+                    lambda r=row_idx, s=i: self._on_slot_image_cleared(r, s)
+                )
                 
                 grid_row = i // COLS_PER_ROW
                 grid_col = i % COLS_PER_ROW
@@ -626,6 +733,9 @@ class PromptTable(QWidget):
                 slot.image_changed.connect(
                     lambda new_tag, r=row_idx, s=i: self._on_slot_image_changed(r, s, new_tag)
                 )
+                slot.image_cleared.connect(
+                    lambda r=row_idx, s=i: self._on_slot_image_cleared(r, s)
+                )
                 
                 h_layout.addWidget(slot)
                 slots.append(slot)
@@ -684,6 +794,7 @@ class PromptTable(QWidget):
         
         If the slot had an old tag in the prompt text, replace it.
         If no tag existed for this slot, append [new_tag] to the prompt.
+        For JSON prompts: update "image"/"images" field inside JSON.
         """
         if row_idx >= len(self._rows):
             return
@@ -691,29 +802,58 @@ class PromptTable(QWidget):
         old_tags = row.image_tags.copy() if row.image_tags else []
         
         import re
+        import json as _json
         text = row.text
         
-        if slot_idx < len(old_tags):
-            # Replace existing tag
-            old_tag = old_tags[slot_idx]
-            # Try to replace [old_tag] with [new_tag]
-            pattern = re.escape(f"[{old_tag}]")
-            new_text = re.sub(pattern, f"[{new_tag}]", text, count=1)
-            if new_text == text:
-                # Try @"old_tag" (quoted)
-                at_q_pattern = r'@"' + re.escape(old_tag) + r'"'
-                new_text = re.sub(at_q_pattern, f'@"{new_tag}"', text, count=1)
-            if new_text == text:
-                # Try @old_tag (unquoted)
-                at_pattern = r'@' + re.escape(old_tag) + r'(?=\s|$)'
-                new_text = re.sub(at_pattern, f"@{new_tag}", text, count=1)
-            if new_text == text:
-                # Still not found, just append
-                new_text = text.rstrip() + f" [{new_tag}]"
-            row.text = new_text
+        # Detect JSON format: text starts with { and is valid JSON
+        is_json = False
+        json_obj = None
+        if text.strip().startswith('{'):
+            try:
+                json_obj = _json.loads(text.strip())
+                is_json = isinstance(json_obj, dict)
+            except (ValueError, _json.JSONDecodeError):
+                pass
+        
+        if is_json and json_obj is not None:
+            # JSON format: rebuild image fields from ALL current slot tags
+            slots = self._image_slots.get(row_idx, [])
+            all_tags = []
+            for i, s in enumerate(slots):
+                tag = new_tag if i == slot_idx else s.tag
+                if tag:
+                    all_tags.append(tag)
+            # Unified field: 1 tag → "image", 2+ → "images", 0 → remove both
+            json_obj.pop('image', None)
+            json_obj.pop('images', None)
+            if len(all_tags) == 1:
+                json_obj['image'] = all_tags[0]
+            elif len(all_tags) > 1:
+                json_obj['images'] = all_tags
+            row.text = _json.dumps(json_obj, ensure_ascii=False)
         else:
-            # New slot, append tag
-            row.text = text.rstrip() + f" [{new_tag}]"
+            # Plain text format: replace/append [tag]
+            if slot_idx < len(old_tags):
+                # Replace existing tag
+                old_tag = old_tags[slot_idx]
+                # Try to replace [old_tag] with [new_tag]
+                pattern = re.escape(f"[{old_tag}]")
+                new_text = re.sub(pattern, f"[{new_tag}]", text, count=1)
+                if new_text == text:
+                    # Try @"old_tag" (quoted)
+                    at_q_pattern = r'@"' + re.escape(old_tag) + r'"'
+                    new_text = re.sub(at_q_pattern, f'@"{new_tag}"', text, count=1)
+                if new_text == text:
+                    # Try @old_tag (unquoted)
+                    at_pattern = r'@' + re.escape(old_tag) + r'(?=\s|$)'
+                    new_text = re.sub(at_pattern, f"@{new_tag}", text, count=1)
+                if new_text == text:
+                    # Still not found, just append
+                    new_text = text.rstrip() + f" [{new_tag}]"
+                row.text = new_text
+            else:
+                # New slot, append tag
+                row.text = text.rstrip() + f" [{new_tag}]"
         
         # Re-extract tags
         row.extract_tags()
@@ -724,6 +864,197 @@ class PromptTable(QWidget):
         if item:
             item.setText(row.text)
             item.setToolTip(row.text)
+        
+        # Emit signal for tab to sync back to text input
+        self.slot_image_changed.emit(row_idx)
+    
+    def _on_slot_image_cleared(self, row_idx: int, slot_idx: int):
+        """Handle slot image cleared — remove [tag] from prompt text.
+        
+        For TEXT format: removes [tag] reference from text.
+        For JSON format: clears "image"/"images" field in JSON.
+        """
+        if row_idx >= len(self._rows):
+            return
+        row = self._rows[row_idx]
+        old_tags = row.image_tags.copy() if row.image_tags else []
+        
+        if slot_idx >= len(old_tags) or not old_tags[slot_idx]:
+            return  # Nothing to remove
+        
+        old_tag = old_tags[slot_idx]
+        
+        import re
+        import json as _json
+        text = row.text
+        
+        # Detect JSON format
+        is_json = False
+        json_obj = None
+        if text.strip().startswith('{'):
+            try:
+                json_obj = _json.loads(text.strip())
+                is_json = isinstance(json_obj, dict)
+            except (ValueError, _json.JSONDecodeError):
+                pass
+        
+        if is_json and json_obj is not None:
+            # JSON format: rebuild image fields from ALL current slot tags (excluding cleared slot)
+            slots = self._image_slots.get(row_idx, [])
+            all_tags = []
+            for i, s in enumerate(slots):
+                if i == slot_idx:
+                    continue  # Skip the cleared slot
+                if s.tag:
+                    all_tags.append(s.tag)
+            # Unified field: 1 tag → "image", 2+ → "images", 0 → remove both
+            json_obj.pop('image', None)
+            json_obj.pop('images', None)
+            if len(all_tags) == 1:
+                json_obj['image'] = all_tags[0]
+            elif len(all_tags) > 1:
+                json_obj['images'] = all_tags
+            row.text = _json.dumps(json_obj, ensure_ascii=False)
+        else:
+            # TEXT format: remove [tag] from text
+            pattern = re.escape(f"[{old_tag}]")
+            new_text = re.sub(pattern, '', text, count=1)
+            if new_text == text:
+                # Try @"tag" or @tag removal
+                at_q_pattern = r'@"' + re.escape(old_tag) + r'"'
+                new_text = re.sub(at_q_pattern, '', text, count=1)
+            if new_text == text:
+                at_pattern = r'@' + re.escape(old_tag) + r'(?=\s|$)'
+                new_text = re.sub(at_pattern, '', text, count=1)
+            # Clean extra whitespace
+            row.text = ' '.join(new_text.split())
+        
+        # Remove tag from image_tags list
+        if slot_idx < len(row.image_tags):
+            row.image_tags[slot_idx] = ''
+        
+        # Re-extract tags
+        row.extract_tags()
+        
+        # Update the prompt text cell in table
+        prompt_col = self._col_index("Prompt")
+        item = self.table.item(row_idx, prompt_col)
+        if item:
+            item.setText(row.text)
+            item.setToolTip(row.text)
+        
+        # Emit signal for tab to sync back to text input
+        self.slot_image_changed.emit(row_idx)
+    
+    # ── Drag-Drop on prompt rows ─────────────────────────────────
+    
+    IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff'}
+    
+    # NOTE: Drag-drop is handled by _DroppableTable subclass directly
+    # (QAbstractItemView intercepts drag events before event filters)
+    
+    def _on_row_image_dropped(self, row_idx: int, image_path: str, tag: str):
+        """Handle image dropped onto a prompt row.
+        
+        Smart format detection:
+        - TEXT format: append [tag] to prompt text
+        - JSON format: add "image" field or append to "images" array
+        Also auto-adds to ImageLibrary and populates image slots if available.
+        """
+        if row_idx >= len(self._rows):
+            return
+        row = self._rows[row_idx]
+        
+        import json as _json
+        import re
+        text = row.text
+        
+        # Auto-add to ImageLibrary
+        try:
+            from services.image_library import get_image_library
+            lib = get_image_library()
+            existing = lib.resolve_tag(tag)
+            if not existing:
+                lib.add_image(image_path, tags=[tag])
+        except Exception:
+            pass
+        
+        # Detect JSON format (with sanitization for malformed JSON)
+        is_json = False
+        json_obj = None
+        if text.strip().startswith('{'):
+            try:
+                _sanitized = text.strip()
+                _sanitized = re.sub(r'(?<=[{,])\s*[^"\s{}\[\]:,]+\s*(?=")', ' ', _sanitized)
+                _sanitized = re.sub(r'(?<=["\d}\]])\s*;\s*(?=")', ', ', _sanitized)
+                _sanitized = re.sub(r',\s*,', ',', _sanitized)
+                _sanitized = re.sub(r',\s*([}\]])', r'\1', _sanitized)
+                json_obj = _json.loads(_sanitized)
+                is_json = isinstance(json_obj, dict)
+            except (ValueError, _json.JSONDecodeError):
+                pass
+        
+        if is_json and json_obj is not None:
+            # JSON format: collect existing tags + new tag, rebuild unified field
+            existing_tags = []
+            existing_image = json_obj.get('image', '')
+            existing_images = json_obj.get('images', [])
+            if isinstance(existing_image, str) and existing_image.strip():
+                existing_tags.append(existing_image.strip())
+            if isinstance(existing_images, list):
+                for v in existing_images:
+                    if isinstance(v, str) and v.strip():
+                        existing_tags.append(v.strip())
+            # Add new tag (avoid duplicates)
+            if tag not in existing_tags:
+                existing_tags.append(tag)
+            # Unified field: 1 tag → "image", 2+ → "images", 0 → remove both
+            json_obj.pop('image', None)
+            json_obj.pop('images', None)
+            if len(existing_tags) == 1:
+                json_obj['image'] = existing_tags[0]
+            elif len(existing_tags) > 1:
+                json_obj['images'] = existing_tags
+            
+            row.text = _json.dumps(json_obj, ensure_ascii=False)
+        else:
+            # TEXT format: append [tag] (or replace existing)
+            existing_tags = row.image_tags.copy() if row.image_tags else []
+            if existing_tags:
+                old_tag = existing_tags[0]
+                pattern = re.escape(f"[{old_tag}]")
+                new_text = re.sub(pattern, f"[{tag}]", text, count=1)
+                if new_text == text:
+                    new_text = text.rstrip() + f" [{tag}]"
+                row.text = new_text
+            else:
+                row.text = text.rstrip() + f" [{tag}]"
+        
+        # Re-extract tags (will parse updated JSON/text)
+        row.extract_tags()
+        
+        # Update prompt text cell
+        prompt_col = self._col_index("Prompt")
+        item = self.table.item(row_idx, prompt_col)
+        if item:
+            item.setText(row.text)
+            item.setToolTip(row.text)
+        
+        # Update image slot — rebuild cells if they don't exist yet
+        slots = self._image_slots.get(row_idx, [])
+        if not slots:
+            self._add_image_cells(row_idx, row)
+            slots = self._image_slots.get(row_idx, [])
+            self.table.setRowHeight(row_idx, self.ROW_HEIGHT_WITH_IMAGES)
+        
+        # Find first empty slot, or use first slot
+        if slots:
+            target_slot = slots[0]
+            for s in slots:
+                if not s.has_image:
+                    target_slot = s
+                    break
+            target_slot.set_image_path(image_path, auto_tag=tag)
         
         # Emit signal for tab to sync back to text input
         self.slot_image_changed.emit(row_idx)

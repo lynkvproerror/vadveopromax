@@ -1,0 +1,21 @@
+{
+  "group_id": "group_20260316_145937",
+  "workflow": "R2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_r2v_fast_portrait_ultra_relaxed",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260316_145937_task_0",
+      "prompt": "{\"scene_number\": 5, \"duration\": \"8s\", \"prompt_en\": \"chalkboard background, white stickman walking slowly on a long road toward a small flag on a hill, hand drawn stickman animation\", \"description_vi\": \"Người que đi chậm nhưng liên tục tiến về phía lá cờ trên ngọn đồi phía trước.\", \"narration_vi\": \"Đừng sợ đi chậm chỉ cần bạn vẫn bước tiếp từng chút một con đường phía trước rồi sẽ tới nơi mình muốn\", \"images\": [\"tấm\", \"cám\", \"mẹ cám\"]}",
+      "model": "veo_3_1_r2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

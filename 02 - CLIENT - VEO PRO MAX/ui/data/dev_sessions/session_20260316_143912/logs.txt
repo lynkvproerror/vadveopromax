@@ -1,0 +1,508 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260316_143912
+Total: 503 entries
+============================================================
+
+[INFO ] 14:23:50 - core.session_manager - [Session] Loaded from 2026-03-16T14:23:37.109380
+[INFO ] 14:23:50 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 14:23:50 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[DEBUG] 14:23:50 - veo.tab_queue - [QueueRefresh] 1 groups, 4 total tasks, existing_groups=[]
+[INFO ] 14:23:50 - veo.tab_queue - [GroupCreate] gid=group_20260316_132202 name='Untitled' children=4 expanded=True
+[INFO ] 14:23:51 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Truyện Kiều: 6 completed stage(s), current=concat
+[DEBUG] 14:23:51 - veo.tab_queue - [QueueRefresh] 1 groups, 4 total tasks, existing_groups=['group_20260316_132202']
+[DEBUG] 14:23:55 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:23:56 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:23:56 - veo - [VersionCheck] OK: 2.3.5 >= 2.3.0
+[DEBUG] 14:23:56 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[INFO ] 14:24:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:24:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:24:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:24:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:24:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:25:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:25:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:25:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:25:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:25:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:26:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:26:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:26:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:26:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:26:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:27:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:27:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:27:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:27:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:27:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:28:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:28:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:28:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:28:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:28:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:28:51 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 14:28:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:28:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[INFO ] 14:29:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:29:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:29:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:29:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:29:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:30:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:30:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:30:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:30:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:30:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:31:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[DEBUG] 14:31:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:31:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:31:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:31:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:32:02 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 14:32:07 - core.profiles_controller - [ProfilesController] Saved 2 profiles
+[INFO ] 14:32:07 - core.app_controller - [AppController] Re-enable levanlinh.kma@gmail.com: launching browser...
+[INFO ] 14:32:07 - core.app_controller - [AppController] Account levanlinh.kma@gmail.com enabled
+[INFO ] 14:32:07 - core.app_controller - [Relaunch] levanlinh.kma@gmail.com: launching browser (headless=True)...
+[DEBUG] 14:32:07 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for levanlinh.kma@gmail.com...
+[INFO ] 14:32:07 - core.app_controller - [Relaunch] levanlinh.kma@gmail.com: ✅ browser launched
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[DEBUG] 14:32:07 - core.chrome_manager - [ChromeManager] No PID file for browser_session_fed78075
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[DEBUG] 14:32:07 - core.chrome_manager - [ChromeManager] Variations seed already up-to-date for browser_session_fed78075
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_fed78075
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] Chrome launched: PID=36544, port=9223
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 36544
+[INFO ] 14:32:07 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 14:32:07 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 14:32:08 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 14:32:08 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 14:32:08 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://jcfbpampapipdoebicibgigmdaidpdki/background.js
+[INFO ] 14:32:08 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.4
+[INFO ] 14:32:08 - core.extension_manager - [ExtMgr] Extension v2.3.4 up-to-date — skipping
+[INFO ] 14:32:08 - core.profiles_controller - [ProfilesController] Chrome PID=36544, port=9223 (new)
+[INFO ] 14:32:08 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 59859)
+[INFO ] 14:32:08 - core.profiles_controller - [ProfilesController] 2 HWND(s) — hidden for levanlinh.kma@gmail.com
+[DEBUG] 14:32:08 - asyncio - Using proactor: IocpProactor
+[INFO ] 14:32:10 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.4)
+[INFO ] 14:32:10 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 14:32:10 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[DEBUG] 14:32:10 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[INFO ] 14:32:10 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 14:32:10 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 14:32:10 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 14:32:11 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 14:32:11 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[DEBUG] 14:32:11 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[DEBUG] 14:32:13 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:32:13 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[DEBUG] 14:32:13 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[DEBUG] 14:32:15 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:32:15 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[DEBUG] 14:32:15 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 14:32:16 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 14:32:16 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 14:32:17 - core.extension_bridge - [ExtensionBridge] Extension v2.3.4 matches local v2.3.4
+[DEBUG] 14:32:20 - core.profiles_controller - [DEBUG] Step 5: Reload done. Headers = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 14:32:20 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 14:32:20 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for levanlinh.kma@gmail.com (persistent, port=9223)
+[INFO ] 14:32:20 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2169 chars)
+[DEBUG] 14:32:20 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2169 chars) → AM + Pool
+[DEBUG] 14:32:20 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2169 chars)
+[INFO ] 14:32:20 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+[INFO ] 14:32:20 - veo - [Status] ✅ levanlinh.kma@gmail.com: reCAPTCHA ready — account prepared
+[DEBUG] 14:32:20 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:32:20 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[INFO ] 14:32:21 - core.profiles_controller - [ProfilesController] 🔇 Post-setup re-hide: 2 HWND(s) hidden for levanlinh.kma@gmail.com
+[DEBUG] 14:32:24 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:32:24 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[DEBUG] 14:32:27 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 14:32:31 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:32:31 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[DEBUG] 14:32:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:32:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:32:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:32:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:33:02 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:33:17 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 14:33:21 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:33:21 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[DEBUG] 14:33:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:33:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:33:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:33:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:34:02 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:34:15 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 14:34:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:34:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 14:34:17 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 14:34:21 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:34:21 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[DEBUG] 14:34:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:34:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:34:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:34:50 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:35:02 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:35:12 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:35:12 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[DEBUG] 14:35:17 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 14:35:21 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:35:21 - core.app_controller - [ExtensionBridge] No account found for levanlinh.kma@gmail.com (headers ignored)
+[INFO ] 14:35:34 - core.dispatcher - [Dispatcher] Cleared all: 4 tasks removed
+[INFO ] 14:35:34 - core.app_controller - [Controller] Queue cleared: 4 tasks, session file deleted
+[DEBUG] 14:35:34 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 14:35:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:35:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:35:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:35:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 14:35:55 - core.app_controller -   [TAG→PATH] [file:///...] → D:/Pictures/1g6pssxk4q651.jpg
+[INFO ] 14:35:55 - core.app_controller -   [TAG→PATH] [file:///...] → D:/Pictures/90s-anime-17.jpg
+[INFO ] 14:35:55 - core.app_controller -   [TAG→PATH] [file:///...] → D:/Pictures/desktop-wallpaper-dark-art-relaxing-anime.jpg
+[WARNING] 14:35:55 - core.app_controller - [Submit] x-client-data not ready — tasks queued but may fail until extension provides fresh headers
+[INFO ] 14:35:55 - veo - [Status] ⚠️ x-client-data not ready — tasks queued, waiting for browser extension.
+[INFO ] 14:35:55 - core.app_controller - ============================================================
+[INFO ] 14:35:55 - core.app_controller - [ADD TO QUEUE] group_id=group_20260316_143555
+[INFO ] 14:35:55 - core.app_controller -   workflow    : R2V
+[INFO ] 14:35:55 - core.app_controller -   model      : 'Veo 3.1 - Fast [LP]' → veo_3_1_r2v_fast_portrait_ultra_relaxed
+[INFO ] 14:35:55 - core.app_controller -   aspect_ratio: PORTRAIT → VIDEO_ASPECT_RATIO_PORTRAIT
+[INFO ] 14:35:55 - core.app_controller -   dual_frame : False
+[INFO ] 14:35:55 - core.app_controller -   output_count: 1 (0 chain tasks forced to 1)
+[INFO ] 14:35:55 - core.app_controller -   tasks      : 1
+[INFO ] 14:35:55 - core.app_controller -     [group_20260316_143555_task_0] {"scene_number": 2, "duration": "8s", "prompt_en": "chalkboa...
+[INFO ] 14:35:55 - core.app_controller - ============================================================
+[DEBUG] 14:35:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=[]
+[INFO ] 14:35:56 - veo.tab_queue - [GroupCreate] gid=group_20260316_143555 name='TÉT' children=1 expanded=True
+[INFO ] 14:35:56 - ui.tabs.tab_queue - [AutoStart] Skipped — auto_start_queue=False, ready=1
+[INFO ] 14:35:58 - core.app_controller - Synced profile → runtime: levanlinh.kma@gmail.com
+[INFO ] 14:35:58 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 14:35:58 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 14:35:58 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[DEBUG] 14:35:58 - asyncio - Using proactor: IocpProactor
+[WARNING] 14:35:58 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 14:35:58 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 14:35:58 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 14:35:58 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 14:35:58 - core.app_controller - [Engine] Processing started
+[INFO ] 14:35:58 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 14:35:58 - core.account_manager - [levanlinh.kma@gmail.com] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 14:35:58 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 14:35:58 - core.multi_account - All account browsers initialized
+[INFO ] 14:35:58 - core.multi_account - ⏳ No account has good x-client-data yet (best=8 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 14:35:58 - core.engine - Engine starting: 1 accounts, 1 ready tasks in queue
+[INFO ] 14:35:58 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[INFO ] 14:35:58 - core.engine - [G1:levanlinh.kma@gmail.com] max_foremen=-1, raw_foreman=8, existing=0
+[INFO ] 14:35:58 - core.engine - [Foreman:levanlinh.kma@gmail.com] Capped foremen 8 → 1 (only 1 task(s) in queue)
+[INFO ] 14:35:58 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Spawned CHỦ + 1 Foremen (max_workers=20, output=1, retry=3, timeout=120s)
+[INFO ] 14:35:58 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=900s, POLL timeout=900s, scan every 30s
+[INFO ] 14:35:58 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Started
+[INFO ] 14:35:58 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Refreshing browser headers...
+[DEBUG] 14:35:58 - core.engine - [foreman-levanlin-0] Waiting for supervisor startup...
+[INFO ] 14:35:58 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 14:35:58 - core.engine - [CreditWindow] Recovery timer started
+[INFO ] 14:35:58 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[DEBUG] 14:35:58 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for levanlinh.kma@gmail.com
+[DEBUG] 14:35:58 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:35:59 - core.engine - [TabKeepalive] Engine processing — yielding...
+[DEBUG] 14:35:59 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:00 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:01 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:36:02 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:36:02 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:36:02 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:36:02 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:36:02 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:03 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:36:03 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:36:03 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2190 chars
+[INFO ] 14:36:03 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 14:36:03 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=1/2)
+[DEBUG] 14:36:04 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:36:04 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 14:36:04 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 14:36:04 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 14:36:05 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:06 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:07 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:08 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:36:08 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:09 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:10 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:11 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:12 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:13 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:36:13 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 14:36:13 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 14:36:13 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ checkAppAvailability: AVAILABLE
+[INFO ] 14:36:14 - core.trpc_client - TRPC: Created project 'My Video Project' → c6ceffbd-24a2-4c1d-bbfb-9f31c73dadea
+[INFO ] 14:36:14 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Project ready: c6ceffbd-24a2-4c1d-bbfb-9f31c73dadea
+[INFO ] 14:36:14 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Pre-warming reCAPTCHA...
+[INFO ] 14:36:14 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2190 chars)
+[DEBUG] 14:36:14 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 14:36:14 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2190 chars) → AM + Pool
+[DEBUG] 14:36:14 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2190 chars)
+[INFO ] 14:36:14 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 14:36:14 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 14:36:14 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:36:14 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2148 chars)
+[INFO ] 14:36:15 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 14:36:15 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:36:15 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2148 chars)
+[INFO ] 14:36:16 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:36:16 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 1/2) — validating reCAPTCHA token...
+[INFO ] 14:36:16 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 14:36:16 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 ✅ Probe OK — reCAPTCHA token valid (2169 chars)
+[INFO ] 14:36:16 - core.engine - [PreUpload:levanlinh.kma@gmail.com] Uploading 3 unique image(s) for R2V batch
+[DEBUG] 14:36:16 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[ERROR] 14:36:16 - core.engine - [PreUpload]   Error uploading D:/Pictures/1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:36:16 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[ERROR] 14:36:16 - core.engine - [PreUpload]   Error uploading D:/Pictures/90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:36:16 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[ERROR] 14:36:16 - core.engine - [PreUpload]   Error uploading D:/Pictures/desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[INFO ] 14:36:16 - core.engine - [PreUpload:levanlinh.kma@gmail.com] Done: 0/3 uploaded in 0.1s
+[INFO ] 14:36:16 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Startup complete — unblocking foremen
+[DEBUG] 14:36:16 - core.engine - [foreman-levanlin-0] Supervisor startup done — entering main loop
+[INFO ] 14:36:16 - core.dispatcher - [Dispatcher] 📋 Task group_20260316_143555_task_0 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=1)
+[INFO ] 14:36:16 - core.engine - [foreman-levanlin-0] Picked task group_20260316_143555_task_0 [running/init] progress=0% prompt_idx=0 workflow=R2V
+[DEBUG] 14:36:16 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:36:17 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 14:36:17 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260316_143555_task_0: uploading 3 image(s) [init] progress=0%
+[DEBUG] 14:36:17 - core.adaptive_burst - [AdaptiveBurst] levanlinh.kma@gmail.com: waiting 4.8s (base=5.5s)
+[DEBUG] 14:36:17 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:36:17 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:36:17 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:36:17 - core.task_journal - [TaskJournal] Snapshot saved — 1 tasks, save #1
+[DEBUG] 14:36:18 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:36:21 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:36:21 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:36:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 14:36:21 - core.engine - Uploading 3 image(s) for task group_20260316_143555_task_0 (parallel, v2)
+[DEBUG] 14:36:21 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:21 - core.engine -   Upload error for 90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 1/3)
+[DEBUG] 14:36:21 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:21 - core.engine -   Upload error for 1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 1/3)
+[DEBUG] 14:36:21 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:21 - core.engine -   Upload error for desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 1/3)
+[DEBUG] 14:36:22 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:22 - core.engine -   Upload error for 90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 2/3)
+[DEBUG] 14:36:22 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:22 - core.engine -   Upload error for 1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 2/3)
+[DEBUG] 14:36:22 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:22 - core.engine -   Upload error for desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 2/3)
+[DEBUG] 14:36:23 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:36:24 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:24 - core.engine -   Upload error for 90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 3/3)
+[ERROR] 14:36:24 - core.engine -   Upload FAILED after 3 attempts: 90s-anime-17.jpg — VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:36:24 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:24 - core.engine -   Upload error for 1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 3/3)
+[ERROR] 14:36:24 - core.engine -   Upload FAILED after 3 attempts: 1g6pssxk4q651.jpg — VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:36:24 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:36:24 - core.engine -   Upload error for desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 3/3)
+[ERROR] 14:36:24 - core.engine -   Upload FAILED after 3 attempts: desktop-wallpaper-dark-art-relaxing-anime.jpg — VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[ERROR] 14:36:24 - core.engine -   ❌ All 3 image(s) failed to upload
+[WARNING] 14:36:24 - core.dispatcher - [Dispatcher] ❌ Task group_20260316_143555_task_0 → FAILED (account=levanlinh.kma@gmail.com, error=R2V has no images (upload failed or image_paths empty), running_count=0)
+[INFO ] 14:36:24 - core.app_controller - [AutoStop] All tasks finished — stopping engine automatically
+[INFO ] 14:36:24 - core.app_controller - [TabKeepalive] Resumed — engine stopped
+[INFO ] 14:36:24 - veo - [Status] Stopping…
+[INFO ] 14:36:25 - core.engine - Engine stop requested — signaling workers to exit
+[INFO ] 14:36:25 - core.upscale_queue - [UpscaleQueue] Stopped — completed=0, failed=0
+[INFO ] 14:36:25 - core.engine - UpscaleQueue stopped
+[INFO ] 14:36:25 - core.engine - Engine stop signal sent — waiting for pipelines to finish
+[INFO ] 14:36:25 - core.engine - [TabKeepalive] Engine idle — resuming tab keepalive
+[DEBUG] 14:36:25 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[INFO ] 14:36:26 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Stopped
+[DEBUG] 14:36:28 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[DEBUG] 14:36:28 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[INFO ] 14:36:28 - core.engine - [CircuitBreaker] Monitor stopped
+[DEBUG] 14:36:28 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 14:36:47 - core.task_journal - [TaskJournal] Snapshot saved — 1 tasks, save #2
+[DEBUG] 14:36:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:36:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:36:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:36:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:36:52 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[INFO ] 14:36:54 - core.task_watchdog - [Watchdog] Stopped — total recoveries: 0
+[INFO ] 14:36:54 - core.recaptcha_pool - [RecaptchaPool] Stopped — hits=0, misses=0, prefetched=5
+[DEBUG] 14:36:54 - core.task_journal - [TaskJournal] Snapshot saved — 1 tasks, save #3
+[INFO ] 14:36:54 - core.log_exporter - [LogExporter] ✅ Report exported: session_20260316_143654.json (17 records, 0 categories)
+[INFO ] 14:36:54 - core.app_controller - [AutoExport] Session log report: logs\reports\session_20260316_143654.json
+[INFO ] 14:36:54 - core.app_controller - [AppController] Engine shutdown complete
+[INFO ] 14:36:54 - veo - [Status] Processing stopped
+[INFO ] 14:36:58 - core.engine - [CreditWindow] Recovery timer stopped
+[INFO ] 14:36:58 - core.engine - Engine stopped — worker/foreman tracking reset
+[INFO ] 14:37:02 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:37:17 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 14:37:21 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:37:21 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:37:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:37:28 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 14:37:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:37:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:37:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:37:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:37:59 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[INFO ] 14:38:02 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:38:12 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:12 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:38:12 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:17 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 14:38:21 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:21 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:38:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:26 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:38:28 - queue - [IncompleteCheck] Task group_20260316_143555_task_0: state=failed → incomplete
+[INFO ] 14:38:28 - queue - [StartAll] ready_count=0, has_incomplete_work=True
+[INFO ] 14:38:28 - queue - [AutoSweep] Round 1/5: retried 0 task(s), 0 video(s), 0 re-upscale(s), 0 re-gen(s), 0 still incomplete
+[DEBUG] 14:38:31 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 14:38:31 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 14:38:31 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 14:38:35 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:38:35 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:35 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:38:35 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 14:38:36 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 14:38:36 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 14:38:36 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[WARNING] 14:38:36 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 14:38:36 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 14:38:36 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 14:38:36 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 14:38:36 - core.app_controller - [Engine] Processing started
+[INFO ] 14:38:36 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 14:38:36 - core.multi_account - All account browsers initialized
+[INFO ] 14:38:36 - core.multi_account - ⏳ No account has good x-client-data yet (best=8 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 14:38:36 - core.engine - Engine starting: 1 accounts, 1 ready tasks in queue
+[INFO ] 14:38:36 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[INFO ] 14:38:36 - core.engine - [G1:levanlinh.kma@gmail.com] max_foremen=-1, raw_foreman=8, existing=0
+[INFO ] 14:38:36 - core.engine - [Foreman:levanlinh.kma@gmail.com] Capped foremen 8 → 1 (only 1 task(s) in queue)
+[INFO ] 14:38:36 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Spawned CHỦ + 1 Foremen (max_workers=20, output=1, retry=3, timeout=120s)
+[INFO ] 14:38:36 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=900s, POLL timeout=900s, scan every 30s
+[INFO ] 14:38:36 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Started
+[INFO ] 14:38:36 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Refreshing browser headers...
+[DEBUG] 14:38:36 - core.engine - [foreman-levanlin-0] Waiting for supervisor startup...
+[INFO ] 14:38:36 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 14:38:36 - core.engine - [CreditWindow] Recovery timer started
+[INFO ] 14:38:36 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[DEBUG] 14:38:36 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for levanlinh.kma@gmail.com
+[DEBUG] 14:38:36 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:36 - core.engine - [TabKeepalive] Engine processing — yielding...
+[DEBUG] 14:38:37 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:38 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:39 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:40 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:40 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:38:40 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:40 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:41 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:38:41 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:38:41 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2212 chars
+[INFO ] 14:38:41 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 14:38:41 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=1/2)
+[DEBUG] 14:38:42 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:38:42 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2233 chars
+[INFO ] 14:38:42 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[DEBUG] 14:38:42 - core.recaptcha_pool - [RecaptchaPool] Prefetched for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 14:38:43 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:44 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:45 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:46 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:38:46 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:47 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:48 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:49 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:50 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 14:38:50 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 14:38:50 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 14:38:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:38:51 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 14:38:51 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:38:51 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 14:38:51 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ checkAppAvailability: AVAILABLE
+[INFO ] 14:38:51 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Pre-warming reCAPTCHA...
+[INFO ] 14:38:51 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2169 chars)
+[DEBUG] 14:38:51 - core.recaptcha_pool - [RecaptchaPool] Injected readiness token for levanlinh.kma@gmail.com (pool=2/2)
+[DEBUG] 14:38:51 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2169 chars) → AM + Pool
+[DEBUG] 14:38:51 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2169 chars)
+[INFO ] 14:38:51 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 14:38:51 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2190 chars
+[INFO ] 14:38:51 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:38:51 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2190 chars)
+[INFO ] 14:38:53 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 14:38:53 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 14:38:53 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2148 chars)
+[INFO ] 14:38:54 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 14:38:54 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 1/2) — validating reCAPTCHA token...
+[INFO ] 14:38:54 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2212 chars
+[INFO ] 14:38:54 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 ✅ Probe OK — reCAPTCHA token valid (2212 chars)
+[INFO ] 14:38:54 - core.engine - [PreUpload:levanlinh.kma@gmail.com] Uploading 3 unique image(s) for R2V batch
+[DEBUG] 14:38:54 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[ERROR] 14:38:54 - core.engine - [PreUpload]   Error uploading D:/Pictures/1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:38:54 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[ERROR] 14:38:54 - core.engine - [PreUpload]   Error uploading D:/Pictures/90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:38:54 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[ERROR] 14:38:54 - core.engine - [PreUpload]   Error uploading D:/Pictures/desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[INFO ] 14:38:54 - core.engine - [PreUpload:levanlinh.kma@gmail.com] Done: 0/3 uploaded in 0.0s
+[INFO ] 14:38:54 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Startup complete — unblocking foremen
+[DEBUG] 14:38:54 - core.engine - [foreman-levanlin-0] Supervisor startup done — entering main loop
+[INFO ] 14:38:54 - core.dispatcher - [Dispatcher] 📋 Task group_20260316_143555_task_0 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=1)
+[INFO ] 14:38:54 - core.engine - [foreman-levanlin-0] Picked task group_20260316_143555_task_0 [running/init] progress=0% prompt_idx=0 workflow=R2V
+[DEBUG] 14:38:54 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 14:38:54 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260316_143555_task_0: uploading 3 image(s) [init] progress=0%
+[DEBUG] 14:38:54 - core.adaptive_burst - [AdaptiveBurst] levanlinh.kma@gmail.com: waiting 5.7s (base=5.5s)
+[DEBUG] 14:38:55 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:55 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 14:38:55 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 14:38:56 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[INFO ] 14:39:00 - core.engine - Uploading 3 image(s) for task group_20260316_143555_task_0 (parallel, v2)
+[DEBUG] 14:39:00 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:00 - core.engine -   Upload error for 90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 1/3)
+[DEBUG] 14:39:00 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:00 - core.engine -   Upload error for desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 1/3)
+[DEBUG] 14:39:00 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:00 - core.engine -   Upload error for 1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 1/3)
+[DEBUG] 14:39:01 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:01 - core.engine -   Upload error for 90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 2/3)
+[DEBUG] 14:39:01 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:01 - core.engine -   Upload error for desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 2/3)
+[DEBUG] 14:39:01 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:01 - core.engine -   Upload error for 1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 2/3)
+[DEBUG] 14:39:01 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[INFO ] 14:39:02 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 14:39:03 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:03 - core.engine -   Upload error for 90s-anime-17.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 3/3)
+[ERROR] 14:39:03 - core.engine -   Upload FAILED after 3 attempts: 90s-anime-17.jpg — VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:39:03 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:03 - core.engine -   Upload error for desktop-wallpaper-dark-art-relaxing-anime.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 3/3)
+[ERROR] 14:39:03 - core.engine -   Upload FAILED after 3 attempts: desktop-wallpaper-dark-art-relaxing-anime.jpg — VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[DEBUG] 14:39:03 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 14:39:03 - core.engine -   Upload error for 1g6pssxk4q651.jpg: VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio' (attempt 3/3)
+[ERROR] 14:39:03 - core.engine -   Upload FAILED after 3 attempts: 1g6pssxk4q651.jpg — VEOApiClient.upload_image() got an unexpected keyword argument 'aspect_ratio'
+[ERROR] 14:39:03 - core.engine -   ❌ All 3 image(s) failed to upload
+[WARNING] 14:39:03 - core.dispatcher - [Dispatcher] ❌ Task group_20260316_143555_task_0 → FAILED (account=levanlinh.kma@gmail.com, error=R2V has no images (upload failed or image_paths empty), running_count=0)
+[INFO ] 14:39:03 - core.app_controller - [AutoStop] All tasks finished — stopping engine automatically
+[INFO ] 14:39:03 - core.app_controller - [TabKeepalive] Resumed — engine stopped
+[INFO ] 14:39:03 - veo - [Status] Stopping…
+[INFO ] 14:39:03 - core.engine - Engine stop requested — signaling workers to exit
+[INFO ] 14:39:03 - core.upscale_queue - [UpscaleQueue] Stopped — completed=0, failed=0
+[INFO ] 14:39:03 - core.engine - UpscaleQueue stopped
+[INFO ] 14:39:03 - core.engine - Engine stop signal sent — waiting for pipelines to finish
+[INFO ] 14:39:03 - core.engine - [TabKeepalive] Engine idle — resuming tab keepalive
+[DEBUG] 14:39:03 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[INFO ] 14:39:04 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Stopped
+[DEBUG] 14:39:06 - veo.tab_queue - [QueueRefresh] 1 groups, 1 total tasks, existing_groups=['group_20260316_143555']
+[DEBUG] 14:39:06 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[INFO ] 14:39:06 - core.engine - [CircuitBreaker] Monitor stopped
+[DEBUG] 14:39:10 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[INFO ] 14:39:12 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

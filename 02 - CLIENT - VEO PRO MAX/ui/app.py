@@ -73,6 +73,7 @@ class MainWindow(QMainWindow):
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
+        self.setAcceptDrops(True)  # Required: register OLE IDropTarget on Windows for cross-window drag-drop
         
         # Store controller and settings
         self.controller = controller

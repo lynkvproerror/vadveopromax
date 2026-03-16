@@ -555,17 +555,39 @@ try {{
     $proc = Get-Process -Id $cfg.pid -ErrorAction SilentlyContinue
     if ($proc) {{
         $proc.WaitForExit(30000) | Out-Null
+        Log 'App process exited.'
+    }} else {{
+        Log 'App process already exited.'
     }}
-}} catch {{}}
+}} catch {{
+    Log "WaitForExit error: $_ — continuing anyway"
+}}
 
-# Extra safety wait
-Start-Sleep -Seconds 2
+# Extra safety wait for file handles to release
+Start-Sleep -Seconds 3
 
 $appDir   = $cfg.appDir
 $srcDir   = $cfg.srcDir
 $exePath  = $cfg.exePath
 $zipPath  = $cfg.zipPath
 $extrDir  = $cfg.extrDir
+
+# ★ FIX: Wait until exe is unlocked (max 15s retry)
+$exeFile = Join-Path $appDir (Split-Path $exePath -Leaf)
+for ($i = 0; $i -lt 5; $i++) {{
+    try {{
+        if (Test-Path $exeFile) {{
+            [IO.File]::Open($exeFile, 'Open', 'ReadWrite', 'None').Close()
+            Log 'Exe file is unlocked.'
+            break
+        }} else {{
+            break
+        }}
+    }} catch {{
+        Log "Exe still locked (attempt $($i+1)/5), waiting 3s..."
+        Start-Sleep -Seconds 3
+    }}
+}}
 
 # CLEAN UPDATE: Delete old app → Copy new
 Log 'Removing file protections...'
@@ -592,15 +614,21 @@ if (Test-Path $toolsDir) {{
 }}
 
 Log 'Deleting old app folder...'
+$deleteOk = $false
 try {{
     Remove-Item -Path $appDir -Recurse -Force -ErrorAction Stop
+    $deleteOk = $true
     Log 'Old app folder deleted.'
 }} catch {{
     Log "Delete failed: $_ — trying item-by-item..."
+    # Delete files deepest-first, then directories
     Get-ChildItem -Path $appDir -Recurse -Force -ErrorAction SilentlyContinue |
         Sort-Object {{ $_.FullName.Length }} -Descending |
         ForEach-Object {{ try {{ Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }} catch {{}} }}
-    try {{ Remove-Item -Path $appDir -Force -ErrorAction SilentlyContinue }} catch {{}}
+    try {{ Remove-Item -Path $appDir -Force -ErrorAction SilentlyContinue; $deleteOk = $true }} catch {{}}
+    if (-not $deleteOk) {{
+        Log 'WARNING: Could not fully delete old folder — will overwrite'
+    }}
 }}
 
 Log "Copying new files from $srcDir to $appDir ..."
@@ -654,6 +682,20 @@ foreach ($d in $hideDirs) {{
     }}
 }}
 
+# ★ FIX: Verify new exe exists before restart
+if (-not (Test-Path $exePath)) {{
+    Log "FATAL: New exe not found at $exePath — update FAILED!"
+    # Try to find exe in appDir
+    $foundExe = Get-ChildItem -Path $appDir -Filter '*.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($foundExe) {{
+        $exePath = $foundExe.FullName
+        Log "Found alternate exe: $exePath"
+    }} else {{
+        Log 'No exe found — cannot restart. Manual intervention needed.'
+        exit 1
+    }}
+}}
+
 # Cleanup
 Log 'Cleaning up temp files...'
 Remove-Item -Path $extrDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -678,14 +720,20 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             
             # Launch updater PowerShell script and exit
             log.info(f"Launching updater: {ps1_path}")
+            # ★ FIX: Use DETACHED_PROCESS so PowerShell survives parent exit
+            # close_fds=True was killing the child process on os._exit(0)
+            DETACHED_PROCESS = 0x00000008
             subprocess.Popen(
                 [
                     "powershell", "-ExecutionPolicy", "Bypass",
                     "-WindowStyle", "Hidden",
                     "-File", ps1_path,
                 ],
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                close_fds=True,
+                creationflags=DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+                close_fds=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
             
             self.update_applied.emit()

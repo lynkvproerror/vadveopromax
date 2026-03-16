@@ -575,9 +575,8 @@ class ImageLibrary:
                         continue
                     
                     img_b64, mime_type = result
-                    token = account.get_access_token()
-                    if not token:
-                        token = await account.ensure_valid_token()
+                    # Fix 401: always use ensure_valid_token for fresh token
+                    token = await account.ensure_valid_token()
                     if not token:
                         log.warning(f"[ImageLibrary] No token for {email}, stopping pre-upload")
                         break

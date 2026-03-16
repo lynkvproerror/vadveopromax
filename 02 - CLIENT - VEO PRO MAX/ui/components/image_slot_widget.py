@@ -13,6 +13,7 @@ from typing import Optional
 from PySide6.QtWidgets import (
     QFrame, QLabel, QVBoxLayout, QHBoxLayout,
     QPushButton, QFileDialog, QToolTip, QSizePolicy, QMenu,
+    QLineEdit,
 )
 from PySide6.QtCore import Qt, Signal, QMimeData, QSize
 from PySide6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QPainter, QColor
@@ -113,15 +114,18 @@ class ImageSlotWidget(QFrame):
         layout.addWidget(self._thumb_frame)
         
         # Clear button (hidden when empty)
+        _btn_size = 14 if self.SLOT_SIZE <= 50 else 18
+        _btn_radius = _btn_size // 2
+        _btn_font = 8 if self.SLOT_SIZE <= 50 else 10
         self._clear_btn = QPushButton("✕")
-        self._clear_btn.setMinimumSize(18, 18)
+        self._clear_btn.setFixedSize(_btn_size, _btn_size)
         self._clear_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {Theme.RED};
                 color: {Theme.CRUST};
                 border: none;
-                border-radius: 9px;
-                font-size: 10px;
+                border-radius: {_btn_radius}px;
+                font-size: {_btn_font}px;
                 font-weight: bold;
                 padding: 0px;
             }}
@@ -133,9 +137,9 @@ class ImageSlotWidget(QFrame):
         self._clear_btn.hide()
         # Position clear button at top-right of thumb_frame
         self._clear_btn.setParent(self._thumb_frame)
-        self._clear_btn.move(self.SLOT_SIZE - 20, 2)
+        self._clear_btn.move(self.SLOT_SIZE - _btn_size - 2, 2)
         
-        # Tag/label text
+        # Tag/label text (double-click to edit)
         self._tag_label = QLabel(self._label_text or "Drop image")
         self._tag_label.setAlignment(Qt.AlignCenter)
         self._tag_label.setFixedWidth(self.SLOT_SIZE + 4)
@@ -146,7 +150,27 @@ class ImageSlotWidget(QFrame):
             border: none;
         """)
         self._tag_label.setWordWrap(False)
+        self._tag_label.mouseDoubleClickEvent = self._start_edit_tag
         layout.addWidget(self._tag_label)
+        
+        # Inline tag editor (hidden by default)
+        self._tag_edit = QLineEdit()
+        self._tag_edit.setFixedWidth(self.SLOT_SIZE + 4)
+        self._tag_edit.setFixedHeight(self._label_h)
+        self._tag_edit.setAlignment(Qt.AlignCenter)
+        self._tag_edit.setStyleSheet(f"""
+            QLineEdit {{
+                color: {Theme.TEXT};
+                background-color: {Theme.SURFACE1};
+                border: 1px solid {self._accent};
+                border-radius: 2px;
+                font-size: 10px;
+                padding: 0px 2px;
+            }}
+        """)
+        self._tag_edit.editingFinished.connect(self._finish_edit_tag)
+        self._tag_edit.hide()
+        layout.addWidget(self._tag_edit)
     
     def _show_empty_state(self):
         """Show empty placeholder."""
@@ -262,6 +286,59 @@ class ImageSlotWidget(QFrame):
     @property
     def has_image(self) -> bool:
         return bool(self._image_path)
+    
+    # === TAG EDITING ===
+    
+    def _start_edit_tag(self, event=None):
+        """Replace tag label with inline editor on double-click."""
+        if not self._image_path:
+            return  # Nothing to rename
+        self._tag_label.hide()
+        self._tag_edit.setText(self._tag or Path(self._image_path).stem)
+        self._tag_edit.show()
+        self._tag_edit.setFocus()
+        self._tag_edit.selectAll()
+    
+    def _finish_edit_tag(self):
+        """Commit tag rename: update Library + emit signal."""
+        new_tag = self._tag_edit.text().strip()
+        self._tag_edit.hide()
+        self._tag_label.show()
+        
+        if not new_tag or new_tag == self._tag:
+            return  # No change
+        
+        old_tag = self._tag
+        self._tag = new_tag
+        self._tag_label.setText(new_tag)
+        
+        # Hot-update ImageLibrary: rename tag
+        lib = self._get_library()
+        if lib and old_tag:
+            try:
+                existing = lib.resolve_tag(old_tag)
+                if existing:
+                    # Remove old tag, add with new tag
+                    lib.update_or_add_image(
+                        existing.path, tags=[new_tag],
+                        category=getattr(existing, 'category', 'All'),
+                        copy_to_library=False,
+                    )
+                    print(f"[ImageSlot] Tag renamed: '{old_tag}' → '{new_tag}'")
+            except Exception as e:
+                print(f"[ImageSlot] Library update error: {e}")
+        elif lib and self._image_path:
+            # No old tag — just add new
+            try:
+                lib.update_or_add_image(
+                    self._image_path, tags=[new_tag],
+                    category='All', copy_to_library=True,
+                )
+                print(f"[ImageSlot] Tag added: '{new_tag}'")
+            except Exception as e:
+                print(f"[ImageSlot] Library add error: {e}")
+        
+        self.image_changed.emit(new_tag)
     
     # === EVENTS ===
     
