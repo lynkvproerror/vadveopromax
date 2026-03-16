@@ -774,6 +774,11 @@ class Engine:
         self._circuit_events: Dict[str, asyncio.Event] = {} # email → Event (set=closed/healthy)
         self._circuit_half_open_lock: Dict[str, asyncio.Lock] = {}  # email → only 1 probe worker
         
+        # ★ Sick account detection: account marked "sick" after repeated circuit trips
+        # Sick accounts skip task dispatch — tasks requeue to healthy accounts
+        self._sick_accounts: Dict[str, float] = {}           # email → time.time() when marked sick
+        self._circuit_trip_count: Dict[str, int] = {}        # email → consecutive trip count (reset on close)
+        
         # (workload_priority removed — upscale always delegates to UpscaleQueue)
         
         # Pre-warm: proactive reCAPTCHA soft recovery after idle period
@@ -1565,6 +1570,7 @@ class Engine:
     
     CIRCUIT_TRIP_THRESHOLD = 5    # consecutive 403s to trip breaker
     CIRCUIT_MONITOR_INTERVAL = 10  # seconds between health checks
+    SICK_TRIP_THRESHOLD = 3        # consecutive circuit trips → mark account "sick"
     
     def _get_circuit_event(self, email: str) -> asyncio.Event:
         """Get or create circuit breaker event (set=healthy, clear=tripped)."""
@@ -1597,6 +1603,11 @@ class Engine:
         # timestamp so exponential backoff counts from the FIRST trip, not each probe.
         if current != "half_open":
             self._circuit_open_since[email] = time.time()
+            # Count consecutive trips (only on fresh trip, not re-trip from half-open)
+            trip_count = self._circuit_trip_count.get(email, 0) + 1
+            self._circuit_trip_count[email] = trip_count
+        else:
+            trip_count = self._circuit_trip_count.get(email, 1)
         
         # Block all waiters
         evt = self._get_circuit_event(email)
@@ -1604,6 +1615,7 @@ class Engine:
         
         log.warning(
             f"⚡ [CircuitBreaker] {email}: OPEN — {reason}. "
+            f"Trip #{trip_count}/{self.SICK_TRIP_THRESHOLD}. "
             f"All workers for this account will sleep until extension reconnects."
         )
         
@@ -1612,6 +1624,10 @@ class Engine:
         if supervisor:
             supervisor.abort_foreman()
             log.info(f"[DD4] {email}: Foreman abort signal sent")
+        
+        # ★ Sick detection: N consecutive trips → mark account sick
+        if trip_count >= self.SICK_TRIP_THRESHOLD and email not in self._sick_accounts:
+            self._mark_account_sick(email)
     
     def _close_circuit_breaker(self, email: str):
         """CLOSE breaker — wake all sleeping workers.
@@ -1625,6 +1641,15 @@ class Engine:
         self._circuit_state[email] = "closed"
         self._circuit_open_since.pop(email, None)
         self._circuit_consecutive_403[email] = 0
+        self._circuit_trip_count[email] = 0  # Reset trip counter on success
+        
+        # ★ Clear sick status if account was marked sick
+        if email in self._sick_accounts:
+            self._sick_accounts.pop(email, None)
+            log.info(
+                f"✅ [SickAccount] {email}: RECOVERED — "
+                f"circuit closed, account available for dispatch again"
+            )
         
         # Wake all waiters
         evt = self._get_circuit_event(email)
@@ -1668,6 +1693,45 @@ class Engine:
         state = self._circuit_state.get(email, "closed")
         if state in ("open", "half_open"):
             self._close_circuit_breaker(email)
+    
+    def is_account_sick(self, email: str) -> bool:
+        """Check if account is marked sick (repeated circuit breaker trips).
+        
+        Sick accounts are excluded from task dispatch — foreman idles,
+        and all running tasks have been requeued to healthy accounts.
+        """
+        return email in self._sick_accounts
+    
+    def _mark_account_sick(self, email: str):
+        """Mark account as sick — requeue all running tasks to healthy accounts.
+        
+        Called when circuit breaker trips SICK_TRIP_THRESHOLD consecutive times
+        without successful recovery. This means reCAPTCHA or extension is
+        fundamentally broken for this account.
+        
+        Effects:
+        1. Account added to _sick_accounts (foreman will idle)
+        2. All RUNNING/WAITING_POLL tasks requeued (high priority, any account)
+        """
+        import time as _time
+        self._sick_accounts[email] = _time.time()
+        
+        # Requeue all running tasks from this account
+        requeued = 0
+        if self._dispatcher:
+            from core.dispatcher import TaskState
+            for task in list(self._dispatcher._all_tasks.values()):
+                if (task.assigned_account == email and 
+                        task.state in (TaskState.RUNNING, TaskState.WAITING_POLL)):
+                    if self._dispatcher.requeue_task(task):
+                        requeued += 1
+        
+        log.warning(
+            f"🤒 [SickAccount] {email}: MARKED SICK — "
+            f"{self._circuit_trip_count.get(email, 0)} consecutive circuit trips. "
+            f"Requeued {requeued} task(s) to healthy accounts. "
+            f"Account will idle until circuit breaker closes."
+        )
     
     async def _wait_for_circuit(self, email: str):
         """Block until circuit breaker closes (extension healthy).
@@ -3111,6 +3175,13 @@ class Engine:
                 # When re-enabled, foreman resumes instantly (next loop).
                 if not account.is_enabled:
                     await asyncio.sleep(2.0)
+                    continue
+                
+                # ★ Sick account: idle foreman when account is marked sick
+                # Sick = repeated circuit breaker trips (reCAPTCHA failure cascade)
+                # Tasks already requeued to healthy accounts. Wait for recovery.
+                if self.is_account_sick(account.email):
+                    await asyncio.sleep(3.0)
                     continue
                 
                 # DD4: Check supervisor abort signal (circuit breaker OR account deleted)
@@ -4966,7 +5037,8 @@ class Engine:
         
         Encapsulates the ENTIRE T2I lifecycle:
         1. Rate lock + burst delay (anti-detect)
-        2. Submit via extension bridge (30-60s synchronous API)
+        2. Submit via extension bridge — 1 API call per image × output_count
+           (F12 verified: website sends 1 request per image, NOT all in batch)
         3. Parse response → extract fife_urls + media_ids 
         4. Download 1K images → complete task
         5. Enqueue UpscaleQueue for 4K upscale (if needed)
@@ -4975,6 +5047,7 @@ class Engine:
         No pipeline sem, no submit ordering — natural serialization.
         """
         import time
+        import uuid as _uuid_batch
         from core.remedy_registry import execute_recovery
         
         _t2i_slots_held = 0
@@ -4991,311 +5064,311 @@ class Engine:
                 f"(active={self._t2i_active_outputs})"
             )
             
-            _submit_output_uris = None
-            _submit_media_ids = None
+            # ★ BUG FIX: T2I multi-image loop
+            # F12 verified: website sends 1 HTTP request per image, NOT all in batch.
+            # All images share the same batchId + sessionId.
+            # We loop output_count times, submitting 1 image per API call.
+            all_output_uris = []
+            all_media_ids = []
             
-            for attempt in range(max_retries + 1):
+            # Generate shared batch_id + session_id for all images in this task
+            shared_batch_id = getattr(task, '_batch_id', '') or str(_uuid_batch.uuid4())
+            shared_session_id = getattr(task, '_session_id', '') or f";{int(time.time() * 1000)}"
+            task._batch_id = shared_batch_id
+            task._session_id = shared_session_id
+            
+            base_seed = task.seed if task.seed is not None else None
+            
+            for img_idx in range(_oc):
                 if self._stop_event.is_set():
                     break
-                # ★ Per-task cancellation: Del/Del All sets CANCELLED
                 if task.state in (TaskState.CANCELLED, TaskState.FAILED):
                     log.info(
                         f"[T2I-Worker:{account.email}] Task {task.id}: "
-                        f"cancelled (state={task.state.value}) — aborting submit"
+                        f"cancelled (state={task.state.value}) — aborting at image {img_idx+1}/{_oc}"
                     )
                     break
                 
-                # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
-                if attempt > 0:
-                    await self.wait_for_cooldown(account.email)
-                    await self._wait_for_circuit(account.email)
-                    await self.wait_for_cooldown(account.email)
+                # Per-image progress: e.g. "📤 Submitting image 2/4"
+                _img_progress_base = int(10 + (img_idx / _oc) * 60)
+                self._dispatcher.update_progress(
+                    task.id, _img_progress_base,
+                    f"📤 Submitting image {img_idx+1}/{_oc}..."
+                )
+                
+                # Per-image seed: unique seed per image in batch
+                img_seed = (base_seed + img_idx) if base_seed is not None else None
+                
+                # ═══ Inner retry loop for each single image ═══
+                _single_success = False
+                for attempt in range(max_retries + 1):
+                    if self._stop_event.is_set():
+                        break
+                    if task.state in (TaskState.CANCELLED, TaskState.FAILED):
+                        break
                     
-                    # (reCAPTCHA + xcd readiness now handled by _pre_submit_gate below)
-                
-                # ── Pre-Submit Gate: validate xcd + reCAPTCHA ──
-                gate_ok = await self._pre_submit_gate(account, task, attempt)
-                if not gate_ok:
-                    self._dispatcher.requeue_task(task)
-                    account.release_workers(worker_count)
-                    worker_count = 0
-                    return
-                
-                # ═══ Sequential submit (under rate lock — matches video pipeline) ═══
-                # Background tasks queue on rate lock, process one at a time.
-                # Anti-detect spacing between submits (burst delay).
-                # Foreman is free (fire-and-forget) — only background tasks wait here.
-                async with self._account_rate_locks[account.email]:
-                    # Cooldown check inside rate lock
-                    if self.is_account_on_cooldown(account.email):
-                        log.info(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"cooldown inside rate lock — requeuing"
-                        )
+                    # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
+                    if attempt > 0:
+                        await self.wait_for_cooldown(account.email)
+                        await self._wait_for_circuit(account.email)
+                        await self.wait_for_cooldown(account.email)
+                    
+                    # ── Pre-Submit Gate: validate xcd + reCAPTCHA ──
+                    gate_ok = await self._pre_submit_gate(account, task, attempt)
+                    if not gate_ok:
                         self._dispatcher.requeue_task(task)
                         account.release_workers(worker_count)
                         worker_count = 0
                         return
                     
-                    # Global cross-account submit gate
-                    async with self._global_submit_lock:
-                        now = time.time()
-                        elapsed = now - self._global_last_submit_ts
-                        gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I  # ★ T2I uses shorter gap (3s vs 10s)
-                        if elapsed < gap:
-                            await asyncio.sleep(gap - elapsed)
+                    # ═══ Sequential submit (under rate lock) ═══
+                    async with self._account_rate_locks[account.email]:
+                        # Cooldown check inside rate lock
                         if self.is_account_on_cooldown(account.email):
+                            log.info(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"cooldown inside rate lock — requeuing"
+                            )
                             self._dispatcher.requeue_task(task)
                             account.release_workers(worker_count)
                             worker_count = 0
                             return
-                        self._global_last_submit_ts = time.time()
-                    
-                    # ★ Status: actually submitting now (rate lock acquired)
-                    self._dispatcher.update_progress(
-                        task.id, 10,
-                        f"🔄 Submitting..."
-                    )
-                    
-                    # Anti-detect burst delay
-                    _settings = self._settings
-                    if getattr(_settings, 'anti_detect_enabled', True) if _settings else True:
-                        _prog_15 = max(15, task.progress or 0) if attempt > 0 else 15
-                        self._dispatcher.update_progress(
-                            task.id, _prog_15,
-                            f"⏳ Waiting ({self._burst_controller_t2i.get_delay(account.email):.0f}s)"
-                        )
-                        log.info(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"adaptive delay → submit attempt {attempt+1}/{max_retries+1}"
-                        )
-                        await self._burst_controller_t2i.wait(account.email)
-                
-                # ═══ OUTSIDE rate lock: XCD + submit + parse ═══
-                # Rate lock released after burst delay — next task can start spacing
-                try:
-                    # (xcd check now handled by _pre_submit_gate above)
-                    
-                    ext_bridge = getattr(account, 'extension_bridge', None)
-                    if not ext_bridge or not ext_bridge.is_connected(account.email):
-                        log.warning(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"extension not connected — retrying..."
-                        )
-                        continue
-                    
-                    _wt_sub = (task.workflow_type or "").upper()
-                    
-                    # ★ Cooldown gate: block if account on reCAPTCHA cooldown
-                    # Prevents cascade: new tasks wait for cooldown before submitting
-                    if self.is_account_on_cooldown(account.email):
-                        self._dispatcher.update_progress(
-                            task.id, 15, "⏳ Account cooldown..."
-                        )
-                        await self.wait_for_cooldown(account.email)
-                    
-                    # ★ Worker model: no submit ordering gate needed
-                    # Foreman is blocked, tasks execute sequentially per worker
-                    self._dispatcher.update_progress(
-                        task.id, 30,
-                        f"📤 Submitting..."
-                    )
-                    
-                    endpoint_key, body = self._api_client.build_request_body(
-                        workflow_type=task.workflow_type,
-                        prompt=task.prompt or "",
-                        project_id=account.project_id or "",
-                        aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
-                        model=task.model or "GEM_PIX_2",  # Sidebar default: 🔥 Nano Banana Pro
-                        output_count=task.output_count or 4,
-                        seed=task.seed,
-                        paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
-                        image_uris=task.image_uris,
-                        batch_id=getattr(task, '_batch_id', ''),        # F12: same batchId across batch
-                        session_id=getattr(task, '_session_id', ''),    # F12: same sessionId across batch
-                    )
-                    
-                    log.info(
-                        f"[T2I-BG:{account.email}] Task {task.id}: "
-                        f"📦 submitting {endpoint_key} ({task.output_count or 4} images)"
-                    )
-                    
-                    # ★ Progressive timeout: use tier-based bridge timeout
-                    from config.constants import get_timeout_tier
-                    tier = get_timeout_tier(attempt)
-                    # ★ T2I uses dedicated longer timeout (105-125s) — image generation
-                    # takes 20-40s server-side, generic bridge_timeout (35s) is too short
-                    bridge_timeout = tier.get('t2i_bridge_timeout', tier['bridge_timeout'])
-                    
-                    ext_result = await asyncio.wait_for(
-                        ext_bridge.submit_prompt(
-                            email=account.email,
-                            endpoint=endpoint_key,
-                            body=body,
-                            needs_recaptcha=True,
-                            attempt=attempt,
-                            timeout=bridge_timeout,  # ★ Pass T2I timeout to bridge
-                        ),
-                        timeout=bridge_timeout + 10,  # outer guard with generous buffer
-                    )
-                    
-
-                    
-                    # Parse response
-                    if ext_result and ext_result.get('success'):
-                        self._dispatcher.update_progress(
-                            task.id, 60,
-                            f"✅ {_wt_sub} response received"
-                        )
-                        self._dispatcher.update_progress(
-                            task.id, 70,
-                            f"📷 Parsing {task.output_count or 4} image(s)..."
-                        )
-                        data = ext_result.get('data', {})
-                        output_uris = []
-                        t2i_media_ids = []
                         
-                        if 'media' in data:
-                            for item in data['media']:
-                                gen_img = (item.get('image') or {}).get('generatedImage', {})
-                                fife_url = gen_img.get('fifeUrl', '')
-                                mid = item.get('mediaId', '') or item.get('name', '')
-                                if fife_url:
-                                    output_uris.append(fife_url)
-                                    t2i_media_ids.append(mid)
-                            log.info(
-                                f"[T2I-BG:{account.email}] "
-                                f"[T2I-Parse] {len(output_uris)} image(s), "
-                                f"mediaIds={[m[:20] for m in t2i_media_ids]}"
-                            )
-                        
-                        # Record success
-                        self._burst_controller_t2i.record_success(account.email)
-                        self.record_circuit_success(account.email)
-                        
-
-                        
-                        if output_uris:
-                            _submit_output_uris = output_uris
-                            _submit_media_ids = t2i_media_ids
-                            break  # ← Exit retry loop
-                        else:
-                            log.warning(
-                                f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"0 output URIs in response"
-                            )
-                            self._dispatcher.complete_task(task.id, output_uris=[])
-                            return
-                    
-                    elif ext_result:
-                        error = ext_result.get('error', 'unknown')
-                        status_code = ext_result.get('status', 0)
-                        error_lower = (error or "").lower()
-                        
-
-                        
-                        log.warning(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"submit failed (attempt {attempt+1}): {error}"
-                        )
-                        
-                        if "403" in str(error) or "recaptcha" in error_lower:
-                            self._burst_controller_t2i.record_error(
-                                account.email, status_code or 403
-                            )
-                            self.record_circuit_403(account.email)
-                            self.set_account_cooldown(
-                                account.email, f"403/{error}"
-                            )
-                            
-                            ext_br = getattr(account, 'extension_bridge', None)
-                            recovery_ctx = {
-                                "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
-                            }
-                            recovery_result = await execute_recovery(
-                                account=account,
-                                error_msg=error or "",
-                                context=recovery_ctx,
-                                ext_bridge=ext_br,
-                                dispatcher=self._dispatcher,
-                                credit_window=self._credit_window,
-                                multi_account=self._account_manager,
-                            )
-                            
-                            if recovery_result.failover:
-                                log.warning(
-                                    f"[T2I-BG:{account.email}] FAILOVER — requeuing"
-                                )
+                        # Global cross-account submit gate
+                        async with self._global_submit_lock:
+                            now = time.time()
+                            elapsed = now - self._global_last_submit_ts
+                            gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I
+                            if elapsed < gap:
+                                await asyncio.sleep(gap - elapsed)
+                            if self.is_account_on_cooldown(account.email):
                                 self._dispatcher.requeue_task(task)
                                 account.release_workers(worker_count)
                                 worker_count = 0
                                 return
-                            
-                            continue
+                            self._global_last_submit_ts = time.time()
                         
-                        # ★ HTTP 400 = bad request body — permanent failure, don't retry
-                        if status_code == 400 or "invalid argument" in error_lower:
-                            log.error(
+                        # Anti-detect burst delay
+                        _settings = self._settings
+                        if getattr(_settings, 'anti_detect_enabled', True) if _settings else True:
+                            log.info(
                                 f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"HTTP 400 INVALID ARGUMENT — failing task "
-                                f"(model={task.model}, ar={task.aspect_ratio})"
+                                f"adaptive delay → submit attempt {attempt+1}/{max_retries+1} "
+                                f"(image {img_idx+1}/{_oc})"
                             )
-                            self._dispatcher.fail_task(
-                                task.id, f"Invalid request: {error[:120]}"
+                            await self._burst_controller_t2i.wait(account.email)
+                    
+                    # ═══ OUTSIDE rate lock: submit + parse ═══
+                    try:
+                        ext_bridge = getattr(account, 'extension_bridge', None)
+                        if not ext_bridge or not ext_bridge.is_connected(account.email):
+                            log.warning(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"extension not connected — retrying..."
                             )
-                            return
+                            continue
                         
-                        if attempt < max_retries:
-                            await asyncio.sleep(5)
-                            continue
-                    else:
-
-                        log.warning(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"no response from extension"
+                        _wt_sub = (task.workflow_type or "").upper()
+                        
+                        # Cooldown gate
+                        if self.is_account_on_cooldown(account.email):
+                            self._dispatcher.update_progress(
+                                task.id, _img_progress_base, "⏳ Account cooldown..."
+                            )
+                            await self.wait_for_cooldown(account.email)
+                        
+                        self._dispatcher.update_progress(
+                            task.id, _img_progress_base + 5,
+                            f"📤 Submitting image {img_idx+1}/{_oc}..."
                         )
-                        if attempt < max_retries:
-                            await asyncio.sleep(5)
-                            continue
-                
-                except asyncio.TimeoutError:
-
-                    log.warning(
-                        f"[T2I-BG:{account.email}] Task {task.id}: "
-                        f"submit timeout (attempt {attempt+1})"
-                    )
-                    if attempt < max_retries:
-                        _backoff = min(10 * (2 ** attempt), 60)  # 10s, 20s, 40s, 60s
+                        
+                        # ★ Build request for 1 image (F12: website sends 1 per HTTP call)
+                        endpoint_key, body = self._api_client.build_request_body(
+                            workflow_type=task.workflow_type,
+                            prompt=task.prompt or "",
+                            project_id=account.project_id or "",
+                            aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
+                            model=task.model or "GEM_PIX_2",
+                            output_count=1,  # ★ FIX: always 1 per API call
+                            seed=img_seed,
+                            paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                            image_uris=task.image_uris,
+                            batch_id=shared_batch_id,
+                            session_id=shared_session_id,
+                        )
+                        
                         log.info(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"backoff {_backoff}s before retry"
+                            f"📦 submitting T2I (image {img_idx+1}/{_oc})"
                         )
-                        await asyncio.sleep(_backoff)
-                        continue
-                except Exception as e:
-
-                    log.error(
+                        
+                        # Progressive timeout
+                        from config.constants import get_timeout_tier
+                        tier = get_timeout_tier(attempt)
+                        bridge_timeout = tier.get('t2i_bridge_timeout', tier['bridge_timeout'])
+                        
+                        ext_result = await asyncio.wait_for(
+                            ext_bridge.submit_prompt(
+                                email=account.email,
+                                endpoint=endpoint_key,
+                                body=body,
+                                needs_recaptcha=True,
+                                attempt=attempt,
+                                timeout=bridge_timeout,
+                            ),
+                            timeout=bridge_timeout + 10,
+                        )
+                        
+                        # Parse response
+                        if ext_result and ext_result.get('success'):
+                            data = ext_result.get('data', {})
+                            img_uris = []
+                            img_mids = []
+                            
+                            if 'media' in data:
+                                for item in data['media']:
+                                    gen_img = (item.get('image') or {}).get('generatedImage', {})
+                                    fife_url = gen_img.get('fifeUrl', '')
+                                    mid = item.get('mediaId', '') or item.get('name', '')
+                                    if fife_url:
+                                        img_uris.append(fife_url)
+                                        img_mids.append(mid)
+                                log.info(
+                                    f"[T2I-BG:{account.email}] "
+                                    f"[T2I-Parse] image {img_idx+1}/{_oc}: "
+                                    f"{len(img_uris)} image(s), "
+                                    f"mediaIds={[m[:20] for m in img_mids]}"
+                                )
+                            
+                            # Record success
+                            self._burst_controller_t2i.record_success(account.email)
+                            self.record_circuit_success(account.email)
+                            
+                            if img_uris:
+                                all_output_uris.extend(img_uris)
+                                all_media_ids.extend(img_mids)
+                                _single_success = True
+                                break  # ← Exit retry loop for this image
+                            else:
+                                log.warning(
+                                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                                    f"0 output URIs in response (image {img_idx+1}/{_oc})"
+                                )
+                                # Don't abort entire task — try remaining images
+                                _single_success = True  # Mark as "attempted"
+                                break
+                        
+                        elif ext_result:
+                            error = ext_result.get('error', 'unknown')
+                            status_code = ext_result.get('status', 0)
+                            error_lower = (error or "").lower()
+                            
+                            log.warning(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"submit failed (attempt {attempt+1}, "
+                                f"image {img_idx+1}/{_oc}): {error}"
+                            )
+                            
+                            if "403" in str(error) or "recaptcha" in error_lower:
+                                self._burst_controller_t2i.record_error(
+                                    account.email, status_code or 403
+                                )
+                                self.record_circuit_403(account.email)
+                                self.set_account_cooldown(
+                                    account.email, f"403/{error}"
+                                )
+                                
+                                ext_br = getattr(account, 'extension_bridge', None)
+                                recovery_ctx = {
+                                    "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
+                                }
+                                recovery_result = await execute_recovery(
+                                    account=account,
+                                    error_msg=error or "",
+                                    context=recovery_ctx,
+                                    ext_bridge=ext_br,
+                                    dispatcher=self._dispatcher,
+                                    credit_window=self._credit_window,
+                                    multi_account=self._account_manager,
+                                )
+                                
+                                if recovery_result.failover:
+                                    log.warning(
+                                        f"[T2I-BG:{account.email}] FAILOVER — requeuing"
+                                    )
+                                    self._dispatcher.requeue_task(task)
+                                    account.release_workers(worker_count)
+                                    worker_count = 0
+                                    return
+                                
+                                continue
+                            
+                            # ★ HTTP 400 = bad request body — permanent failure
+                            if status_code == 400 or "invalid argument" in error_lower:
+                                log.error(
+                                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                                    f"HTTP 400 INVALID ARGUMENT — failing task "
+                                    f"(model={task.model}, ar={task.aspect_ratio})"
+                                )
+                                self._dispatcher.fail_task(
+                                    task.id, f"Invalid request: {error[:120]}"
+                                )
+                                return
+                            
+                            if attempt < max_retries:
+                                await asyncio.sleep(5)
+                                continue
+                        else:
+                            log.warning(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"no response from extension (image {img_idx+1}/{_oc})"
+                            )
+                            if attempt < max_retries:
+                                await asyncio.sleep(5)
+                                continue
+                    
+                    except asyncio.TimeoutError:
+                        log.warning(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"submit timeout (attempt {attempt+1}, image {img_idx+1}/{_oc})"
+                        )
+                        if attempt < max_retries:
+                            _backoff = min(10 * (2 ** attempt), 60)
+                            await asyncio.sleep(_backoff)
+                            continue
+                    except Exception as e:
+                        log.error(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"submit error (image {img_idx+1}/{_oc}): {e}",
+                            exc_info=True,
+                        )
+                        if attempt < max_retries:
+                            _backoff = min(10 * (2 ** attempt), 60)
+                            await asyncio.sleep(_backoff)
+                            continue
+                
+                # If this image failed all retries, log but continue with next
+                if not _single_success:
+                    log.warning(
                         f"[T2I-BG:{account.email}] Task {task.id}: "
-                        f"submit error: {e}",
-                        exc_info=True,
+                        f"image {img_idx+1}/{_oc} failed all retries — skipping"
                     )
-                    if attempt < max_retries:
-                        _backoff = min(10 * (2 ** attempt), 60)
-                        await asyncio.sleep(_backoff)
-                        continue
             
-            # ═══ OUTSIDE rate lock: download + upscale pipeline ═══
-            # ★ FIRE-AND-FORGET: spawn background task for download,
-            # release foreman immediately to pick next task.
-            if _submit_output_uris:
+            # ═══ After multi-image loop: download + upscale pipeline ═══
+            log.info(
+                f"[T2I-BG:{account.email}] Task {task.id}: "
+                f"multi-image loop complete: {len(all_output_uris)}/{_oc} images"
+            )
+            
+            if all_output_uris:
                 log.info(
                     f"[T2I-BG:{account.email}] Task {task.id}: "
-                    f"🚀 fire-and-forget → download in background"
+                    f"🚀 fire-and-forget → download {len(all_output_uris)} images"
                 )
                 asyncio.create_task(
                     self._run_t2i_pipeline_bg(
                         task, account,
-                        _submit_output_uris, _submit_media_ids,
+                        all_output_uris, all_media_ids,
                         worker_count,
                         t2i_slots_held=_t2i_slots_held,
                     )
@@ -5305,10 +5378,10 @@ class Engine:
                 _t2i_slots_held = 0
                 return
             
-            # All retries exhausted — REQUEUE (not fail) to prevent task loss
+            # No images at all — requeue
             log.warning(
                 f"[T2I-BG:{account.email}] Task {task.id}: "
-                f"all {max_retries+1} attempts exhausted — requeuing task"
+                f"0/{_oc} images succeeded — requeuing task"
             )
             self._dispatcher.requeue_task(task)
             account.release_workers(worker_count)
