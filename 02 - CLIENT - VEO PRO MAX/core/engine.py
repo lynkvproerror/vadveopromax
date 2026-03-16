@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Callable
 from concurrent.futures import ProcessPoolExecutor
 import asyncio
 import base64
+import collections
 import os
 import random
 import sys
@@ -453,10 +454,10 @@ class AccountSupervisor:
                 await engine._wait_for_recaptcha_ready(account, max_wait=20.0)
         
         elif phase == 2:
-            # Hard restart
-            log.error(f"🔴 [Supervisor:{self.email}] Phase 2 → HARD browser restart")
-            await engine._do_browser_recovery(account, "supervisor", "hard")
-            await asyncio.sleep(10)
+            # Extended soft recovery (NO browser kill — preserves in-flight tasks)
+            log.warning(f"🔄 [Supervisor:{self.email}] Phase 2 → extended soft recovery (no kill)")
+            await engine._do_browser_recovery(account, "supervisor", "soft")
+            await asyncio.sleep(15)
             await engine._wait_for_recaptcha_ready(account, max_wait=30.0)
         
         else:  # phase >= 3
@@ -496,10 +497,10 @@ class AccountSupervisor:
             await engine._do_browser_recovery(account, "supervisor", "soft")
             await asyncio.sleep(10)
         else:
-            # Escalation 6+: Hard browser restart
-            log.error(f"🔴 [Supervisor:{self.email}] Tab freeze #{freeze_count} → HARD restart")
-            await engine._do_browser_recovery(account, "supervisor", "hard")
-            await asyncio.sleep(15)
+            # Escalation 6+: Extended soft recovery (no kill — preserves in-flight tasks)
+            log.warning(f"🔄 [Supervisor:{self.email}] Tab freeze #{freeze_count} → extended soft recovery")
+            await engine._do_browser_recovery(account, "supervisor", "soft")
+            await asyncio.sleep(20)
         
         await self._recaptcha_gate()
     
@@ -588,7 +589,8 @@ class Engine:
         # This lock ensures minimum 10s gap between ANY two submits.
         self._global_submit_lock = asyncio.Lock()
         self._global_last_submit_ts: float = 0.0
-        self._GLOBAL_MIN_SUBMIT_GAP: float = 10.0  # seconds between any two submits
+        self._GLOBAL_MIN_SUBMIT_GAP: float = 10.0  # seconds between any two submits (video)
+        self._GLOBAL_MIN_SUBMIT_GAP_T2I: float = 3.0  # T2I images are lighter — smaller gap OK
         # (Removed: _submitted_tasks queue — scheduler now owns full lifecycle directly)
         # Risk 7 fix: Max 2 concurrent API calls per account (any type: submit, poll, upload, upscale)
         # Prevents burst traffic when 4 workers poll/submit simultaneously
@@ -672,7 +674,7 @@ class Engine:
             set_cooldown_fn=self.set_account_cooldown,
             clear_cooldown_fn=self.clear_account_cooldown,
             fix_client_data_fn=self.fix_client_data,
-            should_wait_fn=self.should_upscale_wait,
+            should_wait_fn=lambda: False,  # UpscaleQueue runs independently (no pause gate)
             # Fix C: CircuitBreaker gate — wait for circuit CLOSED before submit
             wait_for_circuit_fn=self._wait_for_circuit,
             # V6: Report upscale 403 to engine's circuit breaker
@@ -707,6 +709,14 @@ class Engine:
             max_delay=_ad_max,
             initial_delay=(_ad_min + _ad_max) / 2,
         )
+        # ★ T2I-specific burst controller — lower delays for image generation
+        _ad_min_t2i = getattr(self._settings, 'anti_detect_delay_min_t2i', 1.5)
+        _ad_max_t2i = getattr(self._settings, 'anti_detect_delay_max_t2i', 5.0)
+        self._burst_controller_t2i = AdaptiveBurstController(
+            min_delay=_ad_min_t2i,
+            max_delay=_ad_max_t2i,
+            initial_delay=(_ad_min_t2i + _ad_max_t2i) / 2,  # 3.25s
+        )
         
         # Fix G6: Inject burst_controller into upscale queue for anti-detect delay
         self._upscale_queue._burst_controller = self._burst_controller
@@ -736,6 +746,11 @@ class Engine:
         self._download_count = 0   # Total successful downloads
         self._error_count = 0      # Total task failures
         
+        # ★ T2I output concurrency cap: max 12 outputs active simultaneously
+        # When 12 slots full, subsequent T2I tasks queue at semaphore.acquire()
+        self._t2i_output_semaphore = asyncio.Semaphore(12)
+        self._t2i_active_outputs = 0   # Counter for dashboard stats
+        
         # Bug 4 fix: Per-task download lock — prevents concurrent duplicate downloads
         self._download_locks: Dict[str, asyncio.Lock] = {}
         
@@ -759,12 +774,7 @@ class Engine:
         self._circuit_events: Dict[str, asyncio.Event] = {} # email → Event (set=closed/healthy)
         self._circuit_half_open_lock: Dict[str, asyncio.Lock] = {}  # email → only 1 probe worker
         
-        # Workload priority: controls resource allocation between prompt and upscale
-        # '720p_priority' = upscale queue pauses until ALL prompts submitted + downloaded (default)
-        # 'upscale_priority' = worker does inline upscale before freeing slot
-        # Fix G1: Default '720p_priority' — all 720p downloads complete before upscale,
-        # preventing reCAPTCHA token contention between UpscaleQueue and workers
-        self._workload_priority = 'upscale_priority'
+        # (workload_priority removed — upscale always delegates to UpscaleQueue)
         
         # Pre-warm: proactive reCAPTCHA soft recovery after idle period
         # Prevents 403 cascade by resetting reCAPTCHA context before first submit
@@ -1177,8 +1187,7 @@ class Engine:
         import time
         email = account.email
         bridge = getattr(account, 'extension_bridge', None)
-        from config.constants import MIN_VALID_XCD
-        MIN_GOOD = MIN_VALID_XCD  # 50
+        from config.constants import MIN_VALID_XCD, MIN_VALID_XCD_IMAGE, MIN_VALID_XCD_I2I
         
         # ── Get timeout tier based on attempt ──
         tier = self._get_timeout_tier(attempt)
@@ -1193,134 +1202,155 @@ class Engine:
                 f"reCAPTCHA={rc_wait_timeout:.0f}s"
             )
         
-        # ── Helper: read xcd from 3 sources ──
-        def _get_xcd() -> str:
-            """Read x-client-data: AM headers → bridge cache → session fallback."""
-            # Path 1: AccountManager.get_browser_headers() (reads bridge cache)
-            if hasattr(account, 'get_browser_headers'):
-                headers = account.get_browser_headers()
-                xcd = (headers.get('x-client-data', '') or '')
-                if len(xcd) >= MIN_GOOD:
-                    return xcd
-            else:
-                xcd = ''
-            
-            # Path 2: Direct bridge cache query
-            b = getattr(account, '_extension_bridge', None) or bridge
-            if b:
-                cached = b.get_cached_headers(email, max_age_seconds=0)
-                if cached:
-                    xcd2 = (cached.get('x-client-data', '') or '')
-                    if len(xcd2) >= MIN_GOOD:
-                        return xcd2
-                    if len(xcd2) > len(xcd):
-                        xcd = xcd2
-            
-            # Path 3: Session fallback (debounced value)
-            xcd3 = getattr(getattr(account, 'session', None), 'client_data', '') or ''
-            return xcd3 if len(xcd3) > len(xcd) else xcd
-        
         # Skip gate during stop
         if self._stop_event.is_set():
             return False
         
-        # ── Fast Path: instant real-time check ──
-        if bridge:
-            ready, reason = bridge.is_submit_ready(email)
-            if ready:
-                return True
-            log.debug(
-                f"[PreSubmitGate:{email}] Fast check failed: {reason} "
-                f"(task {task.id}, attempt {attempt})"
-            )
+        # ── Gate 1: x-client-data check ──
+        # When Extension bridge is connected, submit uses page-context fetch()
+        # where Chrome auto-adds the REAL x-client-data (72 chars).
+        # The bridge cache only has 8-char stub (webRequest API limitation).
+        # → Skip xcd gate for Extension-based submissions.
+        _bridge_connected = bridge and bridge.is_connected(email)
         
-        # Also check 3-layer xcd immediately (bridge might not have is_submit_ready)
-        xcd = _get_xcd()
-        if len(xcd) >= MIN_GOOD:
-            # xcd OK — skip slow path, go straight to reCAPTCHA
-            pass  # fall through to reCAPTCHA check below
+        if _bridge_connected:
+            # Extension submit path: Chrome auto-injects real xcd into fetch()
+            # Log cached xcd for diagnostics only (doesn't affect actual submit)
+            xcd_cached = ''
+            if hasattr(account, 'get_browser_headers'):
+                xcd_cached = (account.get_browser_headers().get('x-client-data', '') or '')
+            if len(xcd_cached) < MIN_VALID_XCD:
+                log.debug(
+                    f"[PreSubmitGate:{email}] xcd cache={len(xcd_cached)} chars "
+                    f"(OK — Extension fetch auto-injects real xcd)"
+                )
         else:
-            # ── Slow Path: active reload + monitor (under per-account lock) ──
-            if not hasattr(self, '_gate_locks'):
-                self._gate_locks = {}
-            if email not in self._gate_locks:
-                self._gate_locks[email] = asyncio.Lock()
+            # Direct API path (no extension): must have valid cached xcd
+            MIN_GOOD = MIN_VALID_XCD  # 40 — require full enrollment
             
-            gate_lock = self._gate_locks[email]
+            # ── Helper: read xcd from 3 sources ──
+            def _get_xcd() -> str:
+                """Read x-client-data: AM headers → bridge cache → session fallback."""
+                # Path 1: AccountManager.get_browser_headers() (reads bridge cache)
+                if hasattr(account, 'get_browser_headers'):
+                    headers = account.get_browser_headers()
+                    xcd = (headers.get('x-client-data', '') or '')
+                    if len(xcd) >= MIN_GOOD:
+                        return xcd
+                else:
+                    xcd = ''
+                
+                # Path 2: Direct bridge cache query
+                b = getattr(account, '_extension_bridge', None) or bridge
+                if b:
+                    cached = b.get_cached_headers(email, max_age_seconds=120)
+                    if cached:
+                        xcd2 = (cached.get('x-client-data', '') or '')
+                        if len(xcd2) >= MIN_GOOD:
+                            return xcd2
+                        if len(xcd2) > len(xcd):
+                            xcd = xcd2
+                
+                # Path 3: Session fallback (debounced value)
+                xcd3 = getattr(getattr(account, 'session', None), 'client_data', '') or ''
+                return xcd3 if len(xcd3) > len(xcd) else xcd
             
-            if gate_lock.locked():
-                # Another foreman already doing slow path — wait for result
-                log.debug(f"[PreSubmitGate:{email}] Another foreman in slow path — waiting")
-                async with gate_lock:
-                    pass  # Fall through — check xcd after lock release
-                xcd = _get_xcd()
-                if len(xcd) >= MIN_GOOD:
-                    log.info(f"[PreSubmitGate:{email}] ✅ xcd={len(xcd)} chars (from peer)")
+            xcd = _get_xcd()
+            if len(xcd) >= MIN_GOOD:
+                pass  # xcd OK — fall through to reCAPTCHA check
             else:
-                async with gate_lock:
-                    # Step 1: Trigger page reload for fresh headers
-                    if bridge and bridge.is_connected(email):
-                        log.info(
-                            f"[PreSubmitGate:{email}] Triggering header refresh "
-                            f"(task {task.id}, attempt {attempt})"
-                        )
-                        try:
-                            await bridge.refresh_headers_lightweight(email, timeout=10.0)
-                        except Exception as e:
-                            log.debug(f"[PreSubmitGate:{email}] Refresh failed: {e}")
-                    
-                    # Step 2: Poll xcd — tier-based timeout
-                    start = time.monotonic()
-                    while time.monotonic() - start < xcd_poll_timeout:
-                        if self._stop_event.is_set():
-                            return False
-                        xcd = _get_xcd()
-                        if len(xcd) >= MIN_GOOD:
-                            log.info(
-                                f"[PreSubmitGate:{email}] ✅ xcd={len(xcd)} chars "
-                                f"after {time.monotonic()-start:.1f}s"
-                            )
-                            break
-                        await self._interruptible_sleep(1.0)
+                # xcd short — must wait
+                log.info(
+                    f"[PreSubmitGate:{email}] xcd={len(xcd)} chars (need ≥{MIN_GOOD}) "
+                    f"— entering slow path to wait for valid x-client-data"
+                )
+                
+                # ── Slow Path: active reload + monitor (under per-account lock) ──
+                if not hasattr(self, '_gate_locks'):
+                    self._gate_locks = {}
+                if email not in self._gate_locks:
+                    self._gate_locks[email] = asyncio.Lock()
+                
+                gate_lock = self._gate_locks[email]
+                
+                if gate_lock.locked():
+                    log.debug(f"[PreSubmitGate:{email}] Another foreman in slow path — waiting")
+                    async with gate_lock:
+                        pass
+                    xcd = _get_xcd()
+                    if len(xcd) >= MIN_GOOD:
+                        log.info(f"[PreSubmitGate:{email}] ✅ xcd={len(xcd)} chars (from peer)")
                     else:
-                        # Step 3: Borrow from other accounts
                         log.warning(
-                            f"[PreSubmitGate:{email}] ⚠️ xcd={len(_get_xcd())} chars "
-                            f"after {xcd_poll_timeout:.0f}s (tier {tier_idx}) "
-                            f"— trying borrow from other accounts..."
+                            f"[PreSubmitGate:{email}] ❌ xcd={len(xcd)} chars "
+                            f"(need ≥{MIN_GOOD}) after peer wait — BLOCKING submit"
                         )
-                        try:
-                            self._account_manager.fix_short_client_data()
+                        return False
+                else:
+                    async with gate_lock:
+                        # Step 1: Trigger page reload for fresh headers
+                        if bridge and bridge.is_connected(email):
+                            log.info(
+                                f"[PreSubmitGate:{email}] Triggering header refresh "
+                                f"(task {task.id}, attempt {attempt})"
+                            )
+                            try:
+                                await bridge.refresh_headers_lightweight(email, timeout=10.0)
+                            except Exception as e:
+                                log.debug(f"[PreSubmitGate:{email}] Refresh failed: {e}")
+                        
+                        # Step 2: Poll xcd — tier-based timeout
+                        start = time.monotonic()
+                        while time.monotonic() - start < xcd_poll_timeout:
+                            if self._stop_event.is_set():
+                                return False
                             xcd = _get_xcd()
                             if len(xcd) >= MIN_GOOD:
                                 log.info(
-                                    f"[PreSubmitGate:{email}] ✅ Borrowed xcd="
-                                    f"{len(xcd)} chars from another account"
+                                    f"[PreSubmitGate:{email}] ✅ xcd={len(xcd)} chars "
+                                    f"after {time.monotonic()-start:.1f}s"
                                 )
-                        except Exception as e:
-                            log.debug(f"[PreSubmitGate:{email}] Borrow failed: {e}")
-                        
-                        # Step 4: Post-borrow recovery poll — tier-based timeout
-                        if len(_get_xcd()) < MIN_GOOD:
-                            start2 = time.monotonic()
-                            while time.monotonic() - start2 < xcd_poll_timeout:
-                                if self._stop_event.is_set():
-                                    return False
+                                break
+                            await self._interruptible_sleep(1.0)
+                        else:
+                            # Step 3: Borrow from other accounts
+                            log.warning(
+                                f"[PreSubmitGate:{email}] ⚠️ xcd={len(_get_xcd())} chars "
+                                f"after {xcd_poll_timeout:.0f}s (tier {tier_idx}) "
+                                f"— trying borrow from other accounts..."
+                            )
+                            try:
+                                self._account_manager.fix_short_client_data()
                                 xcd = _get_xcd()
                                 if len(xcd) >= MIN_GOOD:
                                     log.info(
-                                        f"[PreSubmitGate:{email}] ✅ xcd recovered "
-                                        f"{len(xcd)} chars after borrow+{time.monotonic()-start2:.1f}s"
+                                        f"[PreSubmitGate:{email}] ✅ Borrowed xcd="
+                                        f"{len(xcd)} chars from another account"
                                     )
-                                    break
-                                await self._interruptible_sleep(1.0)
-                            else:
-                                # SOFT gate: warn but proceed
-                                xcd_len = len(_get_xcd())
-                                log.warning(
-                                    f"[PreSubmitGate:{email}] ⚠️ xcd={xcd_len} chars "
-                                    f"(need ≥{MIN_GOOD}) — proceeding anyway (soft gate)"
-                                )
+                            except Exception as e:
+                                log.debug(f"[PreSubmitGate:{email}] Borrow failed: {e}")
+                            
+                            # Step 4: Post-borrow recovery poll
+                            if len(_get_xcd()) < MIN_GOOD:
+                                start2 = time.monotonic()
+                                while time.monotonic() - start2 < xcd_poll_timeout:
+                                    if self._stop_event.is_set():
+                                        return False
+                                    xcd = _get_xcd()
+                                    if len(xcd) >= MIN_GOOD:
+                                        log.info(
+                                            f"[PreSubmitGate:{email}] ✅ xcd recovered "
+                                            f"{len(xcd)} chars after borrow+{time.monotonic()-start2:.1f}s"
+                                        )
+                                        break
+                                    await self._interruptible_sleep(1.0)
+                                else:
+                                    xcd_len = len(_get_xcd())
+                                    log.warning(
+                                        f"[PreSubmitGate:{email}] ❌ xcd={xcd_len} chars "
+                                        f"(need ≥{MIN_GOOD}) — BLOCKING submit (hard gate)"
+                                    )
+                                    return False
         
         # ── Gate 2: reCAPTCHA readiness (HARD — always required) ──
         if self._stop_event.is_set():
@@ -1729,9 +1759,9 @@ class Engine:
                     state = self._circuit_state.get(email, "closed")
                     consecutive = self._circuit_consecutive_403.get(email, 0)
                     
-                    # ★ Browser restart recovery: 5+ consecutive 403s → restart
+                    # ★ Soft recovery: 5+ consecutive 403s → soft recover (no browser kill)
                     if state == "open" and consecutive >= self.CIRCUIT_TRIP_THRESHOLD:
-                        # Prevent re-trigger during restart
+                        # Prevent re-trigger during recovery
                         if not getattr(self, '_circuit_restart_pending', {}).get(email):
                             if not hasattr(self, '_circuit_restart_pending'):
                                 self._circuit_restart_pending = {}
@@ -1739,24 +1769,25 @@ class Engine:
                             
                             log.warning(
                                 f"🔄 [CircuitBreaker] {email}: {consecutive}× consecutive 403 "
-                                f"→ triggering browser restart (clear auth, keep profile)"
+                                f"→ soft recovery (no browser kill, preserving sessions)"
                             )
                             try:
-                                ok = await account.restart_browser()
+                                ok = await account.soft_recover_browser()
                                 if ok:
                                     log.info(
-                                        f"✅ [CircuitBreaker] {email}: browser restarted "
+                                        f"✅ [CircuitBreaker] {email}: soft recovery OK "
                                         f"— resetting counter, closing breaker"
                                     )
                                     self._circuit_consecutive_403[email] = 0
                                     self._close_circuit_breaker(email)
                                 else:
-                                    log.error(
-                                        f"❌ [CircuitBreaker] {email}: browser restart failed"
+                                    log.warning(
+                                        f"⚠️ [CircuitBreaker] {email}: soft recovery returned False "
+                                        f"— keeping circuit open, will retry next cycle"
                                     )
                             except Exception as e:
                                 log.error(
-                                    f"❌ [CircuitBreaker] {email}: restart error: {e}"
+                                    f"❌ [CircuitBreaker] {email}: soft recovery error: {e}"
                                 )
                             finally:
                                 self._circuit_restart_pending[email] = False
@@ -2197,8 +2228,7 @@ class Engine:
                     "until": until.strftime("%H:%M:%S"),
                 }
         
-        # ── Workload Priority mode ──
-        stats["workload_priority"] = self._workload_priority
+
         
         # ── Rate Lock contention ──
         stats["rate_locks"] = {}
@@ -2250,8 +2280,7 @@ class Engine:
             elif not value and rp._running:
                 rp.stop()
         elif key == "workload_priority":
-            self._workload_priority = str(value)
-            log.info(f"[Engine] Workload priority → {value}")
+            pass  # Deprecated: upscale always delegates to UpscaleQueue
         elif key == "prewarm_enabled":
             pass  # Read from settings at runtime
         elif key == "prewarm_idle_threshold":
@@ -2260,48 +2289,7 @@ class Engine:
             return False
         return True
     
-    # ── Workload Priority ──
-    
-    def should_upscale_wait(self) -> bool:
-        """Check if upscale queue should pause (720p_priority mode).
-        
-        Fix G2+G4: Pause upscale while ANY prompt is still active —
-        either waiting in queue (ready_count) OR currently generating
-        (running_count). Previous logic only checked ready_count, which
-        dropped to 0 as soon as workers picked up all tasks, causing
-        upscale to start while prompts were still generating.
-        
-        Fix G3+G5: Don't pause when ONLY ready tasks exist and all
-        accounts are on cooldown (true deadlock). But DO pause when
-        workers are running (even in cooldown) — they'll resume and
-        upscale would just compete for the same reCAPTCHA tokens.
-        """
-        if self._workload_priority != '720p_priority':
-            return False
-        
-        ready = self._dispatcher.ready_count
-        running = self._dispatcher.running_count
-        
-        # No active prompts at all → upscale can proceed
-        if ready <= 0 and running <= 0:
-            return False
-        
-        # Fix G5: Workers still running (even if in cooldown) →
-        # always wait. They'll finish/retry and upscale would only
-        # compete for the same reCAPTCHA tokens causing double-403.
-        if running > 0:
-            return True
-        
-        # Fix G3: Only ready tasks remain (no running workers).
-        # If all accounts are on cooldown, those tasks can't be picked up
-        # → allow upscale to avoid deadlock.
-        accounts = self.get_all_accounts()
-        if accounts and all(
-            self.is_account_on_cooldown(acc.email) for acc in accounts
-        ):
-            return False
-        
-        return True
+    # (should_upscale_wait removed — UpscaleQueue now runs independently)
     
     # ── Pre-warm: Proactive reCAPTCHA Recovery ──
     
@@ -2775,6 +2763,25 @@ class Engine:
             pass
         return 2  # Safe default: most T2V projects use output_count=2
     
+    def _is_image_only_workload(self) -> bool:
+        """Check if all READY queued tasks are T2I/I2I (image generation).
+        
+        Used by foreman stagger to apply minimal delays for image-only
+        workloads, since batchGenerateImages is a lightweight sync endpoint
+        that doesn't need heavy anti-detect spacing.
+        """
+        try:
+            has_ready = False
+            for task in self._dispatcher.get_all_tasks():
+                if task.state == TaskState.READY:
+                    has_ready = True
+                    wf = (getattr(task, 'workflow_type', '') or '').upper()
+                    if wf not in ('T2I', 'I2I', ''):
+                        return False
+            return has_ready  # True only if there ARE ready tasks and all are T2I/I2I
+        except Exception:
+            return False
+    
     def _spawn_account_supervisor(
         self, tg: asyncio.TaskGroup, account: AccountManager,
     ):
@@ -3071,7 +3078,7 @@ class Engine:
                     log.info(f"[{fid}] ✅ First submit verified — starting")
                 except asyncio.TimeoutError:
                     log.warning(f"[{fid}] ⚠️ First submit timeout (90s) — starting anyway")
-            # Stagger: use anti-detect delay from settings (respects Settings tab)
+            # Stagger: always use Settings tab anti-detect delay
             from config.settings import get_settings as _get_stagger_settings
             _s = _get_stagger_settings()
             if getattr(_s, 'anti_detect_enabled', True):
@@ -3133,6 +3140,18 @@ class Engine:
                     stagger = random.uniform(1.0, 5.0)
                     log.info(f"[{fid}] Stagger {stagger:.1f}s before resume")
                     await asyncio.sleep(stagger)
+                    # ★ Fix 4: Reset T2I active count after circuit breaker recovery
+                    # Without this, stale _t2i_active_count blocks all foremen
+                    # from picking tasks (counter never decremented after mass requeue).
+                    if hasattr(self, '_t2i_active_count'):
+                        old = self._t2i_active_count.get(account.email, 0)
+                        if old > 0:
+                            self._t2i_active_count[account.email] = 0
+                            log.info(
+                                f"[{fid}] ★ Reset T2I active count "
+                                f"{old} → 0 after abort recovery"
+                            )
+                    self._task_available.set()  # Wake all foremen
                 
                 # Step 1: Two-phase admission — acquire 1 worker first
                 worker_count = 0
@@ -3150,32 +3169,7 @@ class Engine:
                     continue
                 worker_count = 1
                 
-                # ★ T2I first-success gate: BEFORE picking any task
-                # Wait here (no pick-requeue noise) until first T2I succeeds
-                if hasattr(self, '_t2i_first_success'):
-                    _fs_ev = self._t2i_first_success.get(account.email)
-                    _fs_cnt = self._t2i_active_count.get(account.email, 0)
-                    if _fs_ev and not _fs_ev.is_set() and _fs_cnt >= 1:
-                        account.release_workers(worker_count)
-                        worker_count = 0
-                        try:
-                            await asyncio.wait_for(
-                                _fs_ev.wait(), timeout=10.0
-                            )
-                        except asyncio.TimeoutError:
-                            pass
-                        continue
-                
-                # ★ T2I pipeline window gate: BEFORE picking any task
-                # Wait here when window is full — no pick/requeue thrashing
-                if hasattr(self, '_t2i_active_count'):
-                    _pw_cnt = self._t2i_active_count.get(account.email, 0)
-                    _pw_max = getattr(self, '_t2i_pipeline_window', {}).get(account.email, 3)
-                    if _pw_cnt >= _pw_max:
-                        account.release_workers(worker_count)
-                        worker_count = 0
-                        await asyncio.sleep(3.0)
-                        continue
+                # (T2I pipeline gates removed — worker model: foreman IS the concurrency limit)
                 
                 # H4 fix: Check account cooldown BEFORE wasting reCAPTCHA tokens
                 if self.is_account_on_cooldown(account.email):
@@ -3482,100 +3476,43 @@ class Engine:
                     # ═══ T2I/I2I FIRE-AND-FORGET DISPATCH ═══
                     # T2I API is synchronous (~30-60s per submit).
                     # Two gates before fire-and-forget:
-                    #   Gate 1: First-success — only 1 task until first HTTP 200
-                    #           (proves xcd/reCAPTCHA/auth working)
-                    #   Gate 2: Pipeline window — max 5 active tasks per account
-                    #           (3-stage overlap: submit + download + upscale)
+                    # ★ T2I/I2I Worker Model (synchronous — like VEO video)
+                    # Foreman blocks until task completes. No pipeline sem, no
+                    # fire-and-forget, no dispatch lock. Workers ARE the
+                    # concurrency limit — simple and race-free.
                     _wt_dispatch = (task.workflow_type or "").upper()
                     if _wt_dispatch in ("T2I", "I2I"):
-                        # Initialize per-account gates (once)
-                        if not hasattr(self, '_t2i_first_success'):
-                            self._t2i_first_success = {}  # email → Event
-                        if not hasattr(self, '_t2i_active_count'):
-                            self._t2i_active_count = {}   # email → int
-                        if not hasattr(self, '_t2i_pipeline_semaphores'):
-                            self._t2i_pipeline_semaphores = {}
-                        if not hasattr(self, '_t2i_pipeline_window'):
-                            self._t2i_pipeline_window = {}  # email → int
-                        
-                        email = account.email
-                        if email not in self._t2i_first_success:
-                            self._t2i_first_success[email] = asyncio.Event()
-                        if email not in self._t2i_active_count:
-                            self._t2i_active_count[email] = 0
-                        
-                        # ★ Dynamic window based on download quality
-                        # 4K/2K: window=2 (1 submit + 1 upscale overlap)
-                        # 1K: window = max_workers / output_count (blast)
-                        if email not in self._t2i_pipeline_window:
-                            _dq = (getattr(task, 'download_quality', '1K') or '1K').upper()
-                            _oc = getattr(task, 'output_count', 4) or 4
-                            if _dq in ('4K', '2K'):
-                                self._t2i_pipeline_window[email] = 2
-                            else:
-                                self._t2i_pipeline_window[email] = max(
-                                    2, account.max_workers // _oc
-                                )
-                            log.info(
-                                f"[T2I-Window:{email}] Dynamic window = "
-                                f"{self._t2i_pipeline_window[email]} "
-                                f"(quality={_dq}, output_count={_oc}, "
-                                f"max_workers={account.max_workers})"
-                            )
-                        
-                        _win = self._t2i_pipeline_window[email]
-                        if email not in self._t2i_pipeline_semaphores:
-                            self._t2i_pipeline_semaphores[email] = asyncio.Semaphore(_win)
-                        
-                        first_success = self._t2i_first_success[email]
-                        pipeline_sem = self._t2i_pipeline_semaphores[email]
-                        
-                        # Gate 1 is now checked BEFORE task pick (L2465)
-                        # Gate 2 is now checked BEFORE task pick (L2482)
-                        # No pick-requeue loops — foremen await cleanly
-                        
-                        # Safety fallback: if somehow task slipped past pre-pick gate
-                        if self._t2i_active_count[email] >= _win:
-                            self._dispatcher.requeue_task(task)
-                            account.release_workers(worker_count)
-                            worker_count = 0
-                            await asyncio.sleep(3.0)
-                            continue
-                        
-                        # ★ Increment counter BEFORE dispatch (sync — no race)
-                        self._t2i_active_count[email] += 1
-                        
                         log.info(
-                            f"[Foreman:{email}] Task {task.id}: "
-                            f"🔥 T2I fire-and-forget dispatch "
-                            f"({worker_count} workers, "
-                            f"active={self._t2i_active_count[email]}/{_win})"
+                            f"[Foreman:{account.email}] Task {task.id}: "
+                            f"🎨 T2I worker dispatch ({worker_count} workers)"
                         )
-                        self._dispatcher.update_progress(
-                            task.id, 10,
-                            f"⏳ Queued for submit"
-                        )
-                        t = asyncio.create_task(
-                            self._run_t2i_with_pipeline_window(
-                                task=task,
-                                account=account,
-                                worker_count=worker_count,
-                                supervisor=supervisor,
-                                max_retries=max_retries,
-                                timeout=timeout,
-                                pipeline_sem=pipeline_sem,
+                        try:
+                            await self._run_t2i_submit_pipeline_bg(
+                                task, account, worker_count, supervisor,
+                                max_retries, timeout,
                             )
-                        )
-                        active_pipelines.add(t)
-                        t.add_done_callback(active_pipelines.discard)
-                        worker_count = 0  # Ownership transferred to background
-                        continue  # ← Foreman immediately picks next task
+                        except Exception as t2i_err:
+                            log.error(
+                                f"[Foreman:{account.email}] Task {task.id}: "
+                                f"T2I worker error: {t2i_err}",
+                                exc_info=True,
+                            )
+                        worker_count = 0  # Released inside _run_t2i_submit_pipeline_bg
+                        continue  # ← Foreman picks next task
                     
                     for attempt in range(max_retries + 1):
                         # BUG-13: Exit retry loop on stop (prevents 900s block)
                         if self._stop_event.is_set():
                             log.info(f"[{fid}] Stop signal — aborting submit retry")
                             break
+                        # ★ Per-task cancellation: Del/Del All sets CANCELLED
+                        if task.state in (TaskState.CANCELLED, TaskState.FAILED):
+                            log.info(
+                                f"[{fid}] Task {task.id}: {task.state.value} "
+                                f"— aborting submit retry"
+                            )
+                            break
+
                         
                         # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
                         # Both apply to ALL workers on this account (per-email key)
@@ -3711,23 +3648,42 @@ class Engine:
                                 # Tightens delay after 10 successes, backs off on 403s
                                 _wt = (task.workflow_type or "").upper()
                                 _delay_s = self._burst_controller.get_delay(account.email)
+                                
+                                # Fix #3: Skip burst delay on first T2I/I2I submit (cold start)
+                                # Image generation is synchronous & lightweight — no need for
+                                # anti-detect delay on the very first submit per account.
+                                _t2i_first_done_key = f"_t2i_burst_done_{account.email}"
+                                _is_first_t2i = (
+                                    _wt in ("T2I", "I2I")
+                                    and attempt == 0
+                                    and not getattr(self, _t2i_first_done_key, False)
+                                )
+                                
                                 if _wt in ("T2I", "I2I"):
                                     self._dispatcher.update_progress(
                                         task.id, 15,
-                                        f"⏳ Waiting ({_delay_s:.0f}s)"
+                                        f"⏳ Waiting ({_delay_s:.0f}s)" if not _is_first_t2i else "🚀 First submit"
                                     )
                                 else:
                                     self._dispatcher.update_progress(
                                         task.id, 5,
                                         f"⏳ Waiting ({_delay_s:.0f}s)"
                                     )
-                                log.info(
-                                    f"[Foreman:{account.email}] Task {task.id}: adaptive delay "
-                                    f"({self._burst_controller.get_delay(account.email):.1f}s base) → submit "
-                                    f"attempt {attempt+1}/{max_retries+1} [{task.stage.value}] "
-                                    f"progress={task.progress}%"
-                                )
-                                await self._burst_controller.wait(account.email)
+                                
+                                if _is_first_t2i:
+                                    log.info(
+                                        f"[Foreman:{account.email}] Task {task.id}: T2I cold start "
+                                        f"— skipping burst delay → submit attempt {attempt+1}/{max_retries+1}"
+                                    )
+                                    setattr(self, _t2i_first_done_key, True)
+                                else:
+                                    log.info(
+                                        f"[Foreman:{account.email}] Task {task.id}: adaptive delay "
+                                        f"({self._burst_controller.get_delay(account.email):.1f}s base) → submit "
+                                        f"attempt {attempt+1}/{max_retries+1} [{task.stage.value}] "
+                                        f"progress={task.progress}%"
+                                    )
+                                    await self._burst_controller.wait(account.email)
                         
                             try:
                                 # ★ PRIMARY PATH: Extension-based submission
@@ -3744,7 +3700,7 @@ class Engine:
                                     if _wt_sub in ("T2I", "I2I"):
                                         self._dispatcher.update_progress(
                                             task.id, 30,
-                                            f"🎨 Generating images..."
+                                            f"📤 Submitting..."
                                         )
                                     else:
                                         self._dispatcher.update_progress(
@@ -3776,6 +3732,8 @@ class Engine:
                                         seed=task.seed,
                                         paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
                                         image_uris=task.image_uris,
+                                        batch_id=getattr(task, '_batch_id', ''),        # F12: same batchId across batch
+                                        session_id=getattr(task, '_session_id', ''),    # F12: same sessionId across batch
                                     )
                                     
                                     # ── Debug: log request body structure ──
@@ -4548,67 +4506,19 @@ class Engine:
                 return
 
             if task.download_quality != "720p" and media_id:
-                # Check workload priority mode
-                if self._workload_priority == 'prompts_first':
-                    # G7: Delegate to background UpscaleQueue
-                    from core.upscale_queue import UpscaleJob
-                    self._upscale_queue.enqueue(UpscaleJob(
-                        task_id=task.id,
-                        account_email=email,
-                        original_account=email,  # DD6: track original for failover tracing
-                        media_ids=[media_id],
-                        output_uris=[fife_url],
-                        target_quality=task.download_quality,
-                        aspect_ratio=task.aspect_ratio,
-                    ))
-                    # G4: CRITICAL — decrement running to unblock UpscaleQueue
-                    self._dispatcher.decrement_running(email)
-                    task._counter_decremented = True  # Prevent double-decrement in complete_task
-                    log.info(f"{log_prefix} Delegated upscale → UpscaleQueue")
-                    # Worker returns early with 720p quality
-                else:
-                    # Inline upscale (upscale_priority mode)
-                    # ★ Use async semaphore to WAIT for slot (not boolean acquire
-                    # that falls back to UpscaleQueue and causes premature COMPLETED)
-                    upscale_sem = self._get_upscale_api_semaphore(email)
-                    upscaled = ""  # ★ Fix C: initialize to prevent UnboundLocalError
-                    # ── Pre-Submit Gate: validate before upscale ──
-                    _gate_ok = await self._pre_submit_gate(account, task)
-                    if not _gate_ok:
-                        log.warning(f"{log_prefix} PreSubmitGate failed — skipping upscale")
-                    else:
-                        async with upscale_sem:
-                            # Track active upscale count for status bar
-                            account.session.active_upscale_workers += 1
-                            try:
-                                upscaled = await self._upscale_single(
-                                    task, account, fife_url, media_id, effective_video_index
-                                )
-                            finally:
-                                account.session.active_upscale_workers -= 1
-                    if upscaled:
-                        local_final = upscaled
-                        final_quality = task.download_quality
-                        task.video_outputs[video_index].file_upscaled = upscaled
-                        task.video_outputs[video_index].quality = final_quality
-                        log.info(f"{log_prefix} ✅ Upscaled to {final_quality}")
-                    else:
-                        # ★ Fix C: Inline upscale failed → fall back to UpscaleQueue
-                        if not self._stop_event.is_set():
-                            from core.upscale_queue import UpscaleJob
-                            self._upscale_queue.enqueue(UpscaleJob(
-                                task_id=task.id,
-                                account_email=email,
-                                original_account=email,
-                                media_ids=[media_id],
-                                output_uris=[fife_url],
-                                target_quality=task.download_quality,
-                                aspect_ratio=task.aspect_ratio,
-                            ))
-                            log.info(
-                                f"{log_prefix} Inline upscale failed → "
-                                f"delegated to UpscaleQueue for background retry"
-                            )
+                # Always delegate upscale to background UpscaleQueue (decoupled)
+                # Submit workers release immediately after 720p download
+                from core.upscale_queue import UpscaleJob
+                self._upscale_queue.enqueue(UpscaleJob(
+                    task_id=task.id,
+                    account_email=email,
+                    original_account=email,  # DD6: track original for failover tracing
+                    media_ids=[media_id],
+                    output_uris=[fife_url],
+                    target_quality=task.download_quality,
+                    aspect_ratio=task.aspect_ratio,
+                ))
+                log.info(f"{log_prefix} Delegated upscale → UpscaleQueue")
 
             # ── Report result ──
             results_dict[video_index] = WorkerVideoResult(
@@ -5042,89 +4952,57 @@ class Engine:
         # (L2909-3011 handles GENERATED, DOWNLOADED_720, UPSCALING, UPSCALED)
         await self._poll_operation(task, account)
 
-    # ═══════════════════════════════════════════════════════════════
-    # T2I PIPELINE WINDOW WRAPPER
-    # ═══════════════════════════════════════════════════════════════
-    async def _run_t2i_with_pipeline_window(
-        self, task: Task, account: AccountManager,
-        worker_count: int, supervisor=None,
-        max_retries: int = 10, timeout: int = 120,
-        pipeline_sem: asyncio.Semaphore = None,
-    ):
-        """Gate T2I pipeline — sem released AFTER submit (30%), not full pipeline.
-        
-        The semaphore slot is acquired here, then released inside
-        _run_t2i_submit_pipeline_bg right after submit succeeds (~30-60%).
-        Download + upscale run WITHOUT holding the window slot, so the
-        next task can enter submit phase immediately.
-        """
-        _sem_released = False
-        try:
-            if pipeline_sem:
-                await pipeline_sem.acquire()
-            await self._run_t2i_submit_pipeline_bg(
-                task, account, worker_count, supervisor,
-                max_retries, timeout,
-                _pipeline_sem=pipeline_sem,  # ← so it can release after submit
-            )
-            _sem_released = True  # pipeline_bg released it after submit
-        finally:
-            # Safety: if pipeline_bg didn't release (error before submit), release here
-            if not _sem_released and pipeline_sem:
-                try:
-                    pipeline_sem.release()
-                except ValueError:
-                    pass  # Already released by pipeline_bg
-            # ★ Decrement active count — ONLY if not already released at submit (30%)
-            _released_set = getattr(self, '_t2i_submit_released', set())
-            if task.id in _released_set:
-                _released_set.discard(task.id)  # Clean up
-                log.debug(
-                    f"[T2I-Window:{account.email}] Task {task.id} exited — "
-                    f"already released at submit (skip decrement)"
-                )
-            elif hasattr(self, '_t2i_active_count'):
-                email = account.email
-                if email in self._t2i_active_count:
-                    self._t2i_active_count[email] = max(
-                        0, self._t2i_active_count[email] - 1
-                    )
-                    log.debug(
-                        f"[T2I-Window:{email}] Task {task.id} exited — "
-                        f"active={self._t2i_active_count[email]}/"
-                        f"{getattr(self, '_t2i_pipeline_window', {}).get(email, '?')}"
-                    )
+
     
     # ═══════════════════════════════════════════════════════════════
-    # T2I FIRE-AND-FORGET SUBMIT PIPELINE
+    # T2I WORKER SUBMIT PIPELINE (synchronous — foreman awaits)
     # ═══════════════════════════════════════════════════════════════
     async def _run_t2i_submit_pipeline_bg(
         self, task: Task, account: AccountManager,
         worker_count: int, supervisor=None,
         max_retries: int = 10, timeout: int = 120,
-        _pipeline_sem: "asyncio.Semaphore | None" = None,
     ):
-        """Background T2I submit pipeline — decoupled from foreman.
+        """T2I worker pipeline — called synchronously by foreman.
         
         Encapsulates the ENTIRE T2I lifecycle:
-        1. Rate lock + burst delay (same anti-detect as foreman)
+        1. Rate lock + burst delay (anti-detect)
         2. Submit via extension bridge (30-60s synchronous API)
         3. Parse response → extract fife_urls + media_ids 
         4. Download 1K images → complete task
         5. Enqueue UpscaleQueue for 4K upscale (if needed)
         
-        This runs as asyncio.create_task() — foreman is free immediately.
-        Mirrors how video uses _foreman_dispatch_workers.
+        Worker model: foreman blocks until this returns.
+        No pipeline sem, no submit ordering — natural serialization.
         """
         import time
         from core.remedy_registry import execute_recovery
         
+        _t2i_slots_held = 0
         try:
+            # ★ T2I Concurrency Cap: max 12 active outputs globally
+            _oc = task.output_count or 4
+            for _ in range(_oc):
+                await self._t2i_output_semaphore.acquire()
+            _t2i_slots_held = _oc
+            self._t2i_active_outputs += _oc
+            log.info(
+                f"[T2I-Worker:{account.email}] Task {task.id}: "
+                f"acquired {_oc} output slots "
+                f"(active={self._t2i_active_outputs})"
+            )
+            
             _submit_output_uris = None
             _submit_media_ids = None
             
             for attempt in range(max_retries + 1):
                 if self._stop_event.is_set():
+                    break
+                # ★ Per-task cancellation: Del/Del All sets CANCELLED
+                if task.state in (TaskState.CANCELLED, TaskState.FAILED):
+                    log.info(
+                        f"[T2I-Worker:{account.email}] Task {task.id}: "
+                        f"cancelled (state={task.state.value}) — aborting submit"
+                    )
                     break
                 
                 # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
@@ -5163,7 +5041,7 @@ class Engine:
                     async with self._global_submit_lock:
                         now = time.time()
                         elapsed = now - self._global_last_submit_ts
-                        gap = self._GLOBAL_MIN_SUBMIT_GAP
+                        gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I  # ★ T2I uses shorter gap (3s vs 10s)
                         if elapsed < gap:
                             await asyncio.sleep(gap - elapsed)
                         if self.is_account_on_cooldown(account.email):
@@ -5173,19 +5051,25 @@ class Engine:
                             return
                         self._global_last_submit_ts = time.time()
                     
+                    # ★ Status: actually submitting now (rate lock acquired)
+                    self._dispatcher.update_progress(
+                        task.id, 10,
+                        f"🔄 Submitting..."
+                    )
+                    
                     # Anti-detect burst delay
                     _settings = self._settings
                     if getattr(_settings, 'anti_detect_enabled', True) if _settings else True:
                         _prog_15 = max(15, task.progress or 0) if attempt > 0 else 15
                         self._dispatcher.update_progress(
                             task.id, _prog_15,
-                            f"⏳ Waiting ({self._burst_controller.get_delay(account.email):.0f}s)"
+                            f"⏳ Waiting ({self._burst_controller_t2i.get_delay(account.email):.0f}s)"
                         )
                         log.info(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
                             f"adaptive delay → submit attempt {attempt+1}/{max_retries+1}"
                         )
-                        await self._burst_controller.wait(account.email)
+                        await self._burst_controller_t2i.wait(account.email)
                 
                 # ═══ OUTSIDE rate lock: XCD + submit + parse ═══
                 # Rate lock released after burst delay — next task can start spacing
@@ -5201,50 +5085,34 @@ class Engine:
                         continue
                     
                     _wt_sub = (task.workflow_type or "").upper()
-                    self._dispatcher.update_progress(
-                        task.id, 20,
-                        f"🔧 Preparing {_wt_sub} submit"
-                    )
+                    
+                    # ★ Cooldown gate: block if account on reCAPTCHA cooldown
+                    # Prevents cascade: new tasks wait for cooldown before submitting
+                    if self.is_account_on_cooldown(account.email):
+                        self._dispatcher.update_progress(
+                            task.id, 15, "⏳ Account cooldown..."
+                        )
+                        await self.wait_for_cooldown(account.email)
+                    
+                    # ★ Worker model: no submit ordering gate needed
+                    # Foreman is blocked, tasks execute sequentially per worker
                     self._dispatcher.update_progress(
                         task.id, 30,
-                        f"🎨 Generating images..."
+                        f"📤 Submitting..."
                     )
-                    
-                    # ★ Release pipeline sem + active count + workers NOW
-                    # Submit started (30%) — download/upscale are I/O, don't need worker slots.
-                    # This frees workers for foreman to dispatch new tasks.
-                    if _pipeline_sem:
-                        try:
-                            _pipeline_sem.release()
-                            _pipeline_sem = None
-                        except ValueError:
-                            pass
-                    if hasattr(self, '_t2i_active_count'):
-                        email = account.email
-                        if self._t2i_active_count.get(email, 0) > 0:
-                            self._t2i_active_count[email] -= 1
-                            self._t2i_submit_released = getattr(self, '_t2i_submit_released', set())
-                            self._t2i_submit_released.add(task.id)
-                    # Release workers — they're no longer needed after submit
-                    if worker_count > 0:
-                        account.release_workers(worker_count)
-                        log.debug(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"released {worker_count} workers at submit (30%) — "
-                            f"active_count={self._t2i_active_count.get(account.email, 0)}"
-                        )
-                        worker_count = 0
                     
                     endpoint_key, body = self._api_client.build_request_body(
                         workflow_type=task.workflow_type,
                         prompt=task.prompt or "",
                         project_id=account.project_id or "",
                         aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
-                        model=task.model or "imagen_3_5",
+                        model=task.model or "GEM_PIX_2",  # Sidebar default: 🔥 Nano Banana Pro
                         output_count=task.output_count or 4,
                         seed=task.seed,
                         paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
                         image_uris=task.image_uris,
+                        batch_id=getattr(task, '_batch_id', ''),        # F12: same batchId across batch
+                        session_id=getattr(task, '_session_id', ''),    # F12: same sessionId across batch
                     )
                     
                     log.info(
@@ -5255,7 +5123,9 @@ class Engine:
                     # ★ Progressive timeout: use tier-based bridge timeout
                     from config.constants import get_timeout_tier
                     tier = get_timeout_tier(attempt)
-                    bridge_timeout = tier['bridge_timeout']
+                    # ★ T2I uses dedicated longer timeout (105-125s) — image generation
+                    # takes 20-40s server-side, generic bridge_timeout (35s) is too short
+                    bridge_timeout = tier.get('t2i_bridge_timeout', tier['bridge_timeout'])
                     
                     ext_result = await asyncio.wait_for(
                         ext_bridge.submit_prompt(
@@ -5264,9 +5134,12 @@ class Engine:
                             body=body,
                             needs_recaptcha=True,
                             attempt=attempt,
+                            timeout=bridge_timeout,  # ★ Pass T2I timeout to bridge
                         ),
-                        timeout=bridge_timeout + 5,
+                        timeout=bridge_timeout + 10,  # outer guard with generous buffer
                     )
+                    
+
                     
                     # Parse response
                     if ext_result and ext_result.get('success'):
@@ -5297,21 +5170,10 @@ class Engine:
                             )
                         
                         # Record success
-                        self._burst_controller.record_success(account.email)
+                        self._burst_controller_t2i.record_success(account.email)
                         self.record_circuit_success(account.email)
                         
-                        # ★ Signal first-success gate
-                        if hasattr(self, '_t2i_first_success'):
-                            ev = self._t2i_first_success.get(account.email)
-                            if ev and not ev.is_set():
-                                ev.set()
-                                log.info(
-                                    f"[T2I-BG:{account.email}] "
-                                    f"🎯 First T2I success — unlocking pipeline"
-                                )
-                        if not hasattr(self, '_t2i_xcd_proven'):
-                            self._t2i_xcd_proven = {}
-                        self._t2i_xcd_proven[account.email] = True
+
                         
                         if output_uris:
                             _submit_output_uris = output_uris
@@ -5330,13 +5192,15 @@ class Engine:
                         status_code = ext_result.get('status', 0)
                         error_lower = (error or "").lower()
                         
+
+                        
                         log.warning(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
                             f"submit failed (attempt {attempt+1}): {error}"
                         )
                         
                         if "403" in str(error) or "recaptcha" in error_lower:
-                            self._burst_controller.record_error(
+                            self._burst_controller_t2i.record_error(
                                 account.email, status_code or 403
                             )
                             self.record_circuit_403(account.email)
@@ -5369,10 +5233,23 @@ class Engine:
                             
                             continue
                         
+                        # ★ HTTP 400 = bad request body — permanent failure, don't retry
+                        if status_code == 400 or "invalid argument" in error_lower:
+                            log.error(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"HTTP 400 INVALID ARGUMENT — failing task "
+                                f"(model={task.model}, ar={task.aspect_ratio})"
+                            )
+                            self._dispatcher.fail_task(
+                                task.id, f"Invalid request: {error[:120]}"
+                            )
+                            return
+                        
                         if attempt < max_retries:
                             await asyncio.sleep(5)
                             continue
                     else:
+
                         log.warning(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
                             f"no response from extension"
@@ -5382,6 +5259,7 @@ class Engine:
                             continue
                 
                 except asyncio.TimeoutError:
+
                     log.warning(
                         f"[T2I-BG:{account.email}] Task {task.id}: "
                         f"submit timeout (attempt {attempt+1})"
@@ -5390,6 +5268,7 @@ class Engine:
                         await asyncio.sleep(5)
                         continue
                 except Exception as e:
+
                     log.error(
                         f"[T2I-BG:{account.email}] Task {task.id}: "
                         f"submit error: {e}",
@@ -5400,14 +5279,24 @@ class Engine:
                         continue
             
             # ═══ OUTSIDE rate lock: download + upscale pipeline ═══
-            # Rate lock is released — next T2I task starts burst delay now
+            # ★ FIRE-AND-FORGET: spawn background task for download,
+            # release foreman immediately to pick next task.
             if _submit_output_uris:
-                await self._run_t2i_pipeline_bg(
-                    task, account,
-                    _submit_output_uris, _submit_media_ids,
-                    worker_count,
+                log.info(
+                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                    f"🚀 fire-and-forget → download in background"
                 )
+                asyncio.create_task(
+                    self._run_t2i_pipeline_bg(
+                        task, account,
+                        _submit_output_uris, _submit_media_ids,
+                        worker_count,
+                        t2i_slots_held=_t2i_slots_held,
+                    )
+                )
+                # Ownership transferred to background task
                 worker_count = 0
+                _t2i_slots_held = 0
                 return
             
             # All retries exhausted (no successful submit)
@@ -5432,6 +5321,17 @@ class Engine:
                 pass
         
         finally:
+            # ★ Release T2I output slots (only if NOT transferred to background)
+            if _t2i_slots_held > 0:
+                for _ in range(_t2i_slots_held):
+                    self._t2i_output_semaphore.release()
+                self._t2i_active_outputs = max(0, self._t2i_active_outputs - _t2i_slots_held)
+                log.info(
+                    f"[T2I-Worker:{account.email}] Task {task.id}: "
+                    f"released {_t2i_slots_held} output slots "
+                    f"(active={self._t2i_active_outputs})"
+                )
+            # ★ Release workers if still held (only if NOT transferred)
             if worker_count > 0:
                 try:
                     account.release_workers(worker_count)
@@ -5442,18 +5342,24 @@ class Engine:
         self, task: Task, account: AccountManager,
         fife_urls: list, media_ids: list,
         worker_count: int,
+        t2i_slots_held: int = 0,
     ):
         """T2I pipeline: download 1K images → complete task → background upscale.
         
-        Architecture (mirrors video pipeline):
-        1. Download 1K images → complete task (like video 720p download)
-        2. Release workers immediately (foreman unblocked)
-        3. Fire-and-forget background upscale (no rate lock, no global lock)
+        Architecture (fire-and-forget — mirrors video pipeline):
+        1. Wait for server to generate high-quality images
+        2. Download 1K images → complete task
+        3. Enqueue UpscaleQueue for 4K upscale
+        4. Release workers + semaphore slots in finally
+        
+        Called as background task via asyncio.create_task() — foreman
+        is NOT blocked. Worker and semaphore ownership transferred here.
         
         Args:
             fife_urls: Remote FIFE URLs for generated images (1K resolution)
             media_ids: mediaId per image (needed for upscale API)
             worker_count: Worker slots to release on exit
+            t2i_slots_held: T2I output semaphore slots to release on exit
         """
         try:
             from pathlib import Path
@@ -5476,27 +5382,68 @@ class Engine:
                         quality="pending",
                     ))
             
-            # BUG-16: Skip download if stop is active
+            # BUG-16: Skip download if stop is active or task cancelled
             if self._stop_event.is_set():
                 log.info(f"[T2I-Pipeline] Task {task.id}: stop signal — skipping download")
                 return
+            if task.state in (TaskState.CANCELLED, TaskState.FAILED):
+                log.info(
+                    f"[T2I-Pipeline] Task {task.id}: task {task.state.value} "
+                    f"— skipping download"
+                )
+                return
             
             # === Stage 1: Download 1K images ===
+            # ★ Wait 60s after submit for server to generate high-quality images
             self._dispatcher.update_progress(
-                task.id, 85, f"📥 Downloading {total} image(s) (1K)"
+                task.id, 75, f"🎨 Generating..."
             )
-            local_paths = await self._download_outputs(
-                task, fife_urls,
-                quality_subfolder="1K",
-                generate_thumbnails=True,
-            )
+            log.info(f"[T2I-Pipeline] Task {task.id}: waiting 60s before download check")
+            await asyncio.sleep(60)
+            
+            # ★ Download with retry: 3 attempts, 20s apart
+            local_paths = []
+            _T2I_DL_MAX_RETRIES = 3
+            _T2I_DL_RETRY_INTERVAL = 20
+            for dl_attempt in range(1, _T2I_DL_MAX_RETRIES + 1):
+                if self._stop_event.is_set():
+                    break
+                if task.state in (TaskState.CANCELLED, TaskState.FAILED):
+                    break
+                self._dispatcher.update_progress(
+                    task.id, 80 + dl_attempt * 3,
+                    f"📥 Download attempt {dl_attempt}/{_T2I_DL_MAX_RETRIES} ({total} images)"
+                )
+                local_paths = await self._download_outputs(
+                    task, fife_urls,
+                    quality_subfolder="1K",
+                    generate_thumbnails=True,
+                )
+                if local_paths:
+                    log.info(
+                        f"[T2I-Pipeline] Task {task.id}: download OK "
+                        f"(attempt {dl_attempt}, {len(local_paths)} files)"
+                    )
+                    break
+                # Not ready yet — retry after interval
+                if dl_attempt < _T2I_DL_MAX_RETRIES:
+                    log.warning(
+                        f"[T2I-Pipeline] Task {task.id}: download empty "
+                        f"(attempt {dl_attempt}), retrying in {_T2I_DL_RETRY_INTERVAL}s..."
+                    )
+                    self._dispatcher.update_progress(
+                        task.id, 80 + dl_attempt * 3,
+                        f"⏳ Retry in {_T2I_DL_RETRY_INTERVAL}s..."
+                    )
+                    await asyncio.sleep(_T2I_DL_RETRY_INTERVAL)
             
             if not local_paths:
                 log.warning(
-                    f"[T2I-Pipeline] Task {task.id}: download returned 0 files"
+                    f"[T2I-Pipeline] Task {task.id}: download returned 0 files "
+                    f"after {_T2I_DL_MAX_RETRIES} attempts"
                 )
                 self._dispatcher.fail_task(
-                    task.id, "Image download failed (0 files saved)"
+                    task.id, f"Image download failed after {_T2I_DL_MAX_RETRIES} attempts"
                 )
                 self._error_count += 1
                 if self._on_task_failed:
@@ -5561,6 +5508,13 @@ class Engine:
             )
             
             # === Stage 3: Enqueue UpscaleQueue for image upscale ===
+            # ★ Skip upscale if task was cancelled during download
+            if task.state in (TaskState.CANCELLED, TaskState.FAILED):
+                log.info(
+                    f"[T2I-Pipeline] Task {task.id}: task {task.state.value} "
+                    f"— skipping upscale enqueue"
+                )
+                return
             # Uses same infrastructure as video upscale (cooldown, reCAPTCHA, bridge)
             from core.upscale_queue import UpscaleJob
             upscale_queue = getattr(self, '_upscale_queue', None)
@@ -5614,6 +5568,16 @@ class Engine:
         finally:
             if worker_count > 0:
                 account.release_workers(worker_count)
+            # ★ Release T2I output semaphore slots (transferred from submit pipeline)
+            if t2i_slots_held > 0:
+                for _ in range(t2i_slots_held):
+                    self._t2i_output_semaphore.release()
+                self._t2i_active_outputs = max(0, self._t2i_active_outputs - t2i_slots_held)
+                log.info(
+                    f"[T2I-Pipeline:{account.email}] Task {task.id}: "
+                    f"released {t2i_slots_held} output slots "
+                    f"(active={self._t2i_active_outputs})"
+                )
 
     async def _t2i_upscale_bg(
         self, task: Task, account: AccountManager,
@@ -6481,162 +6445,50 @@ class Engine:
                             upscale_paths = [None] * len(media_ids)
                             skip_upscale = True  # Bug #8: preserve media_ids for re-upscale
                         
-                        # Phase 3A: Upscale — mode determines inline vs background
+                        # Phase 3A: Always delegate upscale to background UpscaleQueue
                         if not skip_upscale:  # Bug #8: check flag instead of testing media_ids
-                            if self._workload_priority == 'upscale_priority':
-                                # ── Pool Separation: release ops → acquire upscale slot ──
-                                # Free ops workers so other foremen can pick new tasks
-                                if worker_count > 0:
-                                    account.release_workers(worker_count)
-                                    log.info(
-                                        f"[Engine] Task {task.id}: released {worker_count} ops "
-                                        f"worker(s) before upscale"
-                                    )
-                                    worker_count = 0
-                                    # Wake foremen waiting for ops capacity
-                                    _cap_evt = self._workers_available.get(account.email)
-                                    if _cap_evt:
-                                        _cap_evt.set()
-                                
-                                # Acquire upscale slot (separate pool, max 4)
-                                if not account.acquire_upscale_worker():
-                                    # Upscale pool full → fallback to UpscaleQueue
-                                    log.info(
-                                        f"[Engine] Task {task.id}: upscale pool full "
-                                        f"({account.session.active_upscale_workers}/"
-                                        f"{account.session.max_upscale_workers}) "
-                                        f"→ fallback to background queue"
-                                    )
-                                    from core.upscale_queue import UpscaleJob
-                                    self._upscale_queue.enqueue(UpscaleJob(
-                                        task_id=task.id,
-                                        account_email=account.email,
-                                        original_account=account.email,
-                                        media_ids=list(media_ids),
-                                        output_uris=list(output_uris),
-                                        target_quality=task.download_quality,
-                                        aspect_ratio=task.aspect_ratio,
-                                    ))
-                                    task.upscale_media_ids = list(media_ids)
-                                    task.stage = TaskStage.UPSCALING
-                                    self._dispatcher.update_progress(
-                                        task.id, 88, f"⬆️ Upscaling {task.download_quality} (queued)"
-                                    )
-                                    # Handle continuation before exit
-                                    if (
-                                        (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
-                                        and self._dispatcher.has_children(task.id)
-                                        and output_uris
-                                    ):
-                                        frame_result = await self._extract_continuation_frame(
-                                            task, account, output_uris[0]
-                                        )
-                                        if frame_result:
-                                            self._dispatcher.activate_children_early(
-                                                task.id, frame_result[0], frame_result[1],
-                                            )
-                                    self._dispatcher.decrement_running(account.email)
-                                    task._counter_decremented = True
-                                    continue  # Skip to next foreman loop iteration
-                                
-                                upscale_worker_held = True
-                                log.info(
-                                    f"[Engine] Task {task.id}: upscale_priority mode → "
-                                    f"inline upscale ({task.download_quality}) "
-                                    f"[upscale slots: {account.session.active_upscale_workers}/"
-                                    f"{account.session.max_upscale_workers}]"
+                            from core.upscale_queue import UpscaleJob
+                            self._upscale_queue.enqueue(UpscaleJob(
+                                task_id=task.id,
+                                account_email=account.email,
+                                original_account=account.email,  # DD6
+                                media_ids=list(media_ids),
+                                output_uris=list(output_uris),
+                                target_quality=task.download_quality,
+                                aspect_ratio=task.aspect_ratio,
+                            ))
+                            task.upscale_media_ids = list(media_ids)
+                            task.stage = TaskStage.UPSCALING
+                            self._dispatcher.update_progress(
+                                task.id, 88, f"⬆️ Upscaling {task.download_quality} (queued)"
+                            )
+                            
+                            # Handle continuation frame before worker exits
+                            # EARLY ACTIVATION: Children start immediately after 720p,
+                            # not after upscale completes (~3-5min savings per chain link)
+                            if (
+                                (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
+                                and self._dispatcher.has_children(task.id)
+                                and output_uris
+                            ):
+                                frame_result = await self._extract_continuation_frame(
+                                    task, account, output_uris[0]
                                 )
-                                task.stage = TaskStage.UPSCALING
-                                self._dispatcher.update_progress(
-                                    task.id, 88, f"⬆️ Upscaling {task.download_quality} (inline)"
-                                )
-                                try:
-                                    upscale_results = await self._auto_upscale(
-                                        task, account, output_uris, media_ids
+                                if frame_result:
+                                    self._dispatcher.activate_children_early(
+                                        task.id,
+                                        frame_result[0],   # continuation_frame_uri
+                                        frame_result[1],   # continuation_frame_local_path
                                     )
-                                    # Populate upscale_paths for merge at L1642+
-                                    for i, uri in enumerate(upscale_results):
-                                        if uri and i < len(upscale_paths):
-                                            upscale_paths[i] = uri
-                                finally:
-                                    # Always release upscale slot
-                                    account.release_upscale_worker()
-                                    upscale_worker_held = False
-                                    log.info(
-                                        f"[Engine] Task {task.id}: released upscale worker "
-                                        f"[remaining: {account.session.active_upscale_workers}/"
-                                        f"{account.session.max_upscale_workers}]"
-                                    )
-                                
-                                # Handle continuation frame (same as background path)
-                                if (
-                                    (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
-                                    and self._dispatcher.has_children(task.id)
-                                    and output_uris
-                                ):
-                                    frame_result = await self._extract_continuation_frame(
-                                        task, account, output_uris[0]
-                                    )
-                                    if frame_result:
-                                        # ★ SPEED OPT: Activate children FIRST — they will
-                                        # self-wait for reCAPTCHA when their foreman picks them
-                                        self._dispatcher.activate_children_early(
-                                            task.id,
-                                            frame_result[0],
-                                            frame_result[1],
-                                        )
-                                # Fall through to merge at L1642+ (don't return)
-                            else:
-                                # BACKGROUND upscale (720p_priority mode)
-                                from core.upscale_queue import UpscaleJob
-                                self._upscale_queue.enqueue(UpscaleJob(
-                                    task_id=task.id,
-                                    account_email=account.email,
-                                    original_account=account.email,  # DD6
-                                    media_ids=list(media_ids),
-                                    output_uris=list(output_uris),
-                                    target_quality=task.download_quality,
-                                    aspect_ratio=task.aspect_ratio,
-                                ))
-                                task.upscale_media_ids = list(media_ids)
-                                task.stage = TaskStage.UPSCALING  # ★ Stay in upscaling
-                                self._dispatcher.update_progress(
-                                    task.id, 88, f"⬆️ Upscaling {task.download_quality} (queued)"
-                                )
-                                
-                                # Handle continuation frame before worker exits
-                                # EARLY ACTIVATION: Children start immediately after 720p,
-                                # not after upscale completes (~3-5min savings per chain link)
-                                if (
-                                    (getattr(self._settings, 'continuation_enabled', True) if self._settings else True)
-                                    and self._dispatcher.has_children(task.id)
-                                    and output_uris
-                                ):
-                                    frame_result = await self._extract_continuation_frame(
-                                        task, account, output_uris[0]
-                                    )
-                                    if frame_result:
-                                        # ★ SPEED OPT: Activate children FIRST — don't wait for
-                                        # reCAPTCHA. Children will self-wait when foreman picks them.
-                                        # _resolve_dependencies pops _parent_to_children,
-                                        # so UpscaleQueue's complete_task() won't double-activate
-                                        self._dispatcher.activate_children_early(
-                                            task.id,
-                                            frame_result[0],   # continuation_frame_uri
-                                            frame_result[1],   # continuation_frame_local_path
-                                        )
-                                
-                                # Worker exits — UpscaleQueue will call complete_task()
-                                # ★ CRITICAL: Decrement running_count so should_upscale_wait()
-                                # returns False when all prompts are done. Without this,
-                                # running_count stays >0 forever → upscale deadlock.
-                                self._dispatcher.decrement_running(account.email)
-                                task._counter_decremented = True  # Prevent double-decrement in complete_task
-                                log.info(
-                                    f"[Engine] Task {task.id}: worker releasing slot → "
-                                    f"upscale continues in background"
-                                )
-                                return
+                            
+                            # Worker exits — UpscaleQueue will call complete_task()
+                            self._dispatcher.decrement_running(account.email)
+                            task._counter_decremented = True  # Prevent double-decrement in complete_task
+                            log.info(
+                                f"[Engine] Task {task.id}: worker releasing slot → "
+                                f"upscale continues in background"
+                            )
+                            return
                     
                     # Per-video quality merge: prefer upscale, fallback 720p
                     # NOTE: local_720p has same length as output_uris, with "" for failed downloads
@@ -7952,32 +7804,29 @@ class Engine:
                             except Exception as soft_err:
                                 log.error(f"❌ Upscale soft recovery failed: {soft_err}")
                                 
-                        elif attempt == 2:
-                            # Tier 2: Hard restart (kill + relaunch) as fallback
+                        elif attempt >= 2:
+                            # Tier 2: Extended soft recovery (no browser kill — preserves sessions)
                             log.warning(
-                                f"🔄 Upscale {video_label}: reCAPTCHA failed 3x. "
-                                f"Full browser restart (kill + relaunch)..."
+                                f"🔄 Upscale {video_label}: reCAPTCHA failed {attempt + 1}x. "
+                                f"Extended soft recovery (no kill)..."
                             )
                             try:
-                                restart_ok = await account.restart_browser()
-                                if restart_ok:
-                                    log.info(f"✅ Upscale: Browser restarted for {account.email}. Retrying...")
-                                    # Post-restart: refresh headers (gate handles full validation on next retry)
-                                    ext_b = getattr(account, 'extension_bridge', None)
-                                    if ext_b and ext_b.is_connected(account.email):
-                                        try:
-                                            await ext_b.refresh_headers_lightweight(account.email, timeout=10.0)
-                                        except Exception:
-                                            pass
-                                    # Borrow xcd as fallback
+                                soft_ok = await account.soft_recover_browser()
+                                if soft_ok:
+                                    log.info(f"✅ Upscale: Soft recovery OK for {account.email}. Retrying...")
+                                else:
+                                    log.warning(f"⚠️ Upscale: Soft recovery returned False for {account.email}")
+                                # Simulate activity to rebuild trust score
+                                _ext = getattr(account, 'extension_bridge', None)
+                                if _ext and _ext.is_connected(account.email):
                                     try:
-                                        self._account_manager.fix_short_client_data()
+                                        await _ext.simulate_activity(account.email, timeout=3.0)
                                     except Exception:
                                         pass
-                                else:
-                                    log.error(f"❌ Upscale: Browser restart returned False")
-                            except Exception as restart_err:
-                                log.error(f"❌ Upscale browser restart failed: {restart_err}")
+                                # Longer cooldown to let reCAPTCHA reset
+                                await asyncio.sleep(15)
+                            except Exception as soft_err:
+                                log.error(f"❌ Upscale soft recovery failed: {soft_err}")
                     
                     if attempt < max_submit_retries - 1:
                         # ★ FIX: Check stop event before delay
@@ -8801,6 +8650,14 @@ class Engine:
         task_output_count = getattr(task, 'output_count', 1) or 1
         is_multi = len(output_uris) > 1 or task_output_count > 1
         
+        # ★ DEBUG: Trace naming logic
+        log.debug(
+            f"[Download-Naming] Task {task.id}: "
+            f"prompt_idx={idx_str}, output_count={task_output_count}, "
+            f"uris={len(output_uris)}, is_multi={is_multi}, "
+            f"video_index={video_index}"
+        )
+        
         # Bug 4A: Timeout prevents infinite hang on unresponsive FIFE server
         dl_timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
         async with aiohttp.ClientSession(timeout=dl_timeout) as session:
@@ -8847,6 +8704,13 @@ class Engine:
                         file_ext = '.png' if is_image_task else '.mp4'
                         filename = sep.join(parts) + file_ext
                         filepath = output_path / filename
+                        
+                        # ★ DEBUG: Trace per-file naming
+                        log.debug(
+                            f"[Download-Naming] Task {task.id} uri[{i}]: "
+                            f"variant_idx={variant_idx}, is_multi={is_multi}, "
+                            f"parts={parts} → {filename}"
+                        )
                         
                         # Avoid overwrite — add numeric suffix if exists
                         counter = 1
@@ -8995,15 +8859,17 @@ class Engine:
                                     log.info(f"Thumbnail (image): {thumb_path.name}")
                                 else:
                                     # Video: extract first frame using ffmpeg (with fallback)
-                                    import subprocess, shutil
+                                    import subprocess
+                                    from core.frame_extractor import get_ffmpeg_path
                                     ffmpeg_ok = False
+                                    _ffmpeg_bin = get_ffmpeg_path()
                                     
-                                    if shutil.which('ffmpeg'):
+                                    if _ffmpeg_bin:
                                         # Try at 1s first, then at 0s for short videos
                                         for ss_val in ['1', '0']:
                                             try:
                                                 result = subprocess.run(
-                                                    ['ffmpeg', '-y', '-ss', ss_val, '-i', str(filepath),
+                                                    [_ffmpeg_bin, '-y', '-ss', ss_val, '-i', str(filepath),
                                                      '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
                                                      str(thumb_path)],
                                                     capture_output=True, timeout=10
@@ -9016,7 +8882,7 @@ class Engine:
                                                 log.debug(f"ffmpeg -ss {ss_val} failed: {ff_err}")
                                     else:
                                         log.warning(
-                                            f"ffmpeg not in PATH — trying PIL fallback for thumbnail"
+                                            f"ffmpeg not available — trying PIL fallback for thumbnail"
                                         )
                                     
                                     # PIL fallback: decode first frame from video container
@@ -9098,7 +8964,9 @@ class Engine:
         
         # Probe original resolution
         import subprocess
-        ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
+        # Use Path-based replacement to only change filename, not directory
+        _ffmpeg_p = Path(ffmpeg)
+        ffprobe = str(_ffmpeg_p.parent / _ffmpeg_p.name.replace("ffmpeg", "ffprobe"))
         try:
             probe_result = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -9229,14 +9097,16 @@ class Engine:
                     thumb_img.save(str(thumb_path), 'JPEG', quality=85)
             else:
                 # Video: extract first frame using ffmpeg (with fallback)
-                import subprocess, shutil
+                import subprocess
+                from core.frame_extractor import get_ffmpeg_path
                 ffmpeg_ok = False
+                _ffmpeg_bin = get_ffmpeg_path()
                 
-                if shutil.which('ffmpeg'):
+                if _ffmpeg_bin:
                     for ss_val in ['1', '0']:
                         try:
                             subprocess.run(
-                                ['ffmpeg', '-y', '-ss', ss_val, '-i', str(source),
+                                [_ffmpeg_bin, '-y', '-ss', ss_val, '-i', str(source),
                                  '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
                                  str(thumb_path)],
                                 capture_output=True, timeout=10,
