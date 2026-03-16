@@ -1668,7 +1668,6 @@ class UpscaleQueue:
                 # - Normal tasks: FIFE-only (reliable, no extra deps)
                 # - Re-upscale (right-click): TRPC ZIP first → FIFE fallback
                 #   (re-upscale has no FIFE URI, must use TRPC)
-                is_re_upscale_job = not fife_uri if uris_to_download else False
                 # Better detection: check if ANY entry has None URI (re-upscale signature)
                 _has_re_upscale_entries = any(u is None for _, u in uris_to_download)
                 
