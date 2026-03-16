@@ -323,6 +323,7 @@ const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefin
 const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
 const hasSiteKey = !!extractSiteKey();
 const ready = hasExecute && hasSiteKey;
+performLightweightRefresh();
 chrome.runtime.sendMessage({
 action: 'recaptcha_warmth',
 email: _registeredEmail,
@@ -378,6 +379,8 @@ const endpointUrl = msg.endpointUrl;
 const payload = msg.payload || {};
 const needsRecaptcha = msg.needsRecaptcha !== false;
 const endpointKey = msg.endpoint || '';
+const rcTimeout = msg.rcTimeout || 15000;
+const fetchTimeout = msg.fetchTimeout || 20000;
 const resultHandler = (event) => {
 if (event.source !== window) return;
 if (!event.data || event.data.type !== '__VEO_SUBMIT_RESULT__') return;
@@ -390,16 +393,17 @@ requestId: requestId,
 });
 };
 window.addEventListener('message', resultHandler);
+const relayTimeout = Math.max((rcTimeout + fetchTimeout) * 2, 60000);
 const timeout = setTimeout(() => {
 window.removeEventListener('message', resultHandler);
-console.error(`[VEO Bridge Content] ❌ submit_prompt timed out (45s)`);
+console.error(`[VEO Bridge Content] ❌ submit_prompt timed out (${relayTimeout / 1000}s)`);
 chrome.runtime.sendMessage({
 action: 'submit_prompt_relay_result',
 requestId: requestId,
 success: false,
-error: 'Content script relay timeout (45s)',
+error: `Content script relay timeout (${relayTimeout / 1000}s)`,
 });
-}, 45000);
+}, relayTimeout);
 const origHandler = resultHandler;
 const wrappedHandler = (event) => {
 if (event.source !== window) return;
@@ -418,6 +422,8 @@ const endpointUrl = ${JSON.stringify(endpointUrl)};
 const payload = ${JSON.stringify(payload)};
 const needsRecaptcha = ${JSON.stringify(needsRecaptcha)};
 const endpointKey = ${JSON.stringify(endpointKey)};
+const rcTimeoutMs = ${rcTimeout};
+const fetchTimeoutMs = ${fetchTimeout};
 try {
 // ── Step 1: reCAPTCHA token ──────────────────────────────
 let recaptchaToken = null;
@@ -456,14 +462,14 @@ try {
 const rcAction = (endpointKey === 'T2I') ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
 const recaptchaPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
 const recaptchaTimeout = new Promise((_, reject) =>
-setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
+setTimeout(() => reject(new Error('reCAPTCHA execute timeout (' + (rcTimeoutMs / 1000) + 's)')), rcTimeoutMs)
 );
 recaptchaToken = await Promise.race([recaptchaPromise, recaptchaTimeout]);
 // HAR verified: valid tokens are 1742-2169 chars
-if (!recaptchaToken || recaptchaToken.length < 1000) {
+if (!recaptchaToken || recaptchaToken.length < 1500) {
 window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
 success: false,
-error: 'reCAPTCHA token too short (' + (recaptchaToken ? recaptchaToken.length : 0) + ' chars, need ≥1000)',
+error: 'reCAPTCHA token too short (' + (recaptchaToken ? recaptchaToken.length : 0) + ' chars, need ≥1500)',
 tokenLength: recaptchaToken ? recaptchaToken.length : 0
 }}, '*');
 return;
@@ -483,6 +489,19 @@ body.clientContext.recaptchaContext = {
 token: recaptchaToken,
 applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
 };
+// ★ T2I/I2I: also inject into nested requests[].clientContext
+// F12 verified 2026-03-15: T2I format has clientContext inside
+// EACH request item, and ALL must include recaptchaContext
+if (Array.isArray(body.requests)) {
+for (const req of body.requests) {
+if (req.clientContext) {
+req.clientContext.recaptchaContext = {
+token: recaptchaToken,
+applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+};
+}
+}
+}
 }
 // ── Step 3: Access token ─────────────────────────────────
 let accessToken = null;
@@ -503,7 +522,7 @@ accessToken = user.accessToken;
 const headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
 if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
 const controller = new AbortController();
-const fetchTimeout = setTimeout(() => controller.abort(), 20000);
+const fetchTimer = setTimeout(() => controller.abort(), fetchTimeoutMs);
 try {
 const resp = await fetch(endpointUrl, {
 method: 'POST',
@@ -512,7 +531,7 @@ credentials: 'include',
 body: JSON.stringify(body),
 signal: controller.signal,
 });
-clearTimeout(fetchTimeout);
+clearTimeout(fetchTimer);
 const responseText = await resp.text();
 let responseData = null;
 try { responseData = JSON.parse(responseText); }
@@ -525,9 +544,9 @@ data: responseData,
 tokenLength: recaptchaToken ? recaptchaToken.length : 0,
 }}, '*');
 } catch (fetchErr) {
-clearTimeout(fetchTimeout);
+clearTimeout(fetchTimer);
 const errMsg = fetchErr.name === String.fromCharCode(0x41,0x62,0x6f,0x72,0x74,0x45,0x72,0x72,0x6f,0x72)
-? 'fetch timeout (20s) — API did not respond'
+? 'fetch timeout (' + (fetchTimeoutMs / 1000) + 's) — API did not respond'
 : 'fetch failed: ' + fetchErr.message;
 window.postMessage({ type: '__VEO_SUBMIT_RESULT__', requestId, result: {
 success: false,

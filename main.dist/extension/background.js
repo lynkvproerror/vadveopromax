@@ -29,8 +29,9 @@ if (result.tabState && Object.keys(result.tabState).length > 0) {
 for (const [tabId, state] of Object.entries(result.tabState)) {
 try {
 const tab = await chrome.tabs.get(parseInt(tabId));
-if (tab) {
+if (tab && tab.url && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome:')) {
 tabState[tabId] = state;
+} else if (tab) {
 }
 } catch (_) {
 }
@@ -44,7 +45,7 @@ return;
 try {
 const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
 for (const tab of tabs) {
-if (!tabState[tab.id]) {
+if (!tabState[tab.id] && tab.url && tab.url.includes('labs.google')) {
 tabState[tab.id] = {
 email: null, headers: {}, accessToken: null,
 lastHeartbeat: 0, recaptchaReady: false,
@@ -226,18 +227,19 @@ return { token: null, error: 'Could not extract reCAPTCHA site key' };
 }
 try {
 const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
-if (token && token.length >= 1000) {
+if (token && token.length >= 1500) {
 return { token, tokenLength: token.length };
 }
-return { token: null, error: `Token too short (${token ? token.length : 0} chars, need ≥1000)`, tokenLength: token ? token.length : 0 };
+return { token: null, error: `Token too short (${token ? token.length : 0} chars, need ≥1500)`, tokenLength: token ? token.length : 0 };
 } catch (err) {
 return { token: null, error: err.message, tokenLength: 0 };
 }
 },
 args: [msg.siteKey || null],
 });
+const rcTimeoutMs = msg.rcTimeout || 15000;
 const timeoutPromise = new Promise((_, reject) =>
-setTimeout(() => reject(new Error('reCAPTCHA execute timeout (15s) — widget may be frozen')), 15000)
+setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s) — widget may be frozen`)), rcTimeoutMs)
 );
 const results = await Promise.race([scriptPromise, timeoutPromise]);
 const result = results?.[0]?.result;
@@ -614,7 +616,7 @@ return;
 const scriptPromise = chrome.scripting.executeScript({
 target: { tabId },
 world: 'MAIN',
-func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey) => {
+func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey, rcTimeoutMs, fetchTimeoutMs) => {
 let siteKey = null;
 if (needsRecaptcha) {
 for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
@@ -641,20 +643,37 @@ if (!siteKey) {
 return { success: false, error: 'Could not extract reCAPTCHA site key' };
 }
 }
+if (needsRecaptcha) {
+try {
+const randomX = Math.floor(Math.random() * window.innerWidth * 0.6 + window.innerWidth * 0.2);
+const randomY = Math.floor(Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.2);
+['mousemove', 'mouseover', 'mousedown', 'mouseup', 'click'].forEach(type => {
+document.dispatchEvent(new MouseEvent(type, {
+bubbles: true, clientX: randomX, clientY: randomY,
+view: window, detail: type === 'click' ? 1 : 0,
+}));
+});
+window.scrollBy(0, Math.floor(Math.random() * 50) - 25);
+document.dispatchEvent(new Event('focus'));
+window.dispatchEvent(new Event('focus'));
+await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 400)));
+} catch (_simErr) {
+}
+}
+const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
+const rcAction = needsRecaptcha ? (imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION') : null;
 let recaptchaToken = null;
 if (needsRecaptcha) {
 try {
-const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
-const rcAction = imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION';
 const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
-const rcTimeout = new Promise((_, reject) =>
-setTimeout(() => reject(new Error('reCAPTCHA execute timeout (10s)')), 10000)
+const rcTimeout_ = new Promise((_, reject) =>
+setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s)`)), rcTimeoutMs)
 );
-recaptchaToken = await Promise.race([rcPromise, rcTimeout]);
-if (!recaptchaToken || recaptchaToken.length < 1000) {
+recaptchaToken = await Promise.race([rcPromise, rcTimeout_]);
+if (!recaptchaToken || recaptchaToken.length < 1500) {
 return {
 success: false,
-error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1000)`,
+error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1500)`,
 tokenLength: recaptchaToken ? recaptchaToken.length : 0,
 };
 }
@@ -664,16 +683,31 @@ return { success: false, error: `reCAPTCHA execute failed: ${err.message}` };
 }
 const body = payload.body || {};
 if (needsRecaptcha && recaptchaToken) {
-const rcCtx = {
+if (!body.clientContext) body.clientContext = {};
+body.clientContext.recaptchaContext = {
 token: recaptchaToken,
 applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
 };
-if (!body.clientContext) body.clientContext = {};
-body.clientContext.recaptchaContext = rcCtx;
 if (Array.isArray(body.requests)) {
-for (const req of body.requests) {
+for (let i = 0; i < body.requests.length; i++) {
+const req = body.requests[i];
+let itemToken = recaptchaToken;
+if (i > 0 && req.clientContext) {
+try {
+await new Promise(r => setTimeout(r, 300 + Math.floor(Math.random() * 200)));
+itemToken = await grecaptcha.enterprise.execute(siteKey, { action: rcAction });
+if (!itemToken || itemToken.length < 1500) {
+itemToken = recaptchaToken;
+}
+} catch (_freshErr) {
+itemToken = recaptchaToken;
+}
+}
 if (req.clientContext) {
-req.clientContext.recaptchaContext = rcCtx;
+req.clientContext.recaptchaContext = {
+token: itemToken,
+applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+};
 }
 }
 }
@@ -702,7 +736,8 @@ if (authHeaderValue) {
 headers['Authorization'] = authHeaderValue;
 }
 const controller = new AbortController();
-const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey) ? 90000 : 20000;
+const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey)
+? Math.max(fetchTimeoutMs || 20000, 90000) : (fetchTimeoutMs || 20000);
 const fetchTimer = setTimeout(() => controller.abort(), fetchTimeout);
 try {
 const bodyStr = JSON.stringify(body);
@@ -720,6 +755,17 @@ try {
 responseData = JSON.parse(responseText);
 } catch (e) {
 responseData = { raw: responseText.substring(0, 1000) };
+}
+if (siteKey && recaptchaToken) {
+try {
+fetch(`https://www.google.com/recaptcha/enterprise/clr?k=${siteKey}`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/x-protobuffer' },
+credentials: 'include',
+mode: 'no-cors',
+body: `\n(${siteKey}`,
+}).catch(() => {});
+} catch (_clrErr) {  }
 }
 return {
 success: resp.ok,
@@ -753,6 +799,8 @@ msg.payload || {},
 msg.needsRecaptcha !== false,
 tabState[tabId]?.accessToken || null,
 msg.endpoint || '',
+msg.rcTimeout || 15000,
+msg.fetchTimeout || 20000,
 ],
 });
 const scriptTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(msg.endpoint) ? 120000 : 30000;
@@ -1764,6 +1812,7 @@ chrome.alarms.create(HEADER_REFRESH_ALARM, { periodInMinutes: 3 });
 chrome.alarms.create(TAB_CLEANUP_ALARM, { periodInMinutes: 2 });
 chrome.alarms.onAlarm.addListener((alarm) => {
 if (alarm.name === KEEPALIVE_ALARM) {
+if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
 ensureOffscreenDocument();
 }
 if (alarm.name === HEADER_REFRESH_ALARM) {
@@ -1903,24 +1952,35 @@ world: 'MAIN',
 }]);
 } catch (e) {
 }
+injectExistingTabs().then(() => {
+closeExcessTabs();
+ensureVeoTab();
+});
+});
+async function initializeStartup() {
+try {
+await restoreTabState();
+} catch (_) { }
+_tabStateRestored = true;
 await ensureOffscreenDocument();
-injectExistingTabs().then(() => {
+try {
+await injectExistingTabs();
 closeExcessTabs();
 ensureVeoTab();
-});
-});
-restoreTabState().then(() => {
-_tabStateRestored = true;
-ensureOffscreenDocument();
-injectExistingTabs().then(() => {
-closeExcessTabs();
-ensureVeoTab();
-});
-}).catch(() => {
-_tabStateRestored = true;
-ensureOffscreenDocument();
-});
+} catch (e) {
+}
+}
+initializeStartup();
+const _startupTime = Date.now();
+const STARTUP_GRACE_MS = 45000;
+let _offscreenRecreateFailCount = 0;
+let _lastOffscreenRecreateTime = 0;
 setInterval(async () => {
+if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
+const backoffMs = Math.min(15000 * Math.pow(2, _offscreenRecreateFailCount), 120000);
+if (_offscreenRecreateFailCount > 0 && Date.now() - _lastOffscreenRecreateTime < backoffMs) {
+return;
+}
 try {
 const contexts = await chrome.runtime.getContexts({
 contextTypes: ['OFFSCREEN_DOCUMENT'],
@@ -1928,7 +1988,22 @@ documentUrls: [chrome.runtime.getURL('offscreen.html')],
 });
 if (contexts.length === 0) {
 wsConnected = false;
+_lastOffscreenRecreateTime = Date.now();
 await ensureOffscreenDocument();
+await new Promise(r => setTimeout(r, 2000));
+const recheck = await chrome.runtime.getContexts({
+contextTypes: ['OFFSCREEN_DOCUMENT'],
+documentUrls: [chrome.runtime.getURL('offscreen.html')],
+});
+if (recheck.length > 0) {
+_offscreenRecreateFailCount = 0;
+} else {
+_offscreenRecreateFailCount++;
+}
+} else {
+if (_offscreenRecreateFailCount > 0) {
+_offscreenRecreateFailCount = 0;
+}
 }
 } catch (e) {
 }
