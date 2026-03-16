@@ -5265,7 +5265,12 @@ class Engine:
                         f"submit timeout (attempt {attempt+1})"
                     )
                     if attempt < max_retries:
-                        await asyncio.sleep(5)
+                        _backoff = min(10 * (2 ** attempt), 60)  # 10s, 20s, 40s, 60s
+                        log.info(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"backoff {_backoff}s before retry"
+                        )
+                        await asyncio.sleep(_backoff)
                         continue
                 except Exception as e:
 
@@ -5275,7 +5280,8 @@ class Engine:
                         exc_info=True,
                     )
                     if attempt < max_retries:
-                        await asyncio.sleep(5)
+                        _backoff = min(10 * (2 ** attempt), 60)
+                        await asyncio.sleep(_backoff)
                         continue
             
             # ═══ OUTSIDE rate lock: download + upscale pipeline ═══
@@ -5299,15 +5305,15 @@ class Engine:
                 _t2i_slots_held = 0
                 return
             
-            # All retries exhausted (no successful submit)
-            log.error(
+            # All retries exhausted — REQUEUE (not fail) to prevent task loss
+            log.warning(
                 f"[T2I-BG:{account.email}] Task {task.id}: "
-                f"all {max_retries+1} attempts exhausted — failing task"
+                f"all {max_retries+1} attempts exhausted — requeuing task"
             )
-            self._dispatcher.fail_task(
-                task.id,
-                f"T2I submit failed after {max_retries+1} attempts"
-                )
+            self._dispatcher.requeue_task(task)
+            account.release_workers(worker_count)
+            worker_count = 0
+            return
         
         except Exception as e:
             log.error(
