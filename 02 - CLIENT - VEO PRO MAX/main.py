@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 VEO Pro Max - Entry Point (PySide6)
-Version: 2.1.0
+Version: 2.3.4
 """
 
 import sys
