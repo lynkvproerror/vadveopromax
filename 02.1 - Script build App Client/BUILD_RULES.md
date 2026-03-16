@@ -518,3 +518,65 @@ Khi chỉ sửa extension (không sửa Python code):
 > ⚠️ Extension hot-replace chỉ update FILE trên ổ đĩa. Chrome giữ extension CŨ trong memory
 > cho đến khi Chrome restart hoặc `install_if_needed()` cycle tiếp theo reload.
 
+---
+
+## 📌 Rule #11: FFmpeg Local (tools/) — Bundle & Update Safety
+
+> **Status**: ✅ ĐÃ TRIỂN KHAI — FFmpeg được bundle trong ZIP, bảo toàn qua updates.
+
+### 11a. Cấu trúc thư mục
+
+```
+02 - CLIENT (source)             → tools/ffmpeg/ffmpeg.exe + ffprobe.exe
+03 - Final App Client/main.dist/ → tools/ffmpeg/ffmpeg.exe + ffprobe.exe (bundled in ZIP)
+```
+
+### 11b. Search Order (frame_extractor.py `_find_ffmpeg()`)
+
+| Priority | Location | Mô tả |
+|----------|----------|-------|
+| 0 (cao nhất) | `<app_dir>/tools/ffmpeg/ffmpeg.exe` | **Bundled** — ưu tiên dùng |
+| 1 | System PATH | Nếu user có FFmpeg global |
+| 2 | Common Windows paths | `C:\ffmpeg\bin\`, `~\ffmpeg\bin\` |
+| 3 | `~/.veoauto/ffmpeg/` | Legacy portable (fallback cũ) |
+| 4 | Auto-download → `tools/ffmpeg/` | Nếu bundle bị thiếu/hỏng |
+
+### 11c. Build Pipeline Integration
+
+**Nuitka `--include-data-dir`** (build_release.py):
+```python
+"--include-data-dir=tools=tools",  # Bundle FFmpeg binaries
+```
+
+**`KEEP_VISIBLE`** (cả build_release.py lẫn main.py):
+```python
+KEEP_VISIBLE = {"VEO_Pro_Max.exe", "config", "assets", "data", "extension", "tools"}
+```
+
+### 11d. Update Safety — Bảo toàn tools/ qua Full Update
+
+> [!CAUTION]
+> **PowerShell updater script XÓA TOÀN BỘ app folder khi full update!**
+> `tools/ffmpeg/` (~200MB) sẽ bị mất nếu không backup TRƯỚC.
+
+**Giải pháp**: Updater script (auto_updater.py) tự động:
+1. **Backup** `tools/` → `%TEMP%\veo_tools_backup\` TRƯỚC KHI xóa app
+2. Delete + Copy new version (bình thường)
+3. **Restore** `tools/` từ backup → `<app_dir>/tools/` SAU KHI copy xong
+4. Cleanup backup temp dir
+
+**Đặc biệt**: Nếu new ZIP đã có `tools/ffmpeg/`, backup sẽ KHÔNG ghi đè (new version > old).
+Logic: restore chỉ merge files mới — nếu new ZIP đã bundle ffmpeg thì dùng bản mới.
+
+### 11e. Lưu ý khi update ZIP KHÔNG chứa FFmpeg
+
+- Nếu build mới KHÔNG có `tools/ffmpeg/` → backup sẽ được restore lại nguyên vẹn
+- Nếu cả ZIP mới lẫn backup đều không có → auto-download kicks in (Priority #4)
+- User KHÔNG BAO GIỜ phải download FFmpeg thủ công
+
+### 11f. Khi nào cần update FFmpeg binary
+
+- FFmpeg bundled version: **latest from BtbN/FFmpeg-Builds** (win64-gpl)
+- Chỉ cần update khi có security fix hoặc feature mới cần hỗ trợ
+- Để update: download mới → replace `02/tools/ffmpeg/ffmpeg.exe` + `ffprobe.exe` → rebuild
+

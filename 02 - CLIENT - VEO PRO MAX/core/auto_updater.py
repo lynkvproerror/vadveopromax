@@ -574,6 +574,23 @@ Get-ChildItem -Path $appDir -Recurse -Force -ErrorAction SilentlyContinue |
         try {{ $_.Attributes = 'Normal' }} catch {{}}
     }}
 
+# ★ Rule #11: Backup tools/ BEFORE delete (FFmpeg ~200MB, survives updates)
+$toolsDir = Join-Path $appDir 'tools'
+$toolsBackup = Join-Path $env:TEMP 'veo_tools_backup'
+$toolsBackedUp = $false
+if (Test-Path $toolsDir) {{
+    Log 'Backing up tools/ directory...'
+    if (Test-Path $toolsBackup) {{ Remove-Item $toolsBackup -Recurse -Force -ErrorAction SilentlyContinue }}
+    try {{
+        Copy-Item $toolsDir $toolsBackup -Recurse -Force -ErrorAction Stop
+        $toolsBackedUp = $true
+        $itemCount = (Get-ChildItem $toolsBackup -Recurse -File | Measure-Object).Count
+        Log "Tools backed up ($itemCount files)"
+    }} catch {{
+        Log "Tools backup failed: $_ — will rely on auto-download"
+    }}
+}}
+
 Log 'Deleting old app folder...'
 try {{
     Remove-Item -Path $appDir -Recurse -Force -ErrorAction Stop
@@ -596,6 +613,26 @@ try {{
     Log 'Trying robocopy fallback...'
     & robocopy $srcDir $appDir /E /IS /IT /NFL /NDL /NJH /NJS 2>&1 | Out-Null
     Log 'Robocopy fallback done.'
+}}
+
+# ★ Rule #11: Restore tools/ from backup (merge — keep new version if ZIP already bundles)
+if ($toolsBackedUp) {{
+    $newTools = Join-Path $appDir 'tools'
+    if (-not (Test-Path (Join-Path $newTools 'ffmpeg' 'ffmpeg.exe'))) {{
+        # New ZIP does NOT bundle FFmpeg → restore full backup
+        Log 'Restoring tools/ from backup (new ZIP has no FFmpeg)...'
+        if (Test-Path $newTools) {{ Remove-Item $newTools -Recurse -Force -ErrorAction SilentlyContinue }}
+        try {{
+            Copy-Item $toolsBackup $newTools -Recurse -Force -ErrorAction Stop
+            Log 'Tools restored successfully.'
+        }} catch {{
+            Log "Tools restore failed: $_ — FFmpeg will auto-download on next launch"
+        }}
+    }} else {{
+        Log 'New ZIP already bundles FFmpeg — using new version.'
+    }}
+    # Cleanup backup
+    Remove-Item $toolsBackup -Recurse -Force -ErrorAction SilentlyContinue
 }}
 
 # Re-hide runtime files

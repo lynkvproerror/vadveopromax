@@ -317,6 +317,7 @@ def run_nuitka_build(onefile: bool = False):
         "--include-data-dir=data=data",
         "--include-data-dir=ui/img=ui/img",
         "--include-data-dir=extension=extension",
+        "--include-data-dir=tools=tools",  # Bundle FFmpeg binaries (Rule #11)
 
         # Output name
         "--output-filename=VEO_Pro_Max.exe",
@@ -404,6 +405,7 @@ def organize_dist_folder():
         "assets",
         "data",
         "extension",
+        "tools",  # FFmpeg bundled (Rule #11)
     }
 
     hidden_count = 0

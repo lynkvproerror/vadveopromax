@@ -68,6 +68,7 @@ def _hide_runtime_files():
         "assets",
         "data",
         "extension",
+        "tools",  # FFmpeg bundled (Rule #11)
     }
     
     hidden = 0
