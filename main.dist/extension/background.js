@@ -84,11 +84,41 @@ if (elapsed < RELOAD_COOLDOWN_MS) {
 return false;
 }
 try {
+const state = tabState[tabId];
+if (state && state.email) {
+wsSend({
+action: 'tab_reloading',
+email: state.email,
+tabId: tabId,
+gracePeriodMs: 60000,
+reason: reason,
+});
+}
 await chrome.tabs.reload(tabId, { bypassCache });
 tabLastReloadTime[tabId] = now;
 return true;
 } catch (e) {
 return false;
+}
+}
+async function sendMessageWithRetry(tabId, message, maxRetries = 1) {
+for (let attempt = 0; attempt <= maxRetries; attempt++) {
+try {
+return await chrome.tabs.sendMessage(tabId, message);
+} catch (e) {
+if (attempt < maxRetries) {
+try {
+await chrome.scripting.executeScript({
+target: { tabId },
+files: ['content.js'],
+});
+await new Promise(r => setTimeout(r, 3000));
+} catch (injectErr) {
+}
+} else {
+throw e;
+}
+}
 }
 }
 let _offscreenCreating = null;
@@ -429,16 +459,6 @@ try { chrome.tabs.update(newTab.id, { autoDiscardable: false }); } catch (_) { }
 startZombieTimer(newTab.id);
 }
 }
-break;
-}
-case 'reload_extension': {
-wsSend({
-action: 'extension_reloading',
-requestId: msg.requestId || '',
-});
-setTimeout(() => {
-chrome.runtime.reload();
-}, 500);
 break;
 }
 case 'check_recaptcha_ready': {
@@ -1826,10 +1846,10 @@ async function lightweightRefreshAll() {
 for (const [tabId, state] of Object.entries(tabState)) {
 if (!state.email) continue;
 try {
-await chrome.tabs.sendMessage(parseInt(tabId), { action: 'lightweight_header_refresh' });
+await sendMessageWithRetry(parseInt(tabId), { action: 'lightweight_header_refresh' });
 } catch (e) {
 try {
-await chrome.tabs.reload(parseInt(tabId), { bypassCache: false });
+await safeTabReload(parseInt(tabId), 'lightweight-refresh-failed');
 } catch (re) {
 }
 }

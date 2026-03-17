@@ -1,12 +1,13 @@
 /* VEO Pro Max Extension v2.2.2 - Protected */
 const WEBSOCKET_PORTS = [8765, 8766, 8767];
 const RECONNECT_BASE_MS = 3000;
-const RECONNECT_MAX_MS = 15000;
+const RECONNECT_MAX_MS = 60000;
 let ws = null;
 let wsConnected = false;
 let currentPortIndex = 0;
 let reconnectDelay = RECONNECT_BASE_MS;
 let reconnectTimer = null;
+let _reconnectScheduled = false;
 function connectWebSocket() {
 if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
 return;
@@ -55,6 +56,8 @@ fastPortScan();
 }
 };
 ws.onerror = () => {
+if (!_fastScanActive) {
+}
 };
 } catch (e) {
 currentPortIndex = (currentPortIndex + 1) % WEBSOCKET_PORTS.length;
@@ -92,10 +95,13 @@ scheduleReconnect();
 }
 function scheduleReconnect() {
 if (reconnectTimer) clearTimeout(reconnectTimer);
+_reconnectScheduled = true;
 reconnectTimer = setTimeout(() => {
 reconnectTimer = null;
+_reconnectScheduled = false;
 connectWebSocket();
 }, reconnectDelay);
+reconnectDelay = Math.min(reconnectDelay * 1.5, RECONNECT_MAX_MS);
 }
 function wsSend(data) {
 if (ws && ws.readyState === WebSocket.OPEN) {
@@ -130,7 +136,7 @@ return false;
 setInterval(() => {
 if (ws && ws.readyState === WebSocket.OPEN) {
 wsSend({ action: 'ping' });
-} else {
+} else if (!_reconnectScheduled && !_fastScanActive) {
 connectWebSocket();
 }
 }, 20000);
