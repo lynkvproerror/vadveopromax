@@ -43,8 +43,8 @@ class AccountManager:
         return self._session.max_workers
     
     def set_max_workers(self, n: int):
-        """Set max concurrent workers (0-20). 0 effectively disables processing."""
-        self._session.max_workers = max(0, min(n, 20))
+        """Set max concurrent workers. Value from UI 'Total Output' column."""
+        self._session.max_workers = max(0, n)
     
     # --- Deprecated slot accessors (backward compat) ---
     @property

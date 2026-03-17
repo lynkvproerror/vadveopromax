@@ -157,7 +157,8 @@ class ProcessVerifier:
             import subprocess
             result = subprocess.run(
                 ['wmic', 'process', 'where', f'ProcessId={ppid}', 'get', 'Name'],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
             )
             lines = [l.strip() for l in result.stdout.strip().split('\n') if l.strip() and l.strip() != 'Name']
             if lines:
@@ -364,7 +365,8 @@ class DebuggerDetector:
                 import subprocess
                 result = subprocess.run(
                     ['wmic', 'process', 'get', 'Name'],
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                 )
                 running = {
                     l.strip().lower()

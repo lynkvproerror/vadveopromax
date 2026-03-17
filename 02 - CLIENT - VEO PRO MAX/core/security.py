@@ -392,7 +392,8 @@ class EnvironmentChecker:
                 ["wmic", "computersystem", "get", "manufacturer"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
             )
             
             output = result.stdout.upper()

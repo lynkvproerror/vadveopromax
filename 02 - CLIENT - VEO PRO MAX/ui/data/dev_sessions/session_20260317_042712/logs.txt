@@ -1,0 +1,593 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260317_042712
+Total: 588 entries
+============================================================
+
+[INFO ] 04:09:57 - core.session_manager - [Session] Loaded from 2026-03-17T04:09:38.035199
+[INFO ] 04:09:57 - core.app_controller - [Session] Queue restore SKIPPED (restore_queue_on_startup=False)
+[INFO ] 04:09:57 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[DEBUG] 04:09:57 - veo.tab_queue - [QueueRefresh] 3 groups, 81 total tasks, existing_groups=[]
+[INFO ] 04:09:57 - veo.tab_queue - [GroupCreate] gid=group_20260317_024029 name='KỊCH BẢN 10 PHÚT TRUYỆN KIỀU/character' children=5 expanded=True
+[INFO ] 04:09:58 - veo.tab_queue - [GroupCreate] gid=group_20260317_024441 name='KỊCH BẢN 10 PHÚT TRUYỆN KIỀU/scenes' children=38 expanded=True
+[INFO ] 04:09:59 - veo.tab_queue - [GroupCreate] gid=group_20260317_030701 name='KỊCH BẢN 10 PHÚT TRUYỆN KIỀU/video' children=38 expanded=True
+[INFO ] 04:09:59 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 04:09:59 - veo.tab_project - [Pipeline] Full restore: 38 scenes, 5 characters, topic='Dưới đây là **kịch bản truyện tranh / kịch bản kể '
+[INFO ] 04:10:00 - veo.tab_project - [Pipeline] ♻️ Auto-restored from KỊCH BẢN 10 PHÚT TRUYỆN KIỀU: 6 completed stage(s), current=video_gen, FULL session
+[DEBUG] 04:10:00 - veo.tab_queue - [QueueRefresh] 3 groups, 81 total tasks, existing_groups=['group_20260317_024029', 'group_20260317_024441', 'group_20260317_030701']
+[DEBUG] 04:10:02 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:10:02 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:10:02 - veo - [VersionCheck] OK: 2.3.6 >= 2.3.0
+[DEBUG] 04:10:02 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[DEBUG] 04:10:07 - core.auto_updater - Up to date (app=v2.3.6, ext=v2.3.6)
+[DEBUG] 04:10:09 - core.app_controller - Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+[INFO ] 04:10:17 - core.app_controller - [AutoStop] Pipeline mode ACTIVE — auto-stop deferred
+[DEBUG] 04:10:17 - asyncio - Using proactor: IocpProactor
+[INFO ] 04:10:17 - veo.pipeline - [Pipeline] Stage 'concat' done → waiting for user confirm
+[INFO ] 04:10:17 - veo.tab_project - [Pipeline] Auto-confirm skipped for 'concat' (needs manual review)
+[DEBUG] 04:10:24 - core.app_controller - Sync levanlinh.kma@gmail.com: timeout (browser not ready yet)
+[INFO ] 04:10:24 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 04:10:24 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 04:10:24 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 04:10:24 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/2: veofidelia169@tunxelamorintesa.sbs...
+[DEBUG] 04:10:24 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for veofidelia169@tunxelamorintesa.sbs...
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_50d44400
+[DEBUG] 04:10:24 - core.chrome_manager - [ChromeManager] No PID file for browser_session_50d44400
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] ✅ Variations seed copied to browser_session_50d44400 (seed=58916 chars, 6 keys)
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_50d44400
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] Chrome launched: PID=51544, port=9223
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 51544
+[INFO ] 04:10:24 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400\.chrome_pid.json
+[WARNING] 04:10:24 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 04:10:25 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 04:10:25 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 04:10:25 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 04:10:25 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.6
+[INFO ] 04:10:25 - core.extension_manager - [ExtMgr] Extension v2.3.6 up-to-date — skipping
+[INFO ] 04:10:25 - core.profiles_controller - [ProfilesController] Chrome PID=51544, port=9223 (new)
+[INFO ] 04:10:25 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for veofidelia169@tunxelamorintesa.sbs (smart-hide disabled)
+[DEBUG] 04:10:25 - asyncio - Using proactor: IocpProactor
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 04:10:26 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 04:10:26 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 04:10:29 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 04:10:30 - core.profiles_controller - [DEBUG] Step 5: Reload done. Headers = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:10:30 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 04:10:30 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for veofidelia169@tunxelamorintesa.sbs (persistent, port=9223)
+[INFO ] 04:10:35 - veo.pipeline - [Pipeline] Stage 'concat' confirmed by user
+[INFO ] 04:10:35 - veo.tab_project - [Pipeline] Project name: 'KỊCH BẢN 10 PHÚT TRUYỆN KIỀU' (source=stage1)
+[INFO ] 04:10:35 - veo.tab_project - [Pipeline] Session saved → D:\Downloads\KỊCH BẢN 10 PHÚT TRUYỆN KIỀU\_pipeline_session.json
+[INFO ] 04:10:35 - veo.tab_project - [Pipeline] Session saved → D:\Downloads\KỊCH BẢN 10 PHÚT TRUYỆN KIỀU\_pipeline_session.json
+[INFO ] 04:10:35 - veo.tab_project - [Pipeline] Confirm: stage='concat', controller=YES
+[INFO ] 04:10:35 - veo.tab_project - [Pipeline] Batch complete: 1/1 topics OK
+[INFO ] 04:10:35 - core.app_controller - [AutoStop] Pipeline mode INACTIVE — auto-stop allowed
+[DEBUG] 04:10:39 - core.app_controller - Sync levanlinh.kma@gmail.com: timeout (browser not ready yet)
+[INFO ] 04:10:39 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 04:10:39 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 04:10:39 - core.app_controller - [AutoLaunch] ✅ veofidelia169@tunxelamorintesa.sbs browser visible (smart-hide disabled)
+[INFO ] 04:10:39 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 2/2: levanlinh.kma@gmail.com...
+[DEBUG] 04:10:39 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for levanlinh.kma@gmail.com...
+[INFO ] 04:10:39 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 50842)
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[DEBUG] 04:10:39 - core.chrome_manager - [ChromeManager] No PID file for browser_session_fed78075
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 04:10:39 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.6)
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 04:10:39 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:10:39 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:10:39 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 04:10:39 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] ✅ Variations seed copied to browser_session_fed78075 (seed=58916 chars, 6 keys)
+[DEBUG] 04:10:39 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[DEBUG] 04:10:39 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9224, profile=browser_session_fed78075
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9224 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 04:10:39 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 04:10:39 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:10:39 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] Chrome launched: PID=44308, port=9224
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 44308
+[INFO ] 04:10:39 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for veofidelia169@tunxelamorintesa.sbs — zombie detection suspended 60s (reason: header-refresh)
+[INFO ] 04:10:39 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 04:10:39 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9224 (timeout=30s)...
+[INFO ] 04:10:39 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 04:10:39 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:10:40 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:10:40 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:10:40 - core.chrome_manager - [ChromeManager] CDP ready on port 9224
+[INFO ] 04:10:40 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 04:10:40 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 04:10:40 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.6
+[INFO ] 04:10:40 - core.extension_manager - [ExtMgr] Extension v2.3.6 up-to-date — skipping
+[INFO ] 04:10:40 - core.profiles_controller - [ProfilesController] Chrome PID=44308, port=9224 (new)
+[INFO ] 04:10:40 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 62558)
+[INFO ] 04:10:40 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[DEBUG] 04:10:40 - asyncio - Using proactor: IocpProactor
+[INFO ] 04:10:40 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser visible (smart-hide disabled)
+[INFO ] 04:10:40 - core.app_controller - [AutoLaunch] Connecting 2 accounts to debug browsers...
+[INFO ] 04:10:40 - core.multi_account - Starting browsers for 2 accounts...
+[INFO ] 04:10:40 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 04:10:40 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 04:10:40 - core.account_manager - [levanlinh.kma@gmail.com] No debug browser — extension-only mode (TRPCClient unavailable)
+[INFO ] 04:10:40 - core.multi_account - All account browsers initialized
+[INFO ] 04:10:40 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 04:10:40 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 04:10:40 - core.app_controller - [BridgeInject] Injected extension_bridge into levanlinh.kma@gmail.com (lazy)
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9224...
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 04:10:41 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 04:10:41 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:10:41 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.6)
+[INFO ] 04:10:41 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 04:10:41 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[DEBUG] 04:10:41 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 04:10:41 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 04:10:41 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 04:10:41 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[DEBUG] 04:10:42 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:42 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:42 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 04:10:42 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 04:10:42 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 04:10:43 - core.app_controller - [AutoLaunch] Extension status: 2 emails registered: ['levanlinh.kma@gmail.com', 'veofidelia169@tunxelamorintesa.sbs']
+[INFO ] 04:10:43 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 04:10:44 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/9BE50ACEE714B3D35A4AF3A7D6...
+[DEBUG] 04:10:44 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 04:10:44 - core.profiles_controller - [DEBUG] Step 5: Reload done. Headers = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:10:44 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 04:10:44 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for levanlinh.kma@gmail.com (persistent, port=9224)
+[INFO ] 04:10:45 - core.extension_manager - [ExtMgr] Closed extensions tab 9BE50ACE... (PUT)
+[INFO ] 04:10:45 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 04:10:45 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.6
+[INFO ] 04:10:45 - core.app_controller - [AppController] Extension v2.3.6 connected via bridge for veofidelia169@tunxelamorintesa.sbs — up-to-date
+[INFO ] 04:10:45 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 04:10:45 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9224/devtools/page/3FBB97BF2F73312BDF75D74C78...
+[INFO ] 04:10:47 - core.extension_manager - [ExtMgr] Closed extensions tab 3FBB97BF... (PUT)
+[INFO ] 04:10:47 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 04:10:47 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.6
+[INFO ] 04:10:47 - core.app_controller - [AppController] Extension v2.3.6 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 04:10:47 - core.app_controller - [AppController] Extension batch check results: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected', 'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 04:10:47 - core.app_controller - [AutoLaunch] Extension check complete: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected', 'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 04:10:47 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 2 emails
+[INFO ] 04:10:47 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 04:10:47 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 04:10:47 - core.app_controller - [AutoLaunch] 📸 Image Library: 50 images, all already uploaded
+[DEBUG] 04:10:47 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: already in progress, skipping duplicate
+[DEBUG] 04:10:47 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[DEBUG] 04:10:47 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:47 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:47 - core.multi_account - 🔄 [veofidelia169@tunxelamorintesa.sbs] x-client-data too short (8 chars), borrowing from levanlinh.kma@gmail.com (68 chars)
+[INFO ] 04:10:47 - core.multi_account - ✅ Fixed x-client-data for 1 account(s)
+[INFO ] 04:10:47 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:10:47 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 04:10:49 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:49 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:49 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:10:49 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:10:49 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:10:49 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:10:49 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:10:51 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 04:10:52 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2169 chars)
+[DEBUG] 04:10:52 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2169 chars) → AM + Pool
+[DEBUG] 04:10:52 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2169 chars)
+[INFO ] 04:10:52 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+[INFO ] 04:10:52 - veo - [Status] ✅ levanlinh.kma@gmail.com: reCAPTCHA ready — account prepared
+[DEBUG] 04:10:55 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:55 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:10:55 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:10:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:10:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:10:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:10:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:11:02 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[WARNING] 04:11:09 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 04:11:09 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=d7f19ff6)
+[WARNING] 04:11:09 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 04:11:09 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for veofidelia169@tunxelamorintesa.sbs — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[DEBUG] 04:11:16 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:11:16 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:11:16 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:11:16 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:11:23 - veo.pipeline - [Pipeline] Stage 'concat' skipped by user
+[INFO ] 04:11:23 - veo.tab_project - [Pipeline] Session saved → D:\Downloads\KỊCH BẢN 10 PHÚT TRUYỆN KIỀU\_pipeline_session.json
+[INFO ] 04:11:23 - veo.tab_project - [Pipeline] Batch complete: 2/2 topics OK
+[INFO ] 04:11:23 - core.app_controller - [AutoStop] Pipeline mode INACTIVE — auto-stop allowed
+[WARNING] 04:11:25 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs (no heartbeat for 54s) — recovery attempt 1/3
+[INFO ] 04:11:25 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for veofidelia169@tunxelamorintesa.sbs — frozen tab recovery 1/3
+[DEBUG] 04:11:25 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:11:25 - veo.pipeline - [Pipeline] Stage 'concat' skipped by user
+[INFO ] 04:11:25 - veo.tab_project - [Pipeline] Session saved → D:\Downloads\KỊCH BẢN 10 PHÚT TRUYỆN KIỀU\_pipeline_session.json
+[INFO ] 04:11:25 - veo.tab_project - [Pipeline] Batch complete: 3/3 topics OK
+[INFO ] 04:11:25 - core.app_controller - [AutoStop] Pipeline mode INACTIVE — auto-stop allowed
+[DEBUG] 04:11:27 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:11:29 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:11:29 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:11:29 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:11:29 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:11:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=14s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=1
+[WARNING] 04:11:39 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 04:11:39 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=f2b317ec)
+[WARNING] 04:11:39 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[INFO ] 04:11:39 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for veofidelia169@tunxelamorintesa.sbs — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[DEBUG] 04:11:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:11:45 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs suppressed — refresh already in-progress (20s ago)
+[DEBUG] 04:11:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:11:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:11:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:11:46 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:11:46 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:11:46 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:11:46 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:11:56 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:11:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:11:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:11:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:11:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:12:00 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 04:12:10 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:12:14 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:12:14 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:12:14 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:12:14 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:12:34 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:12:34 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 04:12:36 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 04:12:36 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:12:36 - core.profiles_controller - [ProfilesController] ⏳ JS eval paused for veofidelia169@tunxelamorintesa.sbs (page navigating — soft recovery)
+[DEBUG] 04:12:36 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat skipped (no browser page)
+[DEBUG] 04:12:36 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:12:37 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[INFO ] 04:12:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:12:41 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:12:41 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:12:41 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:12:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:12:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:12:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:12:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:12:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:12:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:12:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:12:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:13:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:13:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:13:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:13:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:13:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:13:10 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:13:29 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:13:29 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:13:29 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:13:29 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:13:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:13:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:13:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:13:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:13:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:13:50 - core.engine - [TabKeepalive] Pinged 6 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:13:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:13:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:13:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:13:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:14:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:14:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:14:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:14:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:14:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:14:25 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[INFO ] 04:14:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:14:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:14:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:14:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:14:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:14:52 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:14:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:14:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:14:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:14:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:15:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:15:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:15:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:15:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:15:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:15:12 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 04:15:12 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:15:12 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 04:15:13 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:15:13 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 04:15:13 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 04:15:13 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 04:15:15 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 04:15:15 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:15:16 - core.profiles_controller - [ProfilesController] ✅ JS eval recovered for veofidelia169@tunxelamorintesa.sbs (was paused for 1 calls)
+[INFO ] 04:15:16 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:15:16 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:15:16 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:15:20 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:15:20 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:15:20 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:15:20 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:15:20 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:15:20 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:15:20 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[INFO ] 04:15:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:15:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:15:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:15:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:15:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:15:51 - core.engine - [TabKeepalive] Pinged 6 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:15:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:15:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:15:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:15:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:16:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:16:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:16:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:16:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:16:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:16:14 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:16:29 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:16:29 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:16:29 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:16:29 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:16:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:16:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:16:43 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:16:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:16:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:16:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:16:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:16:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:16:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:16:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:17:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:17:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:17:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:17:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:17:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:17:12 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[INFO ] 04:17:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:17:41 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:17:41 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 04:17:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 04:17:42 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:17:42 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:17:43 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:17:46 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:17:46 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:17:46 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:17:46 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:17:47 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:17:47 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:17:47 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:17:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:17:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:17:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:17:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:18:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:18:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:18:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:18:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:18:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:18:12 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[INFO ] 04:18:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:18:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:18:43 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:18:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:18:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:18:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:18:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:18:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:19:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:19:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:19:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:19:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:19:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:19:12 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:19:29 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:19:29 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:19:29 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:19:29 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:19:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:19:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:19:47 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:19:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:19:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:19:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:19:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:20:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:20:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:20:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:20:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:20:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:20:23 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:20:23 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:20:23 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:20:23 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:20:24 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:20:27 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 04:20:27 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:20:27 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 04:20:27 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:20:27 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:20:27 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:20:27 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:20:28 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:20:28 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:20:28 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[INFO ] 04:20:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:20:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:20:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:20:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:20:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:20:50 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:20:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:20:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:20:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:20:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:21:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:21:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:21:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:21:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:21:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:21:11 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[INFO ] 04:21:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:21:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:21:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:21:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:21:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:21:47 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:21:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:21:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:21:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:21:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:22:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:22:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:22:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:22:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:22:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:22:19 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:22:29 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:22:29 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:22:29 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:22:29 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:22:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:22:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:22:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:22:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:22:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:22:47 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:22:47 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:22:48 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:22:48 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:22:48 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:22:51 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:22:51 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:22:51 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:22:51 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:22:52 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:22:52 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:22:52 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:22:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:22:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:22:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:22:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:23:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:23:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:23:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:23:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:23:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:23:21 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[INFO ] 04:23:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:23:41 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:23:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:23:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:23:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:23:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:23:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:23:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:23:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:23:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:24:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:24:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:24:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:24:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:24:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:24:11 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:24:37 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[INFO ] 04:24:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:24:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:24:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:24:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:24:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:24:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:24:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:24:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:24:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:25:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:25:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:25:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:25:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:25:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:25:16 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:25:16 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:25:16 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:25:16 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:25:17 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[DEBUG] 04:25:20 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:25:20 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:25:20 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:25:20 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:25:21 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:25:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:25:21 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:25:29 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:25:29 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:25:29 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:25:29 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:25:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:25:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:25:42 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 04:25:42 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:25:43 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 04:25:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:25:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:25:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:25:54 - core.engine - [TabKeepalive] Pinged 6 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:25:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:25:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:25:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:25:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:26:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:26:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:26:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:26:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:26:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 04:26:16 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[INFO ] 04:26:39 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 04:26:41 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 04:26:45 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:26:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:26:45 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 04:26:54 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[DEBUG] 04:26:57 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 04:26:57 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 04:26:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:26:57 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 04:27:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 04:27:04 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:27:04 - veo - x-client-data downgrade blocked: keeping existing (68 chars), rejected new (8 chars: 'CJOTywE=')
+[DEBUG] 04:27:04 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (424 chars)
+[INFO ] 04:27:04 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:27:12 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

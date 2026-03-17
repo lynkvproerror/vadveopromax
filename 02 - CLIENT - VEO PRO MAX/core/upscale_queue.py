@@ -342,6 +342,9 @@ class UpscaleQueue:
         # Injected by engine after construction (same pattern as _burst_controller)
         # fn(email) -> bool: True if reCAPTCHA is healthy
         self._is_recaptcha_healthy_fn: Optional[Callable] = None
+        
+        # Dead-tab pause: accounts whose tabs are dead → stop picking up new jobs
+        self._paused_accounts: set = set()  # email strings
     
     def start(self):
         """Mark queue as running."""
@@ -377,10 +380,52 @@ class UpscaleQueue:
                 task.cancel()
                 log.info(f"[UpscaleQueue] Cancelled worker for {email}")
         self._upscale_processors.clear()
+        self._paused_accounts.clear()
         log.info(
             f"[UpscaleQueue] Stopped — "
             f"completed={self._total_completed}, failed={self._total_failed}"
         )
+    
+    def pause_account(self, email: str):
+        """Pause upscale processing for a dead-tab account.
+        
+        Worker loop exits (email in _paused_accounts breaks while condition).
+        In-flight jobs for this account will also exit early (_process_job guard).
+        """
+        self._paused_accounts.add(email)
+        # Cancel worker task if running
+        worker = self._upscale_processors.get(email)
+        if worker and not worker.done():
+            worker.cancel()
+            log.info(f"[UpscaleQueue] ⏸️ Worker cancelled for {email} (tab dead)")
+        log.warning(
+            f"[UpscaleQueue] ⏸️ Account {email} paused — "
+            f"pending={self._queues.get(email, asyncio.Queue()).qsize()} jobs frozen"
+        )
+    
+    def unpause_account(self, email: str):
+        """Unpause account after tab reconnects.
+        
+        Pending jobs remain in the queue — worker will restart on next enqueue
+        or can be triggered manually.
+        """
+        if email not in self._paused_accounts:
+            return
+        self._paused_accounts.discard(email)
+        log.info(f"[UpscaleQueue] ▶️ Account {email} unpaused")
+        
+        # If there are pending jobs, restart the worker
+        q = self._queues.get(email)
+        if q and not q.empty() and self._running:
+            existing = self._upscale_processors.get(email)
+            if not existing or existing.done():
+                self._upscale_processors[email] = asyncio.ensure_future(
+                    self._worker_loop(email)
+                )
+                log.info(
+                    f"[UpscaleQueue] ▶️ Worker restarted for {email} — "
+                    f"{q.qsize()} pending jobs"
+                )
     
     def enqueue(self, job: UpscaleJob, *, force: bool = False):
         """Add an upscale job for background processing.
@@ -523,7 +568,7 @@ class UpscaleQueue:
         q = self._queues[email]
         active_jobs: List[asyncio.Task] = []
         
-        while self._running:
+        while self._running and email not in self._paused_accounts:
             try:
                 # Clean up completed job tasks
                 done_count = sum(1 for t in active_jobs if t.done())
@@ -639,6 +684,11 @@ class UpscaleQueue:
         # BUG-06: Early exit if queue was stopped (fire-and-forget tasks survive stop)
         if not self._running:
             log.info(f"[UpscaleQueue] Skipping job {job.task_id[:12]} — queue stopped")
+            return
+        
+        # Dead-tab guard: skip job if account paused
+        if job.account_email in self._paused_accounts:
+            log.info(f"[UpscaleQueue] Skipping job {job.task_id[:12]} — account {job.account_email} paused (tab dead)")
             return
         
         # Route image upscale to dedicated handler

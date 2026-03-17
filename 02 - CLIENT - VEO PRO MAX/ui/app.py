@@ -1206,8 +1206,24 @@ class MainWindow(QMainWindow):
     # ── Session Persistence ─────────────────────────────────────
     
     def closeEvent(self, event):
-        """Save session state and kill all Chrome before closing."""
+        """Save session state and kill all Chrome before closing.
+        
+        Stops all timers FIRST to prevent callbacks accessing destroyed widgets,
+        then does session save, then Chrome cleanup in background thread.
+        """
+        # ── Phase 0: Stop ALL QTimers immediately ──
+        # Prevents timer callbacks from accessing destroyed widgets during close
+        for timer_attr in ('_status_timer', '_license_countdown_timer', 
+                           '_license_recheck_timer', '_integrity_timer'):
+            timer = getattr(self, timer_attr, None)
+            if timer and hasattr(timer, 'stop'):
+                try:
+                    timer.stop()
+                except Exception:
+                    pass
+        
         if self.controller:
+            # ── Phase 1: Save session (fast, sync) ──
             try:
                 tabs_data = {}
                 gen_tabs = ["t2v", "i2v", "r2v", "t2i", "i2i", "project"]
@@ -1229,12 +1245,25 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"[App] DevConsole export failed: {e}")
             
-            # Kill all managed Chrome browsers on app exit
+            # ── Phase 2: Kill Chrome in background thread (non-blocking) ──
+            # Avoids time.sleep(1) blocking the UI thread
             try:
                 pc = getattr(self.controller, '_profiles_controller', None)
                 if pc and hasattr(pc, 'kill_all_debug_browsers'):
-                    pc.kill_all_debug_browsers()
-                    print("[App] All managed Chrome processes killed")
+                    import threading
+                    def _bg_kill():
+                        try:
+                            pc.kill_all_debug_browsers()
+                            print("[App] All managed Chrome processes killed")
+                        except Exception as e:
+                            print(f"[App] Chrome cleanup failed: {e}")
+                    
+                    kill_thread = threading.Thread(target=_bg_kill, daemon=True)
+                    kill_thread.start()
+                    # Wait up to 3s — but don't block forever
+                    kill_thread.join(timeout=3.0)
+                    if kill_thread.is_alive():
+                        print("[App] Chrome cleanup still running — proceeding with exit")
             except Exception as e:
                 print(f"[App] Chrome cleanup failed: {e}")
         

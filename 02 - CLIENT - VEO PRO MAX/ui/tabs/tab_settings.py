@@ -236,9 +236,7 @@ class TabSettings(
         # these settings were confusing (showing '0 folder(s)' when data exists).
         # layout.addWidget(self._create_project_builder_section())
         
-        # ── 4. OUTPUT (merged into Defaults section above) ──
-        # Post-Queue Action: backend preserved, hidden from UI
-        self._post_queue_section = self._create_post_queue_section()
+        # REMOVED: Post-Queue Action — now exclusively in Queue tab
         
         # ── 5. BROWSER & SECURITY ──
         layout.addWidget(self._create_browser_visibility_section())  # Smart Hide (All)
@@ -1149,16 +1147,7 @@ class TabSettings(
             if hasattr(self, '_get_selected_sound'):
                 s.notify_sound_file = self._get_selected_sound()
 
-            # ── Post-Queue Action ──
-            if hasattr(self, 'post_queue_switch'):
-                s.post_queue_action_enabled = self.post_queue_switch.isToggled()
-            if hasattr(self, 'post_queue_action_combo'):
-                _reverse_map = {"🔌 Do Nothing": "nothing", "⚡ Shutdown": "shutdown", "💤 Sleep": "sleep"}
-                s.post_queue_action = _reverse_map.get(
-                    self.post_queue_action_combo.currentText(), "nothing"
-                )
-            if hasattr(self, 'sweep_rounds_spin'):
-                s.auto_sweep_max_rounds = self.sweep_rounds_spin.value()
+            # REMOVED: Post-Queue Action — now exclusively in Queue tab
 
             # ── Enhancer Toggles ──
             if hasattr(self, '_enhance_context_toggle'):
@@ -1344,11 +1333,7 @@ class TabSettings(
             if hasattr(self, 'sound_file_combo'):
                 self.sound_file_combo.setCurrentIndex(0)  # default sound
 
-            # ── Post-Queue Action ──
-            if hasattr(self, 'post_queue_switch'):
-                self.post_queue_switch.setToggled(False)
-            if hasattr(self, 'post_queue_action_combo'):
-                self.post_queue_action_combo.setCurrentText("🔌 Do Nothing")
+            # REMOVED: Post-Queue Action — now exclusively in Queue tab
 
             # ── Browser Visibility ──
             if hasattr(self, 'smart_hide_switch'):
@@ -1407,9 +1392,6 @@ class TabSettings(
             if hasattr(self, 'auto_update_toggle'):
                 self.auto_update_toggle.setToggled(True)
 
-            # ── Post-Queue Sweep Rounds ──
-            if hasattr(self, 'sweep_rounds_spin'):
-                self.sweep_rounds_spin.setValue(5)
 
             # ── Language ──
             if hasattr(self, 'lang_menu'):
@@ -1515,14 +1497,7 @@ class TabSettings(
             self.notify_toast_toggle.setToggled(bool(settings["notify_toast_enabled"]))
         if "notify_sound_enabled" in settings and hasattr(self, 'notify_sound_toggle'):
             self.notify_sound_toggle.setToggled(bool(settings["notify_sound_enabled"]))
-        # Post-Queue Action
-        if "post_queue_action_enabled" in settings and hasattr(self, 'post_queue_switch'):
-            self.post_queue_switch.setToggled(bool(settings["post_queue_action_enabled"]))
-        if "post_queue_action" in settings and hasattr(self, 'post_queue_action_combo'):
-            _action_map = {"nothing": "🔌 Do Nothing", "shutdown": "⚡ Shutdown", "sleep": "💤 Sleep"}
-            self.post_queue_action_combo.setCurrentText(
-                _action_map.get(settings["post_queue_action"], "🔌 Do Nothing")
-            )
+        # REMOVED: Post-Queue Action — now exclusively in Queue tab
         # Browser Visibility
         if "smart_hide_enabled" in settings and hasattr(self, 'smart_hide_switch'):
             self.smart_hide_switch.setToggled(bool(settings["smart_hide_enabled"]))
@@ -1557,9 +1532,7 @@ class TabSettings(
         # Auto-Update
         if "auto_update_enabled" in settings and hasattr(self, 'auto_update_toggle'):
             self.auto_update_toggle.setToggled(bool(settings["auto_update_enabled"]))
-        # Post-Queue Sweep Rounds
-        if "auto_sweep_max_rounds" in settings and hasattr(self, 'sweep_rounds_spin'):
-            self.sweep_rounds_spin.setValue(int(settings["auto_sweep_max_rounds"]))
+        # REMOVED: Post-Queue Sweep Rounds — now exclusively in Queue tab
         # Gemini AI
         if "prompt_enhance_enabled" in settings and hasattr(self, 'gemini_enable_switch'):
             self.gemini_enable_switch.setToggled(bool(settings["prompt_enhance_enabled"]))
@@ -1630,12 +1603,7 @@ class TabSettings(
             "notify_toast_enabled": self.notify_toast_toggle.isToggled() if hasattr(self, 'notify_toast_toggle') else True,
             "notify_sound_enabled": self.notify_sound_toggle.isToggled() if hasattr(self, 'notify_sound_toggle') else True,
             "notify_sound_file": self._get_selected_sound() if hasattr(self, '_get_selected_sound') else "default",
-            # Post-Queue Action
-            "post_queue_action_enabled": self.post_queue_switch.isToggled() if hasattr(self, 'post_queue_switch') else False,
-            # B2 fix: reverse-map display text to internal value
-            "post_queue_action": {"🔌 Do Nothing": "nothing", "⚡ Shutdown": "shutdown", "💤 Sleep": "sleep"}.get(
-                self.post_queue_action_combo.currentText(), "nothing"
-            ) if hasattr(self, 'post_queue_action_combo') else "nothing",
+            # REMOVED: Post-Queue Action — now exclusively in Queue tab
             # Browser Visibility
             "smart_hide_enabled": self.smart_hide_switch.isToggled() if hasattr(self, 'smart_hide_switch') else True,
             "hide_all_browsers": self.hide_all_switch.isToggled() if hasattr(self, 'hide_all_switch') else False,
@@ -1654,8 +1622,7 @@ class TabSettings(
             "prewarm_idle_threshold": self.prewarm_threshold.value() if hasattr(self, 'prewarm_threshold') else 10,
             # Auto-Update
             "auto_update_enabled": self.auto_update_toggle.isToggled() if hasattr(self, 'auto_update_toggle') else True,
-            # Post-Queue Sweep Rounds
-            "auto_sweep_max_rounds": self.sweep_rounds_spin.value() if hasattr(self, 'sweep_rounds_spin') else 5,
+            # REMOVED: Post-Queue Sweep Rounds — now exclusively in Queue tab
             # Gemini AI
             "prompt_enhance_enabled": self.gemini_enable_switch.isToggled() if hasattr(self, 'gemini_enable_switch') else False,
             "prompt_auto_enhance": self.gemini_auto_enhance.isToggled() if hasattr(self, 'gemini_auto_enhance') else False,

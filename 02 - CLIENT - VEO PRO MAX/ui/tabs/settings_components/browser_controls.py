@@ -50,7 +50,7 @@ class SettingsBrowserControlsMixin:
         state = self.profiles_controller.get_debug_browser_state(email)
 
         if state == "closed":
-            # Not running → Open browser
+            # Not running → Open browser (in background thread to avoid UI freeze)
             print(f"[Settings] 🌐 Opening browser for {email}...")
             self._update_visibility_toggle_btn(email, "visible")
 
@@ -61,16 +61,23 @@ class SettingsBrowserControlsMixin:
                     Qt.ConnectionType.QueuedConnection
                 )
 
-            success = self.profiles_controller.open_browser_for_debug(
-                email, on_state_change=on_state_change
-            )
-            if not success:
-                self._update_visibility_toggle_btn(email, "closed")
-                from PySide6.QtCore import QMetaObject, Qt
-                QMetaObject.invokeMethod(
-                    self, "_on_debug_browser_failed",
-                    Qt.ConnectionType.QueuedConnection
+            import threading
+            def _bg_open():
+                success = self.profiles_controller.open_browser_for_debug(
+                    email, on_state_change=on_state_change
                 )
+                if not success:
+                    from PySide6.QtCore import QMetaObject, Qt
+                    QMetaObject.invokeMethod(
+                        self, "_refresh_browser_buttons",
+                        Qt.ConnectionType.QueuedConnection
+                    )
+                    QMetaObject.invokeMethod(
+                        self, "_on_debug_browser_failed",
+                        Qt.ConnectionType.QueuedConnection
+                    )
+
+            threading.Thread(target=_bg_open, daemon=True).start()
             self._push_dev_console_status()
 
         elif state == "visible":

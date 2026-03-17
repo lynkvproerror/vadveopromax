@@ -1,0 +1,715 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260317_180045
+Total: 707 entries
+============================================================
+
+[INFO ] 17:55:43 - core.session_manager - [Session] Loaded from 2026-03-17T17:55:29.474323
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155535_task_0 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155535_task_1 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_0 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_1 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_2 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_3 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_4 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_5 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_6 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_7 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_8 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_9 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_10 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_11 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_12 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_13 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_14 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_15 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_16 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_17 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_18 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_19 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_20 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_21 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_22 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_23 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_24 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_25 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_26 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_27 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_28 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_29 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_30 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_31 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_32 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_33 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_34 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_35 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_36 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_37 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_38 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_39 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_40 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_41 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_42 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_43 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_44 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_45 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_46 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_47 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_48 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_49 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_50 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_51 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_52 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_53 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_54 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_55 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_56 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_57 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_58 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_59 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_60 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_61 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_62 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_63 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_64 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_65 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_66 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_67 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_155737_task_68 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_0 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_1 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_2 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_3 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_4 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_5 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_6 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_7 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_8 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_9 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_10 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_11 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_12 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_13 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_14 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_15 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_16 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_17 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_18 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_19 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_20 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_21 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_22 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_23 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_24 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_25 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_26 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_27 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_28 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_29 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_30 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_31 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_32 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_33 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_34 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_35 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_36 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_37 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_38 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_39 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_40 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_41 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_42 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_43 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_44 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_45 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_46 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_47 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_48 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_49 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_50 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_51 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_52 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_53 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_54 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_55 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_56 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_57 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_58 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_59 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_60 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_61 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_62 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_63 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_64 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_65 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_66 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_67 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_68 (already restored from journal)
+[INFO ] 17:55:43 - core.dispatcher - [SessionRestore] Task group_20260317_163149_task_26_retry_v0_170906488372: restored replace_target → (group_20260317_163149_task_26, video[0])
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_163149_task_26_retry_v0_170906488372 (already restored from journal)
+[DEBUG] 17:55:43 - core.dispatcher - [Dispatcher] All 141 tasks already loaded — skipped duplicate restore
+[INFO ] 17:55:43 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[INFO ] 17:55:44 - veo.tab_project - [TabProject] Restored 69 parsed projects from session
+[DEBUG] 17:55:44 - veo.tab_queue - [QueueRefresh] 3 groups, 140 total tasks, existing_groups=[]
+[INFO ] 17:55:44 - veo.tab_queue - [GroupCreate] gid=group_20260317_155535 name='Mây Trắng và Nắng Vàng/character' children=2 expanded=True
+[INFO ] 17:55:44 - veo.tab_queue - [GroupCreate] gid=group_20260317_155737 name='Mây Trắng và Nắng Vàng/scenes' children=69 expanded=True
+[INFO ] 17:55:46 - veo.tab_queue - [GroupCreate] gid=group_20260317_163149 name='Mây Trắng và Nắng Vàng/video' children=69 expanded=True
+[INFO ] 17:55:47 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 17:55:47 - veo.tab_project - [Pipeline] Full restore: 69 scenes, 2 characters, topic='Tên kịch bản: Mây Trắng và Nắng Vàng
+Nhân vật:
+
+Mâ'
+[INFO ] 17:56:00 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Mây Trắng và Nắng Vàng: 6 completed stage(s), current=video_gen, FULL session
+[DEBUG] 17:56:00 - veo.tab_queue - [QueueRefresh] 3 groups, 140 total tasks, existing_groups=['group_20260317_155535', 'group_20260317_155737', 'group_20260317_163149']
+[DEBUG] 17:56:01 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 17:56:01 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 17:56:01 - veo - [VersionCheck] OK: 2.3.6 >= 2.3.0
+[DEBUG] 17:56:01 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[DEBUG] 17:55:55 - core.app_controller - Sync veofidelia169@tunxelamorintesa.sbs: timeout (browser not ready yet)
+[DEBUG] 17:56:01 - core.auto_updater - Up to date (app=v2.3.6, ext=v2.3.6)
+[DEBUG] 17:56:10 - core.app_controller - Sync levanlinh.kma@gmail.com: timeout (browser not ready yet)
+[INFO ] 17:56:10 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 17:56:10 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 17:56:10 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 17:56:10 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/2: veofidelia169@tunxelamorintesa.sbs...
+[DEBUG] 17:56:10 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for veofidelia169@tunxelamorintesa.sbs...
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_50d44400
+[DEBUG] 17:56:10 - core.chrome_manager - [ChromeManager] No PID file for browser_session_50d44400
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[DEBUG] 17:56:10 - core.chrome_manager - [ChromeManager] Variations seed already up-to-date for browser_session_50d44400
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_50d44400
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] Chrome launched: PID=316, port=9223
+[INFO ] 17:56:10 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 316
+[INFO ] 17:56:11 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_50d44400\.chrome_pid.json
+[WARNING] 17:56:11 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 17:56:11 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 17:56:11 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 17:56:11 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 17:56:11 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.6
+[INFO ] 17:56:11 - core.extension_manager - [ExtMgr] Extension v2.3.6 up-to-date — skipping
+[INFO ] 17:56:11 - core.profiles_controller - [ProfilesController] Chrome PID=316, port=9223 (new)
+[INFO ] 17:56:11 - core.profiles_controller - [ProfilesController] 2 HWND(s) — hidden for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 17:56:11 - asyncio - Using proactor: IocpProactor
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 17:56:11 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 17:56:11 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 17:56:12 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 17:56:15 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 17:56:16 - core.profiles_controller - [DEBUG] Step 5: Reload done. Headers = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 17:56:16 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 17:56:16 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for veofidelia169@tunxelamorintesa.sbs (persistent, port=9223)
+[INFO ] 17:56:17 - core.profiles_controller - [ProfilesController] 🔇 Post-setup re-hide: 2 HWND(s) hidden for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 17:56:25 - core.app_controller - Sync levanlinh.kma@gmail.com: timeout (browser not ready yet)
+[INFO ] 17:56:25 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 17:56:25 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 17:56:25 - core.app_controller - [AutoLaunch] ✅ veofidelia169@tunxelamorintesa.sbs browser hidden
+[INFO ] 17:56:25 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 2/2: levanlinh.kma@gmail.com...
+[DEBUG] 17:56:25 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for levanlinh.kma@gmail.com...
+[INFO ] 17:56:25 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 58304)
+[INFO ] 17:56:25 - core.profiles_controller - [ProfilesController] 🔇 Browser hidden for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:25 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[DEBUG] 17:56:25 - core.chrome_manager - [ChromeManager] No PID file for browser_session_fed78075
+[INFO ] 17:56:25 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 17:56:25 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: veofidelia169@tunxelamorintesa.sbs (v2.3.6)
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 17:56:26 - core.app_controller - [ExtensionBridge] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 17:56:26 - veo - [Status] Extension connected for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 17:56:26 - core.chrome_manager - [ChromeManager] Variations seed already up-to-date for browser_session_fed78075
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9224, profile=browser_session_fed78075
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9224 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 17:56:26 - core.app_controller - [ExtensionBridge] 📸 Image Library: 50 pending upload(s) for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 17:56:26 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 17:56:26 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 17:56:26 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: waiting 10s for reCAPTCHA widget...
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] Chrome launched: PID=11804, port=9224
+[INFO ] 17:56:26 - services.image_library - [ImageLibrary] Pre-uploading 50 image(s) for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 11804
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 17:56:26 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9224 (timeout=30s)...
+[INFO ] 17:56:26 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] Access token invalid/expired, refreshing...
+[DEBUG] 17:56:26 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 17:56:26 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 17:56:26 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 17:56:26 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:26 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: []
+[INFO ] 17:56:26 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for veofidelia169@tunxelamorintesa.sbs — zombie detection suspended 60s (reason: header-refresh)
+[INFO ] 17:56:26 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 17:56:26 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:26 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🔑 Access token refreshed via Extension bridge
+[DEBUG] 17:56:26 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=0 chars (both short)
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] CDP ready on port 9224
+[INFO ] 17:56:26 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 17:56:26 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 17:56:26 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.6
+[INFO ] 17:56:26 - core.extension_manager - [ExtMgr] Extension v2.3.6 up-to-date — skipping
+[INFO ] 17:56:26 - core.profiles_controller - [ProfilesController] Chrome PID=11804, port=9224 (new)
+[INFO ] 17:56:26 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 52405)
+[INFO ] 17:56:26 - core.profiles_controller - [ProfilesController] 2 HWND(s) — hidden for levanlinh.kma@gmail.com
+[DEBUG] 17:56:26 - asyncio - Using proactor: IocpProactor
+[INFO ] 17:56:26 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:26 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:26 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser hidden
+[INFO ] 17:56:26 - core.app_controller - [AutoLaunch] Connecting 2 accounts to debug browsers...
+[INFO ] 17:56:26 - core.multi_account - Starting browsers for 2 accounts...
+[INFO ] 17:56:26 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 17:56:26 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 17:56:26 - core.account_manager - [levanlinh.kma@gmail.com] No debug browser — extension-only mode (TRPCClient unavailable)
+[INFO ] 17:56:26 - core.multi_account - All account browsers initialized
+[INFO ] 17:56:26 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 17:56:26 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 17:56:26 - core.app_controller - [BridgeInject] Injected extension_bridge into levanlinh.kma@gmail.com (lazy)
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9224...
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 17:56:27 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 17:56:27 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 17:56:27 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.6)
+[INFO ] 17:56:27 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 17:56:27 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 17:56:27 - core.app_controller - [ExtensionBridge] 📸 Image Library: 49 pending upload(s) for levanlinh.kma@gmail.com
+[DEBUG] 17:56:27 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 17:56:27 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 17:56:27 - services.image_library - [ImageLibrary] Pre-uploading 49 image(s) for levanlinh.kma@gmail.com
+[INFO ] 17:56:28 - core.account_manager - [levanlinh.kma@gmail.com] Access token invalid/expired, refreshing...
+[INFO ] 17:56:28 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 17:56:28 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 17:56:28 - core.account_manager - [levanlinh.kma@gmail.com] 🔑 Access token refreshed via Extension bridge
+[DEBUG] 17:56:28 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge returned None (cache miss or stale)
+[DEBUG] 17:56:28 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:56:28 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:56:28 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:56:28 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 17:56:28 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 17:56:28 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 17:56:29 - core.app_controller - [AutoLaunch] Extension status: 2 emails registered: ['veofidelia169@tunxelamorintesa.sbs', 'levanlinh.kma@gmail.com']
+[INFO ] 17:56:30 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 17:56:30 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/658E2D052797DFB31140487858...
+[DEBUG] 17:56:30 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 17:56:30 - core.profiles_controller - [DEBUG] Step 5: Reload done. Headers = ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 17:56:30 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 17:56:30 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for levanlinh.kma@gmail.com (persistent, port=9224)
+[INFO ] 17:56:31 - core.extension_manager - [ExtMgr] Closed extensions tab 658E2D05... (PUT)
+[INFO ] 17:56:31 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 17:56:31 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.6
+[INFO ] 17:56:31 - core.app_controller - [AppController] Extension v2.3.6 connected via bridge for veofidelia169@tunxelamorintesa.sbs — up-to-date
+[INFO ] 17:56:31 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 17:56:31 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9224/devtools/page/5F838C6563F8CCAEC05A70A744...
+[INFO ] 17:56:31 - core.profiles_controller - [ProfilesController] 🔇 Post-setup re-hide: 2 HWND(s) hidden for levanlinh.kma@gmail.com
+[INFO ] 17:56:32 - core.profiles_controller - [ProfilesController] 🔇 Browser hidden for levanlinh.kma@gmail.com
+[INFO ] 17:56:33 - core.extension_manager - [ExtMgr] Closed extensions tab 5F838C65... (PUT)
+[INFO ] 17:56:33 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 17:56:33 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.6
+[INFO ] 17:56:33 - core.app_controller - [AppController] Extension v2.3.6 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 17:56:33 - core.app_controller - [AppController] Extension batch check results: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected', 'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 17:56:33 - core.app_controller - [AutoLaunch] Extension check complete: {'veofidelia169@tunxelamorintesa.sbs': '✅ bridge connected', 'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 17:56:33 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 2 emails
+[INFO ] 17:56:33 - core.app_controller - [AutoLaunch] 🔇 Final re-hide sweep: 2 browser(s)
+[INFO ] 17:56:33 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 17:56:33 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 17:56:33 - core.app_controller - [AutoLaunch] 📸 Image Library pre-upload: 98 images × 2 accounts (99 pending)
+[DEBUG] 17:56:33 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: already in progress, skipping duplicate
+[DEBUG] 17:56:33 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: already in progress, skipping duplicate
+[DEBUG] 17:56:33 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:56:33 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:56:33 - services.image_library - [ImageLibrary] Pre-uploading 50 image(s) for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:56:33 - core.profiles_controller - [ProfilesController] 🔇 Browser hidden for levanlinh.kma@gmail.com
+[INFO ] 17:56:33 - core.profiles_controller - [ProfilesController] 🔇 Browser hidden for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 17:56:33 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:56:33 - services.image_library - [ImageLibrary] Pre-uploading 49 image(s) for levanlinh.kma@gmail.com
+[DEBUG] 17:56:33 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:56:33 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 17:56:35 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:35 - services.image_library - [ImageLibrary] ✅ Scene 23.png → c58be2d2-0e5e-4eed-81a3-f5c1bd... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:56:35 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:56:35 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:56:35 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:56:35 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:56:35 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:56:36 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:56:37 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:37 - services.image_library - [ImageLibrary] ✅ Scene 26.png → f25a4fb6-a806-45c7-8b3d-cb9952... (levanlinh.kma@gmail.com)
+[DEBUG] 17:56:37 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:56:37 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 17:56:38 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2169 chars)
+[DEBUG] 17:56:38 - core.app_controller - [ReadinessToken] Cached trial token for levanlinh.kma@gmail.com (2169 chars) → AM + Pool
+[DEBUG] 17:56:38 - core.extension_bridge - [ExtensionBridge] Cached readiness-check token for levanlinh.kma@gmail.com (2169 chars)
+[INFO ] 17:56:38 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+[INFO ] 17:56:38 - veo - [Status] ✅ levanlinh.kma@gmail.com: reCAPTCHA ready — account prepared
+[DEBUG] 17:56:41 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:56:41 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:56:43 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:43 - services.image_library - [ImageLibrary] ✅ Scene 26.png → b0005749-67d6-4916-82cd-0771a1... (levanlinh.kma@gmail.com)
+[DEBUG] 17:56:43 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 17:56:43 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 17:56:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 17:56:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 17:56:43 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:43 - services.image_library - [ImageLibrary] ✅ Scene 23.png → 27d88f63-0c51-4337-a5ac-6c9ba9... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:56:44 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:56:44 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:56:45 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:45 - services.image_library - [ImageLibrary] ✅ Scene 26.png → 1fe1dc45-cc57-4db0-992b-b05ec6... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:56:46 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:56:47 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:47 - services.image_library - [ImageLibrary] ✅ Scene 27.png → 07388598-91c2-4e1c-a23b-aa7e74... (levanlinh.kma@gmail.com)
+[DEBUG] 17:56:48 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:56:53 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:53 - services.image_library - [ImageLibrary] ✅ Scene 27.png → 400b4daf-84d9-441c-87fb-b8430c... (levanlinh.kma@gmail.com)
+[DEBUG] 17:56:53 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:56:55 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:55 - services.image_library - [ImageLibrary] ✅ Scene 27.png → 14e5dac6-b237-42f6-a444-4567bc... (veofidelia169@tunxelamorintesa.sbs)
+[INFO ] 17:56:55 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:55 - services.image_library - [ImageLibrary] ✅ Scene 26.png → 175f922f-a2ce-4806-b91c-291127... (veofidelia169@tunxelamorintesa.sbs)
+[WARNING] 17:56:56 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 17:56:56 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=218be70f)
+[WARNING] 17:56:56 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 17:56:56 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for veofidelia169@tunxelamorintesa.sbs — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[DEBUG] 17:56:56 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:56:56 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:56:57 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:56:57 - services.image_library - [ImageLibrary] ✅ Scene 24.png → 2ee569f2-95c6-4f77-a846-3b26ed... (levanlinh.kma@gmail.com)
+[DEBUG] 17:56:58 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:57:00 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:00 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:57:00 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:57:02 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:02 - services.image_library - [ImageLibrary] ✅ Scene 24.png → 9db0ca17-14cb-4919-94fa-cfd358... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:02 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:02 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:57:02 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:03 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:05 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:05 - services.image_library - [ImageLibrary] ✅ Scene 24.png → fa8d9af3-f46a-4731-b60c-5e1e2d... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:05 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:57:05 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[INFO ] 17:57:07 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:07 - services.image_library - [ImageLibrary] ✅ Scene 22.png → 757d8f37-509e-484d-a24d-1008b0... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:07 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:09 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:09 - services.image_library - [ImageLibrary] ✅ Scene 27.png → 7fc920f6-c77b-4be7-96a6-5372e2... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:10 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[WARNING] 17:57:11 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs (no heartbeat for 54s) — recovery attempt 1/3
+[INFO ] 17:57:11 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for veofidelia169@tunxelamorintesa.sbs — frozen tab recovery 1/3
+[DEBUG] 17:57:11 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:57:12 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:12 - services.image_library - [ImageLibrary] ✅ Scene 22.png → 790ee0ac-8d75-4418-9e7e-0006c6... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:13 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:57:15 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:15 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:57:15 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:57:15 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:15 - services.image_library - [ImageLibrary] ✅ Scene 22.png → ef2203d5-b3ae-4abd-a56d-2aadc0... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:16 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:17 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:17 - services.image_library - [ImageLibrary] ✅ Scene 25.png → 753a97f9-55f5-427f-b8e2-c47fb2... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:18 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:22 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:22 - services.image_library - [ImageLibrary] ✅ Scene 25.png → 400c7a4d-f95c-46ca-9fa4-cbb38e... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:22 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:24 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:24 - services.image_library - [ImageLibrary] ✅ Scene 24.png → 6ac0f432-5cd3-444e-9549-2314a8... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:24 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:25 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:25 - services.image_library - [ImageLibrary] ✅ Scene 25.png → 7824db71-8e61-4d20-9a1a-1391e8... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:25 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:25 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=15s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=1
+[WARNING] 17:57:26 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for veofidelia169@tunxelamorintesa.sbs — extension did not respond (tab may be frozen/suspended)
+[WARNING] 17:57:26 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for veofidelia169@tunxelamorintesa.sbs took 20.0s (requestId=d8d9e461)
+[WARNING] 17:57:26 - core.app_controller - [ProactiveWarmup] veofidelia169@tunxelamorintesa.sbs: ❌ reCAPTCHA still not ready after retry
+[INFO ] 17:57:26 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for veofidelia169@tunxelamorintesa.sbs — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[DEBUG] 17:57:27 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 17:57:28 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:28 - services.image_library - [ImageLibrary] ✅ Scene 30.png → 8a164d53-3ce0-49c7-b4a3-47c6fc... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:29 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:57:30 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:30 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:57:30 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:31 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for veofidelia169@tunxelamorintesa.sbs suppressed — refresh already in-progress (20s ago)
+[DEBUG] 17:57:31 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:57:31 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:33 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:57:33 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:57:33 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:57:35 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:35 - services.image_library - [ImageLibrary] ✅ Scene 30.png → b60c9522-fc77-4b20-9eee-cc3cd1... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:35 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:38 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:38 - services.image_library - [ImageLibrary] ✅ Scene 28.png → ca261cbb-5d0b-4adc-8143-51fdf8... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:39 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:39 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:39 - services.image_library - [ImageLibrary] ✅ Scene 22.png → 7b5ce5ce-6a09-4791-a72b-fcaa5e... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:39 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:40 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:40 - services.image_library - [ImageLibrary] ✅ Scene 30.png → 9f5af169-2cb9-47ae-acc3-8afe71... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:40 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:57:43 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 17:57:43 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 17:57:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 17:57:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 17:57:44 - core.engine - [TabKeepalive] Pinged 6 tab(s) — Chrome freeze prevention OK
+[INFO ] 17:57:45 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:45 - services.image_library - [ImageLibrary] ✅ Scene 28.png → 0db1fb6a-3d5c-401d-9697-75ca57... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:46 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:57:46 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 17:57:48 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:48 - services.image_library - [ImageLibrary] ✅ Scene 29.png → f8d979cf-34bc-4b63-aa32-739853... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:48 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:50 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:50 - services.image_library - [ImageLibrary] ✅ Scene 28.png → 923428bf-327c-4f1f-a0cf-a35d4d... (levanlinh.kma@gmail.com)
+[DEBUG] 17:57:51 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:52 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:52 - services.image_library - [ImageLibrary] ✅ Scene 25.png → f32d53a2-b96b-4501-9f86-667efa... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:52 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:57:55 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:57:55 - services.image_library - [ImageLibrary] ✅ Scene 29.png → 3ee0642e-3b3b-4475-8c2a-0cedaa... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:57:56 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:57:56 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:58:00 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:00 - services.image_library - [ImageLibrary] ✅ Scene 29.png → 657dc58e-b436-40fe-9c2e-d2b68e... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:00 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:58:00 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:58:00 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:58:01 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:01 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:01 - services.image_library - [ImageLibrary] ✅ Scene 31.png → 47236451-eb82-4122-a2b9-b3c985... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:02 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:06 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:06 - services.image_library - [ImageLibrary] ✅ Scene 30.png → 425fd7db-e713-4e94-b2e5-da729a... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:06 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:07 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:07 - services.image_library - [ImageLibrary] ✅ Scene 31.png → 21704ee3-9168-4904-969d-b9fc91... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:08 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:58:10 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[INFO ] 17:58:10 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:10 - services.image_library - [ImageLibrary] ✅ Scene 31.png → a055374b-33a8-452e-a7c4-6b0c36... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:11 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:15 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:15 - services.image_library - [ImageLibrary] ✅ Scene 32.png → 6bb8fa6d-da69-46e1-aaec-358252... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:16 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:17 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:17 - services.image_library - [ImageLibrary] ✅ Scene 32.png → 9f744416-124f-490a-a1cb-da35fe... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:18 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:18 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:18 - services.image_library - [ImageLibrary] ✅ Scene 28.png → f7abce77-f35b-49b5-a7dd-3506fc... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:19 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:20 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:20 - services.image_library - [ImageLibrary] ✅ Scene 32.png → 002aa5f8-b5e8-4bf8-b063-08a831... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:21 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:25 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:25 - services.image_library - [ImageLibrary] ✅ Scene 33.png → 4e934613-6ccb-4368-8e0e-754b82... (levanlinh.kma@gmail.com)
+[INFO ] 17:58:25 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[DEBUG] 17:58:26 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:26 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:26 - services.image_library - [ImageLibrary] ✅ Scene 33.png → 55d94622-7ad2-4d5d-a933-b35b0d... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:27 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:58:27 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 17:58:29 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:29 - services.image_library - [ImageLibrary] ✅ Scene 33.png → 4dfc31f6-1945-4c32-af5c-07630f... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:30 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:58:31 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:58:31 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:58:36 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:36 - services.image_library - [ImageLibrary] ✅ Scene 35.png → 9a75a78f-1468-44d1-8a49-36e3c6... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:36 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:36 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:36 - services.image_library - [ImageLibrary] ✅ Scene 35.png → a06c486e-f781-45d2-b735-ab08ac... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:37 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:39 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:39 - services.image_library - [ImageLibrary] ✅ Scene 29.png → 01e951be-18d6-4f30-8bd2-d79697... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:40 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:40 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:40 - services.image_library - [ImageLibrary] ✅ Scene 35.png → dd0d39ca-38e9-4f74-88f8-2c017d... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:41 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:58:41 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[DEBUG] 17:58:41 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 17:58:43 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 17:58:43 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 17:58:43 - core.profiles_controller - [ProfilesController] ⏳ JS eval paused for veofidelia169@tunxelamorintesa.sbs (page navigating — soft recovery)
+[DEBUG] 17:58:43 - core.engine - [TabKeepalive] veofidelia169@tunxelamorintesa.sbs: API heartbeat skipped (no browser page)
+[DEBUG] 17:58:43 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 17:58:43 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 17:58:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 17:58:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 17:58:43 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 17:58:44 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[INFO ] 17:58:46 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:46 - services.image_library - [ImageLibrary] ✅ Scene 36.png → 1f97f1e6-5ab1-46df-8373-75d9e3... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:46 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 17:58:47 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:58:48 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:58:48 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:58:48 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:48 - services.image_library - [ImageLibrary] ✅ Scene 36.png → 2b3896fd-43ed-4604-8512-eee009... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:49 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:50 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:50 - services.image_library - [ImageLibrary] ✅ Scene 36.png → 649d973e-d070-4d28-a272-f5b610... (levanlinh.kma@gmail.com)
+[DEBUG] 17:58:51 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:58:51 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:58:51 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:58:51 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:58:52 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:52 - services.image_library - [ImageLibrary] ✅ Scene 31.png → dd74c7bb-85ff-4605-8bc0-416c3b... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:53 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:58:56 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:58:56 - services.image_library - [ImageLibrary] ✅ Scene 37.png → bd7d560d-3b7b-426d-871d-ef297c... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:58:57 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:00 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:00 - services.image_library - [ImageLibrary] ✅ Scene 37.png → 7a2e2c4d-6f63-47d4-8f7f-2c0dce... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:00 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:01 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:01 - services.image_library - [ImageLibrary] ✅ Scene 37.png → bb73a42c-90fc-4337-96a3-6b7982... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:02 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:06 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:06 - services.image_library - [ImageLibrary] ✅ Scene 34.png → d71cae07-e66b-4039-a909-6d103b... (veofidelia169@tunxelamorintesa.sbs)
+[INFO ] 17:59:06 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:06 - services.image_library - [ImageLibrary] ✅ Scene 32.png → c7d157d9-8bf8-48d2-bdd7-81dfb6... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:06 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:07 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:15 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:59:15 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:59:15 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:59:15 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:15 - services.image_library - [ImageLibrary] ✅ Scene 34.png → 985bad9c-986e-4b85-afc5-ff81d5... (levanlinh.kma@gmail.com)
+[INFO ] 17:59:15 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:15 - services.image_library - [ImageLibrary] ✅ Scene 38.png → 75ed3e27-9328-48ab-9f4c-6d9173... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:16 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:16 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:18 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:18 - services.image_library - [ImageLibrary] ✅ Scene 34.png → 33659312-a09e-422a-8615-da5390... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:19 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:19 - core.engine - [TabKeepalive] Pinged 5 tab(s) — Chrome freeze prevention OK
+[INFO ] 17:59:20 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:20 - services.image_library - [ImageLibrary] ✅ Scene 33.png → f7e466e3-8f4f-49cf-999e-27f477... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:20 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:25 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:25 - services.image_library - [ImageLibrary] ✅ Scene 39.png → 0d91fc51-2d9a-48c0-aad9-12db96... (veofidelia169@tunxelamorintesa.sbs)
+[INFO ] 17:59:26 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[INFO ] 17:59:26 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:26 - services.image_library - [ImageLibrary] ✅ Scene 38.png → 93242f03-82a6-45f8-861c-67fb52... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:26 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:26 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:27 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 17:59:31 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:31 - services.image_library - [ImageLibrary] ✅ Scene 38.png → d439e20e-b382-4586-b7e8-892191... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:31 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 17:59:31 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:59:32 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:34 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:34 - services.image_library - [ImageLibrary] ✅ Scene 35.png → 117d80c6-2c9f-457c-a63c-632ec9... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:35 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:35 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:35 - services.image_library - [ImageLibrary] ✅ Scene 39.png → 053e274e-e111-45c5-ade9-79d855... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:36 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:36 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:36 - services.image_library - [ImageLibrary] ✅ Scene 41.png → 6ac2f275-213e-4282-9c39-35471a... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:36 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:43 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 17:59:43 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 17:59:43 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 17:59:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 17:59:44 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:44 - services.image_library - [ImageLibrary] ✅ Scene 39.png → 8d3caab3-cd61-42d1-9b2c-938ad4... (levanlinh.kma@gmail.com)
+[INFO ] 17:59:45 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:45 - services.image_library - [ImageLibrary] ✅ Scene 41.png → a15b0195-5d51-4cf8-84f8-239aab... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:45 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:45 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:46 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:46 - services.image_library - [ImageLibrary] ✅ Scene 40.png → feb3c671-d6db-45ed-9759-275446... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:46 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:46 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 17:59:47 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:47 - services.image_library - [ImageLibrary] ✅ Scene 36.png → abbeaefe-830e-4bb6-bace-42041d... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:47 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 17:59:50 - core.extension_bridge - [ExtensionBridge] Headers update for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:59:50 - core.app_controller - [ExtensionBridge] Bearer token stored for veofidelia169@tunxelamorintesa.sbs (423 chars)
+[INFO ] 17:59:50 - core.app_controller - [ExtensionBridge] Headers updated for veofidelia169@tunxelamorintesa.sbs: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 17:59:51 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[INFO ] 17:59:54 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:54 - services.image_library - [ImageLibrary] ✅ Scene 40.png → d98fa699-dac7-4e85-b11b-80ee94... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:55 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:55 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:55 - services.image_library - [ImageLibrary] ✅ Scene 42.png → 0cf39a07-797e-4da1-a9d6-9eab28... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 17:59:56 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:57 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:57 - services.image_library - [ImageLibrary] ✅ Scene 41.png → af03670b-9407-4662-9598-09cd73... (levanlinh.kma@gmail.com)
+[DEBUG] 17:59:57 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 17:59:59 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 17:59:59 - services.image_library - [ImageLibrary] ✅ Scene 37.png → b124ac60-389f-46a7-8fdd-848a33... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 18:00:00 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:04 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:04 - services.image_library - [ImageLibrary] ✅ Scene 42.png → 9d1c6ae1-965b-4278-a80c-5ef147... (levanlinh.kma@gmail.com)
+[DEBUG] 18:00:04 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:05 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:05 - services.image_library - [ImageLibrary] ✅ Scene 43.png → ff545cb4-41c9-436f-a86a-b6f3e6... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 18:00:06 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:10 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:10 - services.image_library - [ImageLibrary] ✅ Scene 40.png → 10b4dcd7-adb4-4f44-bcc0-5fb653... (levanlinh.kma@gmail.com)
+[DEBUG] 18:00:11 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:13 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:13 - services.image_library - [ImageLibrary] ✅ Scene 34.png → d87fccc4-cc8b-4ebb-b06b-0f4cb3... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 18:00:14 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:14 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:14 - services.image_library - [ImageLibrary] ✅ Scene 43.png → f5c47062-33ba-4bfa-b98c-0b306a... (levanlinh.kma@gmail.com)
+[DEBUG] 18:00:15 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:17 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:17 - services.image_library - [ImageLibrary] ✅ Scene 45.png → af56d7ab-69d7-4073-b4c2-82be1f... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 18:00:18 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 18:00:20 - core.engine - [TabKeepalive] Pinged 4 tab(s) — Chrome freeze prevention OK
+[INFO ] 18:00:23 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:23 - services.image_library - [ImageLibrary] ✅ Scene 45.png → 89874ee3-44a1-4333-8588-1dcce8... (levanlinh.kma@gmail.com)
+[DEBUG] 18:00:24 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:26 - core.extension_bridge - [ExtBridge] 📊 Health: veofidelia16=✅(hb=19s,cap=✅), levanlinh.km=✅(hb=18s,cap=✅) | conns=2, pending=0
+[INFO ] 18:00:26 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:26 - services.image_library - [ImageLibrary] ✅ Scene 38.png → 989fb22a-f38a-4fa2-b639-40a36a... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 18:00:27 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 18:00:27 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 18:00:28 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:28 - services.image_library - [ImageLibrary] ✅ Scene 46.png → fc7a62be-5373-4914-b294-2e50c7... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 18:00:28 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:29 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:29 - services.image_library - [ImageLibrary] ✅ Scene 42.png → fae81946-d906-4f1e-adcd-58fc1c... (levanlinh.kma@gmail.com)
+[DEBUG] 18:00:30 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 18:00:31 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:00:31 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:00:33 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:33 - services.image_library - [ImageLibrary] ✅ Scene 46.png → aa9e3035-4d6e-484f-a3fa-a9ccdb... (levanlinh.kma@gmail.com)
+[DEBUG] 18:00:34 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:39 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:39 - services.image_library - [ImageLibrary] ✅ Scene 47.png → e8e0164e-9644-43ea-a626-4fbd77... (veofidelia169@tunxelamorintesa.sbs)
+[DEBUG] 18:00:39 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:43 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:43 - services.image_library - [ImageLibrary] ✅ Scene 43.png → 00f80fec-f865-43f9-95e7-26b768... (levanlinh.kma@gmail.com)
+[INFO ] 18:00:43 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:43 - services.image_library - [ImageLibrary] ✅ Scene 39.png → 2b742ec0-3d8d-45b0-b69a-608c2e... (veofidelia169@tunxelamorintesa.sbs)
+[INFO ] 18:00:43 - core.api_client - [API RESPONSE] 200 keys=['media', 'workflow']
+[INFO ] 18:00:43 - services.image_library - [ImageLibrary] ✅ Scene 47.png → 03ec5c8d-df94-4778-bede-5a3303... (levanlinh.kma@gmail.com)
+[DEBUG] 18:00:43 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 18:00:43 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 18:00:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 18:00:44 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 18:00:43 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 18:00:44 - core.account_manager - [veofidelia169@tunxelamorintesa.sbs] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[DEBUG] 18:00:44 - core.account_manager - [levanlinh.kma@gmail.com] get_browser_headers: bridge xcd=8 chars, session xcd=8 chars (both short)
+[INFO ] 18:00:45 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

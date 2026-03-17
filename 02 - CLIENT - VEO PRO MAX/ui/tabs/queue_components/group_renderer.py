@@ -99,19 +99,29 @@ class QueueGroupMixin:
         timer_label.setToolTip(t("queue_extra.group_elapsed_tooltip"))
         h_layout.addWidget(timer_label)
         
-        # Header buttons
-        for btn_text, btn_tip, btn_color, btn_connect in [
+        # Header buttons — build list dynamically
+        header_buttons = [
             ("⚒️", "Setup: change model, aspect ratio, output folder, outputs", Theme.BLUE,
              lambda checked, _gid=gid, _gd=group_data: self._on_setup_group(_gid, _gd)),
+        ]
+        # JOIN button only for video groups (not T2I/I2I)
+        group_mode = group_data.get('mode', 'T2V').upper()
+        if group_mode not in ('T2I', 'I2I'):
+            header_buttons.append(
+                ("JOIN", "Concat all videos in this group into one final video", Theme.GREEN,
+                 lambda checked, _gid=gid: self._on_concat_group(_gid)),
+            )
+        header_buttons.extend([
             ("FRC", "Force retry ALL prompts in this group", Theme.PEACH,
              lambda checked, _gid=gid: self._on_force_retry_group(_gid)),
             ("RST", "Reset group: delete all downloads & cache, re-queue", Theme.YELLOW,
              lambda checked, _gid=gid: self._on_reset_group(_gid)),
             ("DEL", "Delete entire group", Theme.SUBTEXT0,
              lambda checked, _gid=gid: self._on_delete_group(_gid)),
-        ]:
+        ])
+        for btn_text, btn_tip, btn_color, btn_connect in header_buttons:
             btn = QPushButton(btn_text)
-            btn.setMinimumSize(36 if btn_text != "⚒️" else 32, 24)
+            btn.setMinimumSize(36 if btn_text not in ("⚒️",) else 32, 24)
             btn.setToolTip(btn_tip)
             hover_bg = Theme.RED if btn_text == "DEL" else btn_color
             hover_color = Theme.CRUST
@@ -841,3 +851,182 @@ class QueueGroupMixin:
         self._queue_items = [i for i in self._queue_items if not str(i.id).startswith(group_id)]
         self._update_stats()
         print(f"[Queue] Deleted group: {group_id}")
+    
+    def _on_concat_group(self, group_id: str):
+        """Concat all videos in a group into one final video using FFmpeg.
+        
+        Collects best_file from each task's video_outputs in order,
+        checks for missing videos, and runs FFmpeg concat (stream copy).
+        """
+        import os
+        import logging
+        _log = logging.getLogger("veo.tab_queue")
+        
+        if not self.controller or not hasattr(self.controller, 'dispatcher'):
+            return
+        group = self.controller.dispatcher.get_group(group_id)
+        if not group:
+            return
+        
+        # Collect video files in task order (skip replacement tasks)
+        clips = []      # [(task_index, video_index, file_path)]
+        missing = []     # [(task_index, video_index)]
+        task_idx = 0
+        for task in group.tasks:
+            if task.replace_target:
+                continue  # Skip replacement tasks
+            task_idx += 1
+            if not task.video_outputs:
+                # Task has no video outputs at all
+                missing.append((task_idx, 0))
+                continue
+            for vi, vo in enumerate(task.video_outputs):
+                bf = vo.best_file
+                if bf and os.path.isfile(bf):
+                    clips.append((task_idx, vi, bf))
+                else:
+                    missing.append((task_idx, vi))
+        
+        if not clips:
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast("❌ No video files found in this group", "error")
+            return
+        
+        # Warn about missing videos
+        if missing:
+            missing_desc = ", ".join(f"#{t}" if v == 0 else f"#{t}-v{v+1}" for t, v in missing)
+            if not show_confirm(
+                self, "⚠️ Missing Videos",
+                f"{len(missing)} video(s) missing: {missing_desc}\n\n"
+                f"Concat {len(clips)} available clips anyway?",
+                danger=False
+            ):
+                return
+        
+        # Determine output path
+        output_folder = ""
+        project_name = ""
+        for task in group.tasks:
+            if not task.replace_target:
+                output_folder = task.output_folder or ""
+                project_name = task.project_name or ""
+                break
+        
+        if not output_folder:
+            # Fallback: same folder as first clip
+            output_folder = os.path.dirname(clips[0][2])
+        
+        # Build output filename
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        group_name = group.name or "concat"
+        import re
+        safe_name = re.sub(r'[<>:"/\\|?*]', '', group_name).replace(" ", "_").strip("._")[:50]
+        
+        if project_name:
+            final_dir = os.path.join(output_folder, project_name)
+        else:
+            final_dir = output_folder
+        os.makedirs(final_dir, exist_ok=True)
+        final_path = os.path.join(final_dir, f"{safe_name}_{ts}_joined.mp4")
+        
+        # Get FFmpeg path
+        try:
+            from core.frame_extractor import get_ffmpeg_path
+            ffmpeg_path = get_ffmpeg_path()
+        except ImportError:
+            ffmpeg_path = None
+        
+        if not ffmpeg_path:
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast("❌ FFmpeg not available", "error")
+            return
+        
+        # Show progress toast
+        mw = self.window()
+        if mw and hasattr(mw, 'show_toast'):
+            mw.show_toast(f"⏳ Joining {len(clips)} clips...", "info")
+        
+        # Run FFmpeg in background thread
+        import threading
+        def _run_concat():
+            import subprocess
+            try:
+                # Write concat list
+                concat_list = os.path.join(final_dir, f"_concat_{ts}.txt")
+                with open(concat_list, "w", encoding="utf-8") as f:
+                    for _, _, path in clips:
+                        safe = path.replace("\\", "/")
+                        f.write(f"file '{safe}'\n")
+                
+                cmd = [
+                    ffmpeg_path, "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", concat_list,
+                    "-c", "copy",
+                    final_path,
+                ]
+                
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=600,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                )
+                
+                # Cleanup concat list
+                try:
+                    os.remove(concat_list)
+                except OSError:
+                    pass
+                
+                if result.returncode == 0 and os.path.isfile(final_path):
+                    size_mb = os.path.getsize(final_path) / 1024 / 1024
+                    _log.info(f"[Queue] JOIN: ✅ {len(clips)} clips → {final_path} ({size_mb:.1f} MB)")
+                    # Show success on main thread
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(0, lambda: self._on_concat_complete(
+                        True, final_path, len(clips), size_mb, len(missing)
+                    ))
+                else:
+                    err = result.stderr[:300] if result.stderr else "Unknown error"
+                    _log.error(f"[Queue] JOIN: ❌ FFmpeg failed: {err}")
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(0, lambda: self._on_concat_complete(
+                        False, err, len(clips), 0, len(missing)
+                    ))
+            except subprocess.TimeoutExpired:
+                _log.error("[Queue] JOIN: ❌ FFmpeg timeout (>10 min)")
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._on_concat_complete(
+                    False, "FFmpeg timeout (>10 min)", len(clips), 0, len(missing)
+                ))
+            except Exception as e:
+                _log.error(f"[Queue] JOIN: ❌ {e}")
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._on_concat_complete(
+                    False, str(e), len(clips), 0, len(missing)
+                ))
+        
+        t = threading.Thread(target=_run_concat, daemon=True)
+        t.start()
+    
+    def _on_concat_complete(self, success: bool, path_or_error: str,
+                            clip_count: int, size_mb: float, missing_count: int):
+        """Handle concat completion on main thread."""
+        mw = self.window()
+        if success:
+            missing_note = f" ({missing_count} missing)" if missing_count else ""
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast(
+                    f"✅ Joined {clip_count} clips{missing_note} → {size_mb:.1f} MB",
+                    "success"
+                )
+            # Open output folder
+            import os, subprocess
+            folder = os.path.dirname(path_or_error)
+            if os.path.isdir(folder):
+                subprocess.Popen(['explorer', '/select,', os.path.normpath(path_or_error)])
+        else:
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast(f"❌ Concat failed: {path_or_error[:100]}", "error")

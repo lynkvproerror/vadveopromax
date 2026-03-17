@@ -32,7 +32,8 @@ class PipelinePromptItem:
     index: int
     name: str               # e.g. "👤 Character 1", "Scene 3 • I2V • 8s"
     prompt: str
-    thumbnail_path: str = ""  # file path for preview image/video frame
+    thumbnail_path: str = ""  # file path for preview image
+    video_thumbnail_path: str = ""  # file path for video preview (frame/video)
     accent_color: str = ""    # stage-specific accent (fallback: Theme.BLUE)
     metadata: dict = None     # optional extra metadata
 
@@ -44,7 +45,8 @@ class PipelinePromptItem:
 class PipelinePromptTable(QWidget):
     """Table widget for pipeline stage prompts — styled like PromptTable.
 
-    Columns: # | Preview | Info | Prompt | Actions (Edit)
+    Columns (default):       # | Preview | Info | Prompt | Actions (Edit)
+    Columns (video mode):    # | Image Preview | Video Preview | Info | Prompt | Actions
     """
 
     ROW_HEIGHT = 80
@@ -57,11 +59,13 @@ class PipelinePromptTable(QWidget):
         parent: Optional[QWidget] = None,
         accent_color: str = "",
         thumb_size: tuple = (70, 52),
+        show_video_preview: bool = False,
     ):
         super().__init__(parent)
         self._items: List[PipelinePromptItem] = []
         self._accent = accent_color or Theme.BLUE
         self._thumb_w, self._thumb_h = thumb_size
+        self._show_video_preview = show_video_preview
         self._setup_ui()
 
     # ── UI Setup ─────────────────────────────────────────────────
@@ -71,7 +75,10 @@ class PipelinePromptTable(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        columns = ["#", "Preview", "Info", "Prompt", ""]
+        if self._show_video_preview:
+            columns = ["#", "Image Preview", "Video Preview", "Info", "Prompt", ""]
+        else:
+            columns = ["#", "Preview", "Info", "Prompt", ""]
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels(columns)
 
@@ -99,20 +106,30 @@ class PipelinePromptTable(QWidget):
         """)
 
         header = self.table.horizontalHeader()
-        # # column — fixed 36px
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(0, 36)
-        # Preview — fixed
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(1, self._thumb_w + 20)
-        # Info — fixed 140px
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(2, 140)
-        # Prompt — stretch
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        # Actions — fixed 70px
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(4, 70)
+        if self._show_video_preview:
+            # 6-column mode: # | Image Preview | Video Preview | Info | Prompt | Actions
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(0, 36)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(1, self._thumb_w + 20)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(2, self._thumb_w + 20)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(3, 140)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(5, 70)
+        else:
+            # 5-column mode: # | Preview | Info | Prompt | Actions
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(0, 36)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(1, self._thumb_w + 20)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(2, 140)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(4, 70)
 
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -150,13 +167,19 @@ class PipelinePromptTable(QWidget):
 
         accent = item.accent_color or self._accent
 
-        # Col 0: Index
+        # Determine column offsets based on mode
+        if self._show_video_preview:
+            col_idx, col_img, col_vid, col_info, col_prompt, col_action = 0, 1, 2, 3, 4, 5
+        else:
+            col_idx, col_img, col_vid, col_info, col_prompt, col_action = 0, 1, -1, 2, 3, 4
+
+        # Col: Index
         idx_item = QTableWidgetItem(str(item.index))
         idx_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         idx_item.setForeground(QColor(Theme.SUBTEXT0))
-        self.table.setItem(row_idx, 0, idx_item)
+        self.table.setItem(row_idx, col_idx, idx_item)
 
-        # Col 1: Preview thumbnail
+        # Col: Image Preview thumbnail
         thumb_btn = QPushButton()
         thumb_btn.setFixedSize(self._thumb_w, self._thumb_h)
         has_thumb = item.thumbnail_path and os.path.isfile(item.thumbnail_path)
@@ -172,7 +195,7 @@ class PipelinePromptTable(QWidget):
             fp = item.thumbnail_path
             thumb_btn.clicked.connect(lambda checked=False, p=fp: os.startfile(p))
         else:
-            thumb_btn.setText("⏳\n🖼️")
+            thumb_btn.setText("\u23f3\n\U0001f5bc\ufe0f")
             thumb_btn.setToolTip("Image will appear after generation")
         thumb_btn.setStyleSheet(f"""
             QPushButton {{
@@ -183,31 +206,67 @@ class PipelinePromptTable(QWidget):
             }}
             QPushButton:hover {{ border-color: {accent}; }}
         """)
-        # Center in cell
         thumb_container = QWidget()
         thumb_container.setStyleSheet("background: transparent; border: none;")
         thumb_lay = QHBoxLayout(thumb_container)
         thumb_lay.setContentsMargins(4, 4, 4, 4)
         thumb_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         thumb_lay.addWidget(thumb_btn)
-        self.table.setCellWidget(row_idx, 1, thumb_container)
+        self.table.setCellWidget(row_idx, col_img, thumb_container)
 
-        # Col 2: Info (name + metadata)
+        # Col: Video Preview thumbnail (only in video mode)
+        if self._show_video_preview:
+            vid_btn = QPushButton()
+            vid_btn.setFixedSize(self._thumb_w, self._thumb_h)
+            has_vid = item.video_thumbnail_path and os.path.isfile(item.video_thumbnail_path)
+            if has_vid:
+                pix = QPixmap(item.video_thumbnail_path).scaled(
+                    self._thumb_w - 4, self._thumb_h - 4,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                vid_btn.setIcon(pix)
+                vid_btn.setIconSize(QSize(self._thumb_w - 4, self._thumb_h - 4))
+                # Try to find actual video file for click-to-open
+                vid_file = item.metadata.get("video_path", item.video_thumbnail_path) if item.metadata else item.video_thumbnail_path
+                vid_btn.setToolTip(f"Click to play: {vid_file}")
+                vid_btn.clicked.connect(lambda checked=False, p=vid_file: os.startfile(p))
+            else:
+                vid_btn.setText("\u23f3\n\U0001f3ac")
+                vid_btn.setToolTip("Video will appear after Queue processes this task")
+            vid_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.MANTLE};
+                    border: 1px dashed {Theme.OVERLAY0};
+                    border-radius: 4px;
+                    font-size: 14px; color: {Theme.SUBTEXT0};
+                }}
+                QPushButton:hover {{ border-color: {Theme.PEACH}; }}
+            """)
+            vid_container = QWidget()
+            vid_container.setStyleSheet("background: transparent; border: none;")
+            vid_lay = QHBoxLayout(vid_container)
+            vid_lay.setContentsMargins(4, 4, 4, 4)
+            vid_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            vid_lay.addWidget(vid_btn)
+            self.table.setCellWidget(row_idx, col_vid, vid_container)
+
+        # Col: Info (name + metadata)
         info_lbl = QLabel(item.name)
         info_lbl.setWordWrap(True)
         info_lbl.setStyleSheet(f"""
             color: {accent}; font-weight: bold; font-size: 11px;
             background: transparent; border: none; padding: 4px;
         """)
-        self.table.setCellWidget(row_idx, 2, info_lbl)
+        self.table.setCellWidget(row_idx, col_info, info_lbl)
 
-        # Col 3: Prompt text
+        # Col: Prompt text
         prompt_item = QTableWidgetItem(item.prompt)
         prompt_item.setForeground(QColor(Theme.TEXT))
         prompt_item.setToolTip(item.prompt)
-        self.table.setItem(row_idx, 3, prompt_item)
+        self.table.setItem(row_idx, col_prompt, prompt_item)
 
-        # Col 4: Actions (Edit button)
+        # Col: Actions (Edit button)
         edit_btn = QPushButton("Edit")
         edit_btn.setMinimumSize(55, 30)
         edit_btn.setStyleSheet(f"""
@@ -234,7 +293,7 @@ class PipelinePromptTable(QWidget):
         action_lay.setContentsMargins(4, 4, 4, 4)
         action_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         action_lay.addWidget(edit_btn)
-        self.table.setCellWidget(row_idx, 4, action_container)
+        self.table.setCellWidget(row_idx, col_action, action_container)
 
     def _on_edit(self, row_idx: int):
         """Open modal edit dialog — same styling as PromptTable._on_edit."""
@@ -300,8 +359,9 @@ class PipelinePromptTable(QWidget):
             new_text = text_edit.toPlainText().strip()
             if new_text and new_text != item.prompt:
                 item.prompt = new_text
-                # Update table cell
-                prompt_cell = self.table.item(row_idx, 3)
+                # Update table cell — prompt column depends on mode
+                prompt_col = 4 if self._show_video_preview else 3
+                prompt_cell = self.table.item(row_idx, prompt_col)
                 if prompt_cell:
                     prompt_cell.setText(new_text)
                     prompt_cell.setToolTip(new_text)

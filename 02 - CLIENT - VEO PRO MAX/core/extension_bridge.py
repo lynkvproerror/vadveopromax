@@ -160,6 +160,36 @@ class ExtensionBridge:
         self._EXTENSION_LOST_TIMEOUT = 60  # Wait 60s before firing on_extension_lost
         self._extension_lost_fired = False  # Prevent re-firing until reconnected
 
+        # Browser close cooldown: prevent infinite restart loops
+        # When auto-close fires or all connections for an account drop,
+        # block browser restart for BROWSER_CLOSE_COOLDOWN_SECONDS.
+        self._browser_close_cooldown: Dict[str, float] = {}  # email → timestamp
+        self.BROWSER_CLOSE_COOLDOWN_SECONDS = 300  # 5 minutes
+
+    # ── Browser Cooldown API ────────────────────────────────────────────
+
+    def is_browser_on_cooldown(self, email: str) -> bool:
+        """Check if browser restart is on cooldown for this account."""
+        ts = self._browser_close_cooldown.get(email, 0)
+        return (time.time() - ts) < self.BROWSER_CLOSE_COOLDOWN_SECONDS
+
+    def get_cooldown_remaining(self, email: str) -> float:
+        """Get remaining cooldown seconds (0 if not on cooldown)."""
+        ts = self._browser_close_cooldown.get(email, 0)
+        return max(0, self.BROWSER_CLOSE_COOLDOWN_SECONDS - (time.time() - ts))
+
+    def set_browser_cooldown(self, email: str):
+        """Mark browser as on cooldown (just closed — restart blocked)."""
+        self._browser_close_cooldown[email] = time.time()
+        log.warning(
+            f"[ExtBridge] 🛑 Browser cooldown set for {email} "
+            f"— restart blocked for {self.BROWSER_CLOSE_COOLDOWN_SECONDS}s"
+        )
+
+    def clear_browser_cooldown(self, email: str):
+        """Clear cooldown (e.g., user manually restarted browser)."""
+        self._browser_close_cooldown.pop(email, None)
+
     @property
     def port(self) -> int:
         return self._port
@@ -2155,6 +2185,17 @@ class ExtensionBridge:
             try:
                 await asyncio.sleep(15)
                 dead = []
+                
+                # Fix 2: Fast-close unregistered connections (no email = not useful)
+                # Browser opens 50+ WebSocket connections but most never register.
+                # Close after 30s instead of waiting 90s for zombie detection.
+                for conn in list(self._connections):
+                    if not conn.registered_emails and not getattr(conn, 'email', None):
+                        age = time.time() - conn.last_activity
+                        if age > 30:
+                            await self._disconnect(conn, "unregistered-timeout")
+                            continue
+                
                 for conn in list(self._connections):
                     if not self._is_ws_open(conn.ws):
                         dead.append(conn)
@@ -2175,6 +2216,20 @@ class ExtensionBridge:
                         if in_grace:
                             # Extend last_activity to prevent re-triggering
                             conn.last_activity = now_check
+                            continue
+
+                        # Fix 1a: Don't kill connections with active pending requests
+                        # Extension may be processing slow submit_prompt (30-46s each)
+                        has_pending = any(
+                            owner is conn for owner in self._pending_request_conns.values()
+                        )
+                        if has_pending:
+                            log.debug(
+                                f"[ExtensionBridge] Zombie suppressed for "
+                                f"{conn.registered_emails} — has pending requests "
+                                f"(idle {since_last:.0f}s)"
+                            )
+                            conn.last_activity = time.time()  # Reset to prevent re-trigger
                             continue
 
                         log.warning(

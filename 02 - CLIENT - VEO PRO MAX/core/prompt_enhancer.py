@@ -677,6 +677,144 @@ class PromptEnhancer:
 
         return None
 
+    # System prompt for Phase 3: Complete regeneration (new prompt, keep characters)
+    REGENERATE_SYSTEM = (
+        "You are a creative video prompt writer for an AI video generation platform.\n"
+        "The original prompt was PERMANENTLY REJECTED by safety filters after 2 fix attempts.\n\n"
+        "YOUR TASK: Write a COMPLETELY NEW video scene description from scratch.\n"
+        "DO NOT reuse ANY wording from the original prompt.\n"
+        "CREATE a fresh scene that conveys a similar mood/theme but with entirely new phrasing.\n\n"
+        "MANDATORY CHARACTER PRESERVATION:\n"
+        "The following characters MUST appear in your new prompt with their EXACT names:\n"
+        "{characters}\n\n"
+        "For each character, you MUST:\n"
+        "- Keep the character marker format: [CharacterName] or @character_name\n"
+        "- Describe their appearance in a safe, family-friendly way\n"
+        "- Give them natural, age-appropriate actions\n\n"
+        "RULES:\n"
+        "1. ALL characters MUST be adults (20+ years). Never mention ages under 18.\n"
+        "2. No violence, gore, weapons, nudity, or any unsafe content.\n"
+        "3. Use positive visual descriptions only — no negative prompts.\n"
+        "4. Include: camera angle, art style, lighting, environment, character actions.\n"
+        "5. Output ONLY the new prompt text. No explanations.\n"
+        "6. Keep similar length to the original.\n"
+        "7. Must be in English.\n\n"
+        "ORIGINAL ERROR: {error}\n"
+        "ORIGINAL PROMPT (for reference only — DO NOT copy):\n{original}"
+    )
+
+    def _extract_characters(self, prompt: str) -> list:
+        """Extract character names from prompt markers: [Name], @name_, 'Name'.
+
+        Returns list of unique character references found.
+        """
+        chars = set()
+        # [Name] format — e.g. [Mẹ Vịt], [Chị Vịt Vàng]
+        for m in re.finditer(r'\[([^\]]+)\]', prompt):
+            name = m.group(1).strip()
+            # Skip scene/stage/camera markers
+            if not any(kw in name.lower() for kw in [
+                'scene', 'stage', 'camera', 'shot', 'angle',
+                'seg', 'transition', 'new', 'end'
+            ]):
+                chars.add(f"[{name}]")
+        # @name_ format
+        for m in re.finditer(r'@(\w+)_', prompt):
+            chars.add(f"@{m.group(1)}_")
+        return sorted(chars)
+
+    async def regenerate_prompt(
+        self, original_prompt: str, error_message: str, api_key: str,
+        profile_email: str = "", output_format: str = "text"
+    ) -> Optional[str]:
+        """Generate a completely NEW prompt preserving character identities.
+
+        Used as attempt 3 when local fix + API fix both failed.
+        Creates fresh scene description, keeping character names/markers.
+        """
+        is_json, scene_data, prompt_text = _unwrap_json(original_prompt)
+
+        # Extract character markers to preserve
+        characters = self._extract_characters(prompt_text)
+        char_list = "\n".join(f"  - {c}" for c in characters) if characters else "  (no specific characters detected)"
+
+        if not api_key:
+            api_key = self._resolve_api_key("")
+        else:
+            api_key = self._resolve_api_key(api_key)
+        if not api_key:
+            return None
+
+        self._ensure_client()
+        cfg = self._get_ai_config()
+        is_google = cfg.get("provider", "Google") == "Google"
+        custom_keys = cfg.get("custom_keys", [])
+
+        if is_google:
+            from services.model_rotation import get_rotation
+            rotation = get_rotation()
+            models_to_try = [rotation.get_model(profile_email)]
+            all_models = rotation.get_all_models()
+            for m in all_models:
+                if m not in models_to_try:
+                    models_to_try.append(m)
+        else:
+            models_to_try = [cfg["model"]]
+
+        system = self.REGENERATE_SYSTEM.replace(
+            "{characters}", char_list
+        ).replace(
+            "{error}", error_message
+        ).replace(
+            "{original}", prompt_text[:1000]  # truncate for safety
+        )
+
+        log.info(
+            f"[Fix] REGENERATE: creating new prompt "
+            f"(chars: {', '.join(characters) if characters else 'none'})"
+        )
+
+        for model in models_to_try:
+            try:
+                result = await self.client.generate(
+                    prompt="Generate a completely new, safe video scene prompt based on the system instructions.",
+                    system=system,
+                    api_key=api_key,
+                    max_tokens=4096,
+                    temperature=0.8,  # higher creativity for fresh prompt
+                    model=model,
+                )
+
+                if result and result.strip():
+                    regenerated = result.strip()
+                    if output_format == "json":
+                        regenerated = _wrap_json(scene_data, regenerated) if is_json else _text_to_json(regenerated)
+                    if is_google:
+                        rotation.increment_used(profile_email, model)
+                    log.info(f"[Fix] REGENERATE OK ({model}): {regenerated[:60]}...")
+                    return regenerated
+
+            except Exception as e:
+                from services.gemini_client import RateLimitError, GeminiAPIError
+                if isinstance(e, RateLimitError) and is_google:
+                    rotation.mark_exhausted(profile_email, model)
+                    try:
+                        from services.key_quota_manager import get_quota_manager
+                        qm = get_quota_manager()
+                        if custom_keys:
+                            next_key = qm.get_available_key(custom_keys)
+                            if next_key:
+                                api_key = next_key
+                    except Exception:
+                        pass
+                    continue
+                if isinstance(e, GeminiAPIError) and e.status == 400 and is_google:
+                    continue
+                log.warning(f"[Fix] REGENERATE failed ({model}): {e}")
+                break
+
+        return None
+
     # -- Cache Helpers --
 
     def _put_cache(self, key: str, value: str):

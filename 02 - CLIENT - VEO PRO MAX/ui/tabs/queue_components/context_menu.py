@@ -128,6 +128,9 @@ class QueueContextMenuMixin:
                     lambda: self._on_fork_continuation(task_id)
                 )
         
+        # Pause refresh while menu is open, resume after
+        self._pause_refresh_for_menu = True
+        menu.aboutToHide.connect(lambda: setattr(self, '_pause_refresh_for_menu', False))
         menu.exec(widget.mapToGlobal(pos))
     
     def _on_force_retry_item(self, item_id):

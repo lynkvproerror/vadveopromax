@@ -581,48 +581,64 @@ class ImageLibrary:
                         log.warning(f"[ImageLibrary] No token for {email}, stopping pre-upload")
                         break
                     
-                    resp = await api_client.upload_image(
-                        access_token=token,
-                        recaptcha_token="",
-                        image_base64=img_b64,
-                        mime_type=mime_type,
-                        file_name=img.filename,
-                        account_headers=account.get_api_headers(),
-                    )
-                    
-                    if resp.success:
-                        # Multi-format mediaId extraction (API changed 2026-03)
-                        media_id = ""
-                        # Format 1: Old {mediaGenerationId: {mediaGenerationId: "..."}}
-                        mgid = resp.data.get("mediaGenerationId")
-                        if mgid:
-                            if isinstance(mgid, dict):
-                                media_id = mgid.get("mediaGenerationId", "")
-                            elif isinstance(mgid, str):
-                                media_id = mgid
-                        # Format 2: New {media: {name: "uuid", ...}, workflow: ...}
-                        if not media_id:
-                            media = resp.data.get("media")
-                            if isinstance(media, dict):
-                                media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
-                            elif isinstance(media, list) and media:
-                                first = media[0]
-                                if isinstance(first, dict):
-                                    media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
+                    # Upload with 429 retry + exponential backoff
+                    upload_ok = False
+                    for _attempt in range(3):
+                        resp = await api_client.upload_image(
+                            access_token=token,
+                            recaptcha_token="",
+                            image_base64=img_b64,
+                            mime_type=mime_type,
+                            file_name=img.filename,
+                            account_headers=account.get_api_headers(),
+                        )
                         
-                        if media_id:
-                            self.set_media_id(img.path, email, media_id)
-                            uploaded += 1
-                            log.info(f"[ImageLibrary] ✅ {img.filename} → {media_id[:30]}... ({email})")
+                        if resp.success:
+                            # Multi-format mediaId extraction (API changed 2026-03)
+                            media_id = ""
+                            # Format 1: Old {mediaGenerationId: {mediaGenerationId: "..."}}
+                            mgid = resp.data.get("mediaGenerationId")
+                            if mgid:
+                                if isinstance(mgid, dict):
+                                    media_id = mgid.get("mediaGenerationId", "")
+                                elif isinstance(mgid, str):
+                                    media_id = mgid
+                            # Format 2: New {media: {name: "uuid", ...}, workflow: ...}
+                            if not media_id:
+                                media = resp.data.get("media")
+                                if isinstance(media, dict):
+                                    media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
+                                elif isinstance(media, list) and media:
+                                    first = media[0]
+                                    if isinstance(first, dict):
+                                        media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
+                            
+                            if media_id:
+                                self.set_media_id(img.path, email, media_id)
+                                uploaded += 1
+                                log.info(f"[ImageLibrary] ✅ {img.filename} → {media_id[:30]}... ({email})")
+                            else:
+                                import json as _json
+                                try:
+                                    dump = _json.dumps(resp.data, default=str, ensure_ascii=False)[:500]
+                                except Exception:
+                                    dump = str(list(resp.data.keys()))
+                                log.warning(f"[ImageLibrary] Upload OK but no mediaId: {img.filename} ({email}): {dump}")
+                            upload_ok = True
+                            break  # Success → next image
                         else:
-                            import json as _json
-                            try:
-                                dump = _json.dumps(resp.data, default=str, ensure_ascii=False)[:500]
-                            except Exception:
-                                dump = str(list(resp.data.keys()))
-                            log.warning(f"[ImageLibrary] Upload OK but no mediaId: {img.filename} ({email}): {dump}")
-                    else:
-                        log.warning(f"[ImageLibrary] Upload failed: {img.filename} ({email}): {resp.error}")
+                            err_str = str(resp.error)
+                            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                                wait = (2 ** _attempt) * 5  # 5s, 10s, 20s
+                                log.warning(
+                                    f"[ImageLibrary] 429 on {img.filename} → "
+                                    f"retry {_attempt+1}/3 in {wait}s"
+                                )
+                                await asyncio.sleep(wait)
+                                continue
+                            else:
+                                log.warning(f"[ImageLibrary] Upload failed: {img.filename} ({email}): {resp.error}")
+                                break  # Non-429 error → skip image
                     
                     # Small delay between uploads for rate limiting
                     await asyncio.sleep(0.5)

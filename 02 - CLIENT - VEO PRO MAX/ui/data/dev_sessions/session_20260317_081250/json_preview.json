@@ -1,0 +1,687 @@
+{
+  "group_id": "group_20260317_080510",
+  "workflow": "I2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_i2v_s_fast_ultra_relaxed",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260317_080510_task_0",
+      "prompt": "[Scene 1] Establishing, lakeside. Wide shot, pan right. 3D Animation. Sunny morning by the lake. Audio of birds chirping and water rippling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_1",
+      "prompt": "[Scene 2] Character intro. Medium shot, static. 3D Animation. Wooden porch. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, skipping happily with a red toy. Audio of light footsteps, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_2",
+      "prompt": "[Scene 3] Morning light. Close-up, forward. 3D Animation. Inside the wooden house. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, looking at her reflection in a window, smiling. Audio of soft humming, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_3",
+      "prompt": "[Scene 4] Toy reveal. Medium shot, static. 3D Animation. Living room floor. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, placing a shiny red wooden car on the rug. Audio of wood clinking on floor, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_4",
+      "prompt": "[Scene 5] Cleaning action. Close-up, pan left. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, polishing the car with a yellow cloth, focused expression. Audio of rhythmic rubbing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_5",
+      "prompt": "[Scene 6] New character entry. Medium shot, static. 3D Animation. Doorway. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, waddling into the room, curious expression. Audio of tiny webbed feet pattering, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_6",
+      "prompt": "[Scene 7] Reaction. Close-up, zoom in. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, eyes widening with excitement, beak slightly open. Audio of a soft gasp, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_7",
+      "prompt": "[Scene 8] Interaction. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, mouth open speaking proudly, \"Look at my new car!\". [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, attentive listening expression. Audio of cheerful duck quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_8",
+      "prompt": "[Scene 9] Pride. Close-up, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, puffing out chest, holding the car high. Audio of proud quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_9",
+      "prompt": "[Scene 10] Multi-segment action. Medium shot, pan right. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, pushing the car >> [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, chasing after it. Audio of wheels rolling on wood, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_10",
+      "prompt": "[Scene 11] Request. Medium shot, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, mouth open speaking pleadingly, \"Can I play too?\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, nodding while listening. Audio of soft hopeful quacks, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_11",
+      "prompt": "[Scene 12] Hesitation. Close-up, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, pulling the car closer to her chest, uncertain expression. Audio of silence, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_12",
+      "prompt": "[Scene 13] Observation. Wide shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, looking at the car then at her brother. Audio of distant wind, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_13",
+      "prompt": "[Scene 14] Desire. Close-up, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, reaching out a wing toward the red car. Audio of soft rustling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_14",
+      "prompt": "[Scene 15] Refusal. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, mouth open speaking firmly, \"No, it is mine!\". [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, sad expression. Audio of sharp quack, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_15",
+      "prompt": "[Scene 16] Avoidance. Medium shot, pan left. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, turning her back to her brother, clutching the toy. Audio of floorboards creaking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_16",
+      "prompt": "[Scene 17] Sadness. Close-up, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, looking down at the floor, drooping wings. Audio of a tiny sigh, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_17",
+      "prompt": "[Scene 18] Persistence. Medium shot, forward. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, waddling closer again, determined expression. Audio of fast pattering, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_18",
+      "prompt": "[Scene 19] Confrontation. Medium shot, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, mouth open speaking insistently, \"Just for a minute!\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, shaking head. Audio of repetitive quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_19",
+      "prompt": "[Scene 20] Tension. Close-up, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, eyes narrowing, holding the car even tighter. Audio of tense silence, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_20",
+      "prompt": "[Scene 21] Conflict start. Medium shot, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, grabbing the front of the car. Audio of a plastic grip sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_21",
+      "prompt": "[Scene 22] Resistance. Close-up, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, mouth open speaking angrily, \"Let go!\". [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, straining expression. Audio of loud angry quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_22",
+      "prompt": "[Scene 23] Struggle. Medium shot, pan right. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, pulling the car toward the door. Audio of scuffling feet, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_23",
+      "prompt": "[Scene 24] Counter-pull. Medium shot, pan left. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, pulling the car back toward the rug. Audio of heavy breathing quacks, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_24",
+      "prompt": "[Scene 25] The tug-of-war. Wide shot, static. 3D Animation. Living room center. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, and [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, pulling the car in opposite directions. Audio of grunting sounds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_25",
+      "prompt": "[Scene 26] Anger. Close-up, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, mouth open speaking loudly, \"It's my toy!\". [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, frowning deeply. Audio of sharp, echoing quacks, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_26",
+      "prompt": "[Scene 27] Frustration. Close-up, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, mouth open speaking tearfully, \"You never share!\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, glaring. Audio of high-pitched quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_27",
+      "prompt": "[Scene 28] Movement. Medium shot, pan right. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, spinning around to keep the car away. Audio of a swoosh sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_28",
+      "prompt": "[Scene 29] Chase. Medium shot, follow. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, chasing [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, around a small wooden table. Audio of fast-paced webbed footsteps, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_29",
+      "prompt": "[Scene 30] The slip. Medium shot, slow motion. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, tripping on the edge of the rug. Audio of a sudden gasp, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_30",
+      "prompt": "[Scene 31] The release. Close-up, slow motion. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, wings opening wide as the car flies out of her grip. Audio of wind whistling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_31",
+      "prompt": "[Scene 32] The flight. Wide shot, tracking. 3D Animation. Living room. The red wooden car soaring through the air. Audio of a spinning sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_32",
+      "prompt": "[Scene 33] The impact. Medium shot, static. 3D Animation. Near the stone fireplace. The car hitting the floor hard. Audio of a loud \"Cạch!\" wood-breaking sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_33",
+      "prompt": "[Scene 34] The damage. Close-up, static. 3D Animation. Floor. A wooden wheel rolling away from the car body. Audio of a hollow rolling sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_34",
+      "prompt": "[Scene 35] Multi-segment shock. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, gasping with wings over mouth >> [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, freezing in place with wide eyes. Audio of stunned silence, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_35",
+      "prompt": "[Scene 36] Regret. Close-up, static. 3D Animation. Floor. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, looking at the broken car, eyes filling with tears. Audio of a soft whimper, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_36",
+      "prompt": "[Scene 37] Sorrow. Close-up, static. 3D Animation. Floor. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, looking at the detached wheel, lip trembling. Audio of a sniffle, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_37",
+      "prompt": "[Scene 38] Guilt. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, mouth open speaking softly, \"I should have let you play...\". [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, looking down. Audio of sad, low quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_38",
+      "prompt": "[Scene 39] Apology. Medium shot, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, mouth open speaking quietly, \"I'm sorry I pulled it so hard...\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, nodding sadly. Audio of gentle quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_39",
+      "prompt": "[Scene 40] Despair. Wide shot, static. 3D Animation. Living room. Both ducklings sitting on the floor next to the broken toy. Audio of a clock ticking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_40",
+      "prompt": "[Scene 41] Shadow entry. Wide shot, static. 3D Animation. Doorway. A long shadow falling over the ducklings. Audio of a door creaking open, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_41",
+      "prompt": "[Scene 42] Mother's arrival. Medium shot, forward. 3D Animation. Living room. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, walking in wearing a floral apron. Audio of calm, steady footsteps, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_42",
+      "prompt": "[Scene 43] Inquiry. Medium shot, static. 3D Animation. Living room. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, mouth open speaking gently, \"What happened here, my dears?\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, looking up. Audio of warm, maternal quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_43",
+      "prompt": "[Scene 44] Explanation. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, pointing at the car, crying expression. Audio of sobbing quacks, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_44",
+      "prompt": "[Scene 45] Confession. Medium shot, static. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, holding the broken wheel out to [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools,. Audio of trembling quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_45",
+      "prompt": "[Scene 46] Comfort. Medium shot, static. 3D Animation. Living room. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, kneeling down and hugging both ducklings. Audio of soft, soothing quacks, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_46",
+      "prompt": "[Scene 47] The lesson. Close-up, static. 3D Animation. Living room. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, mouth open speaking instructively, \"Toys are fun, but sharing makes them special.\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, attentive listening expression. Audio of wise quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_47",
+      "prompt": "[Scene 48] Understanding. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, and [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, looking at each other and nodding. Audio of soft agreement quacks, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_48",
+      "prompt": "[Scene 49] Solution. Medium shot, static. 3D Animation. Living room. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, taking a small wooden hammer from her apron pocket. Audio of a metallic clink, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_49",
+      "prompt": "[Scene 50] Preparation. Close-up, static. 3D Animation. Floor. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, lining up the wheel with the car's axle. Audio of wood sliding, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_50",
+      "prompt": "[Scene 51] Participation. Medium shot, static. 3D Animation. Floor. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, mouth open speaking encouragingly, \"Vàng, hold the car steady.\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, grabbing the car. Audio of instructional quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_51",
+      "prompt": "[Scene 52] Helping hand. Close-up, static. 3D Animation. Floor. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, wings holding the red car firmly on the rug. Audio of focused breathing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_52",
+      "prompt": "[Scene 53] Em's turn. Medium shot, static. 3D Animation. Floor. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, mouth open speaking kindly, \"Xám, hand me the peg.\". [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, reaching for a small piece. Audio of gentle quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_53",
+      "prompt": "[Scene 54] Contribution. Close-up, static. 3D Animation. Floor. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, carefully placing a wooden peg into [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools,'s wing. Audio of a tiny wooden tap, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_54",
+      "prompt": "[Scene 55] The fix. Medium shot, static. 3D Animation. Floor. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, tapping the wheel back into place with the hammer. Audio of rhythmic \"Tack! Tack!\" sounds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_55",
+      "prompt": "[Scene 56] Success. Close-up, static. 3D Animation. Floor. The wheel spinning freely on the car again. Audio of a smooth whirring sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_56",
+      "prompt": "[Scene 57] Joy. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, and [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, jumping up and down, cheering. Audio of happy, excited quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_57",
+      "prompt": "[Scene 58] Gratitude. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, mouth open speaking warmly, \"Thank you, Mom!\". [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, smiling. Audio of grateful quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_58",
+      "prompt": "[Scene 59] Multi-segment change. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, picking up the car >> [Chị Vịt Vàng] handing it to [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards,. Audio of soft rustling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_59",
+      "prompt": "[Scene 60] Sharing. Medium shot, static. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, mouth open speaking kindly, \"You go first, Xám.\". [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, beaming with joy. Audio of sweet quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_60",
+      "prompt": "[Scene 61] Playtime. Medium shot, pan right. 3D Animation. Living room. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, pushing the car toward [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks,. Audio of wheels on wood, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_61",
+      "prompt": "[Scene 62] Reciprocity. Medium shot, pan left. 3D Animation. Living room. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, pushing the car back to [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards,. Audio of laughter-like quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_62",
+      "prompt": "[Scene 63] Transition. Wide shot, static. 3D Animation. Doorway. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, watching her children play from the door, nodding. Audio of distant birds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_63",
+      "prompt": "[Scene 64] Outdoor move. Medium shot, follow. 3D Animation. Garden. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, and [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, waddling outside together with the car. Audio of grass crunching, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_64",
+      "prompt": "[Scene 65] Lakeside play. Wide shot, static. 3D Animation. Near the water. The two ducklings playing on a flat stone. Audio of splashing water, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_65",
+      "prompt": "[Scene 66] Turn-taking. Medium shot, static. 3D Animation. Lakeside. [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, mouth open speaking happily, \"Your turn now, sister!\". [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, nodding while listening. Audio of cheerful quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_66",
+      "prompt": "[Scene 67] Harmony. Close-up, static. 3D Animation. Lakeside. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, and [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, heads close together, looking at the car. Audio of soft, happy quacks, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_67",
+      "prompt": "[Scene 68] Reflection. Medium shot, static. 3D Animation. Lakeside. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, walking toward them with a plate of snacks. Audio of a plate clinking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_68",
+      "prompt": "[Scene 69] Snack time. Medium shot, static. 3D Animation. Lakeside. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, giving the first piece of bread to [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards,. Audio of munching sounds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_69",
+      "prompt": "[Scene 70] Happiness. Wide shot, pan right. 3D Animation. Lakeside. The whole duck family sitting together under the sun. Audio of peaceful nature sounds, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_70",
+      "prompt": "[Scene 71] Multi-segment lesson. Medium shot, static. 3D Animation. Lakeside. [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, mouth open speaking wisely, \"Love is sharing.\" >> [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks, and [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards, hugging. Audio of warm quacking, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_71",
+      "prompt": "[Scene 72] The car again. Close-up, static. 3D Animation. Grass. The red wooden car sitting safely in the green grass. Audio of a gentle breeze, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_72",
+      "prompt": "[Scene 73] Sunset. Wide shot, slow zoom out. 3D Animation. Lakeside house. The sun setting over the water, turning everything golden. Audio of crickets chirping, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_73",
+      "prompt": "[Scene 74] Family bond. Medium shot, static. 3D Animation. Porch. [Chị Vịt Vàng] Chị Vịt Vàng, 6-year-old duck sister, responsible but a bit possessive of her toys, 0.6m, bright golden yellow feathers, soft downy texture, Large expressive blue eyes, small orange beak, rosy cheeks, a small tuft of yellow feathers tied with a pink ribbon, bright pink polka dot dress with white collar, N/A (Natural duck body), hot pink silk ribbon on head, small white lace socks,, [Em Vịt Xám] Em Vịt Xám, 4-year-old duck brother, energetic, curious, and a bit clumsy, 0.45m, soft silver-grey feathers, velvety matte texture, Big round curious black eyes, tiny orange beak, playful smile, messy, spiky tuft of grey feathers on top, vibrant sky blue striped t-shirt, N/A (Natural duck body), royal blue baseball cap worn backwards,, and [Mẹ Vịt] Mẹ Vịt, 30-year-old mother duck, gentle, wise, and patient, 1.1m, creamy off-white feathers, smooth and elegant, Kind almond-shaped eyes, long orange beak, warm maternal smile, neat feathers tucked under a headscarf, lime green floral apron with a large front pocket, N/A (Natural duck body), white lace trim on apron, small brown wicker basket for tools, walking back into the house. Audio of fading footsteps, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260317_080510_task_74",
+      "prompt": "[Scene 75] Final scene. Wide shot, static. 3D Animation. Lakeside house at dusk. Lights turning on inside the windows. Audio of a soft lullaby melody, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

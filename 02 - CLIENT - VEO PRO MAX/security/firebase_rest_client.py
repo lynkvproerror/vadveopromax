@@ -110,7 +110,8 @@ class _HardwareBinder:
                 # CPU ID
                 result = subprocess.run(
                     ['wmic', 'cpu', 'get', 'processorid'],
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                 )
                 cpu_id = result.stdout.strip().split('\n')[-1].strip()
                 components.append(cpu_id)
@@ -121,7 +122,8 @@ class _HardwareBinder:
                 # Motherboard serial
                 result = subprocess.run(
                     ['wmic', 'baseboard', 'get', 'serialnumber'],
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                 )
                 mb_serial = result.stdout.strip().split('\n')[-1].strip()
                 components.append(mb_serial)

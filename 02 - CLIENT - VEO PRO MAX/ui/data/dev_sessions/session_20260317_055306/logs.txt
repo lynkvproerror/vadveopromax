@@ -1,0 +1,123 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260317_055306
+Total: 118 entries
+============================================================
+
+[INFO ] 05:52:06 - core.session_manager - [Session] Loaded from 2026-03-17T05:51:54.594041
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024029_task_0 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024029_task_1 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024029_task_2 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024029_task_3 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024029_task_4 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_0 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_1 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_2 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_3 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_4 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_5 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_6 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_7 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_8 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_9 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_10 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_11 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_12 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_13 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_14 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_15 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_16 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_17 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_18 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_19 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_20 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_21 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_22 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_23 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_24 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_25 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_26 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_27 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_28 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_29 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_30 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_31 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_32 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_33 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_34 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_35 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_36 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_024441_task_37 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_0 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_1 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_2 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_3 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_4 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_5 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_6 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_7 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_8 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_9 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_10 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_11 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_12 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_13 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_14 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_15 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_16 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_17 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_18 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_19 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_20 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_21 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_22 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_23 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_24 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_25 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_26 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_27 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_28 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_29 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_30 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_31 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_32 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_33 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_34 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_35 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_36 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] Skipped import for group_20260317_030701_task_37 (already restored from journal)
+[DEBUG] 05:52:06 - core.dispatcher - [Dispatcher] All 81 tasks already loaded — skipped duplicate restore
+[INFO ] 05:52:06 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[DEBUG] 05:52:06 - veo.tab_queue - [QueueRefresh] 3 groups, 81 total tasks, existing_groups=[]
+[INFO ] 05:52:06 - veo.tab_queue - [GroupCreate] gid=group_20260317_024029 name='KỊCH BẢN 10 PHÚT TRUYỆN KIỀU/character' children=5 expanded=True
+[INFO ] 05:52:07 - veo.tab_queue - [GroupCreate] gid=group_20260317_024441 name='KỊCH BẢN 10 PHÚT TRUYỆN KIỀU/scenes' children=38 expanded=True
+[INFO ] 05:52:08 - veo.tab_queue - [GroupCreate] gid=group_20260317_030701 name='KỊCH BẢN 10 PHÚT TRUYỆN KIỀU/video' children=38 expanded=True
+[INFO ] 05:52:08 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 05:52:08 - veo.tab_project - [Pipeline] Full restore: 38 scenes, 5 characters, topic='Dưới đây là **kịch bản truyện tranh / kịch bản kể '
+[INFO ] 05:52:09 - veo.tab_project - [Pipeline] ♻️ Auto-restored from KỊCH BẢN 10 PHÚT TRUYỆN KIỀU: 7 completed stage(s), current=video_gen, FULL session
+[DEBUG] 05:52:09 - veo.tab_queue - [QueueRefresh] 3 groups, 81 total tasks, existing_groups=['group_20260317_024029', 'group_20260317_024441', 'group_20260317_030701']
+[INFO ] 05:52:06 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 05:52:06 - core.extension_bridge - [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 05:52:06 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: levanlinh.kma@gmail.com
+[DEBUG] 05:52:06 - core.extension_bridge - [ExtensionBridge] No unregistered connection available for levanlinh.kma@gmail.com
+[INFO ] 05:52:06 - core.app_controller - [AutoLaunch] Extension status: 0 emails registered: []
+[INFO ] 05:52:06 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 05:52:06 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[DEBUG] 05:52:11 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:52:11 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:52:11 - veo - [VersionCheck] OK: 2.3.6 >= 2.3.0
+[DEBUG] 05:52:11 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[DEBUG] 05:52:17 - core.auto_updater - Up to date (app=v2.3.6, ext=v2.3.6)
+[INFO ] 05:52:18 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 05:52:36 - core.app_controller - [AutoStop] Pipeline mode ACTIVE — auto-stop deferred
+[DEBUG] 05:52:36 - asyncio - Using proactor: IocpProactor
+[WARNING] 05:52:36 - veo.rotation - [Rotation] pipeline: all models exhausted, forcing gemini-3.1-flash-lite-preview
+[INFO ] 05:52:36 - veo.key_quota - [KeyQuota] Loaded 11 key states
+[DEBUG] 05:52:36 - veo.pipeline - [Pipeline] Hot-reload: 11 key(s) available
+[WARNING] 05:52:36 - veo.pipeline - [Pipeline] gemini-3.1-flash-lite-preview failed: 'NoneType' object has no attribute 'generate'
+[WARNING] 05:52:36 - veo.pipeline - [Pipeline] gemini-3-flash-preview failed: 'NoneType' object has no attribute 'generate'
+[WARNING] 05:52:36 - veo.pipeline - [Pipeline] gemini-2.5-flash failed: 'NoneType' object has no attribute 'generate'
+[WARNING] 05:52:36 - veo.pipeline - [Pipeline] gemini-2.0-flash failed: 'NoneType' object has no attribute 'generate'
+[WARNING] 05:52:36 - veo.pipeline - [Pipeline] gemini-2.5-flash-lite failed: 'NoneType' object has no attribute 'generate'
+[WARNING] 05:52:36 - veo.pipeline - [Pipeline] gemini-2.0-flash-lite failed: 'NoneType' object has no attribute 'generate'
+[INFO ] 05:52:36 - veo.pipeline - [Pipeline] All keys exhausted — waiting 30s for cooldown (round 2/3)...
+[INFO ] 05:53:06 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

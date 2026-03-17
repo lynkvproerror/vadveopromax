@@ -440,6 +440,18 @@ class AppController:
             if state in ("open", "half_open"):
                 self._engine._close_circuit_breaker(email)
                 log.info(f"[AppController] ⚡ CircuitBreaker closed on reconnect for {email}")
+            
+            # ★ Clear tab-dead cooldown — extension reconnected, account is alive again
+            if email in self._engine._account_cooldowns:
+                del self._engine._account_cooldowns[email]
+                evt = self._engine._get_cooldown_event(email)
+                evt.set()  # Unblock engine workers
+                log.info(f"[AppController] ✅ Cooldown cleared on reconnect for {email}")
+            
+            # ★ Unpause upscale queue for this account
+            uq = getattr(self._engine, '_upscale_queue', None)
+            if uq and hasattr(uq, 'unpause_account'):
+                uq.unpause_account(email)
         
         # Defensive: ensure account has bridge reference NOW
         # (startup timing: extension may connect after account created but before
@@ -679,11 +691,28 @@ class AppController:
     def _on_tab_dead(self, email: str, reason: str):
         """Callback from ExtensionBridge when a VEO tab is declared dead.
         
-        Log only — do NOT kill or restart browser.
+        Pause workers for this account (same pattern as logout) to prevent
+        infinite retry loops on reCAPTCHA/submit failures.
         Chrome stays alive; extension may reconnect on its own.
+        On reconnect → _on_extension_connect will clear cooldown + unpause.
         """
-        log.warning(f"[AppController] 💀 Tab dead: {email} (reason: {reason}) — browser stays alive")
+        log.warning(f"[AppController] 💀 Tab dead: {email} (reason: {reason}) — pausing workers")
         try:
+            # Pause engine workers — set long cooldown so workers stop attempting
+            if hasattr(self, '_engine') and self._engine:
+                from datetime import datetime, timedelta
+                self._engine._account_cooldowns[email] = datetime.now() + timedelta(seconds=300)
+                evt = self._engine._get_cooldown_event(email)
+                evt.clear()  # Block all engine workers for this account
+                log.warning(f"[AppController] ⏸️ Engine workers paused for {email} (300s cooldown after tab death)")
+            
+            # Pause upscale queue workers — stop picking up new jobs for this account
+            if hasattr(self, '_engine') and self._engine:
+                uq = getattr(self._engine, '_upscale_queue', None)
+                if uq and hasattr(uq, 'pause_account'):
+                    uq.pause_account(email)
+                    log.warning(f"[AppController] ⏸️ UpscaleQueue paused for {email}")
+            
             self._push_browser_status()
             self._push_extension_status()
         except Exception as e:

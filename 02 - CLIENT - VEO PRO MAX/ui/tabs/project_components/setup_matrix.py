@@ -54,8 +54,8 @@ PROJECT_TYPES = [
     ("custom",         "✏️ Custom"),
 ]
 
-# ── Clip durations (seconds) ──
-CLIP_DURATIONS = [6, 8, 10, 12, 15]
+# ── Clip durations (seconds) — VEO supports 8s only ──
+CLIP_DURATIONS = [8]
 
 CATEGORIES = [
     ("health",          "🏥 Health"),
@@ -496,12 +496,22 @@ class SetupMatrixPanel(QFrame):
         """
         cb_style = f"""
             QCheckBox {{ color: {Theme.TEXT}; font-size: 11px; }}
+            QRadioButton {{ color: {Theme.TEXT}; font-size: 11px; }}
             QCheckBox::indicator {{
                 width: 16px; height: 16px; border-radius: 3px;
                 border: 1px solid {Theme.BORDER};
                 background-color: {Theme.SURFACE0};
             }}
             QCheckBox::indicator:checked {{
+                background-color: {Theme.GREEN};
+                border-color: {Theme.GREEN};
+            }}
+            QRadioButton::indicator {{
+                width: 16px; height: 16px; border-radius: 8px;
+                border: 1px solid {Theme.BORDER};
+                background-color: {Theme.SURFACE0};
+            }}
+            QRadioButton::indicator:checked {{
                 background-color: {Theme.GREEN};
                 border-color: {Theme.GREEN};
             }}
@@ -519,16 +529,8 @@ class SetupMatrixPanel(QFrame):
         self.d0_project_type = _dim_combo("🎬 Project Type", PROJECT_TYPES,
                                           self._on_project_type_changed)
 
-        # Video Count + Voice on same row
-        proj_row = QHBoxLayout()
-        proj_row.setSpacing(6)
-
-        self._video_count = QSpinBox()
-        self._video_count.setRange(1, 100)
-        self._video_count.setValue(1)
-        self._video_count.setSuffix(" video")
-        self._video_count.setMinimumHeight(34)
-        self._video_count.setStyleSheet(f"""
+        # Shared spinbox style
+        spin_style = f"""
             QSpinBox {{
                 background-color: {Theme.SURFACE1}; color: {Theme.TEXT};
                 border: 1px solid {Theme.BORDER}; border-radius: 4px;
@@ -537,12 +539,83 @@ class SetupMatrixPanel(QFrame):
             QSpinBox::up-button, QSpinBox::down-button {{
                 border: none; width: 16px;
             }}
-        """)
-        self._video_count.setToolTip("Tổng số video/dự án cần sản xuất")
-        self._video_count.valueChanged.connect(lambda: self._emit_config())
-        proj_row.addWidget(self._video_count)
+            QSpinBox:disabled {{
+                color: {Theme.SURFACE2};
+            }}
+        """
 
-        self._voice_enabled = QCheckBox("Có lời thoại")
+        # ── Mutually exclusive radios: Đơn / Đa kịch bản / Chia tập ──
+        from PySide6.QtWidgets import QButtonGroup, QRadioButton
+
+        # Hidden default radio for "neither" state
+        self._single_radio = QRadioButton("📝 Đơn")
+        self._single_radio.setChecked(True)
+        self._single_radio.setStyleSheet(cb_style)
+        self._single_radio.setToolTip("1 kịch bản duy nhất, không chia tập")
+        self._single_radio.toggled.connect(self._on_structure_radio_changed)
+        self._layout.addWidget(self._single_radio)
+
+        # Row 1: Đa kịch bản + video count
+        multi_row = QHBoxLayout()
+        multi_row.setSpacing(6)
+
+        self._multi_idea = QRadioButton("🎲 Đa kịch bản")
+        self._multi_idea.setChecked(False)
+        self._multi_idea.setStyleSheet(cb_style)
+        self._multi_idea.setToolTip(
+            "AI tạo N kịch bản/ý tưởng KHÁC NHAU từ cùng 1 chủ đề"
+        )
+        self._multi_idea.toggled.connect(self._on_structure_radio_changed)
+        multi_row.addWidget(self._multi_idea)
+
+        self._video_count = QSpinBox()
+        self._video_count.setRange(1, 100)
+        self._video_count.setValue(1)
+        self._video_count.setSuffix(" video")
+        self._video_count.setEnabled(False)
+        self._video_count.setMinimumHeight(34)
+        self._video_count.setStyleSheet(spin_style)
+        self._video_count.setToolTip("Số kịch bản khác nhau cần tạo")
+        self._video_count.valueChanged.connect(lambda: self._emit_config())
+        multi_row.addWidget(self._video_count)
+
+        self._layout.addLayout(multi_row)
+
+        # Row 2: Chia tập + episode count
+        ep_row = QHBoxLayout()
+        ep_row.setSpacing(6)
+
+        self._episode_enabled = QRadioButton("📺 Chia tập")
+        self._episode_enabled.setChecked(False)
+        self._episode_enabled.setStyleSheet(cb_style)
+        self._episode_enabled.setToolTip(
+            "AI chia 1 kịch bản dài thành N tập riêng biệt\n"
+            "Nhân vật được dùng chung giữa các tập (chỉ tạo 1 lần)"
+        )
+        self._episode_enabled.toggled.connect(self._on_structure_radio_changed)
+        ep_row.addWidget(self._episode_enabled)
+
+        self._episode_count = QSpinBox()
+        self._episode_count.setRange(2, 20)
+        self._episode_count.setValue(3)
+        self._episode_count.setSuffix(" tập")
+        self._episode_count.setEnabled(False)
+        self._episode_count.setMinimumHeight(34)
+        self._episode_count.setStyleSheet(spin_style)
+        self._episode_count.setToolTip("Số tập cần chia")
+        self._episode_count.valueChanged.connect(lambda: self._emit_config())
+        ep_row.addWidget(self._episode_count)
+
+        self._layout.addLayout(ep_row)
+
+        # QButtonGroup ensures mutual exclusion automatically
+        self._structure_group = QButtonGroup(self)
+        self._structure_group.addButton(self._single_radio, 0)
+        self._structure_group.addButton(self._multi_idea, 1)
+        self._structure_group.addButton(self._episode_enabled, 2)
+
+        # ── Row 3: Có lời thoại ──
+        self._voice_enabled = QCheckBox("🗣️ Có lời thoại")
         self._voice_enabled.setChecked(True)
         self._voice_enabled.setStyleSheet(cb_style)
         self._voice_enabled.setToolTip(
@@ -550,19 +623,18 @@ class SetupMatrixPanel(QFrame):
             "Tắt: Video chỉ có hình ảnh/âm nhạc, không có giọng nói"
         )
         self._voice_enabled.stateChanged.connect(lambda: self._emit_config())
-        proj_row.addWidget(self._voice_enabled)
+        self._layout.addWidget(self._voice_enabled)
 
-        self._auto_confirm = QCheckBox("Auto Confirm")
+        # ── Row 4: Auto Confirm ──
+        self._auto_confirm = QCheckBox("⚡ Auto Confirm")
         self._auto_confirm.setChecked(False)
         self._auto_confirm.setStyleSheet(cb_style)
         self._auto_confirm.setToolTip(
-            "B\u1eadt: T\u1ef1 \u0111\u1ed9ng Confirm & Next qua m\u1ed7i stage (kh\u00f4ng c\u1ea7n b\u1ea5m th\u1ee7 c\u00f4ng)\n"
-            "T\u1eaft: D\u1eebng l\u1ea1i \u0111\u1ec3 user review tr\u01b0\u1edbc khi Confirm"
+            "Bật: Tự động Confirm & Next qua mỗi stage (không cần bấm thủ công)\n"
+            "Tắt: Dừng lại để user review trước khi Confirm"
         )
         self._auto_confirm.stateChanged.connect(lambda: self._emit_config())
-        proj_row.addWidget(self._auto_confirm)
-
-        self._layout.addLayout(proj_row)
+        self._layout.addWidget(self._auto_confirm)
 
         # ═══════════════════════════════════════
         # GROUP 2: ⏱️ THỜI LƯỢNG
@@ -911,6 +983,16 @@ class SetupMatrixPanel(QFrame):
         self._dims_container.setVisible(mode == "manual")
         self._emit_config()
 
+    def _on_structure_radio_changed(self, checked: bool):
+        """Handle radio group change: Đơn / Đa kịch bản / Chia tập.
+        
+        QButtonGroup handles mutual exclusion automatically.
+        We just update spinner enable states.
+        """
+        self._video_count.setEnabled(self._multi_idea.isChecked())
+        self._episode_count.setEnabled(self._episode_enabled.isChecked())
+        self._emit_config()
+
     def _on_project_type_changed(self, index: int):
         """Auto-set voice, structure, style, tone based on project type."""
         pt = self.d0_project_type.currentData()
@@ -1066,6 +1148,9 @@ class SetupMatrixPanel(QFrame):
             "project_type":      self.d0_project_type.currentData(),
             "voice_enabled":     self._voice_enabled.isChecked(),
             "auto_confirm":      self._auto_confirm.isChecked(),
+            "multi_idea":        self._multi_idea.isChecked(),
+            "episode_enabled":   self._episode_enabled.isChecked(),
+            "episode_count":     self._episode_count.value() if self._episode_enabled.isChecked() else 1,
             "clip_duration":     self._clip_duration.currentData() or 8,
             "scene_count":       self._scene_count.value(),
             "video_count":       self._video_count.value(),

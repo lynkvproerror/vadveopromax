@@ -174,7 +174,7 @@ class AccountSupervisor:
                     f"foreman-0 will proceed cautiously, others wait"
                 )
             
-            await self.engine._pre_upload_r2v_images(self.account)
+            await self.engine._pre_upload_all_images(self.account)
             log.info(f"[Supervisor:{self.email}] ✅ Startup complete — unblocking foremen")
         except asyncio.CancelledError:
             raise
@@ -567,6 +567,8 @@ class Engine:
         )
         
         self._workers: List[Worker] = []
+        self._foreman_count: Dict[str, int] = {}  # email → current foreman count
+        self._scale_pending = asyncio.Event()  # Signal to check if more foremen needed
         self._running = False
         self._stop_event = asyncio.Event()
         self._pause_event = asyncio.Event()  # Set = running, Clear = paused
@@ -837,9 +839,9 @@ class Engine:
             return None
         
         try:
-            # Auto-detect JSON format: preserve {...} structure
+            # ★ Always output JSON format for auto enhance/fix
             _prompt = task.prompt or ""
-            _fmt = "json" if _prompt.strip().startswith('{') else "text"
+            _fmt = "json"
             enhanced = await self._prompt_enhancer.enhance(
                 prompt=_prompt,
                 api_key=api_key,
@@ -870,78 +872,151 @@ class Engine:
             return None
     
     async def _fix_policy_prompt(
-        self, task, error_msg: str, account
+        self, task, error_msg: str, account, attempt: int = 1
     ) -> Optional[str]:
-        """Auto-fix a policy-blocked prompt via Gemini API.
+        """Auto-fix a policy-blocked prompt — 3-step escalation.
         
-        Uses per-profile key with rotation fallback.
-        Returns fixed prompt or None (prompt unfixable).
+        Attempt 1: LOCAL sanitizer (instant, no API)
+        Attempt 2: Gemini API fix_policy (paraphrase rewrite)
+        Attempt 3: Gemini API regenerate (completely new prompt, keep characters)
+        
+        Returns fixed prompt or None.
         """
         email = account.email
+        _prompt = task.prompt or ""
+        # Store original prompt for attempt 3 reference
+        if not hasattr(task, '_original_prompt'):
+            task._original_prompt = _prompt
+        
+        log.info(f"[Fix] {email}: attempt {attempt}/3 — strategy: "
+                 f"{'LOCAL' if attempt == 1 else 'API_FIX' if attempt == 2 else 'API_REGENERATE'}")
+        
+        # ══════════════════════════════════════════════════════════════
+        # Attempt 1: LOCAL sanitizer only (instant, no API)
+        # ══════════════════════════════════════════════════════════════
+        if attempt == 1:
+            try:
+                from core.prompt_sanitizer import get_sanitizer
+                sanitizer = get_sanitizer()
+                if sanitizer.has_rules():
+                    sanitized, changes = sanitizer.sanitize(_prompt)
+                    if changes:
+                        log.info(
+                            f"[Fix] {email}: LOCAL fix applied ({len(changes)} changes) — "
+                            f"'{_prompt[:40]}...' → '{sanitized[:40]}...'"
+                        )
+                        for c in changes:
+                            log.info(f"[Fix]   {c}")
+                        return sanitized
+            except Exception as e:
+                log.debug(f"[Fix] Local sanitizer error: {e}")
+            
+            # Local didn't match anything — still return None to proceed to attempt 2
+            log.info(f"[Fix] {email}: LOCAL fix found no matches — will proceed to API fix")
+            return None
+        
+        # ══════════════════════════════════════════════════════════════
+        # Common: resolve API key (used by attempts 2 & 3)
+        # ══════════════════════════════════════════════════════════════
         api_key = self._gemini_key_mgr.get_key(email)
         if not api_key:
             api_key = self._gemini_key_mgr.get_rotation_key(email)
         if not api_key:
-            # Lazy auto-provision: try to get key via Extension Bridge
             bridge = getattr(self, '_extension_bridge', None)
             if bridge and bridge.is_connected(email):
-                log.info(f"[Fix] No Gemini key for {email} — auto-provisioning via Extension...")
                 try:
                     api_key = await self._gemini_key_mgr.auto_provision_via_extension(
                         email, bridge
                     )
-                    if api_key:
-                        log.info(f"[Fix] ✅ Auto-provisioned Gemini key for {email}: {api_key[:10]}...")
-                except Exception as prov_err:
-                    log.warning(f"[Fix] Auto-provision failed for {email}: {prov_err}")
+                except Exception:
+                    pass
         if not api_key:
-            # ★ Fallback to custom key from Settings (source="custom")
             try:
                 from services.ai_client_factory import get_ai_config
                 cfg = get_ai_config()
                 if cfg.get("api_key"):
                     api_key = cfg["api_key"]
-                    log.debug(f"[Fix] Using custom API key from Settings for {email}")
             except Exception:
                 pass
         if not api_key:
-            log.warning(f"[Fix] No Gemini API key for {email} — cannot auto-fix policy prompt")
+            log.warning(f"[Fix] No API key for {email} — cannot run attempt {attempt}")
             return None
         
-        try:
-            # Auto-detect JSON format: preserve {...} structure
-            _prompt = task.prompt or ""
-            _fmt = "json" if _prompt.strip().startswith('{') else "text"
-            fixed = await self._prompt_enhancer.fix_policy(
-                prompt=_prompt,
-                error_message=error_msg,
-                api_key=api_key,
-                profile_email=email,
-                output_format=_fmt,
-            )
-            if fixed:
-                log.info(
-                    f"[Fix] {email}: policy error fixed — "
-                    f"'{_prompt[:40]}...' → '{fixed[:40]}...'"
+        # ══════════════════════════════════════════════════════════════
+        # Attempt 2: API fix_policy (paraphrase rewrite, 85-95% similar)
+        # ══════════════════════════════════════════════════════════════
+        if attempt == 2:
+            try:
+                _fmt = "json"
+                fixed = await self._prompt_enhancer.fix_policy(
+                    prompt=_prompt,
+                    error_message=error_msg,
+                    api_key=api_key,
+                    profile_email=email,
+                    output_format=_fmt,
                 )
-            return fixed
-        except Exception as e:
-            # Key invalid → try rotation
-            if '429' in str(e) or '403' in str(e) or '401' in str(e):
-                rotation_key = self._gemini_key_mgr.get_rotation_key(email)
-                if rotation_key:
-                    try:
-                        return await self._prompt_enhancer.fix_policy(
-                            prompt=task.prompt or "",
-                            error_message=error_msg,
-                            api_key=rotation_key,
-                            profile_email=email,
-                            output_format=_fmt,
-                        )
-                    except Exception:
-                        pass
-            log.warning(f"[Fix] Failed for {email}: {e}")
-            return None
+                if fixed:
+                    log.info(
+                        f"[Fix] {email}: API FIX applied — "
+                        f"'{_prompt[:40]}...' → '{fixed[:40]}...'"
+                    )
+                return fixed
+            except Exception as e:
+                if '429' in str(e) or '403' in str(e) or '401' in str(e):
+                    rotation_key = self._gemini_key_mgr.get_rotation_key(email)
+                    if rotation_key:
+                        try:
+                            return await self._prompt_enhancer.fix_policy(
+                                prompt=_prompt,
+                                error_message=error_msg,
+                                api_key=rotation_key,
+                                profile_email=email,
+                                output_format=_fmt,
+                            )
+                        except Exception:
+                            pass
+                log.warning(f"[Fix] API FIX failed for {email}: {e}")
+                return None
+        
+        # ══════════════════════════════════════════════════════════════
+        # Attempt 3: API regenerate (completely new prompt, keep characters)
+        # ══════════════════════════════════════════════════════════════
+        if attempt == 3:
+            # Use the ORIGINAL prompt (before any fixes) as reference
+            original = getattr(task, '_original_prompt', _prompt)
+            try:
+                _fmt = "json"
+                regenerated = await self._prompt_enhancer.regenerate_prompt(
+                    original_prompt=original,
+                    error_message=error_msg,
+                    api_key=api_key,
+                    profile_email=email,
+                    output_format=_fmt,
+                )
+                if regenerated:
+                    log.info(
+                        f"[Fix] {email}: API REGENERATE applied — "
+                        f"completely new prompt '{regenerated[:40]}...'"
+                    )
+                return regenerated
+            except Exception as e:
+                if '429' in str(e) or '403' in str(e) or '401' in str(e):
+                    rotation_key = self._gemini_key_mgr.get_rotation_key(email)
+                    if rotation_key:
+                        try:
+                            return await self._prompt_enhancer.regenerate_prompt(
+                                original_prompt=original,
+                                error_message=error_msg,
+                                api_key=rotation_key,
+                                profile_email=email,
+                                output_format=_fmt,
+                            )
+                        except Exception:
+                            pass
+                log.warning(f"[Fix] API REGENERATE failed for {email}: {e}")
+                return None
+        
+        return None
     
     def _is_policy_error(self, error_msg: str) -> bool:
         """Check if error indicates a prompt policy violation."""
@@ -1714,6 +1789,7 @@ class Engine:
         Effects:
         1. Account added to _sick_accounts (foreman will idle)
         2. All RUNNING/WAITING_POLL tasks requeued (high priority, any account)
+        3. ★ Auto-close browser + set 5-min cooldown to prevent infinite restart loops
         """
         import time as _time
         self._sick_accounts[email] = _time.time()
@@ -1734,6 +1810,26 @@ class Engine:
             f"Requeued {requeued} task(s) to healthy accounts. "
             f"Account will idle until circuit breaker closes."
         )
+        
+        # ★ Fix 4b: Auto-close browser on persistent failures
+        # Browser state is broken (reCAPTCHA cascade, zombie cleanup loop).
+        # Close browser + set 5-min cooldown to prevent infinite restart loop.
+        try:
+            bridge = self._extension_bridge
+            if bridge:
+                bridge.set_browser_cooldown(email)
+            
+            # Close browser for this account
+            for acc in self._account_manager._accounts:
+                if acc.email == email:
+                    asyncio.ensure_future(acc.close_browser())
+                    log.warning(
+                        f"[SickAccount] 🔒 Auto-closed browser for {email} "
+                        f"— cooldown {bridge.BROWSER_CLOSE_COOLDOWN_SECONDS if bridge else 300}s"
+                    )
+                    break
+        except Exception as e:
+            log.error(f"[SickAccount] Auto-close error for {email}: {e}")
     
     async def _wait_for_circuit(self, email: str):
         """Block until circuit breaker closes (extension healthy).
@@ -1939,6 +2035,39 @@ class Engine:
                             # reCAPTCHA healthy — clear tracker
                             if hasattr(self, '_recaptcha_unhealthy_since'):
                                 self._recaptcha_unhealthy_since.pop(email, None)
+                    
+                    # ★ Fix 4d: Auto-restart browser after cooldown expires for sick accounts
+                    # When _mark_account_sick auto-closes browser + sets 5-min cooldown,
+                    # this section detects cooldown expiry and attempts browser restart.
+                    if email in self._sick_accounts:
+                        bridge = self._extension_bridge
+                        if bridge and not bridge.is_browser_on_cooldown(email):
+                            # Cooldown expired — try to restart browser
+                            log.info(
+                                f"[CircuitBreaker] {email}: cooldown expired "
+                                f"— auto-restarting browser"
+                            )
+                            try:
+                                ok = await self._do_browser_recovery(
+                                    account, "circuit-monitor", "hard"
+                                )
+                                if ok:
+                                    self._sick_accounts.pop(email, None)
+                                    self._close_circuit_breaker(email)
+                                    if bridge:
+                                        bridge.clear_browser_cooldown(email)
+                                    log.info(
+                                        f"✅ [CircuitBreaker] {email}: browser restarted, "
+                                        f"account recovered from sick state"
+                                    )
+                            except Exception as e:
+                                log.error(
+                                    f"[CircuitBreaker] {email}: auto-restart failed: {e}"
+                                )
+                                # Re-set cooldown to prevent rapid retry
+                                if bridge:
+                                    bridge.set_browser_cooldown(email)
+                    
             except Exception as e:
                 log.debug(f"[CircuitBreaker] Monitor error: {e}")
             
@@ -2571,6 +2700,7 @@ class Engine:
         
         # Step 5: Clean up per-account state
         self._smart_hide_rehide_countdown.pop(email, None)
+        self._foreman_count.pop(email, None)  # Dynamic scaling tracker
         
         # Step 6: Requeue orphaned tasks assigned to this account
         # Tasks in RUNNING/WAITING_POLL state assigned to deleted account
@@ -2616,7 +2746,11 @@ class Engine:
         self._task_available.clear()
         
         # Bug 14: Wire dispatcher's on_task_ready to wake up waiting workers
-        self._dispatcher.set_on_task_ready(lambda task: self._task_available.set())
+        # + Dynamic scaling: signal _scale_foremen_loop when new tasks arrive
+        def _on_task_ready_scale(task):
+            self._task_available.set()
+            self._scale_pending.set()  # Check if more foremen needed
+        self._dispatcher.set_on_task_ready(_on_task_ready_scale)
         
         # Smart Recovery: Wire CreditWindow to dispatcher for credit-based routing
         self._dispatcher.set_credit_window(self._credit_window)
@@ -2758,6 +2892,9 @@ class Engine:
                 # Hot-reload watcher: listens for new accounts added at runtime
                 tg.create_task(self._account_watcher(tg))
                 
+                # Dynamic foreman scaling: spawn more foremen when tasks grow
+                tg.create_task(self._scale_foremen_loop(tg))
+                
                 # Circuit breaker monitor: checks extension health every 10s
                 tg.create_task(self._circuit_breaker_monitor())
                 
@@ -2800,6 +2937,7 @@ class Engine:
             self._workers.clear()
             self._active_account_emails.clear()
             self._supervisors.clear()
+            self._foreman_count.clear()  # Dynamic scaling tracker
             self._task_group = None
             log.info("Engine stopped — worker/foreman tracking reset")
     
@@ -2872,12 +3010,14 @@ class Engine:
         self._supervisors[account.email] = supervisor
         tg.create_task(supervisor.run())
         
-        # Foreman count: ceil(max_workers / output_count), capped at 8
+        # Foreman count: ceil(max_workers / output_count)
+        # Fix C: I2I/T2I capped at 12 (image gen limit), I2V/R2V/T2V uncapped
         import math
         typical_output = self._get_typical_output_count()
+        foreman_cap = 12 if self._is_image_only_workload() else account.max_workers
         raw_foreman_count = max(1, min(
             math.ceil(account.max_workers / typical_output),
-            8,  # Cap: beyond 8, foremen just queue on rate lock
+            foreman_cap,
         ))
         
         # G1: License gate — GLOBAL cap by permissions.limits.max_foremen
@@ -2927,21 +3067,130 @@ class Engine:
             )
             foreman_count = ready
         
+        # Track starting index to avoid ID collision with existing foremen
+        existing_count = self._foreman_count.get(account.email, 0)
+        start_idx = existing_count
+        
         for i in range(foreman_count):
             foreman_worker = Worker(
-                worker_id=f"foreman-{account.email[:8]}-{i}",
+                worker_id=f"foreman-{account.email[:8]}-{start_idx + i}",
                 api_client=self._api_client,
                 on_progress=self._on_progress,
             )
             self._workers.append(foreman_worker)
             tg.create_task(self._foreman_loop(foreman_worker, account))
         
+        self._foreman_count[account.email] = existing_count + foreman_count
         self._active_account_emails.add(account.email)
         log.info(
             f"[Supervisor:{account.email}] Spawned CHỦ + {foreman_count} Foremen "
             f"(max_workers={account.max_workers}, output={typical_output}, "
             f"retry={account.retry_count}, timeout={account.request_timeout}s)"
         )
+    
+    def _get_foreman_count(self, email: str) -> int:
+        """Count current foremen for a specific account."""
+        prefix = f"foreman-{email[:8]}-"
+        return sum(1 for w in self._workers if w.worker_id.startswith(prefix))
+    
+    async def _scale_foremen_loop(self, tg: asyncio.TaskGroup):
+        """Dynamic foreman scaling — each account scales independently.
+        
+        Runs inside the TaskGroup. When pipeline adds tasks to an already-running
+        engine, this detects the deficit and spawns additional foremen.
+        
+        Each account operates independently: it scales up to its own optimal
+        foreman count based on total pending tasks (READY + RUNNING + WAITING_POLL),
+        not just ready_count. This prevents the race where foremen consume tasks
+        faster than the scaling loop can react.
+        """
+        while not self._stop_event.is_set():
+            try:
+                # Wait for signal or poll every 5s
+                try:
+                    await asyncio.wait_for(self._scale_pending.wait(), timeout=5.0)
+                    self._scale_pending.clear()
+                except asyncio.TimeoutError:
+                    pass
+                
+                if self._stop_event.is_set():
+                    break
+                
+                # Count total pending tasks (READY + RUNNING + WAITING_POLL)
+                # Using total_pending instead of ready_count prevents the race
+                # where foremen pick tasks (READY→RUNNING) before scaling detects them
+                from core.dispatcher import TaskState
+                total_pending = sum(
+                    1 for t in self._dispatcher.get_all_tasks_dict().values()
+                    if t.state in (TaskState.READY, TaskState.RUNNING, TaskState.WAITING_POLL)
+                )
+                if total_pending <= 0:
+                    continue
+                
+                # Each account scales independently — no splitting across accounts
+                for account in self._account_manager._accounts:
+                    if not account.is_enabled:
+                        continue
+                    if account.email not in self._active_account_emails:
+                        continue
+                    
+                    current = self._foreman_count.get(account.email, 0)
+                    
+                    # Calculate optimal foreman count per account
+                    import math
+                    typical_output = self._get_typical_output_count()
+                    foreman_cap = 12 if self._is_image_only_workload() else account.max_workers
+                    optimal = max(1, min(
+                        math.ceil(account.max_workers / typical_output),
+                        foreman_cap,
+                    ))
+                    
+                    # Target = optimal (each account independently scales to its max)
+                    # No per_account_ready splitting — accounts pick from global queue
+                    target = optimal
+                    
+                    if target <= current:
+                        continue
+                    
+                    # G1: License gate check
+                    to_add = target - current
+                    try:
+                        ctrl = getattr(self, '_app_controller', None)
+                        if ctrl and hasattr(ctrl, '_permissions'):
+                            max_foremen = ctrl._permissions.limits.max_foremen
+                            if max_foremen > 0:
+                                total_existing = len(self._workers)
+                                remaining_slots = max(0, max_foremen - total_existing)
+                                to_add = min(to_add, remaining_slots)
+                    except Exception:
+                        pass
+                    
+                    if to_add <= 0:
+                        continue
+                    
+                    log.info(
+                        f"[ScaleForemen:{account.email}] Scaling {current} → "
+                        f"{current + to_add} foremen (pending={total_pending}, "
+                        f"optimal={optimal}, max_workers={account.max_workers})"
+                    )
+                    
+                    start_idx = current
+                    for i in range(to_add):
+                        foreman_worker = Worker(
+                            worker_id=f"foreman-{account.email[:8]}-{start_idx + i}",
+                            api_client=self._api_client,
+                            on_progress=self._on_progress,
+                        )
+                        self._workers.append(foreman_worker)
+                        tg.create_task(self._foreman_loop(foreman_worker, account))
+                    
+                    self._foreman_count[account.email] = current + to_add
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f"[ScaleForemen] Error: {e}")
+                await asyncio.sleep(3)
     
     async def _account_watcher(self, tg: asyncio.TaskGroup):
         """Watch for new accounts added at runtime and spawn workers.
@@ -3066,6 +3315,16 @@ class Engine:
             True if recovery succeeded (either by this worker or another)
         """
         recovery_key = account.email
+        
+        # ★ Fix 4c: Respect browser close cooldown (prevents infinite restart loops)
+        if self._extension_bridge:
+            remaining = self._extension_bridge.get_cooldown_remaining(account.email)
+            if remaining > 0:
+                log.info(
+                    f"[{worker_id}] Browser on cooldown ({remaining:.0f}s remaining) "
+                    f"— skipping {tier} recovery"
+                )
+                return False
         
         lock = self._browser_recovery_locks.setdefault(recovery_key, asyncio.Lock())
         epoch_before = self._browser_recovery_epoch.get(recovery_key, 0)
@@ -3801,6 +4060,11 @@ class Engine:
                                             if enhanced and enhanced != task.prompt:
                                                 task._original_prompt = task.prompt  # Keep original
                                                 task.prompt = enhanced
+                                                # ★ Notify UI of prompt change
+                                                self._dispatcher.update_progress(
+                                                    task.id, task.progress,
+                                                    "✨ Prompt enhanced"
+                                                )
                                         except Exception as e:
                                             log.debug(f"[Enhance] Skip: {e}")
                                     
@@ -3994,6 +4258,11 @@ class Engine:
                                 )
                                 if fixed:
                                     task.prompt = fixed
+                                    # ★ Notify UI of prompt change
+                                    self._dispatcher.update_progress(
+                                        task.id, task.progress,
+                                        f"🔧 Auto-fixed ({_fix_attempts + 1}/3)"
+                                    )
                                     log.info(
                                         f"[Foreman:{account.email}] Task {task.id}: "
                                         f"prompt auto-fixed (attempt {_fix_attempts + 1}/3) → retrying"
@@ -4895,6 +5164,11 @@ class Engine:
                     )
                     if fixed:
                         task.prompt = fixed
+                        # ★ Notify UI of prompt change
+                        self._dispatcher.update_progress(
+                            task.id, task.progress,
+                            f"🔧 Auto-fixed ({_fix_attempts + 1}/3)"
+                        )
                         log.info(
                             f"[Finalizer:{email}] Task {task.id}: "
                             f"prompt auto-fixed (attempt {_fix_attempts + 1}/3) → requeueing"
@@ -6406,14 +6680,25 @@ class Engine:
                             )
                             try:
                                 fixed = await self._fix_policy_prompt(
-                                    task, poll_errors[0], account
+                                    task, poll_errors[0], account,
+                                    attempt=_fix_attempts + 1
                                 )
                                 if fixed:
                                     task.prompt = fixed
                                     task._poll_failed_errors = []
+                                    # ★ Strategy label for UI
+                                    strategy = (
+                                        "LOCAL" if _fix_attempts == 0
+                                        else "API_FIX" if _fix_attempts == 1
+                                        else "REGENERATE"
+                                    )
+                                    self._dispatcher.update_progress(
+                                        task.id, task.progress,
+                                        f"🔧 Auto-fixed ({_fix_attempts + 1}/3 — {strategy})"
+                                    )
                                     log.info(
                                         f"[Poll] Task {task.id}: prompt auto-fixed "
-                                        f"(attempt {_fix_attempts + 1}/3) → requeueing"
+                                        f"(attempt {_fix_attempts + 1}/3 — {strategy}) → requeueing"
                                     )
                                     self._dispatcher.requeue_task(task)
                                     return  # Will be retried with fixed prompt
@@ -7384,107 +7669,188 @@ class Engine:
         
         return False
     
-    async def _pre_upload_r2v_images(self, account: AccountManager):
-        """Pre-upload all unique R2V images for this account before task processing.
+    async def _pre_upload_all_images(self, account: AccountManager):
+        """Pre-upload ALL unique images for this account before task processing.
         
-        Scans all pending R2V tasks, collects unique image_paths not yet in
-        upload_cache for this account, and uploads them once.
+        ★ Fix A: Expanded from R2V-only to ALL image workflows (I2V + R2V).
+        Google upload API has no rate limit → uploads run fully parallel
+        via asyncio.gather() for maximum throughput.
+        
+        Scans all pending tasks with image_paths, collects unique paths
+        not yet in upload_cache or ImageLibrary, and uploads them once.
         
         Cache key = {path}:{email} — each account uploads its own copy.
         Cross-account mediaIds are never shared (asset permission isolation).
+        Results stored in BOTH _upload_cache (in-memory) AND ImageLibrary
+        media_ids (persistent across sessions).
         
-        Called once per foreman after readiness gate, before the main loop.
-        Subsequent tasks will hit cache → skip upload → save ~10s/image/task.
+        Called once per supervisor after readiness gate, before foremen start.
+        Subsequent tasks will hit cache → skip upload → save ~5-10s/image/task.
         """
         import time as _time
+        import hashlib as _hashlib
         
-        # Collect unique image paths from all pending R2V tasks
+        # ── Phase 1: Collect unique image paths from ALL pending tasks ──
         unique_paths = set()
         all_tasks = self._dispatcher.get_all_tasks_dict()
+        
+        # Check ImageLibrary persistent cache too
+        try:
+            from services.image_library import get_image_library
+            lib = get_image_library()
+        except Exception:
+            lib = None
+        
         for task in all_tasks.values():
-            if (task.workflow_type == 'R2V'
-                    and task.image_paths
+            if (task.image_paths
                     and task.state.value in ('ready', 'pending')):
                 for p in task.image_paths:
                     cache_key = f"{p}:{account.email}"
-                    if cache_key not in self._upload_cache:
-                        unique_paths.add(p)
+                    if cache_key in self._upload_cache:
+                        continue  # Already in in-memory cache
+                    # Check ImageLibrary persistent cache
+                    if lib:
+                        lib_id = await asyncio.to_thread(lib.get_media_id, p, account.email)
+                        if lib_id:
+                            # Populate in-memory cache from ImageLibrary
+                            self._upload_cache[cache_key] = lib_id
+                            continue
+                    unique_paths.add(p)
         
         if not unique_paths:
             return
         
         log.info(
             f"[PreUpload:{account.email}] "
-            f"Uploading {len(unique_paths)} unique image(s) for R2V batch"
+            f"Uploading {len(unique_paths)} unique image(s) for all workflows (parallel)"
         )
         t0 = _time.monotonic()
         uploaded = 0
         
-        # Fix 401: ensure valid access token ONCE before upload loop
-        access_token = await account.ensure_valid_token()
-        if not access_token:
-            log.error(f"[PreUpload:{account.email}] Token refresh failed — aborting uploads")
-            return
+        # ── Phase 2: Upload images with bounded concurrency ──
+        # Semaphore prevents loading ALL images into RAM at once (OOM/not-responding)
+        _sem = asyncio.Semaphore(10)  # Max 10 parallel uploads
         
-        for path in sorted(unique_paths):
+        async def _upload_one(path: str) -> bool:
+            """Upload a single image, return True on success."""
+            nonlocal uploaded
             if self._stop_event.is_set():
-                break
-            
+                return False
             try:
-                # Anti-detect delay between uploads
-                if uploaded > 0:
-                    if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
-                        await self._burst_controller.wait(account.email)
+                async with _sem:
+                    # Fresh token for each upload (catches mid-batch refreshes)
+                    access_token = await account.ensure_valid_token()
+                    if not access_token:
+                        log.error(f"[PreUpload:{account.email}] Token failed — skipping {Path(path).name}")
+                        return False
+                    
+                    # Encode image — run in thread to avoid blocking event loop
+                    from core.media_handler import MediaHandler
+                    result = await asyncio.to_thread(MediaHandler.image_to_base64, path)
+                    if not result:
+                        log.error(f"[PreUpload] Failed to encode: {path}")
+                        return False
+                    img_b64, mime_type = result
                 
-                # Encode image
-                from core.media_handler import MediaHandler
-                result = MediaHandler.image_to_base64(path)
-                if not result:
-                    log.error(f"[PreUpload] Failed to encode: {path}")
-                    continue
-                img_b64, mime_type = result
+                    # Compute content hash in thread (avoid blocking event loop)
+                    try:
+                        def _hash_file(p):
+                            h = _hashlib.md5()
+                            with open(p, 'rb') as f:
+                                for chunk in iter(lambda: f.read(8192), b''):
+                                    h.update(chunk)
+                            return h.hexdigest()
+                        content_hash = await asyncio.to_thread(_hash_file, path)
+                    except Exception:
+                        content_hash = ""
                 
-                # Upload (HAR verified: always IMAGE_ASPECT_RATIO_LANDSCAPE)
-                upload_resp = await self._api_client.upload_image(
-                    access_token=access_token,
-                    recaptcha_token="",
-                    image_base64=img_b64,
-                    mime_type=mime_type,
-                    account_headers=account.get_api_headers(),
-                )
-                
-                if upload_resp.success:
-                    # Multi-format mediaId extraction (API changed 2026-03)
-                    media_id = ""
-                    mgid = upload_resp.data.get("mediaGenerationId")
-                    if mgid:
-                        media_id = mgid.get("mediaGenerationId", "") if isinstance(mgid, dict) else mgid
-                    if not media_id:
-                        media = upload_resp.data.get("media")
-                        if isinstance(media, dict):
-                            media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
-                        elif isinstance(media, list) and media:
-                            first = media[0]
-                            if isinstance(first, dict):
-                                media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
-                    if media_id:
-                        cache_key = f"{path}:{account.email}"
-                        async with self._upload_cache_lock:
-                            self._upload_cache[cache_key] = media_id
-                        uploaded += 1
-                        log.info(f"[PreUpload]   {Path(path).name} → {media_id[:40]}...")
-                    else:
-                        log.warning(f"[PreUpload]   Upload OK but no mediaId: {path}")
-                else:
-                    log.error(f"[PreUpload]   Upload failed: {path}: {upload_resp.error}")
+                    # Upload with 429 retry + exponential backoff
+                    for _attempt in range(3):
+                        if self._stop_event.is_set():
+                            return False
+                        
+                        upload_resp = await self._api_client.upload_image(
+                            access_token=access_token,
+                            recaptcha_token="",
+                            image_base64=img_b64,
+                            mime_type=mime_type,
+                            account_headers=account.get_api_headers(),
+                        )
+                    
+                        if upload_resp.success:
+                            # Multi-format mediaId extraction (API changed 2026-03)
+                            media_id = ""
+                            mgid = upload_resp.data.get("mediaGenerationId")
+                            if mgid:
+                                media_id = mgid.get("mediaGenerationId", "") if isinstance(mgid, dict) else mgid
+                            if not media_id:
+                                media = upload_resp.data.get("media")
+                                if isinstance(media, dict):
+                                    media_id = media.get("name", "") or media.get("mediaGenerationId", "") or media.get("mediaId", "")
+                                elif isinstance(media, list) and media:
+                                    first = media[0]
+                                    if isinstance(first, dict):
+                                        media_id = first.get("name", "") or first.get("mediaGenerationId", "") or first.get("mediaId", "")
+                            if media_id:
+                                # Store in in-memory cache (path + hash keys)
+                                cache_key = f"{path}:{account.email}"
+                                async with self._upload_cache_lock:
+                                    self._upload_cache[cache_key] = media_id
+                                    if content_hash:
+                                        self._upload_cache[f"hash:{content_hash}:{account.email}"] = media_id
+                                # Store in ImageLibrary — use path-only match to avoid
+                                # _compute_hash re-reading the file (we already have the hash)
+                                if lib:
+                                    try:
+                                        for img in lib._images:
+                                            if img.path == path or (content_hash and img.content_hash == content_hash):
+                                                img.media_ids[account.email] = media_id
+                                                break
+                                    except Exception:
+                                        pass
+                                uploaded += 1
+                                log.info(f"[PreUpload]   {Path(path).name} → {media_id[:40]}...")
+                                return True
+                            else:
+                                log.warning(f"[PreUpload]   Upload OK but no mediaId: {path}")
+                                break  # Success but no ID — don't retry
+                        else:
+                            err_str = str(upload_resp.error)
+                            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                                wait = (2 ** _attempt) * 5  # 5s, 10s, 20s
+                                log.warning(
+                                    f"[PreUpload] 429 on {Path(path).name} → "
+                                    f"retry {_attempt+1}/3 in {wait}s"
+                                )
+                                await asyncio.sleep(wait)
+                                continue
+                            else:
+                                log.error(f"[PreUpload]   Upload failed: {path}: {upload_resp.error}")
+                                break  # Non-429 error — don't retry
             except Exception as e:
                 log.error(f"[PreUpload]   Error uploading {path}: {e}")
+            return False
+        
+        # Launch all uploads in parallel — no limit
+        await asyncio.gather(
+            *[_upload_one(p) for p in sorted(unique_paths)],
+            return_exceptions=True,
+        )
         
         elapsed = _time.monotonic() - t0
         log.info(
             f"[PreUpload:{account.email}] "
-            f"Done: {uploaded}/{len(unique_paths)} uploaded in {elapsed:.1f}s"
+            f"Done: {uploaded}/{len(unique_paths)} uploaded in {elapsed:.1f}s (parallel)"
         )
+        
+        # Persist ImageLibrary index so mediaIds survive restart
+        # (engine writes directly to img.media_ids but never called _save_index)
+        if lib and uploaded > 0:
+            try:
+                lib._save_index()
+                log.info(f"[PreUpload:{account.email}] ImageLibrary index saved ({uploaded} new mediaIds)")
+            except Exception as _e:
+                log.warning(f"[PreUpload:{account.email}] ImageLibrary save failed: {_e}")
     
     async def _resolve_image_paths(self, task: Task, account: AccountManager):
         """Upload local image files to get mediaGenerationIds.
@@ -7562,9 +7928,27 @@ class Engine:
                 log.info(f"  Path hit: {Path(slot.path).name} → {cached_id} (skip upload)")
                 return cached_id
             
-            # Encode image (once, reuse across retries)
+            # ★ Fix B: Check ImageLibrary persistent cache
+            try:
+                from services.image_library import get_image_library
+                _lib = get_image_library()
+                lib_id = await asyncio.to_thread(_lib.get_media_id, slot.path, account.email)
+                if lib_id:
+                    slot.media_id = lib_id
+                    slot.status = "ready"
+                    # Populate in-memory cache for subsequent lookups
+                    async with self._upload_cache_lock:
+                        self._upload_cache[path_cache_key] = lib_id
+                        if slot.content_hash:
+                            self._upload_cache[f"hash:{slot.content_hash}:{account.email}"] = lib_id
+                    log.info(f"  Library hit: {Path(slot.path).name} → {lib_id} (skip upload)")
+                    return lib_id
+            except Exception:
+                pass
+            
+            # Encode image in thread (once, reuse across retries)
             from core.media_handler import MediaHandler
-            result = MediaHandler.image_to_base64(slot.path)
+            result = await asyncio.to_thread(MediaHandler.image_to_base64, slot.path)
             if not result:
                 slot.status = "error"
                 slot.error = "encode_failed"
@@ -7572,19 +7956,20 @@ class Engine:
                 return ""
             img_b64, mime_type = result
             
-            # Fix 401: ensure valid access token before upload retries
-            access_token = await account.ensure_valid_token()
-            if not access_token:
-                slot.status = "error"
-                slot.error = "auth_failed"
-                log.error(f"  Token refresh failed for {account.email} — skipping {Path(slot.path).name}")
-                return ""
-            
             # Retry loop for upload
             for attempt in range(1, MAX_RETRIES + 1):
                 if self._stop_event.is_set():
                     slot.status = "error"
                     slot.error = "stopped"
+                    return ""
+                
+                # ★ FIX: Re-fetch token on EACH retry (catches mid-retry refreshes)
+                # Previously fetched once before loop → stale token on retry 2/3
+                access_token = await account.ensure_valid_token()
+                if not access_token:
+                    slot.status = "error"
+                    slot.error = "auth_failed"
+                    log.error(f"  Token refresh failed for {account.email} — skipping {Path(slot.path).name}")
                     return ""
                 
                 slot.retry_count = attempt
@@ -9106,7 +9491,8 @@ class Engine:
                                                     [_ffmpeg_bin, '-y', '-ss', ss_val, '-i', str(filepath),
                                                      '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
                                                      str(thumb_path)],
-                                                    capture_output=True, timeout=10
+                                                    capture_output=True, timeout=10,
+                                                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                                                 )
                                                 if thumb_path.exists() and thumb_path.stat().st_size > 100:
                                                     ffmpeg_ok = True
@@ -9344,6 +9730,7 @@ class Engine:
                                  '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
                                  str(thumb_path)],
                                 capture_output=True, timeout=10,
+                                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                             )
                             if thumb_path.exists() and thumb_path.stat().st_size > 100:
                                 ffmpeg_ok = True

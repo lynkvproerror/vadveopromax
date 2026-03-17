@@ -192,12 +192,39 @@ class TabQueue(
             self._forward_replacement_progress(task_id, progress, status_text)
             return
         
+        # ★ Detect prompt enhance/fix → refresh prompt labels
+        is_prompt_change = status_text and (
+            "✨" in status_text or "🔧" in status_text
+        )
+        if is_prompt_change and hasattr(widget, '_scene_label'):
+            # Re-read live prompt from dispatcher
+            live_task = None
+            if self.controller and hasattr(self.controller, '_dispatcher'):
+                live_task = self.controller._dispatcher.get_all_tasks_dict().get(task_id)
+            if live_task and live_task.prompt:
+                new_prompt = live_task.prompt
+                dot_pos = new_prompt.find(". ")
+                if dot_pos > 0 and dot_pos < 120:
+                    scene_name = new_prompt[:dot_pos]
+                    detail_text = new_prompt[dot_pos + 2:]
+                else:
+                    scene_name = new_prompt[:80]
+                    detail_text = new_prompt[80:] if len(new_prompt) > 80 else ""
+                try:
+                    widget._scene_label.setText(scene_name)
+                    widget._scene_label.setToolTip(new_prompt)
+                    if hasattr(widget, '_detail_label') and widget._detail_label:
+                        widget._detail_label.setText(detail_text[:200])
+                        widget._detail_label.setToolTip(new_prompt)
+                except RuntimeError:
+                    pass
+
         # During download/upscale phase: trigger full refresh so thumb overlays update
         is_refresh_phase = status_text and (
             "⬆️" in status_text or "Upscal" in status_text
             or "🔄" in status_text or "📥" in status_text
         )
-        if is_refresh_phase:
+        if is_refresh_phase and not getattr(self, '_pause_refresh_for_menu', False):
             if not hasattr(self, '_upscale_refresh_timer'):
                 self._upscale_refresh_timer = QTimer(self)  # parent=self to avoid leak
                 self._upscale_refresh_timer.setSingleShot(True)
@@ -244,7 +271,7 @@ class TabQueue(
         
         # Auto-refresh: when progress hits 100%, trigger delayed refresh
         # so thumbnails load from just-generated files without right-click
-        if progress >= 100:
+        if progress >= 100 and not getattr(self, '_pause_refresh_for_menu', False):
             QTimer.singleShot(500, self._refresh_queue_from_controller)
         
         # Update status label
@@ -338,6 +365,9 @@ class TabQueue(
     def _flush_throttled_refresh(self):
         """Execute throttled refresh if pending."""
         if self._throttled_refresh_pending:
+            # Skip refresh while context menu is open to prevent widget rebuild
+            if getattr(self, '_pause_refresh_for_menu', False):
+                return  # Will be picked up by next throttle cycle
             self._throttled_refresh_pending = False
             self._refresh_queue_from_controller()
     
@@ -558,12 +588,13 @@ class TabQueue(
         # Post-queue action dropdown — synced with Settings tab
         from config.settings import get_settings as _gs
         _s = _gs()
-        _action_map = {"nothing": "🔌 Do Nothing", "shutdown": "⚡ Shutdown", "sleep": "💤 Sleep"}
-        saved_action = _action_map.get(getattr(_s, 'post_queue_action', 'nothing'), "🔌 Do Nothing")
+        # ★ FIX: Use index-based init (locale-safe, no English/Vietnamese mismatch)
+        _action_index = {"nothing": 0, "shutdown": 1, "sleep": 2}
+        saved_idx = _action_index.get(getattr(_s, 'post_queue_action', 'nothing'), 0)
         
         self.post_queue_combo = QComboBox()
         self.post_queue_combo.addItems([t("queue_extra.do_nothing"), t("queue_extra.shutdown"), t("queue_extra.sleep")])
-        self.post_queue_combo.setCurrentText(saved_action)
+        self.post_queue_combo.setCurrentIndex(saved_idx)
         self.post_queue_combo.setMinimumWidth(150)
         self.post_queue_combo.setToolTip(t("queue_extra.post_queue_tooltip"))
         self.post_queue_combo.currentIndexChanged.connect(self._post_queue_combo_changed)
@@ -819,6 +850,9 @@ class TabQueue(
             prompt_layout_v.addWidget(detail_label)
         
         layout.addWidget(prompt_widget, stretch=1)
+        # ★ Store prompt label refs for live updates (enhance/fix)
+        widget._scene_label = scene_label
+        widget._detail_label = detail_label if detail_text else None
         
         # Col 4: Thumbnail Slots (replaces QProgressBar)
         output_count = task_data.get('output_count', 4) if task_data else 4
@@ -1817,12 +1851,12 @@ class TabQueue(
     
     def _post_queue_combo_changed(self, index: int):
         """Sync Queue dropdown → AppSettings (two-way sync with Settings tab)."""
-        _reverse_map = {"🔌 Do Nothing": "nothing", "⚡ Shutdown": "shutdown", "💤 Sleep": "sleep"}
+        # ★ FIX: Use index-based mapping (locale-safe, no English/Vietnamese mismatch)
+        _index_map = {0: "nothing", 1: "shutdown", 2: "sleep"}
         try:
             from config.settings import get_settings, save_settings
             s = get_settings()
-            text = self.post_queue_combo.currentText()
-            s.post_queue_action = _reverse_map.get(text, "nothing")
+            s.post_queue_action = _index_map.get(index, "nothing")
             s.post_queue_action_enabled = (s.post_queue_action != "nothing")
             save_settings()
         except Exception:
@@ -1851,7 +1885,12 @@ class TabQueue(
         
         from config.settings import get_settings
         s = get_settings()
+        # ★ FIX: Respect post_queue_action_enabled master toggle
+        # Without this check, shutdown/sleep triggers even when toggle is OFF
+        is_enabled = getattr(s, 'post_queue_action_enabled', False)
         action = getattr(s, 'post_queue_action', 'nothing')
+        if not is_enabled:
+            action = 'nothing'
         
         # Sync max sweep rounds from settings (user can change at runtime)
         self._max_sweep_rounds = getattr(s, 'auto_sweep_max_rounds', 5)

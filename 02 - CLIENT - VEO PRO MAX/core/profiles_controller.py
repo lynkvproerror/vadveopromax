@@ -92,7 +92,8 @@ def _find_chrome_pid_by_profile(profile_dir_name: str) -> int:
             ['wmic', 'process', 'where',
              f"name='chrome.exe' and commandline like '%{profile_dir_name}%' and not commandline like '%--type=%'",
              'get', 'processid', '/value'],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
         )
         for line in result.stdout.strip().splitlines():
             line = line.strip()
@@ -2794,7 +2795,8 @@ class ProfilesController:
                     f'Where-Object {{ $_.CommandLine -like "*{profile_path.name}*" }} | '
                     f'ForEach-Object {{ $_.Terminate() }}'
                 )
-                subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10)
+                subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10,
+                               creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
                 log.info(f"[ProfilesController] ✅ Chrome processes killed for {profile_path.name}")
             except Exception as e:
                 log.warning(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
@@ -3074,7 +3076,8 @@ class ProfilesController:
                 f'Where-Object {{ $_.CommandLine -like "*{profile_path.name}*" }} | '
                 f'ForEach-Object {{ $_.Terminate() }}'
             )
-            subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10)
+            subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10,
+                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
         except Exception as e:
             log.warning(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
         

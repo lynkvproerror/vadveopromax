@@ -566,6 +566,7 @@ class SettingsPipelineEnhancerMixin:
                     log.info(f"Running: {' '.join(cmd)}")
                     result = subprocess.run(
                         cmd, capture_output=True, text=True, timeout=600,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                     )
                     if result.stdout:
                         log.info(f"pip stdout:\n{result.stdout[-2000:]}")

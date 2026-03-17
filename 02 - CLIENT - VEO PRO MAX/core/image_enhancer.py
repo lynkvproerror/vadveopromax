@@ -146,6 +146,7 @@ class ImageEnhancer:
                     stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                 )
                 self._active_process = process
             

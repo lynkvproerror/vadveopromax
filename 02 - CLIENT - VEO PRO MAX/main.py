@@ -6,6 +6,8 @@ Version: 2.3.4
 
 import sys
 import logging
+import os
+import subprocess
 from pathlib import Path
 
 # Add project root to path
