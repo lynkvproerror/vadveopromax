@@ -1,14 +1,14 @@
 {
-    "version": "2.3.5",
-    "ext_version": "2.3.4",
-    "release_date": "2026-03-16",
-    "changelog": "v2.3.5 — Sửa lỗi Upscale video\n\n⬆️ Upscale\n• Sửa lỗi chỉ upscale video đầu tiên trong mỗi task — giờ tất cả video (a, b, c, d) đều được upscale đúng\n• Sửa lỗi crash khi download file upscale (fife_uri)\n• Thumbnail hiển thị đúng trạng thái upscale cho từng video\n\n🔧 Ổn định\n• Cải thiện xử lý đồng thời khi upscale nhiều video\n• Tối ưu quy trình upscale background",
-    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.5/VEO_Pro_Max_v2.3.5.zip",
-    "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.5/VEO_Extension_v2.3.4.zip",
-    "sha256": "74b6891a412d43de52f47aac7c2938881e7a30d5bec0bf8cd35ac7549017f715",
-    "ext_sha256": "75252ac645f5b17ed16e4ba77149751a9bdea1c030c0685fc796e22dbd2bddcf",
+    "version": "2.3.7",
+    "ext_version": "2.3.6",
+    "release_date": "2026-03-17",
+    "changelog": "v2.3.7 — Cải thiện Pipeline & Ổn định\n\n🎬 Pipeline AI Production\n• Sửa lỗi Stage 6 tạo lại video đã có khi load session\n• Auto Confirm hoạt động liên tục qua tất cả 7 stages\n• Cải thiện độ ổn định khi chuyển stage tự động\n\n🔧 Ổn định\n• Sửa lỗi dữ liệu scene bị mất khi khôi phục session\n• Tối ưu quản lý bộ nhớ pipeline\n• Cải thiện xử lý đa version trong production pipeline",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.7/VEO_Pro_Max_v2.3.7.zip",
+    "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.7/VEO_Extension_v2.3.6.zip",
+    "sha256": "56c835bc95ec9ea6eded314a5dab8e9bd902f2a0ceff5a8fa5434447fba01ab8",
+    "ext_sha256": "80fbd772ba811bb6f0ef3bf47279d7a7f7c304aa4d5357b21980d4a74534ee3f",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1773638313,
-    "build_time": "2026-03-16T12:18:33.624850"
+    "build_number": 1773749027,
+    "build_time": "2026-03-17T19:03:47.534590"
 }
