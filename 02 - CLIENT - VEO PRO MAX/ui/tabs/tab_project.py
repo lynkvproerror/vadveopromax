@@ -189,8 +189,14 @@ class _StageWorker(QObject):
         return _format_stage_result(self._stage, result)
 
 
-def _format_stage_result(stage_name: str, result) -> str:
-    """Format stage result for human-readable review display."""
+def _format_stage_result(stage_name: str, result, state=None) -> str:
+    """Format stage result for human-readable review display.
+    
+    Args:
+        stage_name: Stage identifier
+        result: StageResult object
+        state: Optional PipelineState for version/episode grouping
+    """
     lines = [f"✅ Stage: {stage_name}\n"]
     if stage_name == "duration_estimate":
         d = result.data
@@ -226,11 +232,30 @@ def _format_stage_result(stage_name: str, result) -> str:
         lines.append(f"  Clip duration: {clip_dur}s")
         lines.append(f"  Total duration: {mins}:{secs:02d}")
         lines.append(f"  = {scene_count} clips × {clip_dur}s = {scene_count * clip_dur}s (target: {total}s)")
+        # Multi-version / episode info
+        v_count = d.get('video_count', 1)
+        if v_count > 1:
+            mode_label = "Multi-Idea" if d.get('multi_idea') else "Multi-Version"
+            lines.append(f"\n🎬 {mode_label}: {v_count} videos")
+        ep_count = d.get('episode_count', 1)
+        if d.get('episode_enabled') and ep_count > 1:
+            lines.append(f"📺 Episodes: {ep_count} tập")
         lines.append("\n(Bạn có thể chỉnh sửa scene count/duration ở Sidebar trước khi Confirm)")
-    elif stage_name == "script_analysis":
+    elif stage_name == "bible_gen":
         # Bible text (plain, editable)
         bible = result.data.get("bible", "") if result.data else ""
-        if bible:
+        
+        # ── Grouped display: Multi-Idea Bibles ──
+        if state and state.is_multi_version() and state.multi_idea and state.versions:
+            lines.append(f"📖 PRODUCTION BIBLES ({len(state.versions)} ideas)\n")
+            lines.append("(Mỗi idea có Bible riêng. Bạn có thể chỉnh sửa từng Bible.)")
+            for v in state.versions:
+                sep = f"{'═' * 20} 📌 {v.label} {'═' * 20}"
+                lines.append(f"\n{sep}")
+                v_bible = v.bible or "(No Bible generated)"
+                lines.append(v_bible)
+            lines.append(f"\n{'═' * 50}")
+        elif bible:
             lines.append("📖 PRODUCTION BIBLE\n")
             lines.append("(Bạn có thể chỉnh sửa kịch bản bên dưới trước khi Confirm)")
             lines.append("=" * 40)
@@ -240,7 +265,43 @@ def _format_stage_result(stage_name: str, result) -> str:
     elif stage_name == "scene_breakdown":
         # Plain text prompts (editable)
         raw = result.data.get("raw_prompts", "") if result.data else ""
-        if raw:
+        
+        # ── Grouped display: Multi-Version prompts ──
+        has_versions = state and state.is_multi_version() and state.versions
+        has_episodes = state and state.is_multi_episode() and state.episodes
+        
+        if has_versions and any(v.scenes for v in state.versions):
+            total_scenes = sum(len(v.scenes) for v in state.versions)
+            lines.append(f"🎬 VEO PROMPTS — {len(state.versions)} versions ({total_scenes} total scenes)\n")
+            lines.append("(Mỗi version có prompts riêng biệt.)")
+            version_scenes_info = result.data.get("version_scenes", {}) if result.data else {}
+            for v in state.versions:
+                scene_count = len(v.scenes)
+                sep = f"{'═' * 18} 📌 {v.label} ({scene_count} scenes) {'═' * 18}"
+                lines.append(f"\n{sep}")
+                if v.scenes:
+                    for s in v.scenes:
+                        lines.append(f"\n--- Scene {s.index} ---")
+                        lines.append(s.prompt or s.description or "(empty)")
+                else:
+                    lines.append("(No scenes generated yet)")
+            lines.append(f"\n{'═' * 55}")
+        elif has_episodes and any(ep.scenes for ep in state.episodes):
+            total_scenes = sum(len(ep.scenes) for ep in state.episodes)
+            lines.append(f"🎬 VEO PROMPTS — {len(state.episodes)} episodes ({total_scenes} total scenes)\n")
+            lines.append("(Mỗi tập có prompts riêng biệt. Characters shared.)")
+            for ep in state.episodes:
+                scene_count = len(ep.scenes)
+                sep = f"{'═' * 18} 📺 {ep.label} ({scene_count} scenes) {'═' * 18}"
+                lines.append(f"\n{sep}")
+                if ep.scenes:
+                    for s in ep.scenes:
+                        lines.append(f"\n--- Scene {s.index} ---")
+                        lines.append(s.prompt or s.description or "(empty)")
+                else:
+                    lines.append("(No scenes generated yet)")
+            lines.append(f"\n{'═' * 55}")
+        elif raw:
             lines.append(f"🎬 VEO PROMPTS ({result.data.get('prompt_count', 0)} scenes)\n")
             lines.append("(Bạn có thể chỉnh sửa prompts bên dưới trước khi Confirm)")
             lines.append("=" * 40)
@@ -323,6 +384,8 @@ class TabProject(QWidget):
 
     # Signal: prompts ready to add to queue
     prompts_ready = Signal(list)  # List[dict] with prompt + config
+    # Signal: queue task completed (thread-safe bridge from engine thread)
+    _pipeline_queue_signal = Signal()
 
     def __init__(self, controller=None, parent=None):
         super().__init__(parent)
@@ -334,9 +397,18 @@ class TabProject(QWidget):
         self._setup_matrix = None # Added for SetupMatrixPanel
         self._parsed_panel = None # Added for ParsedProjectsPanel
         self._pipeline_mode = "text_only"  # Pipeline mode tracking
+        
+        # Pipeline ↔ Queue bidirectional tracking
+        # Maps group_id → {"project_idx": int, "stage": str, "prompt_count": int}
+        self._active_group_ids: dict = {}
+        self._pipeline_queue_signal.connect(self._on_pipeline_queue_check)
 
         self._setup_ui()
         self._init_builder()
+        
+        # Register queue callback for pipeline tracking (deferred until controller ready)
+        if self.controller:
+            self._register_queue_callback()
         
         # Auto-restore pipeline state from last session (deferred so UI is ready)
         from PySide6.QtCore import QTimer
@@ -793,7 +865,7 @@ class TabProject(QWidget):
         self._stage_dots = {}
         STAGE_LABELS = {
             "duration_estimate": "1.Analysis",
-            "script_analysis": "2.Bible",
+            "bible_gen": "2.Bible",
             "scene_breakdown": "3.Prompts",
             "character_gen": "4.Character",
             "scene_image_gen": "5.Scenes",
@@ -803,6 +875,7 @@ class TabProject(QWidget):
         for stage_name in STAGE_ORDER:
             dot = QPushButton(STAGE_LABELS.get(stage_name, stage_name))
             dot.setFixedHeight(24)
+            dot.setCursor(Qt.CursorShape.PointingHandCursor)
             dot.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {Theme.SURFACE1};
@@ -811,11 +884,18 @@ class TabProject(QWidget):
                     border-radius: 3px;
                     font-size: 10px; padding: 2px 6px;
                 }}
+                QPushButton:hover {{
+                    background-color: {Theme.SURFACE2};
+                    border-color: {Theme.BLUE};
+                    color: {Theme.TEXT};
+                }}
             """)
-            dot.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # UI-5: indicator only, no dim
+            dot.setToolTip(f"Click to view {STAGE_LABELS.get(stage_name, stage_name)} data")
+            dot.clicked.connect(lambda checked, _sn=stage_name: self._on_stage_dot_clicked(_sn))
             dots_row.addWidget(dot)
             self._stage_dots[stage_name] = dot
         panel_layout.addLayout(dots_row)
+
 
         # Stage result viewer
         # UI-3: QPlainTextEdit (plain text only — prevents HTML paste issues)
@@ -840,7 +920,7 @@ class TabProject(QWidget):
         self._thumb_scroll.setWidgetResizable(True)
         # UI-2: Use min/max instead of fixedHeight to avoid conflicts
         self._thumb_scroll.setMinimumHeight(0)
-        self._thumb_scroll.setMaximumHeight(100)
+        self._thumb_scroll.setMaximumHeight(16777215)
         self._thumb_scroll.setVisible(False)
         self._thumb_scroll.setStyleSheet(f"""
             QScrollArea {{
@@ -855,34 +935,22 @@ class TabProject(QWidget):
         self._thumb_layout.setSpacing(4)
         self._thumb_layout.addStretch()
         self._thumb_scroll.setWidget(self._thumb_container)
-        panel_layout.addWidget(self._thumb_scroll)
+        self._thumb_scroll.setWidgetResizable(True)
+        self._thumb_scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        panel_layout.addWidget(self._thumb_scroll, stretch=3)
 
-        # Action buttons — UI-1: ordered as [Start] [⬅Back] [➡Next] [✅Confirm] [⏭Skip] [📂Output]
+        # Action buttons — UI-1: ordered as [Start] [✅Confirm] [⏭Skip] [📂Output] [🗑Reset] [📥Load]
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
 
-        self._stage_run_btn = QPushButton("▶️ Start Pipeline")
+        self._stage_run_btn = QPushButton("▶️ Start")
         self._stage_run_btn.setProperty("variant", "success")
         self._stage_run_btn.setProperty("btnSize", "sm")
         self._stage_run_btn.setFixedHeight(30)
         self._stage_run_btn.clicked.connect(self._run_pipeline_stage)
         btn_row.addWidget(self._stage_run_btn)
 
-        self._stage_back_btn = QPushButton("⬅️​ Back")
-        self._stage_back_btn.setProperty("variant", "secondary")
-        self._stage_back_btn.setProperty("btnSize", "sm")
-        self._stage_back_btn.setFixedHeight(30)
-        self._stage_back_btn.setEnabled(False)
-        self._stage_back_btn.clicked.connect(self._on_stage_back)
-        btn_row.addWidget(self._stage_back_btn)
-
-        self._stage_next_btn = QPushButton("➡️​ Next")
-        self._stage_next_btn.setProperty("variant", "secondary")
-        self._stage_next_btn.setProperty("btnSize", "sm")
-        self._stage_next_btn.setFixedHeight(30)
-        self._stage_next_btn.setEnabled(False)
-        self._stage_next_btn.clicked.connect(self._on_stage_next)
-        btn_row.addWidget(self._stage_next_btn)
+        # Back/Next removed — stage dots are now clickable for direct navigation
 
         self._stage_confirm_btn = QPushButton("✅ Confirm & Next")
         self._stage_confirm_btn.setProperty("variant", "success")
@@ -905,6 +973,14 @@ class TabProject(QWidget):
         self._stage_output_btn.setFixedHeight(30)
         self._stage_output_btn.clicked.connect(self._open_output_folder)
         btn_row.addWidget(self._stage_output_btn)
+
+        self._stage_reset_btn = QPushButton("\U0001f5d1 Reset")
+        self._stage_reset_btn.setProperty("variant", "warning")
+        self._stage_reset_btn.setProperty("btnSize", "sm")
+        self._stage_reset_btn.setFixedHeight(30)
+        self._stage_reset_btn.setToolTip("Clear current pipeline and reset viewer to initial state")
+        self._stage_reset_btn.clicked.connect(self._reset_pipeline_viewer)
+        btn_row.addWidget(self._stage_reset_btn)
 
         self._stage_load_btn = QPushButton("\U0001f4e5 Load")
         self._stage_load_btn.setProperty("variant", "secondary")
@@ -993,10 +1069,10 @@ class TabProject(QWidget):
         if not dot:
             return
         flash_count = [0]
-        bright = (f"QPushButton {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+        bright = (f"QPushButton {{ background-color: {Theme.GREEN}; color: black; "
                   f"border: 2px solid {Theme.TEXT}; "
                   f"border-radius: 3px; font-size: 10px; font-weight: bold; padding: 2px 6px; }}")
-        normal = (f"QPushButton {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+        normal = (f"QPushButton {{ background-color: {Theme.GREEN}; color: black; "
                   f"border-radius: 3px; font-size: 10px; font-weight: bold; padding: 2px 6px; }}")
         def _tick():
             flash_count[0] += 1
@@ -1024,11 +1100,144 @@ class TabProject(QWidget):
         anim.start()
         self._scroll_height_anim = anim  # prevent GC
 
-    def _update_thumbnails(self, stage_name: str):
-        """Update thumbnail gallery for visual stages (4-7).
+    # ── GRP: Collapsible group header for pipeline stages ──
+    def _create_pipeline_group(self, group_id: str, title: str, icon: str,
+                                item_count: int, accent_color: str,
+                                content_widget, expanded: bool = True):
+        """Create a collapsible group container (header + content) like Queue tab groups."""
+        from PySide6.QtWidgets import QWidget, QFrame, QLabel, QHBoxLayout, QVBoxLayout
+        from PySide6.QtCore import Qt
+
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+
+        # === HEADER ===
+        header = QFrame()
+        header.setObjectName(f"pipelineGroupHeader_{group_id}")
+        header.setFixedHeight(36)
+        header.setCursor(Qt.CursorShape.PointingHandCursor)
+        header.setStyleSheet(f"""
+            QFrame#{header.objectName()} {{
+                background-color: {Theme.SURFACE2};
+                border-left: 4px solid {accent_color};
+                border-bottom: 1px solid {Theme.SURFACE0};
+            }}
+            QFrame#{header.objectName()}:hover {{
+                background-color: {Theme.OVERLAY0 if hasattr(Theme, 'OVERLAY0') else Theme.SURFACE2};
+            }}
+            QFrame#{header.objectName()} > * {{ border: none; }}
+        """)
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(8, 4, 12, 4)
+        h_layout.setSpacing(8)
+
+        arrow = QLabel("▼" if expanded else "▶")
+        arrow.setFixedWidth(16)
+        arrow.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 12px; border: none;")
+        h_layout.addWidget(arrow)
+
+        title_lbl = QLabel(f"{icon} {title}")
+        title_lbl.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold; font-size: 12px; border: none;")
+        h_layout.addWidget(title_lbl, stretch=1)
+
+        count_lbl = QLabel(f"{item_count} items")
+        count_lbl.setStyleSheet(f"color: {accent_color}; font-size: 11px; border: none;")
+        h_layout.addWidget(count_lbl)
+
+        container_layout.addWidget(header)
+
+        # === CONTENT ===
+        content_widget.setVisible(expanded)
+        container_layout.addWidget(content_widget)
+
+        # Store ref for toggle
+        if not hasattr(self, '_pipeline_groups'):
+            self._pipeline_groups = {}
+        self._pipeline_groups[group_id] = {
+            'arrow': arrow, 'content': content_widget, 'expanded': expanded,
+        }
+
+        # Click header → toggle
+        def _on_header_click(event, _gid=group_id):
+            self._toggle_pipeline_group(_gid)
+        header.mousePressEvent = _on_header_click
+
+        return container
+
+    def _toggle_pipeline_group(self, group_id: str):
+        """Toggle expand/collapse of a pipeline group."""
+        grp = self._pipeline_groups.get(group_id)
+        if not grp:
+            return
+        expanded = not grp['expanded']
+        grp['expanded'] = expanded
+        grp['content'].setVisible(expanded)
+        grp['arrow'].setText("▼" if expanded else "▶")
+
+    def _get_cached_frame(self, video_path: str) -> str:
+        """Fix 6: Extract first frame with caching to avoid redundant FFmpeg calls.
         
-        Stage 4: Horizontal card scroll (character cards)
-        Stage 5-7: Vertical list with horizontal row cards (thumbnail left + info right)
+        Returns cached frame path if available, otherwise extracts and caches.
+        Eliminates ~200ms FFmpeg subprocess per video on repeated navigation.
+        """
+        import os
+        if not hasattr(self, '_frame_cache'):
+            self._frame_cache = {}
+        if video_path in self._frame_cache:
+            cached = self._frame_cache[video_path]
+            if cached and os.path.isfile(cached):
+                return cached
+        # Extract and cache
+        try:
+            if not hasattr(self, '_frame_extractor'):
+                from core.frame_extractor import FrameExtractor
+                self._frame_extractor = FrameExtractor()
+            if self._frame_extractor.is_available:
+                frame = self._frame_extractor.extract_first_frame(video_path)
+                self._frame_cache[video_path] = frame or ""
+                return frame or ""
+        except Exception:
+            pass
+        self._frame_cache[video_path] = ""
+        return ""
+    
+    def _compute_thumb_fingerprint(self, stage_name: str) -> str:
+        """Fix 7: Compute a lightweight fingerprint of thumbnail-relevant data.
+        
+        Used to skip full widget rebuild when navigating back to an
+        already-rendered stage with unchanged data.
+        """
+        if not self._pipeline:
+            return ""
+        state = self._pipeline.state
+        if stage_name == "scene_breakdown":
+            n = len(state.scenes or [])
+            return f"{stage_name}:s{n}"
+        elif stage_name == "character_gen":
+            chars = state.characters or []
+            n_img = sum(1 for c in chars if c.image_path)
+            return f"{stage_name}:{len(chars)}:{n_img}"
+        elif stage_name == "scene_image_gen":
+            scenes = state.scenes or []
+            n_img = sum(1 for s in scenes if s.image_path)
+            return f"{stage_name}:{len(scenes)}:{n_img}"
+        elif stage_name == "video_gen":
+            scenes = state.scenes or []
+            n_vid = sum(1 for s in scenes if s.video_path)
+            return f"{stage_name}:{len(scenes)}:{n_vid}"
+        elif stage_name == "concat":
+            scenes = state.scenes or []
+            n_vid = sum(1 for s in scenes if s.video_path)
+            has_final = 1 if state.final_video_path else 0
+            return f"{stage_name}:{n_vid}:{has_final}"
+        return f"{stage_name}:unknown"
+    
+    def _update_thumbnails(self, stage_name: str):
+        """Update thumbnail gallery for visual stages (3-7).
+
+        All stages use PipelinePromptTable wrapped in collapsible groups.
         """
         import os
         from PySide6.QtGui import QPixmap
@@ -1038,8 +1247,8 @@ class TabProject(QWidget):
             PipelinePromptTable, PipelinePromptItem,
         )
 
-        visual_stages = {"character_gen", "scene_image_gen", "video_gen", "concat"}
-        list_stages   = {"scene_image_gen", "video_gen", "concat"}
+        visual_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
+        list_stages   = {"scene_breakdown", "scene_image_gen", "video_gen", "concat"}
 
         if stage_name not in visual_stages:
             self._thumb_scroll.setVisible(False)
@@ -1047,6 +1256,18 @@ class TabProject(QWidget):
             self._thumb_scroll.setMinimumHeight(0)
             self._thumb_scroll.setMaximumHeight(100)
             return
+
+        # ── Fix 7: Skip rebuild if same stage already rendered with same data ──
+        new_fp = self._compute_thumb_fingerprint(stage_name)
+        old_fp = getattr(self, '_thumb_data_fingerprint', None)
+        old_stage = getattr(self, '_thumb_current_stage', None)
+        if old_stage == stage_name and old_fp == new_fp and new_fp:
+            # Already showing this exact data — just ensure visible + expandable
+            self._thumb_scroll.setVisible(True)
+            self._thumb_scroll.setMaximumHeight(16777215)
+            return
+        self._thumb_current_stage = stage_name
+        self._thumb_data_fingerprint = new_fp
 
         # ── Rebuild layout direction based on stage type ──
         # Stage 4 = HBox (horizontal cards), Stages 5-7 = VBox (vertical list)
@@ -1065,8 +1286,123 @@ class TabProject(QWidget):
         self._thumb_layout = QVBoxLayout(self._thumb_container)
         self._thumb_layout.setContentsMargins(4, 4, 4, 4)
         self._thumb_layout.setSpacing(6)
+        self._thumb_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         # AN-5: Animated height transition
         self._animate_scroll_height(250, 16777215)
+
+        # ── Stage 3: Scene Breakdown prompts (PipelinePromptTable) ──
+        if stage_name == "scene_breakdown":
+            state = self._pipeline.state if self._pipeline else None
+            stage_obj = self._pipeline.state.get_stage("scene_breakdown") if state else None
+            has_versions = state and state.is_multi_version() and state.versions
+            has_episodes = state and state.is_multi_episode() and state.episodes
+
+            if has_versions and any(v.scenes for v in state.versions):
+                # Multi-version: one collapsible group per version
+                for vi, v in enumerate(state.versions):
+                    if not v.scenes:
+                        continue
+                    items = []
+                    for s in v.scenes:
+                        shot_type = s.description.split('.')[0] if s.description and '.' in s.description else "Scene"
+                        items.append(PipelinePromptItem(
+                            index=s.index,
+                            name=f"🎬 Scene {s.index}\n{shot_type}",
+                            prompt=s.prompt or s.description or "(empty)",
+                            accent_color=Theme.PEACH,
+                        ))
+                    tbl = PipelinePromptTable(accent_color=Theme.PEACH, thumb_size=(1, 1))
+                    tbl.table.setColumnHidden(1, True)
+                    tbl.set_items(items)
+                    grp = self._create_pipeline_group(
+                        f"s3_v{vi}", f"{v.label}", "📌",
+                        len(v.scenes), Theme.PEACH, tbl,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                self._pipeline_prompt_table = None
+            elif has_episodes and any(ep.scenes for ep in state.episodes):
+                # Multi-episode: one collapsible group per episode
+                for ei, ep in enumerate(state.episodes):
+                    if not ep.scenes:
+                        continue
+                    items = []
+                    for s in ep.scenes:
+                        shot_type = s.description.split('.')[0] if s.description and '.' in s.description else "Scene"
+                        items.append(PipelinePromptItem(
+                            index=s.index,
+                            name=f"🎬 Scene {s.index}\n{shot_type}",
+                            prompt=s.prompt or s.description or "(empty)",
+                            accent_color=Theme.PEACH,
+                        ))
+                    tbl = PipelinePromptTable(accent_color=Theme.PEACH, thumb_size=(1, 1))
+                    tbl.table.setColumnHidden(1, True)
+                    tbl.set_items(items)
+                    grp = self._create_pipeline_group(
+                        f"s3_ep{ei}", f"{ep.label}", "📺",
+                        len(ep.scenes), Theme.PEACH, tbl,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                self._pipeline_prompt_table = None
+            else:
+                # Single version: one flat table
+                scenes = state.scenes if state else []
+                raw_prompts = stage_obj.data.get("raw_prompts", "") if stage_obj and stage_obj.data else ""
+                if not scenes and raw_prompts:
+                    # Fallback: parse raw_prompts text into items
+                    import re
+                    blocks = re.split(r'\n---\s*Scene\s+(\d+)\s*---\n', raw_prompts)
+                    items = []
+                    if len(blocks) > 1:
+                        for j in range(1, len(blocks), 2):
+                            idx = int(blocks[j])
+                            prompt = blocks[j + 1].strip() if j + 1 < len(blocks) else ""
+                            items.append(PipelinePromptItem(
+                                index=idx, name=f"🎬 Scene {idx}",
+                                prompt=prompt, accent_color=Theme.PEACH,
+                            ))
+                    else:
+                        # Single block — show as one item
+                        items.append(PipelinePromptItem(
+                            index=1, name="🎬 All Scenes",
+                            prompt=raw_prompts.strip(), accent_color=Theme.PEACH,
+                        ))
+                    self._pipeline_prompt_table = PipelinePromptTable(
+                        accent_color=Theme.PEACH, thumb_size=(1, 1),
+                    )
+                    self._pipeline_prompt_table.table.setColumnHidden(1, True)
+                    self._pipeline_prompt_table.set_items(items)
+                    grp = self._create_pipeline_group(
+                        "s3_single", "Scene Prompts", "📝",
+                        len(items), Theme.PEACH, self._pipeline_prompt_table,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                elif scenes:
+                    items = []
+                    for s in scenes:
+                        shot_type = s.description.split('.')[0] if s.description and '.' in s.description else "Scene"
+                        items.append(PipelinePromptItem(
+                            index=s.index,
+                            name=f"🎬 Scene {s.index}\n{shot_type}",
+                            prompt=s.prompt or s.description or "(empty)",
+                            accent_color=Theme.PEACH,
+                        ))
+                    self._pipeline_prompt_table = PipelinePromptTable(
+                        accent_color=Theme.PEACH, thumb_size=(1, 1),
+                    )
+                    self._pipeline_prompt_table.table.setColumnHidden(1, True)
+                    self._pipeline_prompt_table.set_items(items)
+                    grp = self._create_pipeline_group(
+                        "s3_scenes", "Scene Prompts", "📝",
+                        len(items), Theme.PEACH, self._pipeline_prompt_table,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                else:
+                    lbl = QLabel("⏳ Scene prompts will appear after Stage 3 completes")
+                    lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
+                    self._thumb_layout.addWidget(lbl)
+
+            self._fade_in_thumb_scroll()
+            return
 
         # ── Stage 4: Character prompts (PipelinePromptTable) ──
         if stage_name == "character_gen":
@@ -1079,31 +1415,78 @@ class TabProject(QWidget):
             else:
                 thumb_sz = (60, 60)
 
-            stage_obj = self._pipeline.state.get_stage("character_gen")
-            characters = self._pipeline.state.characters or []
-            char_prompts = stage_obj.prompts or []
+            state = self._pipeline.state
+            has_versions = state.is_multi_version() and state.versions
+            has_episodes = state.is_multi_episode() and state.episodes
 
-            if not characters and not char_prompts:
-                lbl = QLabel("⏳ Character data will appear after Stage 4 completes")
-                lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
-                self._thumb_layout.addWidget(lbl)
-            else:
+            def _build_char_items(chars, char_prompts=None):
                 items = []
-                count = max(len(characters), len(char_prompts))
+                cp = char_prompts or []
+                count = max(len(chars), len(cp))
                 for i in range(count):
-                    char = characters[i] if i < len(characters) else None
-                    prompt = char_prompts[i] if i < len(char_prompts) else (char.prompt if char else "")
+                    char = chars[i] if i < len(chars) else None
+                    prompt = cp[i] if i < len(cp) else (char.prompt if char else "")
                     name = char.name if char else f"Character {i+1}"
                     thumb_path = (char.image_path if char and char.image_path and os.path.isfile(char.image_path) else "")
                     items.append(PipelinePromptItem(
                         index=i + 1, name=f"👤 {name}", prompt=prompt,
                         thumbnail_path=thumb_path, accent_color=Theme.BLUE,
                     ))
-                self._pipeline_prompt_table = PipelinePromptTable(
-                    accent_color=Theme.BLUE, thumb_size=thumb_sz,
-                )
-                self._pipeline_prompt_table.set_items(items)
-                self._thumb_layout.addWidget(self._pipeline_prompt_table)
+                return items
+
+            if has_versions and any(v.characters for v in state.versions):
+                # Multi-version: one group per version
+                for vi, v in enumerate(state.versions):
+                    if not v.characters:
+                        continue
+                    items = _build_char_items(v.characters)
+                    tbl = PipelinePromptTable(accent_color=Theme.BLUE, thumb_size=thumb_sz)
+                    tbl.set_items(items)
+                    label = v.label or f"Version {v.index + 1}"
+                    grp = self._create_pipeline_group(
+                        f"s4_v{vi}", f"👤 {label}", "👤",
+                        len(items), Theme.BLUE, tbl,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                self._pipeline_prompt_table = None
+            elif has_episodes:
+                # Multi-episode: characters are SHARED — show one group
+                chars = state.shared_characters or state.characters or []
+                if chars:
+                    items = _build_char_items(chars)
+                    self._pipeline_prompt_table = PipelinePromptTable(
+                        accent_color=Theme.BLUE, thumb_size=thumb_sz,
+                    )
+                    self._pipeline_prompt_table.set_items(items)
+                    grp = self._create_pipeline_group(
+                        "s4_shared", "Shared Characters", "👤",
+                        len(items), Theme.BLUE, self._pipeline_prompt_table,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                else:
+                    lbl = QLabel("⏳ Character data will appear after Stage 4 completes")
+                    lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
+                    self._thumb_layout.addWidget(lbl)
+            else:
+                # Single project
+                stage_obj = state.get_stage("character_gen")
+                characters = state.characters or []
+                char_prompts = stage_obj.prompts or []
+                if not characters and not char_prompts:
+                    lbl = QLabel("⏳ Character data will appear after Stage 4 completes")
+                    lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
+                    self._thumb_layout.addWidget(lbl)
+                else:
+                    items = _build_char_items(characters, char_prompts)
+                    self._pipeline_prompt_table = PipelinePromptTable(
+                        accent_color=Theme.BLUE, thumb_size=thumb_sz,
+                    )
+                    self._pipeline_prompt_table.set_items(items)
+                    grp = self._create_pipeline_group(
+                        "s4_chars", "Character Prompts", "👤",
+                        len(items), Theme.BLUE, self._pipeline_prompt_table,
+                    )
+                    self._thumb_layout.addWidget(grp)
 
             # AN-1: Fade-in scroll
             self._fade_in_thumb_scroll()
@@ -1120,40 +1503,93 @@ class TabProject(QWidget):
             else:
                 thumb_sz = (70, 70)
 
-            stage_obj = self._pipeline.state.get_stage("scene_image_gen")
-            scene_configs = []
-            if stage_obj.data and isinstance(stage_obj.data, dict):
-                scene_configs = stage_obj.data.get("scene_configs", [])
-            scenes = self._pipeline.state.scenes or []
+            state = self._pipeline.state
+            has_versions = state.is_multi_version() and state.versions
+            has_episodes = state.is_multi_episode() and state.episodes
 
-            if not scene_configs and not scenes:
-                lbl = QLabel("⏳ Scene data will appear after Stage 5 completes")
-                lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
-                self._thumb_layout.addWidget(lbl)
-            else:
+            def _build_scene_img_items(scenes):
                 items = []
-                count = max(len(scene_configs), len(scenes))
-                for i in range(count):
-                    sc = scene_configs[i] if i < len(scene_configs) else {}
-                    scene = scenes[i] if i < len(scenes) else None
-                    idx = sc.get("index", i + 1)
-                    prompt = sc.get("prompt", scene.prompt if scene else "")
-                    mode = sc.get("mode", "T2I")
-                    has_image = scene and scene.image_path and os.path.isfile(scene.image_path)
-                    thumb_path = scene.image_path if has_image else ""
-                    mode_icon = "🖼️" if mode == "I2I" else "✏️"
+                for s in scenes:
+                    has_image = s.image_path and os.path.isfile(s.image_path)
+                    thumb_path = s.image_path if has_image else ""
                     status_icon = "✅" if has_image else "⏳"
                     items.append(PipelinePromptItem(
-                        index=idx,
-                        name=f"{status_icon} Scene {idx}\n{mode_icon} {mode}",
-                        prompt=prompt, thumbnail_path=thumb_path,
+                        index=s.index,
+                        name=f"{status_icon} Scene {s.index}",
+                        prompt=s.prompt or s.description or "(empty)",
+                        thumbnail_path=thumb_path,
                         accent_color=Theme.GREEN,
                     ))
-                self._pipeline_prompt_table = PipelinePromptTable(
-                    accent_color=Theme.GREEN, thumb_size=thumb_sz,
-                )
-                self._pipeline_prompt_table.set_items(items)
-                self._thumb_layout.addWidget(self._pipeline_prompt_table)
+                return items
+
+            if has_versions and any(v.scenes for v in state.versions):
+                for vi, v in enumerate(state.versions):
+                    if not v.scenes:
+                        continue
+                    items = _build_scene_img_items(v.scenes)
+                    tbl = PipelinePromptTable(accent_color=Theme.GREEN, thumb_size=thumb_sz)
+                    tbl.set_items(items)
+                    label = v.label or f"Version {v.index + 1}"
+                    grp = self._create_pipeline_group(
+                        f"s5_v{vi}", f"🖼️ {label}", "🖼️",
+                        len(items), Theme.GREEN, tbl,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                self._pipeline_prompt_table = None
+            elif has_episodes and any(ep.scenes for ep in state.episodes):
+                for ei, ep in enumerate(state.episodes):
+                    if not ep.scenes:
+                        continue
+                    items = _build_scene_img_items(ep.scenes)
+                    tbl = PipelinePromptTable(accent_color=Theme.GREEN, thumb_size=thumb_sz)
+                    tbl.set_items(items)
+                    label = ep.label or f"Tập {ep.index + 1}"
+                    grp = self._create_pipeline_group(
+                        f"s5_ep{ei}", f"🖼️ {label}", "🖼️",
+                        len(items), Theme.GREEN, tbl,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                self._pipeline_prompt_table = None
+            else:
+                # Single project — use stage_obj data or scenes
+                stage_obj = state.get_stage("scene_image_gen")
+                scene_configs = []
+                if stage_obj.data and isinstance(stage_obj.data, dict):
+                    scene_configs = stage_obj.data.get("scene_configs", [])
+                scenes = state.scenes or []
+
+                if not scene_configs and not scenes:
+                    lbl = QLabel("⏳ Scene data will appear after Stage 5 completes")
+                    lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
+                    self._thumb_layout.addWidget(lbl)
+                else:
+                    items = []
+                    count = max(len(scene_configs), len(scenes))
+                    for i in range(count):
+                        sc = scene_configs[i] if i < len(scene_configs) else {}
+                        scene = scenes[i] if i < len(scenes) else None
+                        idx = sc.get("index", i + 1)
+                        prompt = sc.get("prompt", scene.prompt if scene else "")
+                        mode = sc.get("mode", "T2I")
+                        has_image = scene and scene.image_path and os.path.isfile(scene.image_path)
+                        thumb_path = scene.image_path if has_image else ""
+                        mode_icon = "🖼️" if mode == "I2I" else "✏️"
+                        status_icon = "✅" if has_image else "⏳"
+                        items.append(PipelinePromptItem(
+                            index=idx,
+                            name=f"{status_icon} Scene {idx}\n{mode_icon} {mode}",
+                            prompt=prompt, thumbnail_path=thumb_path,
+                            accent_color=Theme.GREEN,
+                        ))
+                    self._pipeline_prompt_table = PipelinePromptTable(
+                        accent_color=Theme.GREEN, thumb_size=thumb_sz,
+                    )
+                    self._pipeline_prompt_table.set_items(items)
+                    grp = self._create_pipeline_group(
+                        "s5_images", "Scene Images", "🖼️",
+                        len(items), Theme.GREEN, self._pipeline_prompt_table,
+                    )
+                    self._thumb_layout.addWidget(grp)
 
             # AN-1: Fade-in scroll
             self._fade_in_thumb_scroll()
@@ -1168,186 +1604,201 @@ class TabProject(QWidget):
             else:
                 thumb_sz = (107, 60)
 
-            stage_obj = self._pipeline.state.get_stage("video_gen")
-            video_configs = []
-            if stage_obj.data and isinstance(stage_obj.data, dict):
-                video_configs = stage_obj.data.get("video_configs", [])
-            scenes = self._pipeline.state.scenes or []
+            state = self._pipeline.state
+            has_versions = state.is_multi_version() and state.versions
+            has_episodes = state.is_multi_episode() and state.episodes
 
-            if not video_configs and not scenes:
-                lbl = QLabel("⏳ Video configs will appear after Stage 6 runs")
-                lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
-                self._thumb_layout.addWidget(lbl)
-            else:
+            def _build_video_items(scenes):
                 items = []
-                for i, vc in enumerate(video_configs):
-                    scene = scenes[i] if i < len(scenes) else None
-                    idx = vc.get("index", i + 1)
-                    prompt = vc.get("prompt", "")
-                    scene_tag = vc.get("scene_tag", f"Scene {idx}")
-                    mode = vc.get("mode", "T2V")
-                    img_path = vc.get("image_path", "")
-                    has_video = scene and scene.video_path and os.path.isfile(scene.video_path)
-                    # Resolve thumbnail: video frame > source image > empty
-                    thumb_path = ""
+                for s in scenes:
+                    has_video = s.video_path and os.path.isfile(s.video_path)
+                    # Image preview from scene image
+                    thumb_path = s.image_path if (s.image_path and os.path.isfile(s.image_path)) else ""
+                    # Video preview from generated video
+                    vid_thumb_path = ""
+                    actual_video_path = ""
                     if has_video:
-                        try:
-                            if not hasattr(self, '_frame_extractor'):
-                                from core.frame_extractor import FrameExtractor
-                                self._frame_extractor = FrameExtractor()
-                            if self._frame_extractor.is_available:
-                                thumb_path = self._frame_extractor.extract_first_frame(scene.video_path) or ""
-                        except Exception:
-                            pass
-                        if not thumb_path:
-                            thumb_path = scene.video_path  # fallback: let PipelinePromptTable try
-                    elif img_path and os.path.isfile(img_path):
-                        thumb_path = img_path
-                    mode_icon = "🎬" if mode == "I2V" else ("📐" if mode == "R2V" else "📹")
+                        actual_video_path = s.video_path
+                        vid_thumb_path = self._get_cached_frame(s.video_path)
+                        if not vid_thumb_path:
+                            vid_thumb_path = s.video_path
                     status_icon = "✅" if has_video else "⏳"
-                    duration = vc.get("duration_s", 8)
                     items.append(PipelinePromptItem(
-                        index=idx,
-                        name=f"{status_icon} {scene_tag}\n{mode_icon} {mode} • {duration}s",
-                        prompt=prompt, thumbnail_path=thumb_path,
+                        index=s.index,
+                        name=f"{status_icon} Scene {s.index}",
+                        prompt=s.prompt or s.description or "(empty)",
+                        thumbnail_path=thumb_path,
+                        video_thumbnail_path=vid_thumb_path,
                         accent_color=Theme.PEACH,
+                        metadata={"video_path": actual_video_path},
                     ))
-                self._pipeline_prompt_table = PipelinePromptTable(
-                    accent_color=Theme.PEACH, thumb_size=thumb_sz,
-                )
-                self._pipeline_prompt_table.set_items(items)
-                self._thumb_layout.addWidget(self._pipeline_prompt_table)
+                return items
+
+            if has_versions and any(v.scenes for v in state.versions):
+                for vi, v in enumerate(state.versions):
+                    if not v.scenes:
+                        continue
+                    items = _build_video_items(v.scenes)
+                    tbl = PipelinePromptTable(
+                        accent_color=Theme.PEACH, thumb_size=thumb_sz,
+                        show_video_preview=True,
+                    )
+                    tbl.set_items(items)
+                    label = v.label or f"Version {v.index + 1}"
+                    grp = self._create_pipeline_group(
+                        f"s6_v{vi}", f"📹 {label}", "📹",
+                        len(items), Theme.PEACH, tbl,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                self._pipeline_prompt_table = None
+            elif has_episodes and any(ep.scenes for ep in state.episodes):
+                for ei, ep in enumerate(state.episodes):
+                    if not ep.scenes:
+                        continue
+                    items = _build_video_items(ep.scenes)
+                    tbl = PipelinePromptTable(
+                        accent_color=Theme.PEACH, thumb_size=thumb_sz,
+                        show_video_preview=True,
+                    )
+                    tbl.set_items(items)
+                    label = ep.label or f"Tập {ep.index + 1}"
+                    grp = self._create_pipeline_group(
+                        f"s6_ep{ei}", f"📹 {label}", "📹",
+                        len(items), Theme.PEACH, tbl,
+                    )
+                    self._thumb_layout.addWidget(grp)
+                self._pipeline_prompt_table = None
+            else:
+                # Single project — use stage_obj data
+                stage_obj = state.get_stage("video_gen")
+                video_configs = []
+                if stage_obj.data and isinstance(stage_obj.data, dict):
+                    video_configs = stage_obj.data.get("video_configs", [])
+                scenes = state.scenes or []
+
+                if not video_configs and not scenes:
+                    lbl = QLabel("⏳ Video configs will appear after Stage 6 runs")
+                    lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
+                    self._thumb_layout.addWidget(lbl)
+                else:
+                    items = []
+                    for i, vc in enumerate(video_configs):
+                        scene = scenes[i] if i < len(scenes) else None
+                        idx = vc.get("index", i + 1)
+                        prompt = vc.get("prompt", "")
+                        scene_tag = vc.get("scene_tag", f"Scene {idx}")
+                        mode = vc.get("mode", "T2V")
+                        img_path = vc.get("image_path", "")
+                        has_video = scene and scene.video_path and os.path.isfile(scene.video_path)
+                        # Image Preview: always show source image
+                        thumb_path = img_path if (img_path and os.path.isfile(img_path)) else ""
+                        # Video Preview: show frame from generated video
+                        vid_thumb_path = ""
+                        actual_video_path = ""
+                        if has_video:
+                            actual_video_path = scene.video_path
+                            vid_thumb_path = self._get_cached_frame(scene.video_path)
+                            if not vid_thumb_path:
+                                vid_thumb_path = scene.video_path  # fallback
+                        mode_icon = "🎬" if mode == "I2V" else ("📐" if mode == "R2V" else "📹")
+                        status_icon = "✅" if has_video else "⏳"
+                        duration = vc.get("duration_s", 8)
+                        items.append(PipelinePromptItem(
+                            index=idx,
+                            name=f"{status_icon} {scene_tag}\n{mode_icon} {mode} • {duration}s",
+                            prompt=prompt, thumbnail_path=thumb_path,
+                            video_thumbnail_path=vid_thumb_path,
+                            accent_color=Theme.PEACH,
+                            metadata={"video_path": actual_video_path},
+                        ))
+                    self._pipeline_prompt_table = PipelinePromptTable(
+                        accent_color=Theme.PEACH, thumb_size=thumb_sz,
+                        show_video_preview=True,
+                    )
+                    self._pipeline_prompt_table.set_items(items)
+                    grp = self._create_pipeline_group(
+                        "s6_videos", "Video Prompts", "📹",
+                        len(items), Theme.PEACH, self._pipeline_prompt_table,
+                    )
+                    self._thumb_layout.addWidget(grp)
 
             # AN-1: Fade-in scroll
             self._fade_in_thumb_scroll()
             return
 
-        # ── Stage 7 (concat): Final video row ──
+        # ── Stage 7 (concat): Final concatenated videos only ──
         if stage_name == "concat":
-            # TH-3: Respect video aspect config instead of hardcoding landscape
             config = self._setup_matrix.get_config() if self._setup_matrix else {}
             vid_aspect = config.get("video_aspect", "LANDSCAPE")
             if vid_aspect == "PORTRAIT":
-                thumb_w, thumb_h = 100, 178
+                thumb_sz = (60, 107)
             else:
-                thumb_w, thumb_h = 178, 100
-            # Collect all scene videos + final
-            items = []
-            for s in (self._pipeline.state.scenes or []):
-                if s.video_path and os.path.isfile(s.video_path):
-                    items.append(("clip", f"Scene {s.index}", s.video_path))
-            vp = self._pipeline.state.final_video_path
-            if vp and os.path.isfile(vp):
-                items.append(("final", "🎬 Final Video", vp))
+                thumb_sz = (107, 60)
 
-            if not items:
-                lbl = QLabel("⏳ Final video will appear after Stage 7 completes")
+            state = self._pipeline.state
+            project_name = (state.topic or "Project").strip().split("\n")[0][:60]
+
+            # Collect final videos based on project type
+            final_videos = []  # [(index, label, video_path)]
+
+            if state.is_multi_version() and state.versions:
+                # Multi-version: each version has its own final video
+                for v in state.versions:
+                    vp = v.final_video_path
+                    if vp and os.path.isfile(vp):
+                        label = v.label or f"Version {v.index + 1}"
+                        final_videos.append((v.index + 1, f"{project_name} — {label}", vp))
+            elif state.is_multi_episode() and state.episodes:
+                # Multi-episode: each episode has its own final video
+                for ep in state.episodes:
+                    vp = ep.final_video_path
+                    if vp and os.path.isfile(vp):
+                        label = ep.label or f"Tập {ep.index + 1}"
+                        final_videos.append((ep.index + 1, f"{project_name} — {label}", vp))
+            else:
+                # Single project: one final video
+                vp = state.final_video_path
+                if vp and os.path.isfile(vp):
+                    final_videos.append((1, project_name, vp))
+
+            if not final_videos:
+                lbl = QLabel("⏳ Video thành phẩm sẽ hiển thị sau khi Stage 7 hoàn tất")
                 lbl.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; padding: 20px;")
-                self._thumb_layout.insertWidget(0, lbl)
+                self._thumb_layout.addWidget(lbl)
             else:
-                for kind, name, path in items:
-                    row = QFrame()
-                    border_color = Theme.GREEN if kind == "final" else Theme.BORDER
-                    bg = Theme.SURFACE0 if kind == "clip" else Theme.SURFACE1
-                    row.setStyleSheet(f"""
-                        QFrame {{
-                            background: {bg};
-                            border: 1px solid {border_color};
-                            border-radius: 6px;
-                        }}
-                    """)
-                    row_layout = QHBoxLayout(row)
-                    row_layout.setContentsMargins(8, 6, 8, 6)
-                    row_layout.setSpacing(10)
-
-                    # Left: Thumbnail (video frame)
-                    thumb_btn = QPushButton()
-                    tw = thumb_w if kind == "clip" else thumb_w + 40
-                    th = thumb_h if kind == "clip" else thumb_h + 20
-                    thumb_btn.setFixedSize(tw, th)
-                    frame_thumb = None
-                    try:
-                        if not hasattr(self, '_frame_extractor'):
-                            from core.frame_extractor import FrameExtractor
-                            self._frame_extractor = FrameExtractor()
-                        if self._frame_extractor.is_available:
-                            frame_thumb = self._frame_extractor.extract_first_frame(path)
-                    except Exception as e:
-                        log.warning(f"[Pipeline] Frame extraction failed: {e}")
-                    if frame_thumb:
-                        pix = QPixmap(frame_thumb).scaled(
-                            tw - 4, th - 4, Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation
-                        )
-                        thumb_btn.setIcon(pix)
-                        thumb_btn.setIconSize(QSize(tw - 4, th - 4))
-                    else:
-                        thumb_btn.setText(f"🎬\n{name}")
-                    thumb_btn.setStyleSheet(f"""
-                        QPushButton {{
-                            background: {Theme.MANTLE};
-                            border: 1px dashed {Theme.OVERLAY0};
-                            border-radius: 4px;
-                            font-size: 14px; color: {Theme.SUBTEXT0};
-                        }}
-                        QPushButton:hover {{ border-color: {Theme.TEAL}; }}  /* TH-5: distinct from Stage 5 */
-                    """)
-                    thumb_btn.setToolTip(f"Click to play: {path}")
-                    fp = path
-                    thumb_btn.clicked.connect(lambda checked=False, p=fp: os.startfile(p))
-                    row_layout.addWidget(thumb_btn)
-
-                    # Right: Info
-                    right_panel = QVBoxLayout()
-                    right_panel.setSpacing(4)
-
-                    icon = "🏁" if kind == "final" else "🎞️"
-                    title_color = Theme.GREEN if kind == "final" else Theme.TEXT
-                    name_lbl = QLabel(f"{icon} {name}")
-                    name_lbl.setStyleSheet(f"""
-                        color: {title_color}; font-weight: bold; font-size: 13px;
-                        background: transparent; border: none;
-                    """)
-                    right_panel.addWidget(name_lbl)
+                items = []
+                for idx, name, path in final_videos:
+                    # Thumbnail from video frame
+                    thumb_path = self._get_cached_frame(path)
 
                     # File info
                     try:
                         size_mb = os.path.getsize(path) / (1024 * 1024)
-                        info_text = f"📁 {os.path.basename(path)}\n💾 {size_mb:.1f} MB"
+                        file_info = f"📁 {os.path.basename(path)}\n💾 {size_mb:.1f} MB"
                     except Exception:
-                        info_text = f"📁 {os.path.basename(path)}"
-                    info_lbl = QLabel(info_text)
-                    info_lbl.setStyleSheet(f"""
-                        color: {Theme.SUBTEXT0}; font-size: 11px;
-                        background: transparent; border: none;
-                    """)
-                    info_lbl.setWordWrap(True)
-                    right_panel.addWidget(info_lbl)
+                        file_info = f"📁 {os.path.basename(path)}"
 
-                    # Play button for final video
-                    if kind == "final":
-                        play_btn = QPushButton("▶️ Play Final Video")
-                        play_btn.setFixedHeight(28)
-                        play_btn.setStyleSheet(f"""
-                            QPushButton {{
-                                background: {Theme.GREEN}; color: {Theme.CRUST};
-                                border: none; border-radius: 4px;
-                                font-weight: bold; font-size: 11px;
-                            }}
-                            QPushButton:hover {{ background: {Theme.TEAL}; }}
-                        """)
-                        play_fp = path
-                        play_btn.clicked.connect(lambda checked=False, p=play_fp: os.startfile(p))
-                        right_panel.addWidget(play_btn)
+                    items.append(PipelinePromptItem(
+                        index=idx,
+                        name=f"🏁 {name}",
+                        prompt=file_info,
+                        thumbnail_path=thumb_path,
+                        accent_color=Theme.GREEN,
+                        metadata={"video_path": path},
+                    ))
+                self._pipeline_prompt_table = PipelinePromptTable(
+                    accent_color=Theme.GREEN, thumb_size=thumb_sz,
+                )
+                self._pipeline_prompt_table.set_items(items)
+                total_label = f"Final Output ({len(items)} video{'s' if len(items) > 1 else ''})"
+                grp = self._create_pipeline_group(
+                    "s7_output", total_label, "🏁",
+                    len(items), Theme.GREEN, self._pipeline_prompt_table,
+                )
+                self._thumb_layout.addWidget(grp)
 
-                    right_panel.addStretch()
-                    row_layout.addLayout(right_panel, stretch=1)
-                    self._thumb_layout.insertWidget(self._thumb_layout.count() - 1, row)
-
-            # AN-1 + AN-2: Fade-in scroll + stagger rows
+            # AN-1: Fade-in scroll
             self._fade_in_thumb_scroll()
-            rows = [self._thumb_layout.itemAt(i).widget() for i in range(self._thumb_layout.count()) if self._thumb_layout.itemAt(i).widget()]
-            self._stagger_fade_cards(rows)
             return
 
         self._thumb_scroll.setVisible(False)
@@ -1399,7 +1850,7 @@ class TabProject(QWidget):
 
         # ── Generate button ──
         if is_full:
-            self._generate_btn.setText("▶️​ Start Pipeline")
+            self._generate_btn.setText("▶️​ Start")
             self._generate_btn.setProperty("variant", "primary")
         else:
             self._generate_btn.setText(t("project_builder.generate"))
@@ -1471,7 +1922,7 @@ class TabProject(QWidget):
             self._pipeline.state.topic = all_topics[0]
             if len(all_topics) > 1:
                 log.info(f"[Pipeline] Multi-topic batch: {len(all_topics)} topics")
-                self._stage_viewer.setPlainText(
+                self._set_viewer_text(
                     f"🎬 Batch mode: {len(all_topics)} topics\n"
                     f"Starting topic 1/{len(all_topics)}: {all_topics[0][:60]}..."
                 )
@@ -1479,14 +1930,14 @@ class TabProject(QWidget):
         # Find next stage (or use forced stage for retry/back)
         next_stage = force_stage or self._pipeline.get_next_stage()
         if not next_stage:
-            self._stage_viewer.setPlainText("✅ Pipeline complete! All stages done.")
+            self._set_viewer_text("✅ Pipeline complete! All stages done.")
             return
 
         self._pipeline_current_stage = next_stage
 
         # Fix 4: Reset dot to yellow (running) — covers retry after red error
         self._stage_dots[next_stage].setStyleSheet(
-            f"QPushButton {{ background-color: {Theme.YELLOW}; color: {Theme.CRUST}; "
+            f"QPushButton {{ background-color: {Theme.YELLOW}; color: black; "
             f"border: 1px solid {Theme.YELLOW}; border-radius: 3px; "
             f"font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
         )
@@ -1494,7 +1945,6 @@ class TabProject(QWidget):
         self._stage_run_btn.setEnabled(False)
         self._stage_run_btn.setText(f"⏳ Running: {next_stage}...")
         self._stage_confirm_btn.setEnabled(False)
-        self._stage_back_btn.setEnabled(False)
         
         # ★ Set pipeline mode active — defers AutoStop during stage transitions
         if self.controller and hasattr(self.controller, 'set_pipeline_mode_active'):
@@ -1505,13 +1955,84 @@ class TabProject(QWidget):
         config["topic"] = self._pipeline.state.topic
 
         # Run async stage in background thread
+        # ★ SAFE cleanup: Never call terminate() — it kills the process!
+        # Instead, detach old thread (let it finish naturally) and start a new one.
+        # Old thread's done signal is silently ignored via _generation_id guard.
+        if hasattr(self, '_stage_thread') and self._stage_thread is not None:
+            old_thread = self._stage_thread
+            if old_thread.isRunning():
+                log.warning(
+                    f"[Pipeline] ⚠️ Previous stage thread still running — "
+                    f"detaching (will finish in background, result discarded)"
+                )
+                # Disconnect signals to prevent old thread from updating UI
+                try:
+                    old_thread.started.disconnect()
+                except (RuntimeError, TypeError):
+                    pass
+                # Let the old thread finish naturally — deleteLater cleans up
+                old_thread.finished.connect(
+                    lambda: log.info("[Pipeline] 🧵 Detached old thread finished (result discarded)")
+                )
+                old_thread.finished.connect(old_thread.deleteLater)
+            else:
+                log.debug(f"[Pipeline] Previous thread already finished (state: {old_thread.isFinished()})")
+        
+        # Increment generation ID — stale done signals (from detached threads) are ignored
+        if not hasattr(self, '_generation_id'):
+            self._generation_id = 0
+        self._generation_id += 1
+        current_gen = self._generation_id
+        
+        log.info(f"[Pipeline] 🧵 Creating new QThread for stage '{next_stage}' (gen={current_gen})")
         self._stage_thread = QThread()
         self._stage_worker_obj = _StageWorker(self._pipeline, next_stage, config)
         self._stage_worker_obj.moveToThread(self._stage_thread)
         self._stage_thread.started.connect(self._stage_worker_obj.run)
-        self._stage_worker_obj.done.connect(self._on_stage_done)
+        # Guard: only process done signal if generation_id matches (not from detached old thread)
+        # ★ THREADING FIX: Use QueuedConnection so _on_stage_done runs on GUI thread.
+        # Lambda forces DirectConnection → UI widgets created on worker thread → crash.
+        self._stage_worker_obj._gen_id = current_gen  # tag worker with generation ID
+        self._stage_worker_obj.done.connect(
+            self._on_stage_done_dispatch, Qt.ConnectionType.QueuedConnection
+        )
         self._stage_worker_obj.done.connect(self._stage_thread.quit)
+        # ★ prevent GC of finished thread — deleteLater cleans up safely
+        self._stage_thread.finished.connect(
+            lambda: log.info(f"[Pipeline] 🧵 QThread for '{next_stage}' finished")
+        )
         self._stage_thread.start()
+
+    def _set_viewer_text(self, text: str, *, reset_scroll: bool = False):
+        """Set stage viewer text while preserving scroll position.
+        
+        Args:
+            text: Content to display
+            reset_scroll: If True, scroll to top (used for new stage results)
+        """
+        if reset_scroll:
+            self._stage_viewer.setPlainText(text)
+            self._stage_viewer.verticalScrollBar().setValue(0)
+        else:
+            vbar = self._stage_viewer.verticalScrollBar()
+            pos = vbar.value()
+            self._stage_viewer.setPlainText(text)
+            # Restore — clamp to new max in case content is shorter
+            vbar.setValue(min(pos, vbar.maximum()))
+
+    def _on_stage_done_dispatch(self, stage_name: str, result_text: str, error: str):
+        """Thread-safe dispatch slot for stage worker done signal.
+        
+        Connected via Qt.QueuedConnection so this always runs on GUI thread.
+        Checks generation-ID staleness before forwarding to _on_stage_done.
+        """
+        # Retrieve generation ID tagged on the worker
+        worker_gen = getattr(self._stage_worker_obj, '_gen_id', -1) if hasattr(self, '_stage_worker_obj') else -1
+        current_gen = getattr(self, '_generation_id', -1)
+        if worker_gen != current_gen:
+            log.info(f"[Pipeline] 🗑️ Stale result from gen={worker_gen} discarded (current={current_gen})")
+            return
+        self._on_stage_done(stage_name, result_text, error)
 
     def _on_stage_done(self, stage_name: str, result_text: str, error: str):
         """Handle stage completion — show result for user review."""
@@ -1522,47 +2043,49 @@ class TabProject(QWidget):
             # Fix 2: Retry label on error
             self._stage_run_btn.setText("🔄 Retry")
             # Fix 12: Ensure viewer is visible for error messages (card stages hide it)
+            self._stage_viewer.setMinimumHeight(120)
+            self._stage_viewer.setMaximumHeight(16777215)
             self._stage_viewer.setVisible(True)
             # UI-4: Hide stale thumbnail gallery on error
             self._thumb_scroll.setVisible(False)
-            self._stage_viewer.setPlainText(f"❌ Stage '{stage_name}' error:\n\n{error}")
+            self._set_viewer_text(f"❌ Stage '{stage_name}' error:\n\n{error}")
             self._stage_dots[stage_name].setStyleSheet(
-                f"QPushButton {{ background-color: {Theme.RED}; color: {Theme.CRUST}; "
+                f"QPushButton {{ background-color: {Theme.RED}; color: black; "
                 f"border-radius: 3px; font-size: 10px; padding: 2px 6px; }}"
             )
             self._update_nav_buttons(stage_name)
             # R5-3 Fix: Reset queue awaiting flag on error so future auto-advance isn't blocked
             self._queue_awaiting_completion = False
         else:
-            self._stage_run_btn.setText("▶️ Start Pipeline")
+            self._stage_run_btn.setText("▶️ Start")
             
             # Stages 4-7: hide text viewer, show only vertical list/cards
-            card_stages = {"character_gen", "scene_image_gen", "video_gen", "concat"}
+            card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
             if stage_name in card_stages:
+                self._stage_viewer.setMaximumHeight(0)
                 self._stage_viewer.setVisible(False)
             else:
+                self._stage_viewer.setMinimumHeight(120)
+                self._stage_viewer.setMaximumHeight(16777215)
                 self._stage_viewer.setVisible(True)
-                self._stage_viewer.setPlainText(result_text)
+                self._set_viewer_text(result_text)
             
             self._stage_confirm_btn.setEnabled(True)
             # AN-4: Flash dot 2x on completion instead of instant color change
             self._stage_dots[stage_name].setStyleSheet(
-                f"QPushButton {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; "
+                f"QPushButton {{ background-color: {Theme.GREEN}; color: black; "
                 f"border-radius: 3px; font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
             )
             self._flash_dot(stage_name)
             self._update_nav_buttons(stage_name)
             self._update_thumbnails(stage_name)
             
-            # Auto-confirm: auto-advance for all stages except concat (needs manual review)
+            # Auto-confirm: auto-advance for ALL stages (including concat)
             config = self._setup_matrix.get_config() if self._setup_matrix else {}
             if config.get("auto_confirm", False):
                 from PySide6.QtCore import QTimer
-                if stage_name == "concat":
-                    log.info(f"[Pipeline] Auto-confirm skipped for 'concat' (needs manual review)")
-                else:
-                    log.info(f"[Pipeline] Auto-confirm triggered for '{stage_name}'")
-                    QTimer.singleShot(500, self._on_stage_confirm)
+                log.info(f"[Pipeline] Auto-confirm triggered for '{stage_name}'")
+                QTimer.singleShot(500, self._on_stage_confirm)
 
     def _trigger_queue_auto_start(self):
         """Trigger auto-start on queue tab after pipeline adds tasks."""
@@ -1627,10 +2150,10 @@ class TabProject(QWidget):
             except Exception:
                 pass
             
-            # 2. Fallback: extract title from Stage 2 Bible text (script_analysis)
+            # 2. Fallback: extract title from Stage 2 Bible text (bible_gen)
             if not name:
                 try:
-                    stage2 = self._pipeline.state.get_stage("script_analysis")
+                    stage2 = self._pipeline.state.get_stage("bible_gen")
                     if stage2 and stage2.data:
                         bible = stage2.data.get("bible", "") or stage2.data.get("text", "")
                         if bible:
@@ -1748,19 +2271,56 @@ class TabProject(QWidget):
             log.debug(f"[Pipeline] Existing folder scan failed: {e}")
             return ""
 
+    def _ensure_pipeline_scenes_linked(self):
+        """Defensive: re-link state.scenes to the active version/episode.
+        
+        After session restore, state.scenes may be a stale copy disconnected
+        from version.scenes. This method ensures they share the same reference,
+        preventing stages 5/6/7 from seeing empty image_path/video_path.
+        """
+        if not self._pipeline:
+            return
+        state = self._pipeline.state
+        if state.versions and state.current_version_idx < len(state.versions):
+            v = state.versions[state.current_version_idx]
+            if state.scenes is not v.scenes:
+                log.warning(
+                    f"[Pipeline] ★ scenes reference mismatch detected! "
+                    f"Re-linking state.scenes → version[{state.current_version_idx}].scenes "
+                    f"({len(v.scenes)} scenes, {sum(1 for s in v.scenes if s.video_path)} with video)"
+                )
+                state.scenes = v.scenes
+        elif state.episodes and state.current_episode_idx < len(state.episodes):
+            ep = state.episodes[state.current_episode_idx]
+            if state.scenes is not ep.scenes:
+                log.warning(
+                    f"[Pipeline] ★ scenes reference mismatch detected! "
+                    f"Re-linking state.scenes → episode[{state.current_episode_idx}].scenes"
+                )
+                state.scenes = ep.scenes
+    
     def _on_stage_confirm(self):
         """User confirms current stage result — parse edits, save to disk, advance."""
         if not self._pipeline or not self._pipeline_current_stage:
             return
+        
+        # ★ Defensive: ensure state.scenes is linked to active version/episode
+        self._ensure_pipeline_scenes_linked()
+        
+        # ★ Reset queue flag — manual confirm supersedes any pending queue state.
+        # Without this, stale _queue_awaiting_completion=True from prior stages
+        # blocks auto-advance (e.g. Stage 6 → Stage 7 concat never runs).
+        self._queue_awaiting_completion = False
         
         # Fix 1: Parse edited JSON correctly
         edited_data = self._parse_edited_stage_data()
         self._pipeline.confirm_stage(self._pipeline_current_stage, edited_data)
         self._stage_confirm_btn.setEnabled(False)
         
-        # ── Save stage output to disk ──
+        # ── Save stage output to disk (async to avoid blocking GUI) ──
         self._save_stage_to_disk(self._pipeline_current_stage)
-        self._save_session_to_disk()  # Full session save for resume
+        # Session save is already called inside _save_stage_to_disk
+        # (via _save_session_to_disk_async for non-blocking I/O)
         
         # Check if prompts stage → auto-feed to parsed panel
         if self._pipeline_current_stage == "scene_breakdown" and self._pipeline.state.scenes:
@@ -1773,194 +2333,425 @@ class TabProject(QWidget):
         # Stage 4-6: Send to VEO queue on confirm + track group_id for progress
         cur = self._pipeline_current_stage
         log.info(f"[Pipeline] Confirm: stage='{cur}', controller={'YES' if self.controller else 'NO'}")
+        import os  # Needed for os.path.isfile in multiple branches below
         
         if cur == "character_gen" and self.controller:
-            # Read edited prompts from character card UI (if available)
-            if hasattr(self, '_pipeline_prompt_table') and self._pipeline_prompt_table:
-                edited = self._pipeline_prompt_table.get_edited_prompts()
-                if edited:
-                    edited_prompts = [text for _, text in edited if text]
-                    if edited_prompts:
-                        stage_obj = self._pipeline.state.get_stage("character_gen")
-                        stage_obj.prompts = edited_prompts
-                        stage_obj.data["character_prompts"] = edited_prompts
-                    log.info(f"[Pipeline] Stage 4: Updated {len(edited_prompts)} prompts from card UI edits")
-            
-            stage_obj = self._pipeline.state.get_stage("character_gen")
-            prompts = stage_obj.prompts or []
-            log.info(f"[Pipeline] Stage 4 prompts: {len(prompts)} found (from stage.prompts)")
-            if not prompts:
-                # Fallback: try data dict
-                prompts = stage_obj.data.get("character_prompts", [])
-                log.info(f"[Pipeline] Stage 4 fallback from data: {len(prompts)} found")
-            if prompts:
-                config = self._setup_matrix.get_config() if self._setup_matrix else {}
-                # Build project name: prefer AI title, fallback to topic, sanitize for Windows
-                project_name = self._get_sanitized_project_name(config)
-                settings = {
-                    "model": config.get("image_model", "GEM_PIX_2"),
-                    "aspect_ratio": "PORTRAIT",  # Always PORTRAIT for character portraits
-                    "download_quality": config.get("image_quality", "2k"),
-                    "outputs_per_prompt": config.get("image_outputs", 1),
-                    "output_folder": config.get("output_folder", ""),
-                    "project_name": f"{project_name}/character",
-                }
-                if hasattr(self.controller, "add_t2i_batch"):
-                    group_id = self.controller.add_t2i_batch(prompts=prompts, settings=settings)
-                    log.info(f"[Pipeline] Stage 4: Sent {len(prompts)} T2I character prompts to queue (group={group_id})")
-                    if group_id:
-                        self._start_queue_polling(group_id, "character_gen")
-                        self._trigger_queue_auto_start()
-                    else:
-                        log.warning("[Pipeline] Stage 4: add_t2i_batch returned empty group_id!")
-                else:
-                    log.warning("[Pipeline] Stage 4: controller has no add_t2i_batch method!")
-            else:
-                log.warning("[Pipeline] Stage 4: No character prompts available to send!")
-        elif cur == "scene_image_gen" and self.controller:
-            stage_obj = self._pipeline.state.get_stage("scene_image_gen")
-            stage_data = stage_obj.data or {}
-            configs = stage_data.get("scene_configs", [])
-            
-            # Read edited prompts from scene card UI (if available)
-            if hasattr(self, '_pipeline_prompt_table') and self._pipeline_prompt_table:
-                edited = self._pipeline_prompt_table.get_edited_prompts()
-                if edited:
-                    edited_prompts = [text for _, text in edited if text]
-                    if edited_prompts:
-                        for i, ep in enumerate(edited_prompts):
-                            if i < len(configs):
-                                configs[i]["prompt"] = ep
-                        stage_obj.prompts = edited_prompts
-                        log.info(f"[Pipeline] Stage 5: Updated {len(edited_prompts)} prompts from table UI edits")
-            
-            prompts = [c["prompt"] for c in configs if c.get("prompt")]
-            log.info(f"[Pipeline] Stage 5 prompts: {len(prompts)} from scene_configs")
-            if prompts:
-                config = self._setup_matrix.get_config() if self._setup_matrix else {}
-                project_name = self._get_sanitized_project_name(config)
-                settings = {
-                    "model": config.get("image_model", "GEM_PIX_2"),
-                    "aspect_ratio": config.get("image_aspect", config.get("video_aspect", "LANDSCAPE")),
-                    "download_quality": config.get("image_quality", "2k"),
-                    "outputs_per_prompt": config.get("image_outputs", 1),
-                    "output_folder": config.get("output_folder", ""),
-                    "project_name": f"{project_name}/scenes",
-                }
-                # Build per-prompt image map from scene_configs (per-scene matching)
-                # _stage_scene_image_gen already matched character names to each scene's prompt
-                per_prompt_ref = {}
-                for i, cfg in enumerate(configs):
-                    cfg_refs = cfg.get("reference_images", [])
-                    valid_refs = [r for r in cfg_refs if r and os.path.isfile(r)]
-                    if valid_refs:
-                        per_prompt_ref[i] = valid_refs
-                
-                if per_prompt_ref:
-                    settings["per_prompt_images"] = per_prompt_ref
-                    log.info(f"[Pipeline] Stage 5: {len(per_prompt_ref)}/{len(configs)} scenes with per-scene char refs")
-                else:
-                    # Fallback: all character images for all scenes (no per-scene match available)
-                    ref_images = []
-                    for c in (self._pipeline.state.characters or []):
-                        if c.image_path and os.path.isfile(c.image_path):
-                            ref_images.append(c.image_path)
-                    if ref_images:
-                        settings["reference_images"] = ref_images
-                        log.info(f"[Pipeline] Stage 5: {len(ref_images)} character ref images for I2I (fallback: all chars)")
-                
-                if hasattr(self.controller, "add_t2i_batch"):
-                    group_id = self.controller.add_t2i_batch(prompts=prompts, settings=settings)
-                    log.info(f"[Pipeline] Stage 5: Sent {len(prompts)} scene prompts to queue (group={group_id})")
-                    if group_id:
-                        self._start_queue_polling(group_id, "scene_image_gen")
-                        self._trigger_queue_auto_start()
-        elif cur == "video_gen" and self.controller:
-            stage_data = self._pipeline.state.get_stage("video_gen").data or {}
-            configs = stage_data.get("video_configs", [])
-            
-            # Read edited prompts from video card UI (if available)
-            if hasattr(self, '_pipeline_prompt_table') and self._pipeline_prompt_table:
-                edited = self._pipeline_prompt_table.get_edited_prompts()
-                if edited:
-                    for idx, text in edited:
-                        ci = idx - 1  # PipelinePromptItem.index is 1-based
-                        if text and 0 <= ci < len(configs):
-                            configs[ci]["prompt"] = text
-                    log.info(f"[Pipeline] Stage 6: Updated prompts from table UI edits")
-            
-            prompts = [c["prompt"] for c in configs if c.get("prompt")]
-            log.info(f"[Pipeline] Stage 6 prompts: {len(prompts)} from video_configs")
-            if prompts:
-                config = self._setup_matrix.get_config() if self._setup_matrix else {}
-                project_name = self._get_sanitized_project_name(config)
-                settings = {
-                    "model": config.get("video_model", "Veo 3.1 - Fast"),
-                    "aspect_ratio": config.get("video_aspect", "LANDSCAPE"),
-                    "download_quality": config.get("video_quality", "1080p"),
-                    "duration": config.get("clip_duration", 8),
-                    "outputs_per_prompt": config.get("video_outputs", 1),
-                    "output_folder": config.get("output_folder", ""),
-                    "project_name": f"{project_name}/video",
-                }
-                # R4-2 Fix: Pass voice_enabled from pipeline stage data to engine
-                stage_data = self._pipeline.state.get_stage("video_gen").data if self._pipeline else {}
-                settings["voice_enabled"] = stage_data.get("voice_enabled", config.get("voice_enabled", True))
-                # Route: per-scene I2V (scene image) or R2V (char images from Stage 4)
-                from config.constants import WorkflowType
-                scenes = self._pipeline.state.scenes if self._pipeline else []
-                char_images = []
-                for c in (self._pipeline.state.characters or []):
-                    if c.image_path and os.path.isfile(c.image_path):
-                        char_images.append(c.image_path)
-                
-                per_prompt_images = {}
-                per_prompt_workflows = {}
-                i2v_count = 0
-                r2v_count = 0
-                t2v_count = 0
-                for i, s in enumerate(scenes):
-                    if i >= len(prompts):
-                        break
-                    if s.image_path and os.path.isfile(s.image_path):
-                        # Scene has Stage 5 image → I2V (image as start frame)
-                        per_prompt_images[i] = [s.image_path]
-                        per_prompt_workflows[i] = "I2V"
-                        i2v_count += 1
-                    elif char_images:
-                        # No scene image, but have character refs → R2V
-                        per_prompt_images[i] = char_images
-                        per_prompt_workflows[i] = "R2V"
-                        r2v_count += 1
-                    else:
-                        # No images at all → T2V
-                        per_prompt_workflows[i] = "T2V"
-                        t2v_count += 1
-                
+            # ── Smart routing: check if character images already exist ──
+            characters = self._pipeline.state.characters or []
+            chars_with_images = [c for c in characters if c.image_path and os.path.isfile(c.image_path)]
+            if characters and len(chars_with_images) == len(characters):
+                # All characters have image files → skip queue, advance
                 log.info(
-                    f"[Pipeline] Stage 6 routing: {i2v_count} I2V, "
-                    f"{r2v_count} R2V, {t2v_count} T2V out of {len(prompts)} prompts"
+                    f"[Pipeline] Stage 4: All {len(characters)} characters have images. "
+                    f"Skipping queue → advancing to next stage."
                 )
-                
-                if per_prompt_images:
-                    group_id = self.controller.submit_prompts(
-                        prompts=prompts,
-                        workflow=WorkflowType.I2V,  # default, overridden per-task
-                        per_prompt_images=per_prompt_images,
-                        per_prompt_workflows=per_prompt_workflows,
-                        settings=settings,
+                # Don't set _queue_awaiting_completion — let auto-advance proceed below
+            else:
+                if chars_with_images:
+                    log.info(
+                        f"[Pipeline] Stage 4: {len(chars_with_images)}/{len(characters)} "
+                        f"characters have images. Sending missing prompts to queue."
                     )
-                    log.info(f"[Pipeline] Stage 6: Sent {len(prompts)} mixed-workflow prompts (group={group_id})")
-                elif hasattr(self.controller, "add_t2v_batch"):
-                    # Final fallback: T2V (no images at all)
-                    group_id = self.controller.add_t2v_batch(prompts=prompts, settings=settings)
-                    log.info(f"[Pipeline] Stage 6: Sent {len(prompts)} T2V prompts (no images) (group={group_id})")
+                # Read edited prompts from character card UI (if available)
+                if hasattr(self, '_pipeline_prompt_table') and self._pipeline_prompt_table:
+                    edited = self._pipeline_prompt_table.get_edited_prompts()
+                    if edited:
+                        edited_prompts = [text for _, text in edited if text]
+                        if edited_prompts:
+                            stage_obj = self._pipeline.state.get_stage("character_gen")
+                            stage_obj.prompts = edited_prompts
+                            stage_obj.data["character_prompts"] = edited_prompts
+                        log.info(f"[Pipeline] Stage 4: Updated {len(edited_prompts)} prompts from card UI edits")
+                
+                stage_obj = self._pipeline.state.get_stage("character_gen")
+                prompts = stage_obj.prompts or []
+                log.info(f"[Pipeline] Stage 4 prompts: {len(prompts)} found (from stage.prompts)")
+                if not prompts:
+                    # Fallback: try data dict
+                    prompts = stage_obj.data.get("character_prompts", [])
+                    log.info(f"[Pipeline] Stage 4 fallback from data: {len(prompts)} found")
+                if prompts:
+                    config = self._setup_matrix.get_config() if self._setup_matrix else {}
+                    # Build project name: prefer AI title, fallback to topic, sanitize for Windows
+                    project_name = self._get_sanitized_project_name(config)
+                    settings = {
+                        "model": config.get("image_model", "GEM_PIX_2"),
+                        "aspect_ratio": "LANDSCAPE",  # 16:9 — character turnaround sheet needs horizontal layout (4 views)
+                        "download_quality": config.get("image_quality", "2k"),
+                        "outputs_per_prompt": config.get("image_outputs", 1),
+                        "output_folder": config.get("output_folder", ""),
+                        "project_name": f"{project_name}/character",
+                    }
+                    if hasattr(self.controller, "add_t2i_batch"):
+                        group_id = self.controller.add_t2i_batch(prompts=prompts, settings=settings)
+                        log.info(f"[Pipeline] Stage 4: Sent {len(prompts)} T2I character prompts to queue (group={group_id})")
+                        if group_id:
+                            self._start_queue_polling(group_id, "character_gen")
+                            self._trigger_queue_auto_start()
+                        else:
+                            log.warning("[Pipeline] Stage 4: add_t2i_batch returned empty group_id!")
+                    else:
+                        log.warning("[Pipeline] Stage 4: controller has no add_t2i_batch method!")
                 else:
-                    group_id = None
-                    log.warning("[Pipeline] Stage 6: No suitable controller method available")
-                if group_id:
-                    self._start_queue_polling(group_id, "video_gen")
-                    self._trigger_queue_auto_start()
+                    log.warning("[Pipeline] Stage 4: No character prompts available to send!")
+        elif cur == "scene_image_gen" and self.controller:
+            state = self._pipeline.state
+            config = self._setup_matrix.get_config() if self._setup_matrix else {}
+            project_name = self._get_sanitized_project_name(config)
+            
+            # ── Multi-Version: create one group per version ──
+            if state.is_multi_version() and state.versions and len(state.versions) > 1:
+                # Check if ALL versions' scenes have images already
+                all_have_images = True
+                for v in state.versions:
+                    v_scenes = v.scenes or []
+                    missing = [s for s in v_scenes if not (s.image_path and os.path.isfile(s.image_path))]
+                    if missing:
+                        all_have_images = False
+                        break
+                
+                if all_have_images:
+                    log.info(f"[Pipeline] Stage 5: All {len(state.versions)} versions have scene images → skipping queue")
+                else:
+                    group_version_map = {}  # {group_id: version_idx}
+                    saved_vi = state.current_version_idx  # Save active version
+                    
+                    for vi, version in enumerate(state.versions):
+                        state.activate_version(vi)
+                        v_scenes = state.scenes or []
+                        if not v_scenes:
+                            log.warning(f"[Pipeline] Stage 5: {version.label} has no scenes → skipping")
+                            continue
+                        
+                        # Check which scenes still need images
+                        need_images = [s for s in v_scenes if not (s.image_path and os.path.isfile(s.image_path))]
+                        if not need_images:
+                            log.info(f"[Pipeline] Stage 5: {version.label} — all {len(v_scenes)} scenes have images → skip")
+                            continue
+                        
+                        # Build prompts from stage data for this version
+                        prompts = [s.prompt or s.description or f"Scene {s.index}" for s in v_scenes if s.prompt or s.description]
+                        if not prompts:
+                            continue
+                        
+                        v_settings = {
+                            "model": config.get("image_model", "GEM_PIX_2"),
+                            "aspect_ratio": config.get("image_aspect", config.get("video_aspect", "LANDSCAPE")),
+                            "download_quality": config.get("image_quality", "2k"),
+                            "outputs_per_prompt": config.get("image_outputs", 1),
+                            "output_folder": config.get("output_folder", ""),
+                            "project_name": f"{project_name}/scenes/{version.label}",
+                        }
+                        
+                        # Character ref images (shared across versions)
+                        ref_images = []
+                        for c in (state.characters or []):
+                            if c.image_path and os.path.isfile(c.image_path):
+                                ref_images.append(c.image_path)
+                        if ref_images:
+                            v_settings["reference_images"] = ref_images
+                        
+                        if hasattr(self.controller, "add_t2i_batch"):
+                            group_id = self.controller.add_t2i_batch(prompts=prompts, settings=v_settings)
+                            if group_id:
+                                group_version_map[group_id] = vi
+                                log.info(
+                                    f"[Pipeline] Stage 5: {version.label} → "
+                                    f"{len(prompts)} prompts → group={group_id}"
+                                )
+                    
+                    # Restore original active version
+                    state.activate_version(saved_vi)
+                    
+                    if group_version_map:
+                        self._start_multi_group_polling(group_version_map, "scene_image_gen")
+                        self._trigger_queue_auto_start()
+                        log.info(
+                            f"[Pipeline] Stage 5: Created {len(group_version_map)} version groups "
+                            f"for parallel scene image generation"
+                        )
+            else:
+                # ── Single version (original logic) ──
+                scenes = state.scenes or []
+                scenes_with_images = [s for s in scenes if s.image_path and os.path.isfile(s.image_path)]
+                if scenes and len(scenes_with_images) == len(scenes):
+                    log.info(
+                        f"[Pipeline] Stage 5: All {len(scenes)} scenes have images. "
+                        f"Skipping queue → advancing to next stage."
+                    )
+                else:
+                    if scenes_with_images:
+                        log.info(
+                            f"[Pipeline] Stage 5: {len(scenes_with_images)}/{len(scenes)} "
+                            f"scenes have images. Sending missing prompts to queue."
+                        )
+                    stage_obj = state.get_stage("scene_image_gen")
+                    stage_data = stage_obj.data or {}
+                    configs = stage_data.get("scene_configs", [])
+                    
+                    # Read edited prompts from scene card UI (if available)
+                    if hasattr(self, '_pipeline_prompt_table') and self._pipeline_prompt_table:
+                        edited = self._pipeline_prompt_table.get_edited_prompts()
+                        if edited:
+                            edited_prompts = [text for _, text in edited if text]
+                            if edited_prompts:
+                                for i, ep in enumerate(edited_prompts):
+                                    if i < len(configs):
+                                        configs[i]["prompt"] = ep
+                                stage_obj.prompts = edited_prompts
+                                log.info(f"[Pipeline] Stage 5: Updated {len(edited_prompts)} prompts from table UI edits")
+                    
+                    prompts = [c["prompt"] for c in configs if c.get("prompt")]
+                    log.info(f"[Pipeline] Stage 5 prompts: {len(prompts)} from scene_configs")
+                    if prompts:
+                        settings = {
+                            "model": config.get("image_model", "GEM_PIX_2"),
+                            "aspect_ratio": config.get("image_aspect", config.get("video_aspect", "LANDSCAPE")),
+                            "download_quality": config.get("image_quality", "2k"),
+                            "outputs_per_prompt": config.get("image_outputs", 1),
+                            "output_folder": config.get("output_folder", ""),
+                            "project_name": f"{project_name}/scenes",
+                        }
+                        # Build per-prompt image map from scene_configs (per-scene matching)
+                        per_prompt_ref = {}
+                        for i, cfg in enumerate(configs):
+                            cfg_refs = cfg.get("reference_images", [])
+                            valid_refs = [r for r in cfg_refs if r and os.path.isfile(r)]
+                            if valid_refs:
+                                per_prompt_ref[i] = valid_refs
+                        
+                        if per_prompt_ref:
+                            settings["per_prompt_images"] = per_prompt_ref
+                            log.info(f"[Pipeline] Stage 5: {len(per_prompt_ref)}/{len(configs)} scenes with per-scene char refs")
+                        else:
+                            ref_images = []
+                            for c in (state.characters or []):
+                                if c.image_path and os.path.isfile(c.image_path):
+                                    ref_images.append(c.image_path)
+                            if ref_images:
+                                settings["reference_images"] = ref_images
+                                log.info(f"[Pipeline] Stage 5: {len(ref_images)} character ref images for I2I (fallback: all chars)")
+                        
+                        if hasattr(self.controller, "add_t2i_batch"):
+                            group_id = self.controller.add_t2i_batch(prompts=prompts, settings=settings)
+                            log.info(f"[Pipeline] Stage 5: Sent {len(prompts)} scene prompts to queue (group={group_id})")
+                            if group_id:
+                                self._start_queue_polling(group_id, "scene_image_gen")
+                                self._trigger_queue_auto_start()
+        elif cur == "video_gen" and self.controller:
+            state = self._pipeline.state
+            config = self._setup_matrix.get_config() if self._setup_matrix else {}
+            project_name = self._get_sanitized_project_name(config)
+            
+            # ── Multi-Version: create one group per version ──
+            if state.is_multi_version() and state.versions and len(state.versions) > 1:
+                # Check if ALL versions' scenes have videos already
+                all_have_videos = True
+                for v in state.versions:
+                    v_scenes = v.scenes or []
+                    missing = [s for s in v_scenes if not (s.video_path and os.path.isfile(s.video_path))]
+                    if missing:
+                        all_have_videos = False
+                        break
+                
+                if all_have_videos:
+                    log.info(f"[Pipeline] Stage 6: All {len(state.versions)} versions have videos → skipping queue")
+                else:
+                    from config.constants import WorkflowType
+                    group_version_map = {}  # {group_id: version_idx}
+                    saved_vi = state.current_version_idx
+                    
+                    # Base settings shared across versions
+                    base_settings = {
+                        "model": config.get("video_model", "Veo 3.1 - Fast"),
+                        "aspect_ratio": config.get("video_aspect", "LANDSCAPE"),
+                        "download_quality": config.get("video_quality", "1080p"),
+                        "duration": config.get("clip_duration", 8),
+                        "outputs_per_prompt": config.get("video_outputs", 1),
+                        "output_folder": config.get("output_folder", ""),
+                    }
+                    stage_data_global = state.get_stage("video_gen").data or {}
+                    base_settings["voice_enabled"] = stage_data_global.get(
+                        "voice_enabled", config.get("voice_enabled", True)
+                    )
+                    
+                    # Shared character images (from Stage 4)
+                    char_images = []
+                    for c in (state.characters or []):
+                        if c.image_path and os.path.isfile(c.image_path):
+                            char_images.append(c.image_path)
+                    
+                    for vi, version in enumerate(state.versions):
+                        state.activate_version(vi)
+                        v_scenes = state.scenes or []
+                        if not v_scenes:
+                            log.warning(f"[Pipeline] Stage 6: {version.label} has no scenes → skipping")
+                            continue
+                        
+                        # Check which scenes still need videos
+                        need_videos = [s for s in v_scenes if not (s.video_path and os.path.isfile(s.video_path))]
+                        if not need_videos:
+                            log.info(f"[Pipeline] Stage 6: {version.label} — all {len(v_scenes)} scenes have videos → skip")
+                            continue
+                        
+                        # Build prompts from scenes
+                        prompts = [s.prompt or s.description or f"Scene {s.index}" for s in v_scenes if s.prompt or s.description]
+                        if not prompts:
+                            continue
+                        
+                        v_settings = dict(base_settings)
+                        v_settings["project_name"] = f"{project_name}/video/{version.label}"
+                        
+                        # Per-version I2V / R2V / T2V routing
+                        per_prompt_images = {}
+                        per_prompt_workflows = {}
+                        i2v_count = r2v_count = t2v_count = 0
+                        for i, s in enumerate(v_scenes):
+                            if i >= len(prompts):
+                                break
+                            if s.image_path and os.path.isfile(s.image_path):
+                                per_prompt_images[i] = [s.image_path]
+                                per_prompt_workflows[i] = "I2V"
+                                i2v_count += 1
+                            elif char_images:
+                                per_prompt_images[i] = char_images
+                                per_prompt_workflows[i] = "R2V"
+                                r2v_count += 1
+                            else:
+                                per_prompt_workflows[i] = "T2V"
+                                t2v_count += 1
+                        
+                        log.info(
+                            f"[Pipeline] Stage 6 {version.label}: "
+                            f"{i2v_count} I2V, {r2v_count} R2V, {t2v_count} T2V "
+                            f"out of {len(prompts)} prompts"
+                        )
+                        
+                        group_id = None
+                        if per_prompt_images:
+                            group_id = self.controller.submit_prompts(
+                                prompts=prompts,
+                                workflow=WorkflowType.I2V,
+                                per_prompt_images=per_prompt_images,
+                                per_prompt_workflows=per_prompt_workflows,
+                                settings=v_settings,
+                            )
+                        elif hasattr(self.controller, "add_t2v_batch"):
+                            group_id = self.controller.add_t2v_batch(prompts=prompts, settings=v_settings)
+                        
+                        if group_id:
+                            group_version_map[group_id] = vi
+                            log.info(
+                                f"[Pipeline] Stage 6: {version.label} → "
+                                f"{len(prompts)} prompts → group={group_id}"
+                            )
+                    
+                    # Restore original active version
+                    state.activate_version(saved_vi)
+                    
+                    if group_version_map:
+                        self._start_multi_group_polling(group_version_map, "video_gen")
+                        self._trigger_queue_auto_start()
+                        log.info(
+                            f"[Pipeline] Stage 6: Created {len(group_version_map)} version groups "
+                            f"for parallel video generation"
+                        )
+            else:
+                # ── Single version (original logic) ──
+                scenes = state.scenes or []
+                videos_exist = [s for s in scenes if s.video_path and os.path.isfile(s.video_path)]
+                if scenes and len(videos_exist) == len(scenes):
+                    log.info(
+                        f"[Pipeline] Stage 6: All {len(scenes)} scenes have video files. "
+                        f"Skipping queue → advancing to concat."
+                    )
+                else:
+                    if videos_exist:
+                        log.info(
+                            f"[Pipeline] Stage 6: {len(videos_exist)}/{len(scenes)} scenes "
+                            f"have videos. Re-sending missing prompts to queue."
+                        )
+                    
+                    stage_data = state.get_stage("video_gen").data or {}
+                    configs = stage_data.get("video_configs", [])
+                    
+                    # Read edited prompts from video card UI (if available)
+                    if hasattr(self, '_pipeline_prompt_table') and self._pipeline_prompt_table:
+                        edited = self._pipeline_prompt_table.get_edited_prompts()
+                        if edited:
+                            for idx, text in edited:
+                                ci = idx - 1  # PipelinePromptItem.index is 1-based
+                                if text and 0 <= ci < len(configs):
+                                    configs[ci]["prompt"] = text
+                            log.info(f"[Pipeline] Stage 6: Updated prompts from table UI edits")
+                    
+                    prompts = [c["prompt"] for c in configs if c.get("prompt")]
+                    log.info(f"[Pipeline] Stage 6 prompts: {len(prompts)} from video_configs")
+                    if prompts:
+                        settings = {
+                            "model": config.get("video_model", "Veo 3.1 - Fast"),
+                            "aspect_ratio": config.get("video_aspect", "LANDSCAPE"),
+                            "download_quality": config.get("video_quality", "1080p"),
+                            "duration": config.get("clip_duration", 8),
+                            "outputs_per_prompt": config.get("video_outputs", 1),
+                            "output_folder": config.get("output_folder", ""),
+                            "project_name": f"{project_name}/video",
+                        }
+                        # R4-2 Fix: Pass voice_enabled from pipeline stage data to engine
+                        stage_data = state.get_stage("video_gen").data if self._pipeline else {}
+                        settings["voice_enabled"] = stage_data.get("voice_enabled", config.get("voice_enabled", True))
+                        # Route: per-scene I2V (scene image) or R2V (char images from Stage 4)
+                        from config.constants import WorkflowType
+                        scenes = state.scenes if self._pipeline else []
+                        char_images = []
+                        for c in (state.characters or []):
+                            if c.image_path and os.path.isfile(c.image_path):
+                                char_images.append(c.image_path)
+                        
+                        per_prompt_images = {}
+                        per_prompt_workflows = {}
+                        i2v_count = 0
+                        r2v_count = 0
+                        t2v_count = 0
+                        for i, s in enumerate(scenes):
+                            if i >= len(prompts):
+                                break
+                            if s.image_path and os.path.isfile(s.image_path):
+                                per_prompt_images[i] = [s.image_path]
+                                per_prompt_workflows[i] = "I2V"
+                                i2v_count += 1
+                            elif char_images:
+                                per_prompt_images[i] = char_images
+                                per_prompt_workflows[i] = "R2V"
+                                r2v_count += 1
+                            else:
+                                per_prompt_workflows[i] = "T2V"
+                                t2v_count += 1
+                        
+                        log.info(
+                            f"[Pipeline] Stage 6 routing: {i2v_count} I2V, "
+                            f"{r2v_count} R2V, {t2v_count} T2V out of {len(prompts)} prompts"
+                        )
+                        
+                        if per_prompt_images:
+                            group_id = self.controller.submit_prompts(
+                                prompts=prompts,
+                                workflow=WorkflowType.I2V,  # default, overridden per-task
+                                per_prompt_images=per_prompt_images,
+                                per_prompt_workflows=per_prompt_workflows,
+                                settings=settings,
+                            )
+                            log.info(f"[Pipeline] Stage 6: Sent {len(prompts)} mixed-workflow prompts (group={group_id})")
+                        elif hasattr(self.controller, "add_t2v_batch"):
+                            # Final fallback: T2V (no images at all)
+                            group_id = self.controller.add_t2v_batch(prompts=prompts, settings=settings)
+                            log.info(f"[Pipeline] Stage 6: Sent {len(prompts)} T2V prompts (no images) (group={group_id})")
+                        else:
+                            group_id = None
+                            log.warning("[Pipeline] Stage 6: No suitable controller method available")
+                        if group_id:
+                            self._start_queue_polling(group_id, "video_gen")
+                            self._trigger_queue_auto_start()
 
         # Auto-advance AND auto-run next stage
         # BUT: if we just started queue polling, defer advance to _on_queue_group_complete
@@ -1970,16 +2761,224 @@ class TabProject(QWidget):
         
         next_stage = self._pipeline.get_next_stage()
         if next_stage:
-            self._stage_viewer.setPlainText(
+            self._set_viewer_text(
                 f"✅ Stage '{self._pipeline_current_stage}' confirmed.\n\n"
                 f"⏳ Auto-running: {next_stage}..."
             )
             from PySide6.QtCore import QTimer
             QTimer.singleShot(300, self._run_pipeline_stage)
         else:
-            # All stages complete for current topic
+            # All stages complete for current version/episode
+            # Check if there are more versions/episodes to process
+            if self._advance_to_next_version_or_episode():
+                return  # Started next version/episode
             self._advance_to_next_topic()
     
+    # ── Multi-Version / Episode Advance ────────────────────────
+    
+    def _advance_to_next_version_or_episode(self) -> bool:
+        """Check for more versions/episodes and advance if available.
+        
+        Returns True if started a new version/episode, False if all done.
+        
+        Flow:
+        - Feature A/C (versions): after Stage 7 done → save current version →
+          activate next → reset stages 2-7 → run from Stage 2
+        - Feature B (episodes): after Stage 7 done → save current episode →
+          activate next (shared chars) → reset stages 3-7 → run from Stage 3
+          (skip Stage 4 since characters are shared)
+        """
+        if not self._pipeline:
+            return False
+        
+        state = self._pipeline.state
+        from core.production_pipeline import STAGE_ORDER, StageStatus
+        
+        # ── Multi-Version (Feature A/C) ──
+        if state.is_multi_version() and state.versions:
+            current_vi = state.current_version_idx
+            total_v = len(state.versions)
+            
+            if current_vi < total_v - 1:
+                # Save current version's results
+                state.save_active_version()
+                next_vi = current_vi + 1
+                next_v = state.versions[next_vi]
+                
+                log.info(
+                    f"[Pipeline] Version {current_vi + 1}/{total_v} complete. "
+                    f"Starting {next_v.label} ({next_vi + 1}/{total_v})"
+                )
+                
+                # Activate next version
+                state.activate_version(next_vi)
+                
+                # Reset stages 2-7 for next version (Stage 1 is shared)
+                for sn in STAGE_ORDER[1:]:  # Skip duration_estimate (Stage 1)
+                    sr = state.get_stage(sn)
+                    sr.status = StageStatus.PENDING
+                    sr.data = {}
+                    sr.error = ""
+                    sr.prompts = []
+                    sr.scenes = []
+                    sr.characters = []
+                
+                # Reset UI dots
+                for sn in STAGE_ORDER[1:]:
+                    if sn in self._stage_dots:
+                        self._stage_dots[sn].setStyleSheet(f"""
+                            QPushButton {{
+                                background-color: {Theme.SURFACE1};
+                                color: {Theme.SUBTEXT0};
+                                border: 1px solid {Theme.BORDER};
+                                border-radius: 3px;
+                                font-size: 10px; padding: 2px 6px;
+                            }}
+                        """)
+                
+                # Update state to re-run from Stage 2
+                state.current_stage = STAGE_ORDER[1]  # bible_gen
+                
+                # Show progress
+                self._set_viewer_text(
+                    f"🎬 {next_v.label} ({next_vi + 1}/{total_v})\n\n"
+                    f"⏳ Generating Bible & prompts for version {next_vi + 1}...\n"
+                    f"Topic: {state.topic[:100]}..."
+                )
+                
+                # Update version label on UI
+                self._update_version_label(next_v.label, next_vi + 1, total_v)
+                
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(500, self._run_pipeline_stage)
+                return True
+        
+        # ── Multi-Episode (Feature B) ──
+        if state.is_multi_episode() and state.episodes:
+            current_ei = state.current_episode_idx
+            total_e = len(state.episodes)
+            
+            if current_ei < total_e - 1:
+                # Save current episode's results
+                state.save_active_episode()
+                next_ei = current_ei + 1
+                next_ep = state.episodes[next_ei]
+                
+                log.info(
+                    f"[Pipeline] {state.episodes[current_ei].label} complete. "
+                    f"Starting {next_ep.label} ({next_ei + 1}/{total_e})"
+                )
+                
+                # Activate next episode (shared characters)
+                state.activate_episode(next_ei)
+                
+                # Reset stages 3-7 for next episode (Stage 1-2 shared, Stage 4 skipped)
+                # BUT: keep Stage 4 (character_gen) as-is since chars are shared
+                for sn in STAGE_ORDER[2:]:  # scene_breakdown onwards
+                    if sn == "character_gen":
+                        continue  # Skip — characters shared across episodes
+                    sr = state.get_stage(sn)
+                    sr.status = StageStatus.PENDING
+                    sr.data = {}
+                    sr.error = ""
+                    sr.prompts = []
+                    sr.scenes = []
+                
+                # Reset UI dots for stages 3-7 (except Stage 4)
+                for sn in STAGE_ORDER[2:]:
+                    if sn == "character_gen":
+                        continue
+                    if sn in self._stage_dots:
+                        self._stage_dots[sn].setStyleSheet(f"""
+                            QPushButton {{
+                                background-color: {Theme.SURFACE1};
+                                color: {Theme.SUBTEXT0};
+                                border: 1px solid {Theme.BORDER};
+                                border-radius: 3px;
+                                font-size: 10px; padding: 2px 6px;
+                            }}
+                        """)
+                
+                # Mark Stage 4 as already confirmed/complete (chars shared)
+                s4 = state.get_stage("character_gen")
+                s4.status = StageStatus.CONFIRMED
+                
+                # Re-run from Stage 3 (scene_breakdown)
+                state.current_stage = "scene_breakdown"
+                
+                self._set_viewer_text(
+                    f"📺 {next_ep.label} ({next_ei + 1}/{total_e})\n\n"
+                    f"⏳ Generating scenes for episode {next_ei + 1}...\n"
+                    f"Characters: shared from episode 1\n"
+                    f"Topic: {state.topic[:100]}..."
+                )
+                
+                self._update_version_label(next_ep.label, next_ei + 1, total_e)
+                
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(500, self._run_pipeline_stage)
+                return True
+        
+        return False
+    
+    def _update_version_label(self, label: str, current: int, total: int):
+        """Update the stage dot area with version/episode progress indicator."""
+        pass  # Label removed — progress is shown in group headers
+    
+    def _populate_version_selector(self):
+        """Stub — version selector and progress label removed."""
+        pass
+    
+    def _on_version_selector_changed(self, index: int):
+        """Handle version/episode selector change — debounced to prevent freeze on rapid clicks.
+        
+        _show_stage_review → _update_thumbnails rebuilds many QWidgets which is heavy.
+        A 150ms debounce ensures only the LAST selection is processed.
+        """
+        if index < 0 or not self._pipeline:
+            return
+        
+        # Debounce: cancel previous pending timer, start new one
+        if not hasattr(self, '_version_debounce_timer'):
+            from PySide6.QtCore import QTimer
+            self._version_debounce_timer = QTimer(self)
+            self._version_debounce_timer.setSingleShot(True)
+            self._version_debounce_timer.timeout.connect(self._apply_version_change)
+        
+        self._version_pending_index = index
+        self._version_debounce_timer.start(150)  # ms
+    
+    def _apply_version_change(self):
+        """Apply the debounced version/episode switch."""
+        index = getattr(self, '_version_pending_index', -1)
+        if index < 0 or not self._pipeline:
+            return
+        
+        state = self._pipeline.state
+        
+        if state.is_multi_version() and state.versions:
+            if index != state.current_version_idx:
+                state.save_active_version()
+                state.activate_version(index)
+                v = state.versions[index]
+                log.info(f"[Pipeline] UI: Switched to {v.label} (idx={index})")
+                self._update_version_label(v.label, index + 1, len(state.versions))
+        elif state.is_multi_episode() and state.episodes:
+            if index != state.current_episode_idx:
+                state.save_active_episode()
+                state.activate_episode(index)
+                ep = state.episodes[index]
+                log.info(f"[Pipeline] UI: Switched to {ep.label} (idx={index})")
+                self._update_version_label(ep.label, index + 1, len(state.episodes))
+        
+        # Refresh the current stage display
+        if self._pipeline_current_stage:
+            self._show_stage_review(self._pipeline_current_stage)
+    
+    def _hide_version_selector(self):
+        """Stub — version progress label removed."""
+        pass
+
     # ── Multi-Topic Batch Advance ────────────────────────────────
     
     def _advance_to_next_topic(self):
@@ -1994,7 +2993,7 @@ class TabProject(QWidget):
         from core.production_pipeline import StageStatus
         has_error = False
         if self._pipeline:
-            for sn in ["duration_estimate", "script_analysis", "scene_breakdown",
+            for sn in ["duration_estimate", "bible_gen", "scene_breakdown",
                        "character_gen", "scene_image_gen", "video_gen", "concat"]:
                 sr = self._pipeline.state.get_stage(sn)
                 if sr.status == StageStatus.ERROR:
@@ -2040,7 +3039,7 @@ class TabProject(QWidget):
                 """)
             
             # Show transition message
-            self._stage_viewer.setPlainText(
+            self._set_viewer_text(
                 f"✅ Topic {idx + 1}/{len(topics)} complete: {current_topic[:50]}\n\n"
                 f"⏳ Starting topic {next_idx + 1}/{len(topics)}:\n"
                 f"{next_topic[:100]}..."
@@ -2065,7 +3064,7 @@ class TabProject(QWidget):
                 icon = "✅" if success else "❌"
                 summary_lines.append(f"  {icon} {i+1}. {topic[:60]}")
             
-            self._stage_viewer.setPlainText("\n".join(summary_lines))
+            self._set_viewer_text("\n".join(summary_lines))
             log.info(f"[Pipeline] Batch complete: {ok}/{total} topics OK")
             # ★ Pipeline fully done — allow AutoStop
             if self.controller and hasattr(self.controller, 'set_pipeline_mode_active'):
@@ -2080,6 +3079,9 @@ class TabProject(QWidget):
         
         Tracks progress, populates image_path/video_path from results,
         and auto-advances pipeline when group finishes.
+        
+        For single-group stages (character_gen) or single-version.
+        For multi-version stages, use _start_multi_group_polling() instead.
         """
         from PySide6.QtCore import QTimer
         
@@ -2089,17 +3091,22 @@ class TabProject(QWidget):
         
         self._queue_poll_group_id = group_id
         self._queue_poll_stage = stage_name
+        self._queue_poll_multi_groups = None  # Single-group mode
         self._queue_awaiting_completion = True  # Block auto-advance until queue finishes
+        self._populated_tasks = set()  # Dedup: skip already-processed tasks on subsequent polls
         # Notify controller to defer auto-stop during pipeline queue processing
         if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
             self.controller.set_pipeline_queue_active(True)
         self._queue_poll_timer = QTimer(self)
-        self._queue_poll_timer.setInterval(2000)  # 2 seconds
+        # Fix 5: Visual stages with thumbnails → poll less frequently to reduce UI rebuild load
+        visual_poll_stages = {"scene_image_gen", "video_gen", "concat"}
+        interval = 4000 if stage_name in visual_poll_stages else 2000
+        self._queue_poll_timer.setInterval(interval)
         self._queue_poll_timer.timeout.connect(self._check_queue_progress)
         self._queue_poll_timer.start()
         
         log.info(f"[Pipeline] Started queue polling for group={group_id}, stage={stage_name}")
-        self._stage_viewer.setPlainText(
+        self._set_viewer_text(
             f"⏳ Queue Processing: 0/? tasks\n"
             f"Stage: {stage_name}\n"
             f"Group: {group_id}\n\n"
@@ -2107,17 +3114,78 @@ class TabProject(QWidget):
             f"Switch to Queue tab to see detailed progress."
         )
     
+    def _start_multi_group_polling(self, group_version_map: dict, stage_name: str):
+        """Start polling for MULTIPLE queue groups simultaneously.
+        
+        Used by multi-version Stages 5 & 6 — each version creates its own
+        queue group, all processed in parallel.
+        
+        Args:
+            group_version_map: {group_id: version_idx, ...}
+            stage_name: "scene_image_gen" or "video_gen"
+        """
+        from PySide6.QtCore import QTimer
+        
+        if hasattr(self, '_queue_poll_timer') and self._queue_poll_timer:
+            self._queue_poll_timer.stop()
+        
+        self._queue_poll_group_id = None  # Not single-group mode
+        self._queue_poll_stage = stage_name
+        # Multi-group tracking: {group_id: {"version_idx": int, "done": False}}
+        self._queue_poll_multi_groups = {
+            gid: {"version_idx": vi, "done": False}
+            for gid, vi in group_version_map.items()
+        }
+        self._queue_awaiting_completion = True
+        self._populated_tasks = set()  # Dedup: skip already-processed tasks on subsequent polls
+        if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
+            self.controller.set_pipeline_queue_active(True)
+        
+        self._queue_poll_timer = QTimer(self)
+        # Fix 5: Visual stages with thumbnails → poll less frequently to reduce UI rebuild load
+        visual_poll_stages = {"scene_image_gen", "video_gen", "concat"}
+        interval = 4000 if stage_name in visual_poll_stages else 2000
+        self._queue_poll_timer.setInterval(interval)
+        self._queue_poll_timer.timeout.connect(self._check_queue_progress)
+        self._queue_poll_timer.start()
+        
+        version_labels = []
+        if self._pipeline and self._pipeline.state.versions:
+            for gid, vi in group_version_map.items():
+                if vi < len(self._pipeline.state.versions):
+                    version_labels.append(self._pipeline.state.versions[vi].label)
+        
+        log.info(
+            f"[Pipeline] Started MULTI-GROUP polling for {len(group_version_map)} groups, "
+            f"stage={stage_name}, versions={list(group_version_map.values())}"
+        )
+        self._set_viewer_text(
+            f"⏳ Queue Processing: {len(group_version_map)} version groups\n"
+            f"Stage: {stage_name}\n"
+            f"Versions: {', '.join(version_labels) or str(list(group_version_map.values()))}\n\n"
+            f"Waiting for VEO engine to process all groups in parallel...\n"
+            f"Switch to Queue tab to see detailed progress."
+        )
+    
     def _check_queue_progress(self):
-        """Poll controller for queue group status, update UI."""
-        if not hasattr(self, '_queue_poll_group_id') or not self.controller:
+        """Poll controller for queue group status, update UI.
+        
+        Supports both single-group and multi-group modes.
+        """
+        if not self.controller or not hasattr(self.controller, 'get_group_status'):
+            return
+        
+        # ── Multi-group mode ──
+        if getattr(self, '_queue_poll_multi_groups', None):
+            self._check_multi_group_progress()
+            return
+        
+        # ── Single-group mode (original logic) ──
+        if not hasattr(self, '_queue_poll_group_id') or not self._queue_poll_group_id:
             return
         
         group_id = self._queue_poll_group_id
         stage_name = self._queue_poll_stage
-        
-        if not hasattr(self.controller, 'get_group_status'):
-            log.warning("[Pipeline] Controller missing get_group_status method")
-            return
         
         try:
             status = self.controller.get_group_status(group_id)
@@ -2134,7 +3202,7 @@ class TabProject(QWidget):
         
         # Update stage viewer with progress
         progress_bar = "█" * completed + "░" * (total - completed - failed) + "✗" * failed
-        self._stage_viewer.setPlainText(
+        self._set_viewer_text(
             f"⏳ Queue Processing: {completed}/{total} completed"
             f"{f', {failed} failed' if failed else ''}\n"
             f"Stage: {stage_name}\n"
@@ -2143,34 +3211,171 @@ class TabProject(QWidget):
             f"Switch to Queue tab for detailed progress."
         )
         
-        # Populate paths from completed tasks
+        # Populate paths from completed tasks (dedup — skip already-processed)
+        # Key = (task_id, best_file) so force-retry with new output is re-processed
+        _dedup = getattr(self, '_populated_tasks', set())
         for task_info in status.get("completed_tasks", []):
+            _tid = task_info.get("task_id", "")
+            _bf = task_info.get("best_file", "")
+            _key = (_tid, _bf)
+            if _tid and _key in _dedup:
+                continue
             self._populate_path_from_task(stage_name, task_info)
+            if _tid:
+                _dedup.add(_key)
         
         # Debounce: only update thumbnails if completed count changed
         prev_completed = getattr(self, '_queue_poll_prev_completed', -1)
         if completed != prev_completed:
             self._queue_poll_prev_completed = completed
-            self._update_thumbnails(stage_name)
+            # Fix 1: Throttle thumbnail rebuilds to max 1x/5s during queue polling
+            self._throttled_update_thumbnails(stage_name)
+            # Incremental save every 5 completions — prevents video_path loss on crash
+            # Fix 2: Use async save to avoid blocking GUI thread
+            if completed > 0 and completed % 5 == 0:
+                self._save_session_to_disk_async()
         
         # Check if group is done
         if status.get("is_done"):
             self._queue_poll_timer.stop()
             self._queue_awaiting_completion = False  # Unblock auto-advance
             log.info(f"[Pipeline] Queue group {group_id} completed: {completed}/{total} OK, {failed} failed")
+            # ★ Subscribe to TASK_COMPLETED events for late force-retry detection
+            self._subscribe_late_completion(group_id, stage_name)
             self._on_queue_group_complete(stage_name, status)
     
-    def _populate_path_from_task(self, stage_name: str, task_info: dict):
-        """Populate pipeline state paths from a completed queue task."""
+    def _check_multi_group_progress(self):
+        """Poll ALL groups in multi-group mode. Advance when ALL complete."""
+        stage_name = self._queue_poll_stage
+        groups = self._queue_poll_multi_groups
+        
+        total_completed = 0
+        total_failed = 0
+        total_tasks = 0
+        all_done = True
+        version_lines = []
+        
+        for gid, info in groups.items():
+            vi = info["version_idx"]
+            if info["done"]:
+                # Already completed — skip re-query
+                continue
+            
+            try:
+                status = self.controller.get_group_status(gid)
+            except Exception as e:
+                log.warning(f"[Pipeline] Multi-group poll error for {gid}: {e}")
+                all_done = False
+                continue
+            
+            if not status:
+                all_done = False
+                continue
+            
+            c, f, t = status["completed"], status["failed"], status["total"]
+            total_completed += c
+            total_failed += f
+            total_tasks += t
+            
+            # Populate paths — version-aware (dedup — skip already-processed)
+            # Key = (task_id, best_file) so force-retry with new output is re-processed
+            _dedup = getattr(self, '_populated_tasks', set())
+            for task_info in status.get("completed_tasks", []):
+                _tid = task_info.get("task_id", "")
+                _bf = task_info.get("best_file", "")
+                _key = (_tid, _bf)
+                if _tid and _key in _dedup:
+                    continue
+                self._populate_path_from_task(
+                    stage_name, task_info, version_idx=vi
+                )
+                if _tid:
+                    _dedup.add(_key)
+            
+            # Version label
+            v_label = f"V{vi+1}"
+            if self._pipeline and self._pipeline.state.versions:
+                if vi < len(self._pipeline.state.versions):
+                    v_label = self._pipeline.state.versions[vi].label
+            
+            if status.get("is_done"):
+                info["done"] = True
+                version_lines.append(f"  ✅ {v_label}: {c}/{t} done{f', {f} failed' if f else ''}")
+                self._subscribe_late_completion(gid, stage_name)
+                log.info(f"[Pipeline] Multi-group: {v_label} (group={gid}) completed: {c}/{t} OK, {f} failed")
+            else:
+                all_done = False
+                bar = "█" * c + "░" * (t - c - f) + "✗" * f
+                version_lines.append(f"  ⏳ {v_label}: [{bar}] {c}/{t}")
+        
+        # Update UI
+        self._set_viewer_text(
+            f"⏳ Multi-Version Queue: {total_completed}/{total_tasks} completed"
+            f"{f', {total_failed} failed' if total_failed else ''}\n"
+            f"Stage: {stage_name}\n\n"
+            + "\n".join(version_lines)
+            + "\n\nSwitch to Queue tab for detailed progress."
+        )
+        
+        # Debounce thumbnails
+        prev = getattr(self, '_queue_poll_prev_completed', -1)
+        if total_completed != prev:
+            self._queue_poll_prev_completed = total_completed
+            # Fix 1: Throttle thumbnail rebuilds to max 1x/5s during queue polling
+            self._throttled_update_thumbnails(stage_name)
+            # Fix 2: Use async save to avoid blocking GUI thread
+            if total_completed > 0 and total_completed % 5 == 0:
+                self._save_session_to_disk_async()
+        
+        # ALL groups done → advance
+        if all_done:
+            self._queue_poll_timer.stop()
+            self._queue_poll_multi_groups = None
+            self._queue_awaiting_completion = False
+            log.info(
+                f"[Pipeline] ALL {len(groups)} version groups completed for {stage_name}: "
+                f"{total_completed}/{total_tasks} OK, {total_failed} failed"
+            )
+            # Build aggregated status for _on_queue_group_complete
+            agg_status = {
+                "completed": total_completed,
+                "failed": total_failed,
+                "total": total_tasks,
+                "is_done": True,
+            }
+            self._on_queue_group_complete(stage_name, agg_status)
+    
+    def _populate_path_from_task(self, stage_name: str, task_info: dict, version_idx: int = None):
+        """Populate pipeline state paths from a completed queue task.
+        
+        Allows overwrite: force retry in Queue tab will update stale paths.
+        
+        Args:
+            stage_name: Pipeline stage name
+            task_info: Task completion info from get_group_status()
+            version_idx: If provided, map to version's scenes instead of active state.scenes
+        """
         idx = task_info.get("prompt_index", 0)
         best_file = task_info.get("best_file", "")
         if not best_file:
             return
         
+        # Resolve scenes list — version-aware for multi-group
+        def _get_scenes():
+            """Get the right scenes list for this version."""
+            if version_idx is not None and self._pipeline and self._pipeline.state.versions:
+                versions = self._pipeline.state.versions
+                if version_idx < len(versions):
+                    return versions[version_idx].scenes
+            return self._pipeline.state.scenes
+        
         if stage_name == "character_gen":
             chars = self._pipeline.state.characters
             if idx < len(chars):
-                if not chars[idx].image_path:  # Don't overwrite
+                old_path = chars[idx].image_path
+                if old_path and old_path != best_file:
+                    log.info(f"[Pipeline] ♻️ character[{idx}].image_path OVERWRITTEN (force retry): {old_path} → {best_file}")
+                if True:  # Always overwrite — supports force retry
                     char_name = chars[idx].name
                     final_path = best_file
                     
@@ -2185,9 +3390,14 @@ class TabProject(QWidget):
                             if dest.exists() and dest != src:
                                 # Append index to avoid collision
                                 dest = src.parent / f"{safe_name}_{idx}{src.suffix}"
-                            src.rename(dest)
-                            final_path = str(dest)
-                            log.info(f"[Pipeline] Renamed char image: {src.name} → {dest.name}")
+                            if not src.exists() and dest.exists():
+                                # Already renamed by previous poll — use dest
+                                final_path = str(dest)
+                                log.debug(f"[Pipeline] Char image already renamed: {dest.name}")
+                            else:
+                                src.rename(dest)
+                                final_path = str(dest)
+                                log.info(f"[Pipeline] Renamed char image: {src.name} → {dest.name}")
                         except Exception as e:
                             log.warning(f"[Pipeline] Could not rename char image: {e}")
                     
@@ -2211,9 +3421,13 @@ class TabProject(QWidget):
                         except Exception as e:
                             log.warning(f"[Pipeline] ImageLibrary registration failed: {e}")
         elif stage_name == "scene_image_gen":
-            scenes = self._pipeline.state.scenes
+            scenes = _get_scenes()
+            v_label = f" (V{version_idx+1})" if version_idx is not None else ""
             if idx < len(scenes):
-                if not scenes[idx].image_path:
+                old_path = scenes[idx].image_path
+                if old_path and old_path != best_file:
+                    log.info(f"[Pipeline] ♻️ scene[{idx}]{v_label}.image_path OVERWRITTEN: {old_path} → {best_file}")
+                if True:  # Always overwrite — supports force retry
                     scene = scenes[idx]
                     final_path = best_file
                     
@@ -2229,14 +3443,19 @@ class TabProject(QWidget):
                     try:
                         if dest.exists() and dest != src:
                             dest = src.parent / f"{safe_name}_{idx}{src.suffix}"
-                        src.rename(dest)
-                        final_path = str(dest)
-                        log.info(f"[Pipeline] Renamed scene image: {src.name} → {dest.name}")
+                        if not src.exists() and dest.exists():
+                            # Already renamed by previous poll — use dest
+                            final_path = str(dest)
+                            log.debug(f"[Pipeline] Scene image already renamed: {dest.name}")
+                        else:
+                            src.rename(dest)
+                            final_path = str(dest)
+                            log.info(f"[Pipeline] Renamed scene image: {src.name} → {dest.name}")
                     except Exception as e:
                         log.warning(f"[Pipeline] Could not rename scene image: {e}")
                     
                     scenes[idx].image_path = final_path
-                    log.info(f"[Pipeline] ← scene[{idx}].image_path = {final_path}")
+                    log.info(f"[Pipeline] ← scene[{idx}]{v_label}.image_path = {final_path}")
                     
                     # Register in ImageLibrary for [tag] auto-resolution in Stage 6
                     try:
@@ -2254,27 +3473,186 @@ class TabProject(QWidget):
                     except Exception as e:
                         log.warning(f"[Pipeline] Scene ImageLibrary registration failed: {e}")
         elif stage_name == "video_gen":
-            scenes = self._pipeline.state.scenes
+            scenes = _get_scenes()
+            v_label = f" (V{version_idx+1})" if version_idx is not None else ""
             if idx < len(scenes):
-                if not scenes[idx].video_path:
-                    scenes[idx].video_path = best_file
-                    log.info(f"[Pipeline] ← scene[{idx}].video_path = {best_file}")
+                old_path = scenes[idx].video_path
+                if old_path and old_path != best_file:
+                    log.info(f"[Pipeline] ♻️ scene[{idx}]{v_label}.video_path OVERWRITTEN: {old_path} → {best_file}")
+                scenes[idx].video_path = best_file
+                log.info(f"[Pipeline] ← scene[{idx}]{v_label}.video_path = {best_file}")
+    
+    def _subscribe_late_completion(self, group_id: str, stage_name: str):
+        """Subscribe to TASK_COMPLETED events for force-retry detection.
+        
+        After group polling stops (is_done=True), force-retried tasks
+        can still complete later. This event listener catches those
+        late completions and updates pipeline state + thumbnails.
+        """
+        from core.event_manager import get_event_manager, EventType
+        
+        # Avoid duplicate subscriptions
+        if hasattr(self, '_late_completion_cb') and self._late_completion_cb:
+            get_event_manager().unsubscribe(EventType.TASK_COMPLETED, self._late_completion_cb)
+        
+        def _on_late_task_completed(event):
+            """Handle TASK_COMPLETED event for force-retried tasks."""
+            task_id = event.data.get("task_id", "")
+            if not task_id or not self._pipeline:
+                return
+            # Check if this task belongs to our pipeline group
+            if not task_id.startswith(group_id):
+                return
+            
+            log.info(f"[Pipeline] 🔄 Late TASK_COMPLETED detected: {task_id} (force retry?)")
+            
+            # Re-query group status to get updated best_file
+            if not self.controller or not hasattr(self.controller, 'get_group_status'):
+                return
+            try:
+                status = self.controller.get_group_status(group_id)
+                if not status:
+                    return
+                for task_info in status.get("completed_tasks", []):
+                    if task_info.get("task_id") == task_id:
+                        self._populate_path_from_task(stage_name, task_info)
+                        # Refresh thumbnails on UI thread
+                        from PySide6.QtCore import QMetaObject, Qt
+                        QMetaObject.invokeMethod(
+                            self, "_update_thumbnails_safe",
+                            Qt.ConnectionType.QueuedConnection,
+                        )
+                        break
+            except Exception as e:
+                log.warning(f"[Pipeline] Late completion handler error: {e}")
+        
+        self._late_completion_cb = _on_late_task_completed
+        self._late_completion_group_id = group_id
+        self._late_completion_stage = stage_name
+        get_event_manager().subscribe(EventType.TASK_COMPLETED, _on_late_task_completed)
+        log.info(f"[Pipeline] ★ Subscribed to late TASK_COMPLETED for group={group_id}")
+    
+    def _unsubscribe_late_completion(self):
+        """Unsubscribe from TASK_COMPLETED events (called on pipeline reset)."""
+        if hasattr(self, '_late_completion_cb') and self._late_completion_cb:
+            from core.event_manager import get_event_manager, EventType
+            get_event_manager().unsubscribe(EventType.TASK_COMPLETED, self._late_completion_cb)
+            self._late_completion_cb = None
+            log.info("[Pipeline] ★ Unsubscribed from late TASK_COMPLETED")
+    
+    from PySide6.QtCore import Slot
+    @Slot()
+    def _update_thumbnails_safe(self):
+        """Thread-safe wrapper to refresh thumbnails from event callback."""
+        stage = getattr(self, '_late_completion_stage', None)
+        if stage:
+            self._update_thumbnails(stage)
+    
+    # ── Fix 1: Throttled thumbnail rebuild ──────────────────────
+    
+    def _throttled_update_thumbnails(self, stage_name: str):
+        """Throttle thumbnail rebuilds to max once per 5s during queue polling.
+        
+        Prevents main-thread freeze from destroying/creating hundreds of widgets
+        every 2-4s when queue tasks complete in rapid succession.
+        """
+        import time
+        now = time.monotonic()
+        last = getattr(self, '_thumb_last_rebuild', 0.0)
+        if now - last < 5.0:
+            # Schedule one deferred rebuild if none pending
+            if not getattr(self, '_thumb_deferred', False):
+                self._thumb_deferred = True
+                from PySide6.QtCore import QTimer
+                remain_ms = int((5.0 - (now - last)) * 1000) + 100
+                QTimer.singleShot(remain_ms, lambda: self._deferred_thumb_rebuild(stage_name))
+            return
+        self._thumb_last_rebuild = now
+        self._thumb_deferred = False
+        self._update_thumbnails(stage_name)
+    
+    def _deferred_thumb_rebuild(self, stage_name: str):
+        """Execute deferred thumbnail rebuild after throttle window expires."""
+        import time
+        self._thumb_last_rebuild = time.monotonic()
+        self._thumb_deferred = False
+        self._update_thumbnails(stage_name)
+    
+    # ── Fix 2: Async session save ───────────────────────────────
+    
+    def _save_session_to_disk_async(self):
+        """Non-blocking version: snapshots state on main thread, writes file on bg thread.
+        
+        Used in queue polling paths where blocking the GUI is unacceptable.
+        The sync _save_session_to_disk() is still used on explicit user actions
+        (skip, queue-group-complete) where data integrity is critical.
+        """
+        import threading
+        if not self._pipeline:
+            return
+        
+        # Snapshot data on main thread (fast dict copy)
+        try:
+            session_data = self._pipeline.state.to_session_dict()
+            session_data["_ui"] = {
+                "pipeline_current_stage": self._pipeline_current_stage or "",
+                "viewer_text": self._stage_viewer.toPlainText() if hasattr(self, '_stage_viewer') else "",
+            }
+        except Exception as e:
+            log.warning(f"[Pipeline] Session snapshot failed: {e}")
+            return
+        
+        output_folder = ""
+        if hasattr(self, '_setup_matrix') and hasattr(self._setup_matrix, 'output_folder'):
+            output_folder = self._setup_matrix.output_folder.text().strip()
+        if not output_folder:
+            return
+        
+        config = self._setup_matrix.get_config() if self._setup_matrix else {}
+        topic_slug = self._get_sanitized_project_name(config)
+        if not topic_slug:
+            topic_slug = "Production"
+        
+        project_index = getattr(self._pipeline.state, '_project_index', 0)
+        total_projects = getattr(self._pipeline.state, '_total_projects', 1)
+        folder_name = f"{project_index + 1:03d} - {topic_slug}" if total_projects > 1 else topic_slug
+        
+        def _write():
+            import json as _json
+            from pathlib import Path
+            project_dir = Path(output_folder) / folder_name
+            project_dir.mkdir(parents=True, exist_ok=True)
+            session_path = project_dir / "_pipeline_session.json"
+            try:
+                session_path.write_text(
+                    _json.dumps(session_data, ensure_ascii=False, indent=2, default=str),
+                    encoding='utf-8'
+                )
+                log.info(f"[Pipeline] Session saved (async) → {session_path}")
+            except Exception as e:
+                log.warning(f"[Pipeline] Async session save failed: {e}")
+        
+        threading.Thread(target=_write, daemon=True, name="pipeline-save").start()
     
     def _on_queue_group_complete(self, stage_name: str, status: dict):
         """Queue group finished → update UI → auto-advance if enabled."""
+        # ★ Persist video_paths/image_paths populated during queue polling.
+        # Without this, restart loses all video results and re-queues everything.
+        self._save_session_to_disk()
+        
         completed = status["completed"]
         failed = status["failed"]
         total = status["total"]
         
         if failed > 0:
-            self._stage_viewer.setPlainText(
+            self._set_viewer_text(
                 f"⚠️ Queue completed with errors: {completed}/{total} OK, {failed} failed\n"
                 f"Stage: {stage_name}\n\n"
                 f"Some tasks failed. Check Queue tab for details.\n"
                 f"You can still confirm to proceed with available results."
             )
         else:
-            self._stage_viewer.setPlainText(
+            self._set_viewer_text(
                 f"✅ Queue completed: {completed}/{total} tasks done\n"
                 f"Stage: {stage_name}\n\n"
                 f"All results populated. Click 'Confirm & Next' to proceed."
@@ -2298,14 +3676,31 @@ class TabProject(QWidget):
             if next_stage:
                 # R2-6 Fix: Check video_path completeness before concat
                 if next_stage == "concat" and self._pipeline:
+                    # ★ Defensive: ensure scenes are linked before concat check
+                    self._ensure_pipeline_scenes_linked()
                     scenes = self._pipeline.state.scenes or []
+                    if not scenes:
+                        log.warning(
+                            "[Pipeline] R2-6: No scene data — cannot auto-advance to concat. "
+                            "Pipeline state may have lost scene data."
+                        )
+                        self._set_viewer_text(
+                            f"⚠️ Queue completed: {completed}/{total} tasks done\n"
+                            f"Stage: {stage_name}\n\n"
+                            f"ERROR: No scene data available for concatenation.\n"
+                            f"Scene data may not have been saved properly.\n\n"
+                            f"Try re-running from Stage 3 (Scene Breakdown)."
+                        )
+                        if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
+                            self.controller.set_pipeline_queue_active(False)
+                        return
                     missing_videos = [s.index for s in scenes if not s.video_path]
                     if missing_videos:
                         log.warning(
                             f"[Pipeline] R2-6: {len(missing_videos)} scenes missing video_path "
                             f"before concat: {missing_videos}. Concat may produce partial video."
                         )
-                        self._stage_viewer.setPlainText(
+                        self._set_viewer_text(
                             f"⚠️ Queue completed: {completed}/{total} tasks done\n"
                             f"Stage: {stage_name}\n\n"
                             f"WARNING: {len(missing_videos)} scenes missing video files.\n"
@@ -2324,7 +3719,7 @@ class TabProject(QWidget):
                 # to prevent AutoStop from killing engine before next stage adds tasks
                 if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
                     self.controller.set_pipeline_queue_active(True)
-                self._stage_viewer.setPlainText(
+                self._set_viewer_text(
                     f"✅ Queue completed: {completed}/{total} tasks done\n"
                     f"Stage: {stage_name}\n\n"
                     f"⏳ Auto-running: {next_stage}..."
@@ -2392,7 +3787,7 @@ class TabProject(QWidget):
         
         stage_filenames = {
             "duration_estimate": "duration_estimate",
-            "script_analysis": "bible",
+            "bible_gen": "bible",
             "scene_breakdown": "prompts",
             "character_gen": "character_prompts",
             "scene_image_gen": "scene_image_prompts",
@@ -2406,7 +3801,7 @@ class TabProject(QWidget):
         # Get formatted display text (same as what user sees)
         stage_result = self._pipeline.state.get_stage(stage_name)
         try:
-            display = _format_stage_result(stage_name, stage_result)
+            display = _format_stage_result(stage_name, stage_result, state=self._pipeline.state if self._pipeline else None)
         except Exception:
             display = str(stage_result.data)
         
@@ -2435,19 +3830,35 @@ class TabProject(QWidget):
                 _json.dumps(existing, ensure_ascii=False, indent=2, default=str),
                 encoding='utf-8'
             )
+            # Also save full session for proper restore on restart
+            # Fix 2: Use async save to avoid blocking GUI thread
+            self._save_session_to_disk_async()
         except Exception:
             pass
     
     def _parse_edited_stage_data(self) -> dict:
         """Parse user-edited viewer text into correct pipeline data keys.
         
-        Stage 2 (script_analysis): User edits Bible text → pass back as-is
+        Stage 2 (bible_gen): User edits Bible text → pass back as-is
         Stage 3 (scene_breakdown): User edits prompts text → pass back as-is
         """
         stage = self._pipeline_current_stage
         # Fix 10: Card stages use card UI edits, not hidden text viewer
         card_stages = {"character_gen", "scene_image_gen", "video_gen", "concat"}
         if stage in card_stages:
+            return {}
+        # Stage 3 (scene_breakdown): read edits from PipelinePromptTable
+        if stage == "scene_breakdown":
+            if hasattr(self, '_pipeline_prompt_table') and self._pipeline_prompt_table:
+                edited = self._pipeline_prompt_table.get_items()
+                if edited:
+                    # Reconstruct raw_prompts text from edited table items
+                    parts = []
+                    for item in edited:
+                        parts.append(f"--- Scene {item.index} ---")
+                        parts.append(item.prompt)
+                    return {"prompts_text": "\n".join(parts)}
+            # Fallback: no table → empty (multi-version/episode mode)
             return {}
         text = self._stage_viewer.toPlainText().strip()
         
@@ -2460,7 +3871,7 @@ class TabProject(QWidget):
                 break
         clean_text = "\n".join(lines[content_start:]).strip() if content_start > 0 else text
         
-        if stage == "script_analysis":
+        if stage == "bible_gen":
             # Bible text — pass directly, pipeline stores in state.script_json["bible"]
             if clean_text:
                 return {"bible": clean_text}
@@ -2494,7 +3905,7 @@ class TabProject(QWidget):
         self._update_nav_buttons(self._pipeline_current_stage)
         next_stage = self._pipeline.get_next_stage()
         if next_stage:
-            self._stage_viewer.setPlainText(f"Stage skipped.\n\n⏳ Auto-running: {next_stage}...")
+            self._set_viewer_text(f"Stage skipped.\n\n⏳ Auto-running: {next_stage}...")
             # Fix 2: Auto-advance to next stage (same as confirm)
             from PySide6.QtCore import QTimer
             QTimer.singleShot(300, self._run_pipeline_stage)
@@ -2521,7 +3932,7 @@ class TabProject(QWidget):
         
         # Mark prev stage dot as active (blue = review)
         self._stage_dots[prev_stage].setStyleSheet(
-            f"QPushButton {{ background-color: {Theme.BLUE}; color: {Theme.CRUST}; "
+            f"QPushButton {{ background-color: {Theme.BLUE}; color: black; "
             f"border: 1px solid {Theme.BLUE}; border-radius: 3px; "
             f"font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
         )
@@ -2531,11 +3942,11 @@ class TabProject(QWidget):
         # Show saved result for review/editing
         self._show_stage_review(prev_stage)
         
-        self._stage_run_btn.setText("▶ Start Pipeline")
+        self._stage_run_btn.setText("▶️ Start")
         self._stage_run_btn.setEnabled(True)
         stage_result = self._pipeline.state.get_stage(prev_stage)
         # Fix 11: For card stages, only enable confirm after thumbnails render
-        card_stages = {"character_gen", "scene_image_gen", "video_gen", "concat"}
+        card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
         if prev_stage in card_stages:
             self._stage_confirm_btn.setEnabled(False)
             from PySide6.QtCore import QTimer
@@ -2570,7 +3981,7 @@ class TabProject(QWidget):
         
         # Mark next stage dot as active (blue = review)
         self._stage_dots[next_stage].setStyleSheet(
-            f"QPushButton {{ background-color: {Theme.BLUE}; color: {Theme.CRUST}; "
+            f"QPushButton {{ background-color: {Theme.BLUE}; color: black; "
             f"border: 1px solid {Theme.BLUE}; border-radius: 3px; "
             f"font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
         )
@@ -2578,7 +3989,7 @@ class TabProject(QWidget):
         self._pipeline_current_stage = next_stage
         self._show_stage_review(next_stage)
         
-        self._stage_run_btn.setText("▶ Start Pipeline")
+        self._stage_run_btn.setText("▶️ Start")
         self._stage_run_btn.setEnabled(True)
         self._stage_confirm_btn.setEnabled(bool(next_result.data))
         self._update_nav_buttons(next_stage)
@@ -2588,13 +3999,19 @@ class TabProject(QWidget):
         Uses _format_result() for consistent formatted display.
         """
         # Toggle viewer visibility: hide for card-based stages, show for others
-        card_stages = {"character_gen", "scene_image_gen", "video_gen", "concat"}
+        card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
         if stage_name in card_stages:
+            self._stage_viewer.setMaximumHeight(0)
             self._stage_viewer.setVisible(False)
         else:
+            self._stage_viewer.setMinimumHeight(120)
+            self._stage_viewer.setMaximumHeight(16777215)
             self._stage_viewer.setVisible(True)
         # Height logic is handled inside _update_thumbnails
         self._update_thumbnails(stage_name)
+        
+        # Populate version/episode selector if multi-version/episode
+        self._populate_version_selector()
 
         # Fix 7: Skip text formatting for hidden card stages
         if stage_name in card_stages:
@@ -2603,37 +4020,154 @@ class TabProject(QWidget):
         stage_result = self._pipeline.state.get_stage(stage_name)
         if stage_result.data:
             try:
-                display = _format_stage_result(stage_name, stage_result)
+                display = _format_stage_result(stage_name, stage_result, state=self._pipeline.state if self._pipeline else None)
             except Exception:
                 display = str(stage_result.data)
-            self._stage_viewer.setPlainText(
-                f"\U0001f4cb Reviewing: {stage_name}\n"
-                f"Edit below, then Confirm & Next or Start Pipeline to re-run.\n"
-                f"{'=' * 40}\n\n{display}"
+            
+            # ── Extended character notification for Stage 3 ──
+            ext_chars_notice = ""
+            if stage_name == "scene_breakdown":
+                ext_chars = stage_result.data.get("extended_chars", [])
+                if ext_chars:
+                    ext_chars_notice = (
+                        f"\n{'=' * 40}\n"
+                        f"⚠️ EXTENDED CHARACTERS DETECTED ({len(ext_chars)}):\n"
+                        f"Các nhân vật sau xuất hiện trong prompts nhưng KHÔNG có trong Bible:\n"
+                    )
+                    for name in ext_chars:
+                        ext_chars_notice += f"  • {name} (auto-added, AI sẽ tự tạo profile)\n"
+                    ext_chars_notice += (
+                        f"\nCác nhân vật này đã được tự động thêm vào danh sách.\n"
+                        f"Stage 4 sẽ tạo ảnh nhân vật cho TẤT CẢ (gồm cả mở rộng).\n"
+                        f"Nhấn Confirm & Next để tiếp tục, hoặc chỉnh sửa Bible nếu cần.\n"
+                    )
+            
+            self._set_viewer_text(
+                f"\U0001f4cb Reviewing: {stage_name.replace('_', ' ')}\n"
+                f"Edit below, then Confirm & Next or click stage dot to navigate.\n"
+                f"{'=' * 40}\n\n{display}{ext_chars_notice}"
             )
         else:
-            self._stage_viewer.setPlainText(
-                f"\U0001f4cb {stage_name}\nNo saved data. Click '\u25b6 Start Pipeline' to run."
+            self._set_viewer_text(
+                f"\U0001f4cb {stage_name.replace('_', ' ')}\nNo saved data. Click '▶️ Start' to run."
             )
     
 
     def _update_nav_buttons(self, stage_name: str):
-        """Update Back/Next button enabled state based on current stage position."""
+        """No-op: Back/Next buttons removed. Stage dots handle navigation."""
+        pass
+    
+    def _on_stage_dot_clicked(self, stage_name: str):
+        """Handle click on a stage dot — jump directly to that stage's data.
+        
+        Re-entrancy guard prevents freeze when user clicks rapidly:
+        _show_stage_review → _update_thumbnails is heavy (widget rebuild).
+        """
         from core.production_pipeline import STAGE_ORDER, StageStatus
-        idx = STAGE_ORDER.index(stage_name) if stage_name in STAGE_ORDER else 0
+        if not self._pipeline:
+            return
+        if stage_name not in self._stage_dots:
+            return
         
-        # Back: enabled if not first stage
-        self._stage_back_btn.setEnabled(idx > 0)
+        # Re-entrancy guard: reject rapid clicks while previous is processing
+        if getattr(self, '_stage_dot_busy', False):
+            return
+        self._stage_dot_busy = True
         
-        # Next: enabled if next stage has been run (has data)
-        if idx < len(STAGE_ORDER) - 1:
-            next_s = STAGE_ORDER[idx + 1]
-            next_result = self._pipeline.state.get_stage(next_s)
-            self._stage_next_btn.setEnabled(
-                bool(next_result.data) or next_result.status != StageStatus.PENDING
+        try:
+            stage_result = self._pipeline.state.get_stage(stage_name)
+            
+            # Can only jump to stages that have data (completed/confirmed/error with data)
+            if not stage_result.data and stage_result.status == StageStatus.PENDING:
+                return
+            
+            # Restore current dot to its real status color
+            if self._pipeline_current_stage and self._pipeline_current_stage in self._stage_dots:
+                self._restore_dot_color(self._pipeline_current_stage)
+            
+            # Mark clicked dot as active (blue = review)
+            self._stage_dots[stage_name].setStyleSheet(
+                f"QPushButton {{ background-color: {Theme.BLUE}; color: black; "
+                f"border: 1px solid {Theme.BLUE}; border-radius: 3px; "
+                f"font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
             )
-        else:
-            self._stage_next_btn.setEnabled(False)
+            
+            self._pipeline_current_stage = stage_name
+            
+            # Fix 3: Defer heavy _show_stage_review to next event loop tick
+            # so dot color update paints immediately (no visible freeze)
+            from PySide6.QtCore import QTimer
+            _sr_data = stage_result.data  # capture for lambda
+            def _deferred_review(_sn=stage_name, _data=_sr_data):
+                self._show_stage_review(_sn)
+                self._stage_run_btn.setText("🔄 Re-run")
+                self._stage_run_btn.setEnabled(True)
+                # Fix 11: For card stages, only enable confirm after thumbnails render
+                card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
+                if _sn in card_stages:
+                    self._stage_confirm_btn.setEnabled(False)
+                    QTimer.singleShot(200, lambda: self._stage_confirm_btn.setEnabled(bool(_data)))
+                else:
+                    self._stage_confirm_btn.setEnabled(bool(_data))
+            QTimer.singleShot(0, _deferred_review)
+        finally:
+            # Fix 4: Release guard after 800ms (was 200ms) to cover full thumbnail rebuild time
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(800, lambda: setattr(self, '_stage_dot_busy', False))
+    
+    def _reset_pipeline_viewer(self):
+        """Reset pipeline viewer to initial state — clear all data and UI."""
+        from core.production_pipeline import STAGE_ORDER
+        
+        # Reset pipeline object
+        self._pipeline = None
+        self._pipeline_current_stage = None
+        self._pipeline_project_name = ''
+        
+        # Reset all stage dots to default grey
+        for sn, dot in self._stage_dots.items():
+            dot.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Theme.SURFACE1};
+                    color: {Theme.SUBTEXT0};
+                    border: 1px solid {Theme.BORDER};
+                    border-radius: 3px;
+                    font-size: 10px; padding: 2px 6px;
+                }}
+                QPushButton:hover {{
+                    background-color: {Theme.SURFACE2};
+                    border-color: {Theme.BLUE};
+                    color: {Theme.TEXT};
+                }}
+            """)
+        
+        # Reset viewer text
+        self._stage_viewer.setMinimumHeight(120)
+        self._stage_viewer.setMaximumHeight(16777215)
+        self._stage_viewer.setVisible(True)
+        self._set_viewer_text("", reset_scroll=True)
+        self._stage_viewer.setPlaceholderText("Stage results will appear here for review...")
+        
+        # Reset buttons
+        self._stage_run_btn.setText("▶️ Start")
+        self._stage_run_btn.setEnabled(True)
+        self._stage_confirm_btn.setEnabled(False)
+        
+        # Clear thumbnails
+        while self._thumb_layout.count() > 1:
+            item = self._thumb_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._thumb_scroll.setVisible(False)
+        
+        # Clear batch state
+        self._batch_topics = []
+        self._batch_topic_idx = 0
+        self._batch_results = []
+        self._queue_awaiting_completion = False
+        self._unsubscribe_late_completion()  # Clean up event listener
+        
+        log.info("[Pipeline] Viewer reset to initial state")
     
     def _restore_dot_color(self, stage_name: str):
         """Restore a stage dot to its real status color (green/red/grey)."""
@@ -2641,15 +4175,15 @@ class TabProject(QWidget):
         stage = self._pipeline.state.get_stage(stage_name)
         # Fix 1: WAITING_CONFIRM also shows green (stage completed successfully)
         if stage.status in (StageStatus.CONFIRMED, StageStatus.WAITING_CONFIRM):
-            color, weight = Theme.GREEN, "font-weight: bold; "
+            color, weight, text_color = Theme.GREEN, "font-weight: bold; ", "black"
         elif stage.status == StageStatus.SKIPPED:
-            color, weight = Theme.SURFACE1, ""
+            color, weight, text_color = Theme.SURFACE1, "", Theme.SUBTEXT0
         elif stage.error:
-            color, weight = Theme.RED, ""
+            color, weight, text_color = Theme.RED, "", "black"
         else:
-            color, weight = Theme.SURFACE1, ""
+            color, weight, text_color = Theme.SURFACE1, "", Theme.SUBTEXT0
         self._stage_dots[stage_name].setStyleSheet(
-            f"QPushButton {{ background-color: {color}; color: {Theme.CRUST}; "
+            f"QPushButton {{ background-color: {color}; color: {text_color}; "
             f"border-radius: 3px; font-size: 10px; {weight}padding: 2px 6px; }}"
         )
     
@@ -2797,44 +4331,81 @@ class TabProject(QWidget):
                 STAGE_ORDER, StageStatus
             )
             
+            # ── Priority 1: Full session file (_pipeline_session.json) ──
+            # Contains scenes, characters, topic, etc. via to_session_dict()
+            session_file = best_file.parent / "_pipeline_session.json"
+            use_full_restore = False
+            if session_file.exists():
+                try:
+                    session_raw = _json.loads(session_file.read_text(encoding='utf-8'))
+                    if session_raw.get("stages"):
+                        raw = session_raw
+                        use_full_restore = True
+                        log.info(f"[Pipeline] Found full session file: {session_file.name}")
+                except Exception as e:
+                    log.debug(f"[Pipeline] Session file read failed: {e}")
+            
             # Check if it has actual completed stages
-            completed_count = sum(
-                1 for sn, sr in raw.items()
-                if not sn.startswith('_')
-                and sr.get('status') in ('confirmed', 'completed', 'skipped')
-            )
+            if use_full_restore:
+                stages_dict = raw.get("stages", {})
+                completed_count = sum(
+                    1 for sn, sr in stages_dict.items()
+                    if sr.get('status') in ('confirmed', 'completed', 'skipped')
+                )
+            else:
+                completed_count = sum(
+                    1 for sn, sr in raw.items()
+                    if not sn.startswith('_')
+                    and sr.get('status') in ('confirmed', 'completed', 'skipped')
+                )
             if completed_count == 0:
                 return
             
             # Restore state
-            restored_state = PipelineState()
-            for stage_name, sr_data in raw.items():
-                if stage_name.startswith('_'):
-                    continue
-                try:
-                    status = StageStatus(sr_data.get('status', 'pending'))
-                except (ValueError, KeyError):
-                    status = StageStatus.PENDING
-                sr = StageResult(
-                    stage=stage_name,
-                    status=status,
-                    data=sr_data.get('data', {}),
+            if use_full_restore:
+                # Full restore: scenes, characters, topic, all stage data
+                restored_state = PipelineState.from_session_dict(raw)
+                log.info(
+                    f"[Pipeline] Full restore: {len(restored_state.scenes)} scenes, "
+                    f"{len(restored_state.characters)} characters, "
+                    f"topic='{restored_state.topic[:50]}'"
                 )
-                restored_state.stages[stage_name] = sr
+            else:
+                # Legacy partial restore: only stages (no scenes/characters)
+                restored_state = PipelineState()
+                for stage_name, sr_data in raw.items():
+                    if stage_name.startswith('_'):
+                        continue
+                    try:
+                        status = StageStatus(sr_data.get('status', 'pending'))
+                    except (ValueError, KeyError):
+                        status = StageStatus.PENDING
+                    sr = StageResult(
+                        stage=stage_name,
+                        status=status,
+                        data=sr_data.get('data', {}),
+                    )
+                    restored_state.stages[stage_name] = sr
             
             # Create pipeline
             if not self._pipeline:
                 self._pipeline = ProductionPipeline()
             self._pipeline.state = restored_state
             
-            # Find current stage (first non-completed)
-            current_stage = STAGE_ORDER[0]
-            for sn in STAGE_ORDER:
-                sr = restored_state.stages.get(sn)
-                if sr and sr.status in (StageStatus.CONFIRMED, StageStatus.SKIPPED):
-                    continue
-                current_stage = sn
-                break
+            # Find current stage: prefer saved UI state, fallback to first non-completed
+            ui_data = raw.get("_ui", {}) if use_full_restore else {}
+            saved_current = ui_data.get("pipeline_current_stage", "")
+            
+            if saved_current and saved_current in STAGE_ORDER:
+                current_stage = saved_current
+            else:
+                current_stage = STAGE_ORDER[0]
+                for sn in STAGE_ORDER:
+                    sr = restored_state.stages.get(sn)
+                    if sr and sr.status in (StageStatus.CONFIRMED, StageStatus.SKIPPED):
+                        continue
+                    current_stage = sn
+                    break
             
             self._pipeline_current_stage = current_stage
             
@@ -2846,7 +4417,7 @@ class TabProject(QWidget):
             if current_stage in self._stage_dots:
                 from config.theme import Theme
                 self._stage_dots[current_stage].setStyleSheet(
-                    f"QPushButton {{ background-color: {Theme.BLUE}; color: white; "
+                    f"QPushButton {{ background-color: {Theme.BLUE}; color: black; "
                     f"border-radius: 3px; font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
                 )
             
@@ -2871,9 +4442,106 @@ class TabProject(QWidget):
             log.info(
                 f"[Pipeline] ♻️ Auto-restored from {best_file.parent.name}: "
                 f"{completed_count} completed stage(s), current={current_stage}"
+                f"{', FULL session' if use_full_restore else ', partial (legacy)'}"
             )
         except Exception as e:
             log.warning(f"[Pipeline] Auto-restore failed: {e}")
+    
+    # ── Pipeline ↔ Queue Bidirectional Sync ────────────────────
+    
+    def _register_queue_callback(self):
+        """Register callback on controller to receive queue updates.
+        
+        Called from __init__ and restore_state. Uses existing
+        set_queue_updated_callback() chain — engine thread calls us,
+        we bridge to main thread via _pipeline_queue_signal.
+        """
+        if not self.controller:
+            return
+        try:
+            self.controller.set_queue_updated_callback(self._on_queue_updated_bridge)
+            log.info("[TabProject] ✅ Registered queue_updated callback for pipeline tracking")
+        except Exception as e:
+            log.debug(f"[TabProject] Queue callback registration failed: {e}")
+    
+    def _on_queue_updated_bridge(self, status: dict):
+        """Bridge from engine thread → main thread via Qt Signal.
+        
+        Called by controller._notify_queue_updated() from engine thread.
+        Emits _pipeline_queue_signal which is connected to _on_pipeline_queue_check.
+        """
+        # Only emit if we have active groups to check
+        if self._active_group_ids:
+            self._pipeline_queue_signal.emit()
+    
+    @Slot()
+    def _on_pipeline_queue_check(self):
+        """Main-thread handler: poll get_group_status() for each tracked group.
+        
+        When a group's tasks are all done → update parsed project status.
+        Removes completed groups from _active_group_ids.
+        """
+        if not self._active_group_ids or not self.controller:
+            return
+        
+        completed_groups = []
+        
+        for group_id, info in list(self._active_group_ids.items()):
+            try:
+                status = self.controller.get_group_status(group_id)
+                if not status:
+                    continue  # Group not found (maybe cleared)
+                
+                if status.get("is_done"):
+                    project_idx = info.get("project_idx", -1)
+                    stage = info.get("stage", "")
+                    project_name = info.get("project_name", "")
+                    total = status.get("total", 0)
+                    completed = status.get("completed", 0)
+                    failed = status.get("failed", 0)
+                    
+                    log.info(
+                        f"[TabProject] 🔗 Queue group {group_id} DONE: "
+                        f"{completed}/{total} completed, {failed} failed, "
+                        f"stage={stage}, project={project_name}"
+                    )
+                    
+                    # Update ParsedProjectsPanel status
+                    if self._parsed_panel and project_idx >= 0:
+                        if failed == 0:
+                            self._parsed_panel.set_project_status(project_idx, "completed")
+                            log.info(f"[TabProject] ✅ Project '{project_name}' → completed")
+                        else:
+                            self._parsed_panel.set_project_status(project_idx, "partial")
+                            log.info(
+                                f"[TabProject] ⚠️ Project '{project_name}' → partial "
+                                f"({failed}/{total} tasks failed)"
+                            )
+                    
+                    # Collect output files from completed tasks
+                    completed_tasks = status.get("completed_tasks", [])
+                    if completed_tasks and self._parsed_panel and project_idx >= 0:
+                        for ct in completed_tasks:
+                            best_file = ct.get("best_file", "")
+                            if best_file:
+                                log.info(
+                                    f"[TabProject] 📁 Task {ct['task_id']} output: "
+                                    f"{best_file}"
+                                )
+                    
+                    completed_groups.append(group_id)
+            except Exception as e:
+                log.debug(f"[TabProject] Queue check error for {group_id}: {e}")
+        
+        # Clean up completed groups
+        for gid in completed_groups:
+            self._active_group_ids.pop(gid, None)
+        
+        if completed_groups:
+            log.info(
+                f"[TabProject] 🔗 Pipeline tracking: {len(completed_groups)} group(s) "
+                f"completed, {len(self._active_group_ids)} remaining"
+            )
     
     def _load_project_session(self):
         """Load a pipeline session from a project folder.
@@ -2985,15 +4653,18 @@ class TabProject(QWidget):
         # Highlight current stage
         if current_stage in self._stage_dots:
             self._stage_dots[current_stage].setStyleSheet(
-                f"QPushButton {{ background-color: {Theme.BLUE}; color: white; "
+                f"QPushButton {{ background-color: {Theme.BLUE}; color: black; "
                 f"border-radius: 3px; font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
             )
         
         # Restore viewer content
+        card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
         viewer_text = ui_state.get("viewer_text", "")
-        if viewer_text:
+        if viewer_text and current_stage not in card_stages:
+            self._stage_viewer.setMinimumHeight(120)
+            self._stage_viewer.setMaximumHeight(16777215)
             self._stage_viewer.setVisible(True)
-            self._stage_viewer.setPlainText(viewer_text)
+            self._set_viewer_text(viewer_text)
         else:
             self._show_stage_review(current_stage)
         
@@ -3260,7 +4931,7 @@ class TabProject(QWidget):
     # ── Actions ────────────────────────────────────────────────
 
     def _on_clear(self):
-        """Clear topics input + parsed projects panel."""
+        """Clear topics input + parsed projects panel + pipeline viewer."""
         self._topic_input.clear()
         if self._parsed_panel:
             self._parsed_panel.clear_projects()
@@ -3269,6 +4940,8 @@ class TabProject(QWidget):
         self._topics_header.setText(t("project_extra.topics_collapsed"))
         self._topics_expanded = True
         self._topics_body.setVisible(True)
+        # Also reset pipeline viewer
+        self._reset_pipeline_viewer()
 
     def _on_generate(self):
         """Start full auto generation (Fix 1: runs in background thread)."""
@@ -3685,7 +5358,7 @@ class TabProject(QWidget):
                 name = self._parsed_panel._projects[project_idx].name
             log.info(f"[TabProject] Extracted {len(prompts)} prompts for '{name}'")
             if prompts:
-                self._do_queue_add(prompts, name)
+                self._do_queue_add(prompts, name, project_idx=project_idx)
                 self._parsed_panel.set_project_status(project_idx, "queued")
             else:
                 log.warning(f"[TabProject] No prompts found for project '{name}' (idx={project_idx})")
@@ -3707,8 +5380,12 @@ class TabProject(QWidget):
                 added += 1
         log.info(f"[TabProject] _on_add_all_to_queue: added {added} ready projects")
 
-    def _do_queue_add(self, prompts: list, project_name: str):
-        """Common queue-add logic — routes to T2V or T2I based on combo."""
+    def _do_queue_add(self, prompts: list, project_name: str, project_idx: int = -1, stage_name: str = ""):
+        """Common queue-add logic — routes to T2V or T2I based on combo.
+        
+        Pipeline tracking: captures group_id from controller and stores it in
+        _active_group_ids so queue completion can update pipeline state.
+        """
         if not prompts:
             log.warning(f"[TabProject] _do_queue_add called with empty prompts for '{project_name}'")
             return
@@ -3744,11 +5421,22 @@ class TabProject(QWidget):
         method_name = "add_t2i_batch" if output_type == "T2I" else "add_t2v_batch"
         log.info(f"[TabProject] Calling controller.{method_name}() with {len(prompts)} prompts, controller={self.controller is not None}")
         if self.controller and hasattr(self.controller, method_name):
-            getattr(self.controller, method_name)(
+            group_id = getattr(self.controller, method_name)(
                 prompts=prompts,
                 settings=settings,
             )
-            log.info(f"[TabProject] ✅ Successfully added {len(prompts)} prompts to queue as {output_type}")
+            log.info(f"[TabProject] ✅ Successfully added {len(prompts)} prompts to queue as {output_type} (group_id={group_id})")
+            
+            # ── Pipeline tracking: store group_id for bidirectional sync ──
+            if group_id and (project_idx >= 0 or stage_name):
+                self._active_group_ids[group_id] = {
+                    "project_idx": project_idx,
+                    "stage": stage_name,
+                    "prompt_count": len(prompts),
+                    "project_name": project_name,
+                }
+                log.info(f"[TabProject] 🔗 Pipeline tracking group_id={group_id} → project_idx={project_idx}, stage={stage_name}")
+            
             from ui.popups import show_info
             show_info(self, t("dialogs.added"), t("project_sidebar.added_queue").replace("{count}", str(len(prompts))).replace("{type}", output_type))
 
@@ -3817,7 +5505,11 @@ class TabProject(QWidget):
     # ── Session Persistence ─────────────────────────────────────
 
     def save_state(self) -> dict:
-        """Save tab state for session persistence."""
+        """Save tab state for session persistence.
+        
+        Includes pipeline ↔ queue tracking data so retry/restart
+        can resume pipeline-queue interaction.
+        """
         state = {}
         # Topic input text
         if hasattr(self, '_topic_input'):
@@ -3836,10 +5528,42 @@ class TabProject(QWidget):
         # SetupMatrix sidebar config
         if self._setup_matrix and hasattr(self._setup_matrix, 'get_config'):
             state["sidebar"] = self._setup_matrix.get_config()
+        
+        # ── Pipeline ↔ Queue tracking (Part 1+3: bidirectional sync) ──
+        if self._active_group_ids:
+            state["active_group_ids"] = dict(self._active_group_ids)
+        
+        # ── Pipeline stage queue polling (stages 5-7 resume on restart) ──
+        poll_gid = getattr(self, '_queue_poll_group_id', None)
+        poll_stage = getattr(self, '_queue_poll_stage', None)
+        if poll_gid and poll_stage:
+            state["queue_poll"] = {
+                "group_id": poll_gid,
+                "stage": poll_stage,
+            }
+        
+        # ── Parsed projects data (Part 4: persist across restart) ──
+        if self._parsed_panel and hasattr(self._parsed_panel, '_projects'):
+            projects_save = []
+            for i, row in enumerate(self._parsed_panel._projects):
+                proj_data = {}
+                if i < len(self._parsed_panel._project_data):
+                    proj_data = self._parsed_panel._project_data[i]
+                projects_save.append({
+                    "name": row.name,
+                    "status": row.get_status(),
+                    "files": proj_data,
+                })
+            if projects_save:
+                state["parsed_projects"] = projects_save
+        
         return state
 
     def restore_state(self, data: dict, restore_options=None):
-        """Restore tab state from saved session data."""
+        """Restore tab state from saved session data.
+        
+        Includes pipeline ↔ queue tracking and parsed projects.
+        """
         if not data:
             return
         # Check granular setting
@@ -3865,6 +5589,47 @@ class TabProject(QWidget):
             sidebar = data.get("sidebar", {})
             if sidebar and self._setup_matrix:
                 self._restore_setup_matrix(sidebar)
+            
+            # ── Restore pipeline ↔ queue tracking (Part 1+3) ──
+            saved_groups = data.get("active_group_ids", {})
+            if saved_groups:
+                self._active_group_ids = dict(saved_groups)
+                log.info(f"[TabProject] Restored {len(saved_groups)} active group_ids for pipeline tracking")
+                # Re-register queue callback if controller available
+                if self.controller:
+                    self._register_queue_callback()
+            
+            # ── Restore pipeline stage queue polling (stages 5-7) ──
+            poll_data = data.get("queue_poll")
+            if poll_data and self.controller:
+                gid = poll_data.get("group_id", "")
+                stage = poll_data.get("stage", "")
+                if gid and stage:
+                    # Check if group is still in-progress
+                    try:
+                        status = self.controller.get_group_status(gid)
+                        if status and not status.get("is_done"):
+                            log.info(f"[TabProject] ♻️ Resuming queue polling: group={gid}, stage={stage}")
+                            self._start_queue_polling(gid, stage)
+                        elif status and status.get("is_done"):
+                            log.info(f"[TabProject] Queue group {gid} already done — skipping poll resume")
+                            # Immediately handle completion
+                            self._on_queue_group_complete(stage, status)
+                        else:
+                            log.info(f"[TabProject] Queue group {gid} not found — poll data stale")
+                    except Exception as e:
+                        log.debug(f"[TabProject] Poll restore check failed: {e}")
+            
+            # ── Restore parsed projects (Part 4) ──
+            saved_projects = data.get("parsed_projects", [])
+            if saved_projects and self._parsed_panel:
+                self._parsed_panel.clear_projects()
+                for proj in saved_projects:
+                    name = proj.get("name", "")
+                    files = proj.get("files", {})
+                    status = proj.get("status", "ready")
+                    self._parsed_panel.add_project(name, files, status)
+                log.info(f"[TabProject] Restored {len(saved_projects)} parsed projects from session")
         except Exception as e:
             log.debug(f"[TabProject] Restore state error: {e}")
 

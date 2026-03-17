@@ -160,6 +160,36 @@ class StageResult:
 
 
 @dataclass
+class VersionData:
+    """One version of a video (Feature A/C: multi-version/multi-idea).
+    
+    Each version has its own Bible, scenes, prompts, and output paths.
+    Characters may be shared (Feature A) or unique (Feature C/multi-idea).
+    """
+    index: int                                          # 0-based version index
+    label: str = ""                                     # e.g. "Version 1", "Idea 1"
+    bible: str = ""                                     # Version-specific Bible text
+    scenes: List[SceneData] = field(default_factory=list)
+    characters: List[CharacterData] = field(default_factory=list)
+    final_video_path: str = ""
+    output_subfolder: str = ""                          # e.g. "v1", "v2"
+
+
+@dataclass
+class EpisodeData:
+    """One episode of a multi-part video (Feature B).
+    
+    Characters are SHARED across episodes (gen once, reuse).
+    Each episode has its own scenes, prompts, and output paths.
+    """
+    index: int                                          # 0-based episode index
+    label: str = ""                                     # e.g. "Tập 1"
+    scenes: List[SceneData] = field(default_factory=list)
+    final_video_path: str = ""
+    output_subfolder: str = ""                          # e.g. "ep1", "ep2"
+
+
+@dataclass
 class PipelineState:
     """Full pipeline state across all stages."""
     topic: str = ""
@@ -175,6 +205,75 @@ class PipelineState:
     scenes: List[SceneData] = field(default_factory=list)
     characters: List[CharacterData] = field(default_factory=list)
     final_video_path: str = ""
+    
+    # ── Multi-Version (Feature A/C) ──
+    video_count: int = 1                                # N versions to produce
+    multi_idea: bool = False                            # True = C (different ideas), False = A (variations)
+    versions: List[VersionData] = field(default_factory=list)
+    current_version_idx: int = 0                        # Which version is currently active
+    
+    # ── Multi-Episode (Feature B) ──
+    episode_enabled: bool = False
+    episode_count: int = 1
+    episodes: List[EpisodeData] = field(default_factory=list)
+    current_episode_idx: int = 0                        # Which episode is currently active
+    shared_characters: List[CharacterData] = field(default_factory=list)  # Shared across episodes
+    
+    def is_multi_version(self) -> bool:
+        """True if producing multiple versions (Feature A or A+C)."""
+        return self.video_count > 1
+    
+    def is_multi_episode(self) -> bool:
+        """True if splitting into episodes (Feature B)."""
+        return self.episode_enabled and self.episode_count > 1
+    
+    def get_active_version(self) -> Optional['VersionData']:
+        """Get currently active version, or None if single-version."""
+        if self.versions and self.current_version_idx < len(self.versions):
+            return self.versions[self.current_version_idx]
+        return None
+    
+    def get_active_episode(self) -> Optional['EpisodeData']:
+        """Get currently active episode, or None if single-episode."""
+        if self.episodes and self.current_episode_idx < len(self.episodes):
+            return self.episodes[self.current_episode_idx]
+        return None
+    
+    def activate_version(self, idx: int):
+        """Switch to a different version — swap scenes/characters into active state."""
+        if not self.versions or idx >= len(self.versions):
+            return
+        v = self.versions[idx]
+        self.current_version_idx = idx
+        self.scenes = v.scenes
+        if v.characters:
+            self.characters = v.characters
+        log.info(f"[Pipeline] Activated version {idx + 1}/{len(self.versions)}: {v.label}")
+    
+    def activate_episode(self, idx: int):
+        """Switch to a different episode — swap scenes, keep shared characters."""
+        if not self.episodes or idx >= len(self.episodes):
+            return
+        ep = self.episodes[idx]
+        self.current_episode_idx = idx
+        self.scenes = ep.scenes
+        # Characters are SHARED — restore from shared pool
+        if self.shared_characters:
+            self.characters = self.shared_characters
+        log.info(f"[Pipeline] Activated episode {idx + 1}/{len(self.episodes)}: {ep.label}")
+    
+    def save_active_version(self):
+        """Save current scenes/characters back to the active VersionData."""
+        v = self.get_active_version()
+        if v:
+            v.scenes = self.scenes
+            v.characters = self.characters
+    
+    def save_active_episode(self):
+        """Save current scenes back to the active EpisodeData."""
+        ep = self.get_active_episode()
+        if ep:
+            ep.scenes = self.scenes
     
     def get_stage(self, name: str) -> StageResult:
         if name not in self.stages:
@@ -220,6 +319,53 @@ class PipelineState:
                 }
                 for name, sr in self.stages.items()
             },
+            # Multi-version / Multi-episode
+            "video_count": self.video_count,
+            "multi_idea": self.multi_idea,
+            "current_version_idx": self.current_version_idx,
+            "versions": [
+                {
+                    "index": v.index, "label": v.label, "bible": v.bible,
+                    "output_subfolder": v.output_subfolder,
+                    "final_video_path": v.final_video_path,
+                    "scenes": [
+                        {"index": s.index, "title": s.title, "description": s.description,
+                         "prompt": s.prompt, "character_ref": s.character_ref,
+                         "duration_s": s.duration_s, "image_path": s.image_path,
+                         "video_path": s.video_path}
+                        for s in v.scenes
+                    ],
+                    "characters": [
+                        {"name": c.name, "description": c.description,
+                         "prompt": c.prompt, "image_path": c.image_path}
+                        for c in v.characters
+                    ],
+                }
+                for v in self.versions
+            ],
+            "episode_enabled": self.episode_enabled,
+            "episode_count": self.episode_count,
+            "current_episode_idx": self.current_episode_idx,
+            "episodes": [
+                {
+                    "index": ep.index, "label": ep.label,
+                    "output_subfolder": ep.output_subfolder,
+                    "final_video_path": ep.final_video_path,
+                    "scenes": [
+                        {"index": s.index, "title": s.title, "description": s.description,
+                         "prompt": s.prompt, "character_ref": s.character_ref,
+                         "duration_s": s.duration_s, "image_path": s.image_path,
+                         "video_path": s.video_path}
+                        for s in ep.scenes
+                    ],
+                }
+                for ep in self.episodes
+            ],
+            "shared_characters": [
+                {"name": c.name, "description": c.description,
+                 "prompt": c.prompt, "image_path": c.image_path}
+                for c in self.shared_characters
+            ],
         }
     
     @classmethod
@@ -276,6 +422,71 @@ class PipelineState:
             )
             state.stages[stage_name] = sr
         
+        # Restore multi-version state
+        state.video_count = data.get("video_count", 1)
+        state.multi_idea = data.get("multi_idea", False)
+        state.current_version_idx = data.get("current_version_idx", 0)
+        for vd in data.get("versions", []):
+            v = VersionData(
+                index=vd.get("index", 0),
+                label=vd.get("label", ""),
+                bible=vd.get("bible", ""),
+                output_subfolder=vd.get("output_subfolder", ""),
+                final_video_path=vd.get("final_video_path", ""),
+            )
+            for sd in vd.get("scenes", []):
+                v.scenes.append(SceneData(
+                    index=sd.get("index", 0), title=sd.get("title", ""),
+                    description=sd.get("description", ""), prompt=sd.get("prompt", ""),
+                    character_ref=sd.get("character_ref", ""),
+                    duration_s=sd.get("duration_s", 8.0),
+                    image_path=sd.get("image_path", ""),
+                    video_path=sd.get("video_path", ""),
+                ))
+            for cd in vd.get("characters", []):
+                v.characters.append(CharacterData(
+                    name=cd.get("name", ""), description=cd.get("description", ""),
+                    prompt=cd.get("prompt", ""), image_path=cd.get("image_path", ""),
+                ))
+            state.versions.append(v)
+        
+        # Restore multi-episode state
+        state.episode_enabled = data.get("episode_enabled", False)
+        state.episode_count = data.get("episode_count", 1)
+        state.current_episode_idx = data.get("current_episode_idx", 0)
+        for ed in data.get("episodes", []):
+            ep = EpisodeData(
+                index=ed.get("index", 0),
+                label=ed.get("label", ""),
+                output_subfolder=ed.get("output_subfolder", ""),
+                final_video_path=ed.get("final_video_path", ""),
+            )
+            for sd in ed.get("scenes", []):
+                ep.scenes.append(SceneData(
+                    index=sd.get("index", 0), title=sd.get("title", ""),
+                    description=sd.get("description", ""), prompt=sd.get("prompt", ""),
+                    character_ref=sd.get("character_ref", ""),
+                    duration_s=sd.get("duration_s", 8.0),
+                    image_path=sd.get("image_path", ""),
+                    video_path=sd.get("video_path", ""),
+                ))
+            state.episodes.append(ep)
+        
+        for cd in data.get("shared_characters", []):
+            state.shared_characters.append(CharacterData(
+                name=cd.get("name", ""), description=cd.get("description", ""),
+                prompt=cd.get("prompt", ""), image_path=cd.get("image_path", ""),
+            ))
+        
+        # ★ Re-link state.scenes to active version/episode after restore.
+        # Without this, state.scenes is a separate copy that doesn't share
+        # references with version.scenes — causing confirm handlers to see
+        # stale video_path="" and re-queue already-completed videos.
+        if state.versions:
+            state.activate_version(state.current_version_idx)
+        elif state.episodes:
+            state.activate_episode(state.current_episode_idx)
+        
         return state
 
 
@@ -284,7 +495,7 @@ class PipelineState:
 
 STAGE_ORDER = [
     "duration_estimate",
-    "script_analysis",
+    "bible_gen",
     "scene_breakdown",
     "character_gen",
     "scene_image_gen",
@@ -427,7 +638,7 @@ class ProductionPipeline:
         # → User reviews → confirms
         
         # Stage 2: Script Analysis
-        result = await pipeline.run_stage("script_analysis", config)
+        result = await pipeline.run_stage("bible_gen", config)
         # → User reviews → confirms/edits
         
         # ... etc, one stage at a time
@@ -493,7 +704,7 @@ class ProductionPipeline:
                 # R3-4 Fix: Clear stale scenes so Stage 3 regenerates with new count
                 self.state.scenes = []
                 log.info(f"[Pipeline] Scene count edited → {new_sc}, target_duration recalculated → {self.state.target_duration}s, scenes cleared")
-            elif stage_name == "script_analysis":
+            elif stage_name == "bible_gen":
                 # Bible text edit — update state for Stage 3
                 if "bible" in edited_data:
                     if isinstance(self.state.script_json, dict):
@@ -571,8 +782,8 @@ class ProductionPipeline:
         try:
             if stage_name == "duration_estimate":
                 await self._stage_duration(stage, config)
-            elif stage_name == "script_analysis":
-                await self._stage_script_analysis(stage, config)
+            elif stage_name == "bible_gen":
+                await self._stage_bible_gen(stage, config)
             elif stage_name == "scene_breakdown":
                 await self._stage_scene_breakdown(stage, config)
             elif stage_name == "character_gen":
@@ -722,6 +933,12 @@ class ProductionPipeline:
         self.state.scene_count = scene_count
         self.state.target_duration = target_duration
         
+        # Multi-version / Multi-episode config from sidebar
+        self.state.video_count = config.get("video_count", 1)
+        self.state.multi_idea = config.get("multi_idea", False)
+        self.state.episode_enabled = config.get("episode_enabled", False)
+        self.state.episode_count = config.get("episode_count", 1) if self.state.episode_enabled else 1
+        
         stage.scene_count = scene_count
         stage.clip_duration = clip_duration
         stage.data = {
@@ -731,6 +948,10 @@ class ProductionPipeline:
             "topic": ai_title or topic[:100],
             "source": "ai_detected" if detected else "sidebar_defaults",
             "ai_detected": detected,
+            "video_count": self.state.video_count,
+            "multi_idea": self.state.multi_idea,
+            "episode_enabled": self.state.episode_enabled,
+            "episode_count": self.state.episode_count,
         }
     
     async def _ai_detect_from_input(self, input_text: str) -> dict:
@@ -797,7 +1018,7 @@ Nội dung:
         except ValueError:
             return 0
     
-    async def _stage_script_analysis(self, stage: StageResult, config: Dict):
+    async def _stage_bible_gen(self, stage: StageResult, config: Dict):
         """Stage 2: Research + Bible Generation (self-contained).
         
         LOCAL: topic, characters (from Stage 1), BIBLE_RULES constant
@@ -852,6 +1073,19 @@ Nội dung:
         )
         self.state.script_json = {"research": research}
         
+        # ── Step 1.5: Dialogue Extraction & Analysis (when voice enabled) ──
+        extracted_dialogues = []
+        dialogue_analysis = ""
+        if voice_enabled:
+            extracted_dialogues = self._extract_dialogues_from_script(topic)
+            if extracted_dialogues:
+                log.info(f"[Pipeline] Found {len(extracted_dialogues)} existing dialogues → running AI analysis")
+                dialogue_analysis = await self._analyze_dialogues(
+                    extracted_dialogues, topic, config
+                )
+                self.state.script_json["dialogue_analysis"] = dialogue_analysis
+                self.state.script_json["extracted_dialogues"] = extracted_dialogues
+        
         # ── Step 2: Bible ──
         bible_system = (
             "You are an AI video production expert (VEO). "
@@ -893,11 +1127,25 @@ Nội dung:
             f"Each scene = {clip_dur}s. Do NOT use input's original duration.\n"
         )
         if voice_enabled:
-            bible_prompt += (
-                "\n## 6. DIALOGUE GUIDE\n"
-                "Key dialogue lines for voice-over/narration per scene.\n"
-                "Include speaker name, tone of voice, and line.\n"
-            )
+            if dialogue_analysis:
+                # Script has existing dialogues → use analyzed/improved version
+                bible_prompt += (
+                    "\n## 6. DIALOGUE GUIDE\n"
+                    "⚠️ PHÂN TÍCH LỜI THOẠI TỪ KỊCH BẢN GỐC (bắt buộc tuân thủ):\n"
+                    f"{dialogue_analysis}\n\n"
+                    "NGUYÊN TẮC:\n"
+                    "- ✅ GIỮ NGUYÊN: Sao chép CHÍNH XÁC câu thoại gốc vào Dialogue Guide\n"
+                    "- 🔧 CẢI THIỆN: Dùng phiên bản cải thiện thay cho câu gốc\n"
+                    "- ➕ BỔ SUNG: Thêm câu thoại mới vào đúng vị trí cảnh\n"
+                    "- Mỗi câu thoại PHẢI có: Speaker Name, Tone of Voice, Line\n"
+                )
+            else:
+                # No existing dialogues → AI creates fresh dialogue
+                bible_prompt += (
+                    "\n## 6. DIALOGUE GUIDE\n"
+                    "Key dialogue lines for voice-over/narration per scene.\n"
+                    "Include speaker name, tone of voice, and line.\n"
+                )
         else:
             bible_prompt += (
                 "\nNOTE: This is a SILENT video (no voice-over/dialogue).\n"
@@ -916,6 +1164,8 @@ Nội dung:
             "research": research,
             "bible": bible,
             "topic": topic,
+            "extracted_dialogues": extracted_dialogues,
+            "dialogue_analysis": dialogue_analysis,
         }
         
         # ── R2-4 Fix: Populate state.characters from Bible if still empty ──
@@ -927,6 +1177,62 @@ Nội dung:
                 for name, desc in char_profiles.items():
                     self.state.characters.append(CharacterData(name=name, description=desc))
                 log.info(f"[Pipeline] R2-4: Populated {len(char_profiles)} characters from Bible (was empty)")
+        
+        # ── Multi-Idea: Generate N different Bibles (Feature C) ──
+        version_bibles = [bible]  # First Bible is always the main one
+        video_count = self.state.video_count
+        
+        if self.state.multi_idea and video_count > 1:
+            log.info(f"[Pipeline] Multi-Idea mode: generating {video_count - 1} additional Bibles")
+            for vi in range(1, video_count):
+                variation_prompt = (
+                    f"{bible_prompt}\n\n"
+                    f"⚠️ VARIATION {vi + 1}/{video_count}: Create a COMPLETELY DIFFERENT approach to this topic.\n"
+                    f"- MUST keep the same characters and general subject\n"
+                    f"- Change: story angle, tone, narrative style, scene order, visual approach\n"
+                    f"- Previous Bible #{vi} summary: {bible[:300]}...\n"
+                    f"- Do NOT repeat the exact same story — find a FRESH perspective\n"
+                    f"- Duration and scene count MUST be identical: {scene_count} scenes x {clip_dur}s\n"
+                )
+                alt_bible = await self._call_gemini_with_rotation(
+                    prompt=variation_prompt, system=bible_system,
+                    max_tokens=16000, temperature=0.6 + (vi * 0.05),  # Higher temp for diversity
+                )
+                version_bibles.append(alt_bible)
+                log.info(f"[Pipeline] Multi-Idea: Bible {vi + 1}/{video_count} generated ({len(alt_bible)} chars)")
+        
+        # ── Create VersionData objects ──
+        self.state.versions.clear()
+        if video_count > 1:
+            for vi, vbible in enumerate(version_bibles):
+                label = f"Idea {vi + 1}" if self.state.multi_idea else f"Version {vi + 1}"
+                self.state.versions.append(VersionData(
+                    index=vi,
+                    label=label,
+                    bible=vbible,
+                    output_subfolder=f"v{vi + 1}",
+                    characters=list(self.state.characters),  # Copy for each version
+                ))
+            log.info(f"[Pipeline] Created {len(self.state.versions)} VersionData objects")
+        
+        # ── Episode Split (Feature B) ──
+        if self.state.is_multi_episode():
+            ep_count = self.state.episode_count
+            log.info(f"[Pipeline] Episode mode: marking {ep_count} episodes for Stage 3 split")
+            self.state.episodes.clear()
+            for ei in range(ep_count):
+                self.state.episodes.append(EpisodeData(
+                    index=ei,
+                    label=f"Tập {ei + 1}",
+                    output_subfolder=f"ep{ei + 1}",
+                ))
+            # Store shared characters for reuse across episodes
+            self.state.shared_characters = list(self.state.characters)
+        
+        # Update stage data with version/episode info
+        stage.data["version_count"] = len(version_bibles)
+        stage.data["episode_count"] = self.state.episode_count if self.state.is_multi_episode() else 1
+        stage.data["multi_idea"] = self.state.multi_idea
         
         # Save is handled by tab_project._save_stage_to_disk() on confirm
     
@@ -1005,10 +1311,21 @@ Nội dung:
             f"- Each scene MUST advance the story — NO filler/padding\n"
         )
         if voice_enabled:
-            prompts_user += (
-                f"- Include speaker expressions: mouth open speaking, listening, nodding\n"
-                f"- Audio cues should describe ambient sound AND dialogue mood\n\n"
-            )
+            # Include dialogue context from Bible if available
+            dialogue_section = self._extract_bible_section(bible, "DIALOGUE GUIDE")
+            if dialogue_section:
+                prompts_user += (
+                    f"- Include speaker expressions matching DIALOGUE GUIDE from Bible:\n"
+                    f"  Speaker = mouth open speaking, matching emotion from their dialogue line\n"
+                    f"  Listener = attentive listening, nodding, reaction expression\n"
+                    f"- Audio cues should describe ambient sound AND dialogue mood\n"
+                    f"- Reference DIALOGUE GUIDE for accurate character emotions per scene\n\n"
+                )
+            else:
+                prompts_user += (
+                    f"- Include speaker expressions: mouth open speaking, listening, nodding\n"
+                    f"- Audio cues should describe ambient sound AND dialogue mood\n\n"
+                )
         else:
             prompts_user += (
                 f"- This is a SILENT video — NO dialogue, NO voice-over\n"
@@ -1033,6 +1350,46 @@ Nội dung:
         # ══ PHASE B: LOCAL — Inject character profiles ══
         raw_prompts = self._inject_character_profiles(raw_scenes, char_profiles)
         
+        # ══ PHASE B2: Verify extended characters ══
+        # Scan ALL [CharName] tags in AI-generated scenes and ensure they exist
+        # in state.characters. Add missing ones so Stage 4 generates images for ALL.
+        import re as _re_b2
+        all_tags = set()
+        for line in raw_scenes.split('\n'):
+            tags = _re_b2.findall(r'\[([^\]]+)\]', line)
+            for tag in tags:
+                all_tags.add(tag.strip())
+        
+        # Build lookup of existing characters (diacritic-insensitive)
+        existing_names = {}
+        for c in (self.state.characters or []):
+            existing_names[self._strip_diacritics(c.name)] = c.name
+        
+        # Find missing characters
+        extended_chars = []
+        for tag in sorted(all_tags):
+            tag_stripped = self._strip_diacritics(tag)
+            if tag_stripped not in existing_names:
+                # New character — add to state
+                new_char = CharacterData(
+                    name=tag,
+                    description=f"Supporting character: {tag}",
+                )
+                self.state.characters.append(new_char)
+                existing_names[tag_stripped] = tag
+                extended_chars.append(tag)
+                log.info(f"[Pipeline] Phase B2: Extended character detected: '{tag}'")
+        
+        if extended_chars:
+            log.warning(
+                f"[Pipeline] Phase B2: {len(extended_chars)} extended characters detected "
+                f"and added: {extended_chars}. Stage 4 will generate images for ALL characters."
+            )
+            # Store in stage data for UI notification
+            self._extended_chars_detected = extended_chars
+        else:
+            self._extended_chars_detected = []
+        
         # Parse prompts into scenes
         scenes = self._parse_text_prompts(raw_prompts)
         self.state.scenes = scenes
@@ -1041,15 +1398,25 @@ Nội dung:
         char_prompts = []
         if bible and self.client:
             type_instruction = PROJECT_TYPE_PROMPTS.get(config.get("project_type", ""), "")
-            char_prompt_request = f"""Từ Production Bible sau, trích xuất CHARACTER IMAGE PROMPT cho TỪNG nhân vật.
+            char_prompt_request = f"""Từ Production Bible sau, trích xuất CHARACTER REFERENCE SHEET PROMPT cho TỪNG nhân vật.
 
 {type_instruction}
 
-Mỗi prompt là mô tả VISUAL chi tiết cho Text-to-Image (T2I), bao gồm:
+Mỗi prompt là CHARACTER TURNAROUND MODEL SHEET cho Text-to-Image (T2I):
+
+⚠️ BẮT BUỘC — LAYOUT 4-VIEW TRÊN 1 ẢNH DUY NHẤT (16:9 ngang):
+- Chia ảnh thành 4 panel rõ ràng, mỗi panel có LABEL TEXT phía trên:
+  • Panel 1 (trái): "FRONT VIEW" — toàn thân chính diện, nhìn thẳng camera
+  • Panel 2 (giữa-trái): "LEFT ¾ VIEW" — góc ¾ từ bên trái
+  • Panel 3 (giữa-phải): "RIGHT ¾ VIEW" — góc ¾ từ bên phải
+  • Panel 4 (phải): "BACK VIEW" — phía sau lưng nhân vật
+- Tất cả 4 panel CÙNG tỉ lệ, CÙNG kích thước, CÙNG nhân vật
+- Trong prompt PHẢI có cụm: "character turnaround model sheet, 4-view panel layout"
 - Mô tả ngoại hình đầy đủ (tuổi, chiều cao, da, mặt, tóc, trang phục, phụ kiện)
-- Phong cách nghệ thuật
-- Bối cảnh (background đơn giản, studio lighting)
-- Camera angle: portrait, medium shot
+- Phong cách nghệ thuật matching Bible visual style
+- PLAIN WHITE BACKGROUND ONLY — NO environment, NO scene, NO props
+- Professional studio lighting, clean edges, concept art quality
+- Aspect ratio: 16:9 horizontal ONLY
 
 Trả về mỗi prompt một dòng, ngăn cách bằng dòng trống.
 Chỉ trả về prompts, không giải thích.
@@ -1058,8 +1425,10 @@ Bible:
 {bible[:8000]}"""
             
             char_system = (
-                "Bạn là chuyên gia tạo prompt hình ảnh nhân vật. "
-                "Trích xuất và tạo T2I prompts chi tiết cho từng nhân vật từ Bible."
+                "Bạn là chuyên gia tạo character turnaround model sheet prompts. "
+                "Tạo prompt mô tả CHÍNH XÁC 4-panel layout (FRONT, LEFT ¾, RIGHT ¾, BACK) "
+                "trên 1 ảnh duy nhất, nền trắng, tỉ lệ 16:9 ngang, concept art quality. "
+                "Mỗi prompt PHẢI bắt đầu bằng 'Character turnaround model sheet'."
             )
             
             char_response = await self._call_gemini_with_rotation(
@@ -1077,10 +1446,12 @@ Bible:
         characters = self.state.characters or []
         if not char_prompts and characters:
             for c in characters:
-                desc = c.description or f"Portrait of {c.name}"
+                desc = c.description or f"character {c.name}"
                 char_prompts.append(
-                    f"Professional portrait, {desc}, "
-                    f"studio lighting, neutral background, ultra detailed, 8K"
+                    f"Character turnaround model sheet, 4-view panel layout, "
+                    f"FRONT VIEW (full body facing camera), LEFT ¾ VIEW, RIGHT ¾ VIEW, BACK VIEW, "
+                    f"{desc}, plain white background, professional studio lighting, "
+                    f"concept art quality, ultra detailed, 16:9 horizontal layout"
                 )
         
         # R2-1 Fix: Sync char_prompts count with state.characters
@@ -1108,7 +1479,117 @@ Bible:
             "prompt_count": len(scenes),
             "character_prompts": char_prompts,
             "character_prompt_count": len(char_prompts),
+            "extended_chars": getattr(self, '_extended_chars_detected', []),
         }
+        
+        # ── Multi-Version Prompt Generation ──
+        video_count = self.state.video_count
+        
+        if video_count > 1 and self.state.versions:
+            # Store first version's scenes
+            self.state.versions[0].scenes = list(scenes)
+            
+            if self.state.multi_idea:
+                # Feature C: Each version has a DIFFERENT Bible → generate unique prompts
+                for vi in range(1, min(video_count, len(self.state.versions))):
+                    v = self.state.versions[vi]
+                    alt_bible = v.bible
+                    if not alt_bible:
+                        continue
+                    
+                    log.info(f"[Pipeline] Multi-Idea: Generating prompts for {v.label} from its Bible")
+                    
+                    # Use same extraction pipeline on the version's Bible
+                    alt_char_profiles = self._extract_char_profiles_from_bible(alt_bible)
+                    alt_char_names = ", ".join(alt_char_profiles.keys()) if alt_char_profiles else char_names
+                    
+                    alt_bible_summary = ""
+                    for section_name in ["PROJECT INFO", "SETTINGS", "STORY STRUCTURE"]:
+                        section = self._extract_bible_section(alt_bible, section_name)
+                        if section:
+                            alt_bible_summary += f"{section_name}:\n{section}\n\n"
+                    if not alt_bible_summary:
+                        alt_bible_summary = alt_bible[:2000]
+                    
+                    alt_prompts_user = (
+                        f"Topic: {topic}\n\n"
+                        + (f"{type_instruction}\n" if type_instruction else "")
+                        + f"{self._build_dimension_context(config)}\n"
+                        + f"BIBLE SUMMARY:\n{alt_bible_summary}\n\n"
+                        f"Character names: {alt_char_names}\n\n"
+                        f"REQUIREMENTS:\n"
+                        f"- Generate EXACTLY {scene_count} scene descriptions\n"
+                        f"- Total: {scene_count} x {clip_duration}s = {scene_count * clip_duration}s\n"
+                        f"- Each scene = 1 line, 1 blank line between scenes\n"
+                        f"- Use [CharacterName] tag for each character\n"
+                        f"- Do NOT write full character descriptions — just the NAME TAG + action\n"
+                        f"- At least 3-5 scenes use multi-segment (>>)\n"
+                        f"- Each scene MUST advance the story — NO filler/padding\n"
+                    )
+                    
+                    alt_raw = await self._call_gemini_with_rotation(
+                        prompt=alt_prompts_user, system=prompts_system,
+                        max_tokens=16000, temperature=0.5,
+                    )
+                    alt_raw_injected = self._inject_character_profiles(alt_raw, alt_char_profiles or char_profiles)
+                    v.scenes = self._parse_text_prompts(alt_raw_injected)
+                    log.info(f"[Pipeline] Multi-Idea: {v.label} → {len(v.scenes)} scenes generated")
+                
+            else:
+                # Feature A: Same Bible → generate VARIATIONS (different camera, wording, scene order)
+                for vi in range(1, min(video_count, len(self.state.versions))):
+                    v = self.state.versions[vi]
+                    log.info(f"[Pipeline] Multi-Version: Generating variation {v.label}")
+                    
+                    variation_prompt = (
+                        f"Topic: {topic}\n\n"
+                        f"BIBLE SUMMARY:\n{bible_summary}\n\n"
+                        f"Character names: {char_names}\n\n"
+                        f"TASK: Generate a VARIATION of the scene sequence.\n"
+                        f"⚠️ VARIATION RULES:\n"
+                        f"- Keep the SAME story content and characters\n"
+                        f"- CHANGE: camera angles, shot types, scene order, wording\n"
+                        f"- Use different camera movements (dolly, pan, tilt, zoom vs original)\n"
+                        f"- Reorder scenes where narratively possible\n"
+                        f"- Rephrase action descriptions with different vocabulary\n"
+                        f"- Generate EXACTLY {scene_count} scenes\n"
+                        f"- Each scene = 1 line, 1 blank line between scenes\n"
+                        f"- Use [CharacterName] tags\n"
+                        f"- This is variation #{vi + 1} — must be DISTINCT from the original\n"
+                    )
+                    
+                    alt_raw = await self._call_gemini_with_rotation(
+                        prompt=variation_prompt, system=prompts_system,
+                        max_tokens=16000, temperature=0.6 + (vi * 0.05),
+                    )
+                    alt_raw_injected = self._inject_character_profiles(alt_raw, char_profiles)
+                    v.scenes = self._parse_text_prompts(alt_raw_injected)
+                    v.bible = bible  # Same Bible for all versions in Feature A
+                    log.info(f"[Pipeline] Multi-Version: {v.label} → {len(v.scenes)} scenes generated")
+            
+            stage.data["version_scenes"] = {
+                v.label: len(v.scenes) for v in self.state.versions
+            }
+        
+        # ── Episode Scene Distribution (Feature B) ──
+        if self.state.is_multi_episode() and self.state.episodes:
+            ep_count = len(self.state.episodes)
+            scenes_per_ep = max(1, len(scenes) // ep_count)
+            remainder = len(scenes) % ep_count
+            
+            offset = 0
+            for ei, ep in enumerate(self.state.episodes):
+                count = scenes_per_ep + (1 if ei < remainder else 0)
+                ep.scenes = scenes[offset:offset + count]
+                # Re-index episodes' scenes starting from 1
+                for si, s in enumerate(ep.scenes):
+                    s.index = si + 1
+                offset += count
+                log.info(f"[Pipeline] Episode {ep.label}: {len(ep.scenes)} scenes (idx {offset - count + 1}-{offset})")
+            
+            stage.data["episode_scenes"] = {
+                ep.label: len(ep.scenes) for ep in self.state.episodes
+            }
         
         # Save is handled by tab_project._save_stage_to_disk() on confirm
     
@@ -1221,6 +1702,165 @@ Bible:
         import unicodedata
         nfkd = unicodedata.normalize('NFKD', text)
         return ''.join(c for c in nfkd if not unicodedata.combining(c)).lower()
+    
+    @staticmethod
+    def _extract_dialogues_from_script(text: str) -> list:
+        """Extract existing dialogues from input script text (LOCAL, no API).
+        
+        Detects Vietnamese script dialogue patterns:
+          - Character Name:\n"dialogue"
+          - Character Name: "dialogue"  
+          - Narrator/Sound effects
+        
+        Returns: list of {"speaker": str, "line": str, "scene_idx": int}
+        """
+        import re
+        dialogues = []
+        scene_idx = 0
+        lines = text.split('\n')
+        i = 0
+        
+        # Pattern: scene headers like "Cảnh 1", "Scene 2", "Khung 3"
+        scene_pattern = re.compile(
+            r'^(?:Cảnh|Scene|Màn|Phần)\s*\d+', re.IGNORECASE
+        )
+        # Pattern: speaker line like "Tên Nhân Vật:" or "Tên Nhân Vật:\n"
+        speaker_pattern = re.compile(
+            r'^([A-ZÀ-Ỹa-zà-ỹ][A-ZÀ-Ỹa-zà-ỹ\s]+?)(?:\s+mỉm cười)?:\s*$'
+        )
+        # Pattern: speaker + inline dialogue like 'Name: "dialogue"'
+        inline_pattern = re.compile(
+            r'^([A-ZÀ-Ỹa-zà-ỹ][A-ZÀ-Ỹa-zà-ỹ\s]+?):\s*["\u201c](.+?)["\u201d]\s*$'
+        )
+        # Pattern: quoted text on its own line
+        quote_pattern = re.compile(
+            r'^\s*["\u201c](.+?)["\u201d]\s*$'
+        )
+        
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Detect scene boundary
+            if scene_pattern.match(line):
+                scene_idx += 1
+                i += 1
+                continue
+            
+            # Case 1: Inline dialogue — 'Character: "dialogue"'
+            m_inline = inline_pattern.match(line)
+            if m_inline:
+                speaker = m_inline.group(1).strip()
+                dialogue_text = m_inline.group(2).strip()
+                if dialogue_text:
+                    dialogues.append({
+                        "speaker": speaker,
+                        "line": dialogue_text,
+                        "scene_idx": max(1, scene_idx),
+                    })
+                i += 1
+                continue
+            
+            # Case 2: Speaker on one line, dialogue on next — 'Character:\n"dialogue"'
+            m_speaker = speaker_pattern.match(line)
+            if m_speaker:
+                speaker = m_speaker.group(1).strip()
+                # Look ahead for quoted line
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    m_quote = quote_pattern.match(next_line)
+                    if m_quote:
+                        dialogue_text = m_quote.group(1).strip()
+                        if dialogue_text:
+                            dialogues.append({
+                                "speaker": speaker,
+                                "line": dialogue_text,
+                                "scene_idx": max(1, scene_idx),
+                            })
+                        i += 2
+                        continue
+            
+            i += 1
+        
+        if dialogues:
+            log.info(f"[Pipeline] Extracted {len(dialogues)} dialogues from script "
+                     f"({len(set(d['speaker'] for d in dialogues))} speakers)")
+        return dialogues
+    
+    async def _analyze_dialogues(self, dialogues: list, topic: str, config: dict) -> str:
+        """AI-powered dialogue analysis and improvement.
+        
+        Sends extracted dialogues to Gemini for:
+        - Rating: KEEP (good), IMPROVE (needs work), ADD (missing)
+        - Improved versions for weak dialogues
+        - Suggested new dialogues for scenes without them
+        
+        Returns: structured text for Bible DIALOGUE GUIDE injection.
+        """
+        if not dialogues or not self.client:
+            return ""
+        
+        # Format dialogues for AI
+        dialogue_text = ""
+        current_scene = 0
+        for d in dialogues:
+            if d["scene_idx"] != current_scene:
+                current_scene = d["scene_idx"]
+                dialogue_text += f"\n--- Cảnh {current_scene} ---\n"
+            dialogue_text += f'  {d["speaker"]}: "{d["line"]}"\n'
+        
+        scene_count = self.state.scene_count or 10
+        
+        # Build audience/tone context
+        tone = ", ".join(config.get("tone", [])) or "không xác định"
+        audience = ", ".join(config.get("audience", [])) or "không xác định"
+        
+        system = (
+            "Bạn là chuyên gia biên kịch lời thoại cho video. "
+            "Phân tích lời thoại đã có trong kịch bản và cải thiện chúng."
+        )
+        
+        prompt = f"""Phân tích lời thoại từ kịch bản sau:
+
+Chủ đề: {topic[:500]}
+Đối tượng: {audience}
+Tone: {tone}
+Tổng số cảnh mong muốn: {scene_count}
+
+LỜI THOẠI HIỆN CÓ:
+{dialogue_text}
+
+YÊU CẦU:
+1. Đánh giá TỪNG câu thoại:
+   - ✅ GIỮ NGUYÊN: câu thoại tốt, tự nhiên, phù hợp nhân vật
+   - 🔧 CẢI THIỆN: câu thoại cần sửa (kèm phiên bản mới)
+   - ➕ BỔ SUNG: đề xuất thêm câu thoại cho cảnh còn thiếu
+
+2. Nguyên tắc:
+   - Giữ nguyên tối đa lời thoại gốc hay
+   - Cải thiện phải giữ ý nghĩa + tính cách nhân vật
+   - Bổ sung phải phù hợp bối cảnh và nhân vật
+   - Phù hợp đối tượng {audience}, tone {tone}
+
+3. Format output:
+   Cho mỗi cảnh, liệt kê:
+   ### Cảnh [N]
+   [Speaker]: "[Lời thoại]" — [✅ GIỮ / 🔧 CẢI THIỆN từ "original" / ➕ BỔ SUNG]
+   
+   Cuối cùng thêm section:
+   ### TỔNG KẾT
+   - Tổng số câu thoại gốc: X
+   - Giữ nguyên: Y
+   - Cải thiện: Z  
+   - Bổ sung: W
+"""
+        
+        result = await self._call_gemini_with_rotation(
+            prompt=prompt, system=system,
+            max_tokens=8000, temperature=0.3,
+        )
+        
+        log.info(f"[Pipeline] Dialogue analysis complete: {len(dialogues)} dialogues analyzed")
+        return result
     
     def _inject_character_profiles(self, raw_scenes: str, char_profiles: dict) -> str:
         """Inject full character profiles into compact scene descriptions.
@@ -1512,6 +2152,47 @@ Bible:
             else:
                 missing.append(s.index)
         
+        # ── Fallback: auto-resolve video_path from disk ──
+        # Queue downloads videos to output folder but scene.video_path may not be set.
+        # Scan for files matching {index:03d}_*_720p.mp4 or {index:03d}_*.mp4 pattern.
+        if missing and output_folder:
+            import glob
+            video_dirs = [
+                os.path.join(output_folder, "video", "720p"),
+                os.path.join(output_folder, "video"),
+                output_folder,
+            ]
+            resolved = []
+            for scene_idx in list(missing):
+                found_path = None
+                for vdir in video_dirs:
+                    if not os.path.isdir(vdir):
+                        continue
+                    # Try 720p variant first, then any mp4
+                    for pattern in [f"{scene_idx:03d}_*_720p.mp4", f"{scene_idx:03d}_*.mp4"]:
+                        matches = glob.glob(os.path.join(vdir, pattern))
+                        if matches:
+                            found_path = matches[0]
+                            break
+                    if found_path:
+                        break
+                
+                if found_path:
+                    # Update scene data
+                    for s in scenes:
+                        if s.index == scene_idx:
+                            s.video_path = found_path
+                            clips.append({"index": s.index, "path": found_path, "duration_s": s.duration_s})
+                            break
+                    resolved.append(scene_idx)
+                    missing.remove(scene_idx)
+                    log.info(f"[Pipeline] Stage 7: Auto-resolved scene {scene_idx} → {found_path}")
+            
+            if resolved:
+                log.info(f"[Pipeline] Stage 7: Auto-resolved {len(resolved)}/{len(resolved)+len(missing)} missing video paths")
+                # Sort clips by index to maintain correct order
+                clips.sort(key=lambda c: c["index"])
+        
         # Generate output path
         import re
         topic_raw = self.state.topic[:50] or "production"
@@ -1569,6 +2250,7 @@ Bible:
                         capture_output=True,
                         text=True,
                         timeout=300,  # 5 min timeout
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                     )
                     
                     if result.returncode == 0 and os.path.isfile(final_path):
