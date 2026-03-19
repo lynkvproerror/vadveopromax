@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 12
+SETTINGS_VERSION = 14
 
 
 @dataclass
@@ -123,6 +123,11 @@ class AppSettings:
     developer_mode: bool = False
     show_json_preview: bool = False
     hide_emails: bool = False            # Email masking in profiles table
+    
+    # === MEMORY MANAGEMENT ===
+    log_buffer_max: int = 20_000         # Max log entries in DevConsole buffer (0 = unlimited)
+    session_errors_max: int = 2_000      # Max session error entries to keep
+    auto_clear_tasks_max: int = 2_000    # Auto-clear completed tasks when count exceeds (0 = disabled)
     
     # === NOTIFICATIONS ===
     notify_toast_enabled: bool = True        # In-app toast on group complete
@@ -256,6 +261,15 @@ class AppSettings:
             # 11 → 12: Add download non-watermark (zoom+crop)
             11: lambda d: {**d,
                 'download_non_watermark': True,
+            },
+            # 12 → 13: Add memory management settings
+            12: lambda d: {**d,
+                'log_buffer_max': 20_000,
+                'session_errors_max': 2_000,
+            },
+            # 13 → 14: Add auto-clear completed tasks cap
+            13: lambda d: {**d,
+                'auto_clear_tasks_max': 2_000,
             },
         }
         

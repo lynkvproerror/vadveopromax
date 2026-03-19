@@ -172,9 +172,10 @@ def get_local_extension_version() -> str:
     """Read extension version from bundled extension/manifest.json."""
     try:
         if getattr(sys, "frozen", False):
-            ext_manifest = Path(os.path.dirname(sys.executable)) / "extension" / "manifest.json"
+            # ★ R9-P8: Use resolve() for symlink/junction consistency (matches _get_app_dir)
+            ext_manifest = Path(sys.executable).resolve().parent / "extension" / "manifest.json"
         else:
-            ext_manifest = Path(__file__).parent.parent / "extension" / "manifest.json"
+            ext_manifest = Path(__file__).resolve().parent.parent / "extension" / "manifest.json"
         
         if ext_manifest.exists():
             data = json.loads(ext_manifest.read_text(encoding='utf-8'))
@@ -474,6 +475,11 @@ class AutoUpdater(QObject):
         3. Write PowerShell script that waits for exit, replaces app, restarts
         4. Exit current app
         """
+        # ★ R9-P6: Prevent concurrent apply calls (pending + manual button race)
+        if getattr(self, '_applying_update', False):
+            log.warning("apply_update already in progress — ignoring duplicate call")
+            return
+        self._applying_update = True
         try:
             # ★ R5-1: Validate ZIP integrity before destructive operations
             try:
@@ -510,10 +516,33 @@ class AutoUpdater(QObject):
             else:
                 source_dir = extract_dir
             
+            # ★ R8-P4: Validate source_dir contains expected exe
+            exe_name = os.path.basename(sys.executable)
+            if not os.path.isfile(os.path.join(source_dir, exe_name)):
+                # Try subdirectories (ZIP might have extra nesting)
+                found = False
+                for item in os.listdir(source_dir):
+                    candidate = os.path.join(source_dir, item)
+                    if os.path.isdir(candidate) and os.path.isfile(
+                        os.path.join(candidate, exe_name)
+                    ):
+                        source_dir = candidate
+                        found = True
+                        log.info(f"Source exe found in subdirectory: {source_dir}")
+                        break
+                if not found:
+                    log.error(f"Extracted ZIP does not contain {exe_name}")
+                    self.download_error.emit(
+                        f"ZIP không chứa {exe_name}\n"
+                        f"Vui lòng tải lại bản cập nhật."
+                    )
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                    return
+            
             # ★ E1: Write paths to JSON sidecar to prevent PowerShell injection
             ps1_path = os.path.join(tempfile.gettempdir(), "veo_updater.ps1")
             json_path = os.path.join(tempfile.gettempdir(), "veo_updater_paths.json")
-            exe_name = os.path.basename(sys.executable)
+            # ★ R9-P7: exe_name already defined at R8-P4 validation block above
             exe_full = os.path.join(app_dir, exe_name)
             pid = os.getpid()
             log_path = os.path.join(tempfile.gettempdir(), "veo_update.log")
@@ -534,6 +563,14 @@ class AutoUpdater(QObject):
             ps1_content = f"""
 $ErrorActionPreference = 'Continue'
 
+# ★ R6: Global error trap — catches silent PS1 crashes
+trap {{
+    $ts = Get-Date -Format 'HH:mm:ss'
+    "$ts UNHANDLED ERROR: $_" | Out-File -Append -FilePath $cfg.logFile -Encoding utf8
+    "$ts   At line: $($_.InvocationInfo.ScriptLineNumber)" | Out-File -Append -FilePath $cfg.logFile -Encoding utf8
+    continue
+}}
+
 # ★ E1+R5-5: Read paths from JSON sidecar (injection-safe, here-string)
 $jsonPath = @'
 {json_path}
@@ -548,23 +585,110 @@ function Log($msg) {{
 }}
 
 Log '=== VEO Pro Max Clean Updater ==='
+
+# ★ R7: Write start marker — proves PS1 launched
+$markerFile = Join-Path $env:TEMP 'veo_update_marker.txt'
+"started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" | Out-File -FilePath $markerFile -Encoding utf8
+Log 'Marker: started'
+
 Log 'Waiting for app to exit...'
 
-# Wait for the running app process to exit (by PID, max 30s)
+# ★ R7: Improved WaitForExit — 60s timeout + process name fallback
 try {{
     $proc = Get-Process -Id $cfg.pid -ErrorAction SilentlyContinue
     if ($proc) {{
-        $proc.WaitForExit(30000) | Out-Null
-        Log 'App process exited.'
+        $exited = $proc.WaitForExit(60000)
+        if ($exited) {{ Log 'App process exited (by PID).' }}
+        else {{ Log 'WARNING: App did not exit within 60s — continuing anyway' }}
     }} else {{
-        Log 'App process already exited.'
+        Log 'App process already exited (PID not found).'
     }}
 }} catch {{
-    Log "WaitForExit error: $_ — continuing anyway"
+    Log "WaitForExit error: $_ — trying by name..."
 }}
 
-# Extra safety wait for file handles to release
-Start-Sleep -Seconds 3
+# ★ R7: Fallback — wait for any VEO_Pro_Max.exe to exit (covers PID reuse edge case)
+$exeName = Split-Path $cfg.exePath -Leaf
+$exeBaseName = [IO.Path]::GetFileNameWithoutExtension($exeName)
+for ($w = 0; $w -lt 10; $w++) {{
+    $still = Get-Process -Name $exeBaseName -ErrorAction SilentlyContinue
+    if (-not $still) {{ break }}
+    Log "App still running (by name '$exeBaseName'), waiting 2s... ($($w+1)/10)"
+    Start-Sleep -Seconds 2
+}}
+
+# ★ R8-P1: Force-kill if STILL running after wait loop (prevents locked exe)
+$still = Get-Process -Name $exeBaseName -ErrorAction SilentlyContinue
+if ($still) {{
+    Log "FORCE KILLING $exeBaseName (still running after 20s wait)"
+    & taskkill /F /IM $exeName 2>&1 | Out-Null
+    Start-Sleep -Seconds 3
+    Log 'Force kill done.'
+}} else {{
+    # Extra safety wait for file handles to release
+    Start-Sleep -Seconds 3
+}}
+
+# ★ FIX R5: Kill orphan Chrome processes using our browser profiles
+# Chrome spawns ~10 child processes (renderer, GPU, utility, crashpad)
+# taskkill /T /F kills entire process TREE — not just main PID
+Log 'Killing orphan Chrome processes...'
+$profilesDirs = @()
+$profilesDir1 = Join-Path $env:USERPROFILE '.veoauto\browser_profiles'
+$profilesDir2 = Join-Path $cfg.appDir 'config\browser_profiles'
+if (Test-Path $profilesDir1) {{ $profilesDirs += $profilesDir1 }}
+if (Test-Path $profilesDir2) {{ $profilesDirs += $profilesDir2 }}
+$chromeKilled = 0
+foreach ($profilesDir in $profilesDirs) {{
+    Log "Scanning $profilesDir for Chrome PID files..."
+    Get-ChildItem -Path $profilesDir -Filter '.chrome_pid.json' -Recurse -Force | ForEach-Object {{
+        try {{
+            $pidData = Get-Content $_.FullName -Raw -Encoding utf8 | ConvertFrom-Json
+            $chromePid = $pidData.pid
+            $chromeProc = Get-Process -Id $chromePid -ErrorAction SilentlyContinue
+            if ($chromeProc -and $chromeProc.Name -match 'chrome') {{
+                # taskkill /T = tree kill (parent + all children)
+                & taskkill /T /F /PID $chromePid 2>&1 | Out-Null
+                $chromeKilled++
+                Log "Killed Chrome tree PID=$chromePid"
+            }}
+        }} catch {{
+            Log "Chrome kill warning: $_"
+        }}
+    }}
+}}
+
+# ★ FIX R5: Nuclear fallback — kill ANY chrome.exe using our browser_profiles
+# Catches Chrome processes not tracked by PID files (orphaned children, relaunched instances)
+foreach ($profilesDir in $profilesDirs) {{
+    Get-Process -Name 'chrome' -ErrorAction SilentlyContinue | Where-Object {{
+        try {{
+            $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)").CommandLine
+            $cmdLine -and ($cmdLine -match [regex]::Escape($profilesDir))
+        }} catch {{ $false }}
+    }} | ForEach-Object {{
+        & taskkill /T /F /PID $_.Id 2>&1 | Out-Null
+        $chromeKilled++
+        Log "Nuclear: killed chrome.exe PID=$($_.Id)"
+    }}
+}}
+
+# ★ FIX R5: Kill orphan node.exe from Playwright driver
+# Playwright spawns node.exe that holds locks on playwright/ package directory
+$appDir = $cfg.appDir
+Get-Process -Name 'node' -ErrorAction SilentlyContinue | Where-Object {{
+    try {{ $_.MainModule.FileName -like "$appDir*" }} catch {{ $false }}
+}} | ForEach-Object {{
+    Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    Log "Killed orphan node.exe PID=$($_.Id)"
+}}
+
+if ($profilesDirs.Count -eq 0) {{
+    Log 'No browser_profiles dir found — skipping Chrome cleanup.'
+}} else {{
+    Start-Sleep -Seconds 2
+    Log "Chrome cleanup done ($chromeKilled killed)."
+}}
 
 $appDir   = $cfg.appDir
 $srcDir   = $cfg.srcDir
@@ -572,21 +696,46 @@ $exePath  = $cfg.exePath
 $zipPath  = $cfg.zipPath
 $extrDir  = $cfg.extrDir
 
-# ★ FIX: Wait until exe is unlocked (max 15s retry)
+# ★ R6: Validate source directory BEFORE any file operations
+Log "Source dir: $srcDir"
+Log "App dir:    $appDir"
+Log "Exe path:   $exePath"
+$srcCount = (Get-ChildItem $srcDir -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object).Count
+Log "Source file count: $srcCount"
+if ($srcCount -eq 0) {{
+    Log 'FATAL: Source directory is EMPTY — aborting update!'
+    exit 1
+}}
+$srcExe = Get-ChildItem -Path $srcDir -Filter '*.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($srcExe) {{ Log "Source exe: $($srcExe.Name) ($([math]::Round($srcExe.Length / 1MB, 1)) MB)" }}
+else {{ Log 'WARNING: No .exe found in source directory!' }}
+
+# ★ R7: Rename-trick — Windows allows renaming a running exe!
+# Rename old exe to .bak BEFORE robocopy → new exe writes without lock conflict
 $exeFile = Join-Path $appDir (Split-Path $exePath -Leaf)
-for ($i = 0; $i -lt 5; $i++) {{
+$exeBak = "$exeFile.old_bak"
+if (Test-Path $exeFile) {{
     try {{
-        if (Test-Path $exeFile) {{
-            [IO.File]::Open($exeFile, 'Open', 'ReadWrite', 'None').Close()
-            Log 'Exe file is unlocked.'
-            break
-        }} else {{
-            break
-        }}
+        # Remove old .bak if exists from previous failed update
+        if (Test-Path $exeBak) {{ Remove-Item $exeBak -Force -ErrorAction SilentlyContinue }}
+        Rename-Item -Path $exeFile -NewName (Split-Path $exeBak -Leaf) -Force -ErrorAction Stop
+        Log "Exe renamed to .old_bak (rename-trick success)"
     }} catch {{
-        Log "Exe still locked (attempt $($i+1)/5), waiting 3s..."
-        Start-Sleep -Seconds 3
+        Log "Exe rename failed: $_ — will try overwrite via robocopy"
+        # Fallback: wait until exe is unlocked (max 15s)
+        for ($i = 0; $i -lt 5; $i++) {{
+            try {{
+                [IO.File]::Open($exeFile, 'Open', 'ReadWrite', 'None').Close()
+                Log 'Exe file is unlocked.'
+                break
+            }} catch {{
+                Log "Exe still locked (attempt $($i+1)/5), waiting 3s..."
+                Start-Sleep -Seconds 3
+            }}
+        }}
     }}
+}} else {{
+    Log 'Old exe not found — fresh install.'
 }}
 
 # CLEAN UPDATE: Delete old app → Copy new
@@ -628,19 +777,87 @@ try {{
     try {{ Remove-Item -Path $appDir -Force -ErrorAction SilentlyContinue; $deleteOk = $true }} catch {{}}
     if (-not $deleteOk) {{
         Log 'WARNING: Could not fully delete old folder — will overwrite'
+        # ★ R6: Log what files survived deletion
+        $remaining = Get-ChildItem -Path $appDir -Recurse -Force -ErrorAction SilentlyContinue |
+            Where-Object {{ -not $_.PSIsContainer }} | Select-Object -First 20
+        foreach ($rem in $remaining) {{
+            Log "  STILL EXISTS: $($rem.FullName) ($($rem.Length) bytes)"
+        }}
     }}
 }}
 
 Log "Copying new files from $srcDir to $appDir ..."
 New-Item -Path $appDir -ItemType Directory -Force | Out-Null
-try {{
-    Copy-Item -Path (Join-Path $srcDir '*') -Destination $appDir -Recurse -Force -ErrorAction Stop
-    Log 'Copy completed successfully.'
-}} catch {{
-    Log "Copy-Item failed: $_"
-    Log 'Trying robocopy fallback...'
-    & robocopy $srcDir $appDir /E /IS /IT /NFL /NDL /NJH /NJS 2>&1 | Out-Null
-    Log 'Robocopy fallback done.'
+# ★ FIX R2: Use robocopy /MIR as PRIMARY — handles merge, overwrites, AND stale cleanup
+# /MIR = mirror mode (/E + /PURGE) — deletes stale files in destination
+# ★ R8-P3: Use full path for /XD to avoid excluding nested 'tools' dirs
+# /R:2 /W:1 = retry locked files 2 times with 1s wait
+$toolsExclude = Join-Path $appDir 'tools'
+Log 'Using robocopy mirror...'
+# ★ R6: Log robocopy output instead of suppressing (critical for diagnosis)
+$roboLog = & robocopy $srcDir $appDir /MIR /IS /IT /R:2 /W:1 /XD $toolsExclude 2>&1
+$roboLog | Out-File -Append -FilePath $logFile -Encoding utf8
+$roboExit = $LASTEXITCODE
+if ($roboExit -le 7) {{
+    # ★ R9-P9: Exit codes 4-7 indicate partial mismatches — log as warning
+    if ($roboExit -ge 4) {{
+        Log "WARNING: Robocopy partial mismatch (exit=$roboExit) — some files may not have copied correctly"
+    }} else {{
+        Log "Robocopy completed (exit=$roboExit)."
+    }}
+    $deleteOk = $true
+}} else {{
+    Log "Robocopy had errors (exit=$roboExit) — falling back to Copy-Item..."
+    try {{
+        Copy-Item -Path (Join-Path $srcDir '*') -Destination $appDir -Recurse -Force -ErrorAction Stop
+        Log 'Copy-Item fallback done.'
+    }} catch {{
+        Log "Copy-Item also failed: $_"
+    }}
+    # ★ R8-P2: Purge stale files not present in source (Copy-Item has no /PURGE)
+    Log 'Purging stale files from destination...'
+    $purgedCount = 0
+    Get-ChildItem -Path $appDir -Recurse -File -Force -ErrorAction SilentlyContinue | ForEach-Object {{
+        $rel = $_.FullName.Substring($appDir.Length + 1)
+        $srcPath = Join-Path $srcDir $rel
+        if (-not (Test-Path $srcPath)) {{
+            # Skip tools/ dir (managed separately)
+            if (-not $rel.StartsWith('tools\')) {{
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                $purgedCount++
+            }}
+        }}
+    }}
+    Log "Purged $purgedCount stale files."
+}}
+
+# ★ R6: Post-copy verification — compare file counts
+$dstCount = (Get-ChildItem $appDir -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object).Count
+Log "Destination file count after copy: $dstCount (source had: $srcCount)"
+$dstExe = Join-Path $appDir (Split-Path $exePath -Leaf)
+if (Test-Path $dstExe) {{
+    $exeSize = [math]::Round((Get-Item $dstExe).Length / 1MB, 1)
+    Log "Destination exe: $dstExe ($exeSize MB)"
+}} else {{
+    Log "CRITICAL: Exe NOT found in destination after copy: $dstExe"
+}}
+
+# ★ R7: Compare version.json — definitive proof update content is correct
+$srcVer = Join-Path $srcDir 'version.json'
+$dstVer = Join-Path $appDir 'version.json'
+if ((Test-Path $srcVer) -and (Test-Path $dstVer)) {{
+    $sv = (Get-Content $srcVer -Raw -Encoding utf8 | ConvertFrom-Json).version
+    $dv = (Get-Content $dstVer -Raw -Encoding utf8 | ConvertFrom-Json).version
+    if ($sv -eq $dv) {{ Log "Version match: $sv ✓" }}
+    else {{ Log "VERSION MISMATCH! Source=$sv Dest=$dv — update may have failed" }}
+}} elseif (Test-Path $srcVer) {{
+    Log 'WARNING: version.json exists in source but NOT in destination'
+}}
+
+# ★ R7: Clean up .old_bak exe (safe now — process has exited)
+if (Test-Path $exeBak) {{
+    Remove-Item $exeBak -Force -ErrorAction SilentlyContinue
+    Log 'Cleaned up .old_bak exe'
 }}
 
 # ★ Rule #11: Restore tools/ from backup (merge — keep new version if ZIP already bundles)
@@ -703,6 +920,10 @@ Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
 # ★ R4-2: Remove JSON sidecar (contains full paths)
 Remove-Item -Path $jsonPath -Force -ErrorAction SilentlyContinue
 
+# ★ R7: Write completion marker — proves PS1 ran to the end
+"completed $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" | Out-File -FilePath $markerFile -Encoding utf8
+Log 'Marker: completed'
+
 # Restart
 Log "Starting: $exePath"
 Start-Process -FilePath $exePath -WorkingDirectory $appDir
@@ -714,9 +935,6 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             
             with open(ps1_path, "w", encoding="utf-8") as f:
                 f.write(ps1_content)
-            
-            # Clear any pending update marker
-            self.clear_pending_update()
             
             # Launch updater PowerShell script and exit
             log.info(f"Launching updater: {ps1_path}")
@@ -736,10 +954,35 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
                 stderr=subprocess.DEVNULL,
             )
             
+            # ★ R8-P0: Clear pending AFTER Popen succeeds
+            # If Popen throws, pending marker stays → retry on next startup
+            self.clear_pending_update()
+            
             self.update_applied.emit()
             
-            # Exit the app
-            QTimer.singleShot(500, lambda: os._exit(0))
+            # ★ FIX R3: Kill all Chrome processes BEFORE exit
+            # os._exit() bypasses closeEvent() → Chrome kill in app.py never runs
+            # Chrome holds locks on DLLs, .pyd, extension/ files → PS1 Remove-Item fails
+            try:
+                from core.chrome_manager import kill_all_managed_chromes
+                # browser_profiles is at ~/.veoauto/browser_profiles (primary)
+                # and possibly config/browser_profiles (legacy) inside app dir
+                killed_any = False
+                for bp_dir in [
+                    os.path.join(str(Path.home()), ".veoauto", "browser_profiles"),
+                    os.path.join(self._get_app_dir(), "config", "browser_profiles"),
+                ]:
+                    if os.path.isdir(bp_dir):
+                        kill_all_managed_chromes(bp_dir)
+                        log.info(f"Pre-update: killed Chrome in {bp_dir}")
+                        killed_any = True
+                if not killed_any:
+                    log.debug("Pre-update: no browser_profiles dirs found")
+            except Exception as e:
+                log.warning(f"Pre-update Chrome kill failed: {e}")
+            
+            # Exit the app (3s delay for Chrome kill + file handle release)
+            QTimer.singleShot(3000, lambda: os._exit(0))
             
         except Exception as e:
             log.error(f"Failed to apply update: {e}")
@@ -975,11 +1218,14 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
     
     @staticmethod
     def _get_app_dir() -> str:
-        """Get the application root directory."""
+        """Get the application root directory.
+        
+        ★ R8-P5: Uses resolve() to handle symlinks/junctions correctly.
+        """
         if getattr(sys, "frozen", False):
-            return os.path.dirname(sys.executable)
+            return str(Path(sys.executable).resolve().parent)
         else:
-            return str(Path(__file__).parent.parent)
+            return str(Path(__file__).resolve().parent.parent)
 
 
 class _ExtUpdateWorker(QThread):
@@ -1074,8 +1320,10 @@ class _ExtUpdateWorker(QThread):
                                     except Exception:
                                         pass
             
-            if _rmtree_ok and not os.path.isdir(ext_dir):
-                shutil.copytree(src_ext, ext_dir)
+            if _rmtree_ok:
+                # ★ FIX: dirs_exist_ok=True guards against race condition where
+                # ext_dir is recreated between rmtree and copytree
+                shutil.copytree(src_ext, ext_dir, dirs_exist_ok=True)
             
             # Cleanup
             shutil.rmtree(extract_dir, ignore_errors=True)

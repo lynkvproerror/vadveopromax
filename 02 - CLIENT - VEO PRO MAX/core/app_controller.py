@@ -489,6 +489,13 @@ class AppController:
             asyncio.run(self._refresh_extension_data(email))
         except Exception as e:
             log.debug(f"[ExtensionBridge] Startup refresh scheduling failed: {e}")
+        
+        # Tier check for this account (after data refresh completes)
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.ensure_future(self._enforce_single_account_tier(email))
+        except Exception:
+            pass
     
     def _on_readiness_token(self, email: str, token: str):
         """Callback from ExtensionBridge when readiness check yields a valid token.
@@ -564,7 +571,46 @@ class AppController:
                     if ready2:
                         log.info(f"[ProactiveWarmup] {email}: ✅ reCAPTCHA ready on retry")
                     else:
-                        log.warning(f"[ProactiveWarmup] {email}: ❌ reCAPTCHA still not ready after retry")
+                        # ★ Fix 3: Escalate — try full reload + hard navigation
+                        # Instead of just logging warning and giving up,
+                        # actively recover the reCAPTCHA widget during startup.
+                        log.warning(
+                            f"[ProactiveWarmup] {email}: ❌ still not ready → "
+                            f"escalating to full reload"
+                        )
+                        try:
+                            await self._extension_bridge._trigger_refresh(
+                                email, "ProactiveWarmup escalation", level="full"
+                            )
+                            await asyncio.sleep(25.0)  # VEO page load + reCAPTCHA init
+                            
+                            if not self._extension_bridge.is_connected(email):
+                                log.debug(f"[ProactiveWarmup] {email}: disconnected during reload")
+                            else:
+                                ready3 = await self._extension_bridge.check_recaptcha_ready(
+                                    email, timeout=20.0
+                                )
+                                if ready3:
+                                    log.info(f"[ProactiveWarmup] {email}: ✅ reCAPTCHA ready after reload")
+                                    self._notify_status(f"✅ {email}: reCAPTCHA recovered after reload")
+                                else:
+                                    log.warning(
+                                        f"[ProactiveWarmup] {email}: 🔄 reload failed → hard navigation"
+                                    )
+                                    await self._extension_bridge.trigger_hard_navigation(email)
+                                    await asyncio.sleep(20.0)
+                                    ready4 = await self._extension_bridge.check_recaptcha_ready(
+                                        email, timeout=20.0
+                                    )
+                                    if ready4:
+                                        log.info(f"[ProactiveWarmup] {email}: ✅ reCAPTCHA ready after hard nav")
+                                    else:
+                                        log.error(
+                                            f"[ProactiveWarmup] {email}: ❌ reCAPTCHA dead after "
+                                            f"all recovery attempts — engine will handle on Start All"
+                                        )
+                        except Exception as warmup_err:
+                            log.debug(f"[ProactiveWarmup] {email}: escalation error: {warmup_err}")
         except Exception as e:
             log.debug(f"[ProactiveWarmup] {email}: warm-up failed (non-fatal): {e}")
         finally:
@@ -807,6 +853,65 @@ class AppController:
                         acc._parent_manager = self._multi_account  # for bridge auto-recovery
                     log.info(f"[AutoLaunch] ProfilesController + ExtensionBridge injected into {len(self._multi_account._accounts)} accounts")
                 
+                # Step 2.5: Pre-launch tier check — call /v1/credits via HTTP (no browser)
+                # Uses cached access tokens from tokens.json to get real-time tier from server
+                if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                    try:
+                        from core.token_manager import get_token_manager
+                        import urllib.request, urllib.error, json as _json
+                        
+                        _tm = get_token_manager()
+                        _API_URL = "https://aisandbox-pa.googleapis.com/v1/credits?key=AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY"
+                        _pre_disabled = 0
+                        
+                        for p_obj in self._profiles_controller._profiles:
+                            if not p_obj.is_enabled:
+                                continue  # already disabled
+                            
+                            _token = _tm.get_valid_token(p_obj.email)
+                            if not _token:
+                                log.debug(f"[PreTierCheck] No valid token for {p_obj.email} — skip (will check after browser)")
+                                continue
+                            
+                            # Call /v1/credits API with Bearer token
+                            try:
+                                _req = urllib.request.Request(_API_URL, headers={
+                                    "Authorization": f"Bearer {_token}"
+                                })
+                                with urllib.request.urlopen(_req, timeout=10) as _resp:
+                                    _data = _json.loads(_resp.read().decode())
+                                
+                                _tier = _data.get("userPaygateTier", "")
+                                _sku = _data.get("sku", "")
+                                _credits_val = _data.get("credits", 0)
+                                
+                                # Update profile with fresh server data
+                                p_obj.paygate_tier = _tier or p_obj.paygate_tier
+                                p_obj.sku = _sku or p_obj.sku
+                                p_obj.credits = _credits_val
+                                p_obj.subscription_fetched = True
+                                
+                                if _tier == "PAYGATE_TIER_NOT_PAID":
+                                    p_obj.is_enabled = False
+                                    for acc in self._multi_account._accounts:
+                                        if acc.email == p_obj.email:
+                                            acc.disable()
+                                            break
+                                    _pre_disabled += 1
+                                    log.warning(f"[PreTierCheck] ⛔ {p_obj.email}: Free → disabled (skipping browser)")
+                                else:
+                                    _label = "Ultra" if _tier == "PAYGATE_TIER_TWO" else "Pro" if _tier == "PAYGATE_TIER_ONE" else _tier
+                                    log.info(f"[PreTierCheck] ✅ {p_obj.email}: {_label}")
+                            except Exception as _e:
+                                log.debug(f"[PreTierCheck] API call failed for {p_obj.email}: {_e} — will recheck after browser")
+                        
+                        if _pre_disabled > 0:
+                            self._profiles_controller.save_profiles()
+                            self._notify_profiles_changed()
+                            log.warning(f"[PreTierCheck] ⛔ {_pre_disabled} Free account(s) disabled before browser launch")
+                    except Exception as _pre_err:
+                        log.debug(f"[PreTierCheck] Pre-launch tier check failed: {_pre_err}")
+                
                 # Step 3: Open debug browsers
                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                     profiles = self._profiles_controller.get_all_profiles()
@@ -882,6 +987,13 @@ class AppController:
                         asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
                     if connected:
                         log.info(f"[AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for {len(connected)} emails")
+                
+                # Step 7.5: Enforce account tiers — disable Free, sync paygate_tier
+                try:
+                    await self._enforce_account_tiers()
+                    log.info("[AutoLaunch] ✅ Account tier enforcement complete")
+                except Exception as e:
+                    log.warning(f"[AutoLaunch] Account tier check failed: {e}")
                 
                 self._push_browser_status()
                 
@@ -4307,6 +4419,109 @@ class AppController:
             account.set_profiles_controller(self._profiles_controller)
         if not getattr(account, '_parent_manager', None):
             account._parent_manager = self._multi_account
+    
+    async def _enforce_account_tiers(self):
+        """Check paygate_tier for all accounts — disable Free, sync tier to runtime.
+        
+        Called after browsers connect and extension data is available.
+        Fetches subscription info if not yet cached, then:
+        - Disables PAYGATE_TIER_NOT_PAID (Free) accounts
+        - Logs tier for each account
+        - Pushes updated browser status to UI
+        """
+        if not self._profiles_controller:
+            return
+        
+        disabled_count = 0
+        for acc in list(self._multi_account._accounts):
+            email = acc.email
+            try:
+                profile = self._profiles_controller.get_profile(email)
+                if not profile:
+                    continue
+                
+                # Fetch fresh subscription if not yet fetched
+                tier = profile.paygate_tier
+                if not tier or tier == "UNKNOWN":
+                    try:
+                        await self._profiles_controller._fetch_subscription_via_browser(email)
+                        profile = self._profiles_controller.get_profile(email)
+                        tier = profile.paygate_tier if profile else None
+                    except Exception as e:
+                        log.debug(f"[TierCheck] Subscription fetch failed for {email}: {e}")
+                
+                # Sync tier from profile → runtime AccountManager
+                if tier:
+                    acc._paygate_tier = tier
+                
+                # Disable Free accounts
+                if tier == "PAYGATE_TIER_NOT_PAID":
+                    acc.disable()
+                    profile.is_enabled = False
+                    self._profiles_controller.save_profiles()
+                    disabled_count += 1
+                    log.warning(f"[TierCheck] ⛔ {email}: Free account → auto-disabled")
+                else:
+                    tier_label = "Ultra" if tier == "PAYGATE_TIER_TWO" else (
+                        "Pro" if tier == "PAYGATE_TIER_ONE" else tier or "unknown"
+                    )
+                    log.info(f"[TierCheck] ✅ {email}: {tier_label}")
+            except Exception as e:
+                log.debug(f"[TierCheck] Error checking {email}: {e}")
+        
+        if disabled_count > 0:
+            log.warning(f"[TierCheck] ⛔ {disabled_count} Free account(s) auto-disabled")
+            self._push_browser_status()
+            self._notify_profiles_changed()
+        else:
+            log.info("[TierCheck] ✅ All accounts are Pro or Ultra")
+    
+    async def _enforce_single_account_tier(self, email: str):
+        """Check tier for a single account — called on extension connect."""
+        if not self._profiles_controller:
+            return
+        
+        acc = self._multi_account.get_account(email)
+        if not acc:
+            return
+        
+        profile = self._profiles_controller.get_profile(email)
+        if not profile:
+            return
+        
+        tier = profile.paygate_tier
+        if tier:
+            acc._paygate_tier = tier
+        
+        if tier == "PAYGATE_TIER_NOT_PAID":
+            acc.disable()
+            profile.is_enabled = False
+            self._profiles_controller.save_profiles()
+            log.warning(f"[TierCheck] ⛔ {email}: Free account → auto-disabled")
+            self._push_browser_status()
+            self._notify_profiles_changed()
+    
+    def _notify_profiles_changed(self):
+        """Notify Settings tab to refresh profiles table (thread-safe).
+        
+        Triggers the profiles_changed callback registered by TabSettings,
+        which calls _refresh_profiles_table() to update toggle switches.
+        """
+        if not (hasattr(self, '_profiles_controller') and self._profiles_controller):
+            return
+        cb = self._profiles_controller._callbacks.get("profiles_changed")
+        if not cb:
+            return
+        try:
+            from PySide6.QtCore import QMetaObject, Qt, QThread
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and QThread.currentThread() != app.thread():
+                QMetaObject.invokeMethod(app, cb, Qt.ConnectionType.QueuedConnection)
+            else:
+                cb()
+        except Exception as e:
+            log.debug(f"[NotifyProfiles] Failed to notify UI: {e}")
     
     def _get_account_for_reupscale(self, task_id: str):
         """Get account for re-upscale: MUST use assigned_account.
