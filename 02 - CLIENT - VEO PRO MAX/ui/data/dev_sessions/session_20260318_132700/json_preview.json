@@ -1,0 +1,30 @@
+{
+  "group_id": "group_20260318_131908",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 4,
+  "tasks": [
+    {
+      "id": "group_20260318_131908_task_0",
+      "prompt": "Mật Ong, an anthropomorphic honey jar, round glass body 20cm tall,golden amber honey color #DAA520 with warm glow effect,large gentle cartoon eyes #1A1A1A with warm golden highlights,small sweet smile lips #E8A87C, wooden lid as hat #8B6914,small honey dipper as walking cane, kind nurturing expression,standing next to Chanh on bathroom counter",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_131908_task_1",
+      "prompt": "Cô Lan, a 25-year-old Vietnamese woman, medium height 160cm,warm beige skin tone #D4A574 with visible oily T-zone and enlarged pores on nose and cheeks,round face with worried brown eyes #4A3728, dark eyebrows,shoulder-length straight black hair #1A1A1A with side part,wearing casual white cotton t-shirt #FFFFFF,light blue denim shorts #87CEEB,no accessories, distressed expression looking in bathroom mirror",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

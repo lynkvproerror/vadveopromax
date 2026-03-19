@@ -1,0 +1,1056 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260319_053058
+Total: 1046 entries
+============================================================
+
+[INFO ] 05:23:16 - core.session_manager - [Session] Loaded from 2026-03-19T05:01:55.671296
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_131908_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_131908_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_132954_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_132954_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_132954_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_133222_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_133222_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_133222_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134108_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134125_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134140_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_134517_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_135201_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182901_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182914_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182927_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182941_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_182952_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_183002_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220533_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220556_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220608_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220626_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220643_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_220654_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224905_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_224948_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225012_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225032_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225055_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225133_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225205_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225235_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225323_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225440_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225456_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225527_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225619_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225634_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225719_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225753_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_0 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_1 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_2 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_3 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_4 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_5 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_6 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_7 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_8 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] Skipped import for group_20260318_225818_task_9 (already restored from journal)
+[DEBUG] 05:23:16 - core.dispatcher - [Dispatcher] All 348 tasks already loaded — skipped duplicate restore
+[DEBUG] 05:23:16 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=[]
+[INFO ] 05:23:16 - veo.tab_queue - [GroupCreate] gid=group_20260318_131908 name='character' children=2 expanded=True
+[INFO ] 05:23:16 - veo.tab_queue - [GroupCreate] gid=group_20260318_132954 name='character full' children=3 expanded=True
+[INFO ] 05:23:16 - veo.tab_queue - [GroupCreate] gid=group_20260318_133222 name='character full' children=3 expanded=True
+[INFO ] 05:23:17 - veo.tab_queue - [GroupCreate] gid=group_20260318_134108 name='01_Thu_Nho_Lo_Chan_Long' children=10 expanded=True
+[INFO ] 05:23:17 - veo.tab_queue - [GroupCreate] gid=group_20260318_134125 name='02_Vao_Giac_Sau_5_Phut' children=10 expanded=True
+[INFO ] 05:23:17 - veo.tab_queue - [GroupCreate] gid=group_20260318_134140 name='03_Nhan_Tran_Bao_Ve_Gan' children=10 expanded=True
+[INFO ] 05:23:17 - veo.tab_queue - [GroupCreate] gid=group_20260318_134517 name='04_Ngu_Sau_Giac' children=10 expanded=True
+[INFO ] 05:23:18 - veo.tab_queue - [GroupCreate] gid=group_20260318_135201 name='05_Khu_Mui_Tu_Lanh' children=10 expanded=True
+[INFO ] 05:23:18 - veo.tab_queue - [GroupCreate] gid=group_20260318_182901 name='06_Lam_Sach_May_Hut_Mui' children=10 expanded=True
+[INFO ] 05:23:18 - veo.tab_queue - [GroupCreate] gid=group_20260318_182914 name='07_Lam_Sach_Tham_Trai_San' children=10 expanded=True
+[INFO ] 05:23:18 - veo.tab_queue - [GroupCreate] gid=group_20260318_182927 name='08_Cha_Nha_Tam_Than_Thanh' children=10 expanded=True
+[INFO ] 05:23:19 - veo.tab_queue - [GroupCreate] gid=group_20260318_182941 name='09_Khu_Mui_Nha_Ve_Sinh' children=10 expanded=True
+[INFO ] 05:23:19 - veo.tab_queue - [GroupCreate] gid=group_20260318_182952 name='10_Hoa_Tren_Ban_Tho' children=10 expanded=True
+[INFO ] 05:23:19 - veo.tab_queue - [GroupCreate] gid=group_20260318_183002 name='11_Hoa_Du_Du_Duc' children=10 expanded=True
+[INFO ] 05:23:19 - veo.tab_queue - [GroupCreate] gid=group_20260318_220533 name='12_Ca_Gai_Leo' children=10 expanded=True
+[INFO ] 05:23:20 - veo.tab_queue - [GroupCreate] gid=group_20260318_220556 name='13_Chuoi_Hot' children=10 expanded=True
+[INFO ] 05:23:20 - veo.tab_queue - [GroupCreate] gid=group_20260318_220608 name='14_Chon_Mau_Dung_Menh' children=10 expanded=True
+[INFO ] 05:23:20 - veo.tab_queue - [GroupCreate] gid=group_20260318_220626 name='15_Giam_Mo_Bung' children=10 expanded=True
+[INFO ] 05:23:20 - veo.tab_queue - [GroupCreate] gid=group_20260318_220643 name='16_Duoi_Chuot_Gian' children=10 expanded=True
+[INFO ] 05:23:20 - veo.tab_queue - [GroupCreate] gid=group_20260318_220654 name='17_Loi_Ich_Bia' children=10 expanded=True
+[INFO ] 05:23:21 - veo.tab_queue - [GroupCreate] gid=group_20260318_224905 name='01_Thu_Nho_Lo_Chan_Long' children=10 expanded=True
+[INFO ] 05:23:21 - veo.tab_queue - [GroupCreate] gid=group_20260318_224948 name='02_Vao_Giac_Sau_5_Phut' children=10 expanded=True
+[INFO ] 05:23:21 - veo.tab_queue - [GroupCreate] gid=group_20260318_225012 name='03_Nhan_Tran_Bao_Ve_Gan' children=10 expanded=True
+[INFO ] 05:23:21 - veo.tab_queue - [GroupCreate] gid=group_20260318_225032 name='04_Ngu_Sau_Giac' children=10 expanded=True
+[INFO ] 05:23:22 - veo.tab_queue - [GroupCreate] gid=group_20260318_225055 name='05_Khu_Mui_Tu_Lanh' children=10 expanded=True
+[INFO ] 05:23:22 - veo.tab_queue - [GroupCreate] gid=group_20260318_225133 name='06_Lam_Sach_May_Hut_Mui' children=10 expanded=True
+[INFO ] 05:23:23 - veo.tab_queue - [GroupCreate] gid=group_20260318_225205 name='07_Lam_Sach_Tham_Trai_San' children=10 expanded=True
+[INFO ] 05:23:23 - veo.tab_queue - [GroupCreate] gid=group_20260318_225235 name='08_Cha_Nha_Tam_Than_Thanh' children=10 expanded=True
+[INFO ] 05:23:24 - veo.tab_queue - [GroupCreate] gid=group_20260318_225323 name='09_Khu_Mui_Nha_Ve_Sinh' children=10 expanded=True
+[INFO ] 05:23:24 - veo.tab_queue - [GroupCreate] gid=group_20260318_225440 name='10_Hoa_Tren_Ban_Tho' children=10 expanded=True
+[INFO ] 05:23:24 - veo.tab_queue - [GroupCreate] gid=group_20260318_225456 name='11_Hoa_Du_Du_Duc' children=10 expanded=True
+[INFO ] 05:23:25 - veo.tab_queue - [GroupCreate] gid=group_20260318_225527 name='12_Ca_Gai_Leo' children=10 expanded=True
+[INFO ] 05:23:25 - veo.tab_queue - [GroupCreate] gid=group_20260318_225619 name='13_Chuoi_Hot' children=10 expanded=True
+[INFO ] 05:23:26 - veo.tab_queue - [GroupCreate] gid=group_20260318_225634 name='14_Chon_Mau_Dung_Menh' children=10 expanded=True
+[INFO ] 05:23:26 - veo.tab_queue - [GroupCreate] gid=group_20260318_225719 name='15_Giam_Mo_Bung' children=10 expanded=True
+[INFO ] 05:23:27 - veo.tab_queue - [GroupCreate] gid=group_20260318_225753 name='16_Duoi_Chuot_Gian' children=10 expanded=True
+[INFO ] 05:23:27 - veo.tab_queue - [GroupCreate] gid=group_20260318_225818 name='17_Loi_Ich_Bia' children=10 expanded=True
+[INFO ] 05:23:27 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 05:23:27 - veo.pipeline - [Pipeline] Activated version 1/1: Version 1
+[INFO ] 05:23:27 - veo.tab_project - [Pipeline] Full restore: 38 scenes, 2 characters, topic='## 1. PROJECT INFO
+
+**Topic:** Kịch Bản Phim Ngắn:'
+[INFO ] 05:23:27 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Hành Trình Đến Vùng Đất Ánh Sáng: 7 completed stage(s), current=concat, FULL session
+[DEBUG] 05:23:27 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:23:34 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:23:34 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:23:34 - veo - [VersionCheck] OK: 2.3.7 >= 2.3.0
+[DEBUG] 05:23:34 - veo - [FeatureFlags] Applied server features (ai_prompt_trial=False)
+[DEBUG] 05:23:28 - core.app_controller - Sync levanlinh.kma@gmail.com: timeout (browser not ready yet)
+[INFO ] 05:23:28 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 05:23:28 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 05:23:28 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 05:23:28 - core.token_manager - [TokenManager] No tokens found for levanlinh.kma@gmail.com
+[DEBUG] 05:23:28 - core.app_controller - [PreTierCheck] No valid token for levanlinh.kma@gmail.com — skip (will check after browser)
+[INFO ] 05:23:28 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: levanlinh.kma@gmail.com...
+[DEBUG] 05:23:28 - core.profiles_controller - [ProfilesController] 🌐 Opening debug browser for levanlinh.kma@gmail.com...
+[INFO ] 05:23:28 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 05:23:28 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[DEBUG] 05:23:28 - core.chrome_manager - [ChromeManager] No PID file for browser_session_fed78075
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[DEBUG] 05:23:28 - core.chrome_manager - [ChromeManager] Variations seed already up-to-date for browser_session_fed78075
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_fed78075
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] Chrome launched: PID=18420, port=9223
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 18420
+[INFO ] 05:23:28 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 05:23:28 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 05:23:29 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 60634)
+[INFO ] 05:23:29 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 05:23:29 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[DEBUG] 05:23:29 - core.extension_manager - [ExtMgr] Extension loaded: chrome-extension://edhhmoglabcdhmolgekcdnnfknalphjh/background.js
+[INFO ] 05:23:29 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.6
+[INFO ] 05:23:29 - core.extension_manager - [ExtMgr] Extension v2.3.6 up-to-date — skipping
+[INFO ] 05:23:29 - core.profiles_controller - [ProfilesController] Chrome PID=18420, port=9223 (new)
+[INFO ] 05:23:29 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[DEBUG] 05:23:29 - asyncio - Using proactor: IocpProactor
+[INFO ] 05:23:29 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser visible (smart-hide disabled)
+[INFO ] 05:23:29 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[DEBUG] 05:23:29 - core.profiles_controller - [DEBUG] Step 1: Connecting to CDP on port 9223...
+[INFO ] 05:23:29 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 05:23:29 - core.account_manager - [levanlinh.kma@gmail.com] ⏳ Debug browser starting, waiting...
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 1: ✅ Connected. Contexts: 1
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 1b: Skipped (fresh launch — already installed by launch_chrome)
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 2: Found 2 existing page(s)
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 2: ✅ Reusing existing flow tab: https://labs.google/fx/vi/tools/flow
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 3: Setting up CDP header capture...
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 3: ✅ CDP session created
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 3: ✅ Network.enable active — listening for headers
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 4: Current URL = https://labs.google/fx/vi/tools/flow
+[WARNING] 05:23:30 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 5: Headers so far = []
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] Step 5: Reloading to trigger API calls...
+[DEBUG] 05:23:30 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 05:23:30 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.6)
+[INFO ] 05:23:30 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 05:23:30 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[DEBUG] 05:23:30 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 05:23:30 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[ERROR] 05:23:30 - core.profiles_controller - [DEBUG] Step 5: Reload error: Page.reload: net::ERR_ABORTED; maybe frame was detached?
+Call log:
+  - waiting for navigation until "load"
+
+[INFO ] 05:23:30 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: header-refresh)
+[INFO ] 05:23:30 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 05:23:30 - core.profiles_controller - [ProfilesController] ✅ Debug browser ready for levanlinh.kma@gmail.com (persistent, port=9223)
+[INFO ] 05:23:30 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 05:23:30 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 05:23:30 - core.account_manager - [levanlinh.kma@gmail.com] 🔗 Attaching to debug browser (page access only)
+[DEBUG] 05:23:30 - core.recaptcha_session - [RecaptchaBrowserSession] ✅ Attached to debug browser page (shared profile)
+[INFO ] 05:23:30 - core.multi_account - All account browsers initialized
+[INFO ] 05:23:30 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 05:23:30 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 05:23:31 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 05:23:31 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 05:23:33 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[DEBUG] 05:23:33 - core.extension_bridge - [ExtensionBridge] No unregistered connection available for veofidelia169@tunxelamorintesa.sbs
+[INFO ] 05:23:33 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['levanlinh.kma@gmail.com']
+[INFO ] 05:23:33 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 05:23:33 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/5EE053611821DD5B75C02A7155...
+[DEBUG] 05:23:34 - core.auto_updater - Up to date (app=v2.3.7, ext=v2.3.6)
+[INFO ] 05:23:35 - core.extension_manager - [ExtMgr] Closed extensions tab 5EE05361... (PUT)
+[INFO ] 05:23:35 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 05:23:35 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.6
+[INFO ] 05:23:35 - core.app_controller - [AppController] Extension v2.3.6 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 05:23:35 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 05:23:35 - core.app_controller - [AutoLaunch] Extension check complete: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 05:23:35 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 05:23:35 - core.app_controller - [TierCheck] ✅ levanlinh.kma@gmail.com: Ultra
+[INFO ] 05:23:35 - core.app_controller - [TierCheck] ✅ All accounts are Pro or Ultra
+[INFO ] 05:23:35 - core.app_controller - [AutoLaunch] ✅ Account tier enforcement complete
+[INFO ] 05:23:35 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 05:23:35 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[DEBUG] 05:23:35 - core.app_controller - [AutoLaunch] 📸 Image Library: empty, skipping pre-upload
+[DEBUG] 05:23:35 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: already in progress, skipping duplicate
+[DEBUG] 05:23:35 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:23:35 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:23:35 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:23:35 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:23:35 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 05:23:37 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:23:37 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:23:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:23:37 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:23:44 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 05:23:48 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:23:48 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:23:48 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:23:48 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:23:54 - core.engine - [TabKeepalive] Pinged 3 tab(s) — Chrome freeze prevention OK
+[WARNING] 05:24:00 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[WARNING] 05:24:00 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for levanlinh.kma@gmail.com took 20.0s (requestId=739baafd)
+[WARNING] 05:24:00 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 05:24:00 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[DEBUG] 05:24:06 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:24:06 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:24:06 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:24:06 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:24:16 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 05:24:16 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:24:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:24:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:24:24 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[INFO ] 05:24:28 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=⚠️(hb=35s,cap=✅) | conns=1, pending=1
+[WARNING] 05:24:30 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[WARNING] 05:24:30 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for levanlinh.kma@gmail.com took 20.0s (requestId=03eece45)
+[WARNING] 05:24:30 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ❌ reCAPTCHA still not ready after retry
+[INFO ] 05:24:30 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[DEBUG] 05:24:35 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:24:35 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:24:35 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:24:35 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:24:38 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:24:38 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:24:38 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:24:38 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:24:47 - core.engine - [TabKeepalive] Pinged 2 tab(s) — Chrome freeze prevention OK
+[WARNING] 05:24:49 - core.extension_bridge - [ExtensionBridge] 🥶 Tab frozen for levanlinh.kma@gmail.com (no heartbeat for 54s) — recovery attempt 1/3
+[INFO ] 05:24:49 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [lightweight] for levanlinh.kma@gmail.com — frozen tab recovery 1/3
+[DEBUG] 05:24:49 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for levanlinh.kma@gmail.com
+[DEBUG] 05:24:51 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 05:24:53 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:24:53 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:24:53 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:24:53 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:25:01 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 05:25:05 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:25:05 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:25:05 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:25:05 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:25:06 - core.engine - [TabKeepalive] Pinged 1 tab(s) — Chrome freeze prevention OK
+[DEBUG] 05:25:06 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 05:25:08 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 05:25:08 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 05:25:08 - core.profiles_controller - [ProfilesController] ⏳ JS eval paused for levanlinh.kma@gmail.com (page navigating — soft recovery)
+[DEBUG] 05:25:08 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat skipped (no browser page)
+[INFO ] 05:25:10 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 05:25:10 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 05:25:10 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[DEBUG] 05:25:10 - asyncio - Using proactor: IocpProactor
+[WARNING] 05:25:10 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 05:25:10 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 05:25:10 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 05:25:10 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 05:25:10 - core.app_controller - [Engine] Processing started
+[INFO ] 05:25:10 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 05:25:10 - core.multi_account - All account browsers initialized
+[INFO ] 05:25:10 - core.engine - Engine starting: 1 accounts, 1 ready tasks in queue
+[INFO ] 05:25:10 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[DEBUG] 05:25:10 - core.engine - [Fix G9] Wired RecaptchaPool ref to ExtensionBridge
+[INFO ] 05:25:10 - core.engine - [G1:levanlinh.kma@gmail.com] max_foremen=-1, raw_foreman=10, existing=0
+[INFO ] 05:25:10 - core.engine - [Foreman:levanlinh.kma@gmail.com] Capped foremen 10 → 1 (only 1 task(s) in queue)
+[INFO ] 05:25:10 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Spawned CHỦ + 1 Foremen (max_workers=20, output=2, retry=3, timeout=120s)
+[INFO ] 05:25:10 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=900s, POLL timeout=900s, scan every 30s
+[INFO ] 05:25:10 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Started
+[INFO ] 05:25:10 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Refreshing browser headers...
+[DEBUG] 05:25:10 - core.engine - [foreman-levanlin-0] Waiting for supervisor startup...
+[INFO ] 05:25:10 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 05:25:10 - core.engine - [CreditWindow] Recovery timer started
+[INFO ] 05:25:10 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[DEBUG] 05:25:10 - core.extension_bridge - [ExtensionBridge] 🔄 Lightweight header refresh OK for levanlinh.kma@gmail.com
+[INFO ] 05:25:10 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ x-client-data ready (68 chars)
+[DEBUG] 05:25:10 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 05:25:10 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[DEBUG] 05:25:11 - core.engine - [TabKeepalive] Engine processing — yielding...
+[DEBUG] 05:25:12 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation']
+[DEBUG] 05:25:12 - core.profiles_controller - [DEBUG] CDP ExtraInfo captured: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 05:25:12 - core.profiles_controller - [ProfilesController] ✅ JS eval recovered for levanlinh.kma@gmail.com (was paused for 1 calls)
+[INFO ] 05:25:12 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ checkAppAvailability: AVAILABLE
+[INFO ] 05:25:13 - core.trpc_client - TRPC: Created project 'My Video Project' → aa20d7bf-2bd8-45c6-bc60-bd48478237a2
+[INFO ] 05:25:13 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Project ready: aa20d7bf-2bd8-45c6-bc60-bd48478237a2
+[INFO ] 05:25:13 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Pre-warming reCAPTCHA...
+[INFO ] 05:25:13 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:25:13 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #1, 0.0/30s) — retry in 2.0s
+[DEBUG] 05:25:14 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:25:14 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:25:14 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:25:14 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[INFO ] 05:25:15 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #2, 2.0/30s) — retry in 2.6s
+[DEBUG] 05:25:15 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:25:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 05:25:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:25:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:25:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 05:25:15 - core.engine - [ScaleForemen:levanlinh.kma@gmail.com] Scaling 1 → 10 foremen (pending=1, optimal=10, max_workers=20)
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-1] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-2] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-3] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-4] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-5] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-6] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-7] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-8] Waiting for supervisor startup...
+[DEBUG] 05:25:15 - core.engine - [foreman-levanlin-9] Waiting for supervisor startup...
+[WARNING] 05:25:15 - core.extension_bridge - [ExtensionBridge] ❌ reCAPTCHA token too short for levanlinh.kma@gmail.com: Token too short (569 chars, need ≥1500) — consecutive #1
+[WARNING] 05:25:15 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 1)
+[INFO ] 05:25:15 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 3s...
+[DEBUG] 05:25:16 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:25:16 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:25:16 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:25:16 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[INFO ] 05:25:17 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:25:17 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #3, 4.6/30s) — retry in 3.4s
+[WARNING] 05:25:18 - core.extension_bridge - [ExtensionBridge] ❌ reCAPTCHA token too short for levanlinh.kma@gmail.com: Token too short (569 chars, need ≥1500) — consecutive #2
+[WARNING] 05:25:18 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 2)
+[INFO ] 05:25:18 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 6s...
+[INFO ] 05:25:21 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:25:21 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #4, 8.0/30s) — retry in 4.4s
+[INFO ] 05:25:24 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: short-token-threshold)
+[DEBUG] 05:25:25 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[INFO ] 05:25:28 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=18s,cap=✅) | conns=1, pending=2
+[WARNING] 05:25:29 - core.extension_bridge - [ExtensionBridge] ❌ reCAPTCHA token too short for levanlinh.kma@gmail.com: Token too short (569 chars, need ≥1500) — consecutive #3
+[WARNING] 05:25:29 - core.extension_bridge - [ExtensionBridge] 🔄 Short token threshold reached for levanlinh.kma@gmail.com — Extension will auto-reload tab (App skips duplicate reload)
+[INFO ] 05:25:29 - core.extension_bridge - [ExtensionBridge] ⏸️ Post-reload cooldown set for levanlinh.kma@gmail.com — 15s quiet period for widget init
+[DEBUG] 05:25:29 - core.extension_bridge - [ExtensionBridge] RecaptchaPool paused for levanlinh.kma@gmail.com
+[INFO ] 05:25:29 - core.extension_bridge - [ExtBridge] ⏱️ Response: request_recaptcha for levanlinh.kma@gmail.com took 5.0s
+[WARNING] 05:25:29 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 3)
+[WARNING] 05:25:29 - core.account_manager - [levanlinh.kma@gmail.com] ❌ reCAPTCHA refresh failed all 3 attempts (consecutive failures: 1)
+[DEBUG] 05:25:29 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:25:29 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:25:29 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:25:29 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[WARNING] 05:25:30 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (5.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[INFO ] 05:25:30 - core.extension_bridge - [ExtBridge] ⏱️ Response: check_recaptcha_ready for levanlinh.kma@gmail.com took 5.0s
+[INFO ] 05:25:30 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #5, 17.4/30s) — retry in 5.0s
+[DEBUG] 05:25:32 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:25:32 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:25:32 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:25:32 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:25:35 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:25:35 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready: post-reload cooldown for levanlinh.kma@gmail.com (9s remaining) — returning False
+[INFO ] 05:25:35 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #6, 22.4/30s) — retry in 5.0s
+[DEBUG] 05:25:40 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 05:25:40 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready: post-reload cooldown for levanlinh.kma@gmail.com (4s remaining) — returning False
+[INFO ] 05:25:40 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #7, 27.4/30s) — retry in 5.0s
+[DEBUG] 05:25:45 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[INFO ] 05:25:45 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[WARNING] 05:25:45 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ grecaptcha not ready after 32.4s / 7 attempts — triggering full page reload for recovery
+[INFO ] 05:25:45 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [full] for levanlinh.kma@gmail.com — reCAPTCHA ready timeout after 7 attempts
+[INFO ] 05:25:45 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 05:25:45 - core.extension_bridge - [ExtensionBridge] ⏸️ Post-reload cooldown set for levanlinh.kma@gmail.com — 15s quiet period for widget init
+[DEBUG] 05:25:45 - core.extension_bridge - [ExtensionBridge] RecaptchaPool paused for levanlinh.kma@gmail.com
+[INFO ] 05:25:45 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ Waiting 25s for reCAPTCHA widget to re-initialize after full reload...
+[DEBUG] 05:25:52 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:25:52 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:25:52 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:25:52 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:25:55 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:26:05 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:26:06 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 05:26:10 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 05:26:15 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:26:20 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 05:26:20 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:26:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:26:20 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:26:16 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[WARNING] 05:26:18 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (8.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[INFO ] 05:26:18 - core.extension_bridge - [ExtBridge] ⏱️ Response: check_recaptcha_ready for levanlinh.kma@gmail.com took 8.0s
+[DEBUG] 05:26:20 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:26:20 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:26:20 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:26:20 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:26:25 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[INFO ] 05:26:26 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:26:28 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=2s,cap=✅) | conns=1, pending=0
+[INFO ] 05:26:29 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[WARNING] 05:26:29 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⚠️ reCAPTCHA still not ready after reload + 25s wait + 3 verify attempts
+[WARNING] 05:26:29 - core.engine - [Foreman:levanlinh.kma@gmail.com] 🔄 Escalating to HARD NAVIGATION (full page reload failed — forcing VEO URL navigation)
+[WARNING] 05:26:29 - core.extension_bridge - [ExtensionBridge] 🔄 Hard navigation for levanlinh.kma@gmail.com → https://labs.google/fx/vi/tools/flow (reCAPTCHA recovery)
+[INFO ] 05:26:29 - core.extension_bridge - [ExtensionBridge] 📍 Navigating levanlinh.kma@gmail.com to: https://labs.google/fx/vi/tools/flow
+[DEBUG] 05:26:35 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:26:35 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:26:35 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:26:35 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:26:35 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:26:40 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 05:26:45 - veo.tab_queue - [QueueRefresh] 37 groups, 348 total tasks, existing_groups=['group_20260318_131908', 'group_20260318_132954', 'group_20260318_133222', 'group_20260318_134108', 'group_20260318_134125', 'group_20260318_134140', 'group_20260318_134517', 'group_20260318_135201', 'group_20260318_182901', 'group_20260318_182914', 'group_20260318_182927', 'group_20260318_182941', 'group_20260318_182952', 'group_20260318_183002', 'group_20260318_220533', 'group_20260318_220556', 'group_20260318_220608', 'group_20260318_220626', 'group_20260318_220643', 'group_20260318_220654', 'group_20260318_224905', 'group_20260318_224948', 'group_20260318_225012', 'group_20260318_225032', 'group_20260318_225055', 'group_20260318_225133', 'group_20260318_225205', 'group_20260318_225235', 'group_20260318_225323', 'group_20260318_225440', 'group_20260318_225456', 'group_20260318_225527', 'group_20260318_225619', 'group_20260318_225634', 'group_20260318_225719', 'group_20260318_225753', 'group_20260318_225818']
+[DEBUG] 05:26:50 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 05:26:52 - core.dispatcher - [Dispatcher] Cleared all: 348 tasks removed
+[INFO ] 05:26:52 - core.app_controller - [Controller] Queue cleared: 348 tasks, session file deleted
+[DEBUG] 05:26:52 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:26:55 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[WARNING] 05:26:56 - core.extension_bridge - [ExtensionBridge] ❌ Navigation failed for levanlinh.kma@gmail.com: unknown
+[WARNING] 05:26:56 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: navigate_tab for levanlinh.kma@gmail.com took 26.6s (requestId=7f763ca9)
+[ERROR] 05:26:56 - core.extension_bridge - [ExtensionBridge] ❌ Hard navigation failed for levanlinh.kma@gmail.com: no response
+[WARNING] 05:26:56 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ⚠️ reCAPTCHA not ready — foremen will retry before first submit
+[INFO ] 05:26:56 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 1/2) — validating reCAPTCHA token...
+[DEBUG] 05:27:00 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 05:27:00 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:27:04 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:27:04 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:27:04 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:27:04 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:27:05 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[WARNING] 05:27:10 - core.extension_bridge - [ExtensionBridge] ❌ reCAPTCHA token too short for levanlinh.kma@gmail.com: Token too short (569 chars, need ≥1500) — consecutive #1
+[WARNING] 05:27:10 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: request_recaptcha for levanlinh.kma@gmail.com took 14.2s (requestId=8be67319)
+[WARNING] 05:27:10 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe: reCAPTCHA token too short (0 chars)
+[DEBUG] 05:27:10 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:27:10 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 05:27:15 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:27:16 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 05:27:16 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:27:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:27:16 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[INFO ] 05:27:20 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 2/2) — validating reCAPTCHA token...
+[WARNING] 05:27:20 - core.extension_bridge - [ExtensionBridge] ❌ reCAPTCHA token too short for levanlinh.kma@gmail.com: Token too short (569 chars, need ≥1500) — consecutive #2
+[WARNING] 05:27:20 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe: reCAPTCHA token too short (0 chars)
+[WARNING] 05:27:20 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ⚠️ Probe submit failed — foreman-0 will proceed cautiously, others wait
+[INFO ] 05:27:20 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Startup complete — unblocking foremen
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-0] Supervisor startup done — entering main loop
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-1] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-1] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-2] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-2] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-3] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-3] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-4] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-4] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-5] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-5] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-6] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-6] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-7] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-7] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-8] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-8] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - core.engine - [foreman-levanlin-9] Supervisor startup done — entering main loop
+[INFO ] 05:27:20 - core.engine - [foreman-levanlin-9] ⏳ Waiting for foreman-0 first submit success...
+[DEBUG] 05:27:20 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:27:25 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[INFO ] 05:27:28 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=19s,cap=✅) | conns=1, pending=0
+[DEBUG] 05:27:30 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:27:35 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:27:40 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[DEBUG] 05:27:40 - core.dispatcher - [AUDIT] ✅ Counters OK — running=0, accounts={}
+[DEBUG] 05:27:45 - veo.tab_queue - [QueueRefresh] 0 groups, 0 total tasks, existing_groups=[]
+[INFO ] 05:27:46 - core.app_controller - ============================================================
+[INFO ] 05:27:46 - core.app_controller - [ADD TO QUEUE] group_id=group_20260319_052746
+[INFO ] 05:27:46 - core.app_controller -   workflow    : T2V
+[INFO ] 05:27:46 - core.app_controller -   model      : 'Veo 3.1 - Fast [LP]' → veo_3_1_t2v_fast_portrait_ultra_relaxed
+[INFO ] 05:27:46 - core.app_controller -   aspect_ratio: PORTRAIT → VIDEO_ASPECT_RATIO_PORTRAIT
+[INFO ] 05:27:46 - core.app_controller -   dual_frame : False
+[INFO ] 05:27:46 - core.app_controller -   output_count: 2 (0 chain tasks forced to 1)
+[INFO ] 05:27:46 - core.app_controller -   tasks      : 10
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_0] Hook scene [2 SEG]. Semi-realistic Pixar-style 3D animation,...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_1] Problem scene. Medium shot. Atiso, an anthropomorphic artich...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_2] Reaction scene. Two-shot. Anh Tùng, 38-year-old Vietnamese m...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_3] Tip 1 scene [2 SEG]. Semi-realistic Pixar-style 3D animation...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_4] Tip 2 scene. Medium shot. Atiso, an anthropomorphic artichok...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_5] Tip 3 scene [2 SEG]. Semi-realistic Pixar-style 3D animation...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_6] Demo scene [2 SEG]. Semi-realistic Pixar-style 3D animation....
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_7] Practice scene. Medium shot. Anh Tùng, 38-year-old Vietnames...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_8] Result scene. Medium shot. Warm golden light. Anh Tùng, 38-y...
+[INFO ] 05:27:46 - core.app_controller -     [group_20260319_052746_task_9] Hook-end scene. Close-up. Atiso, an anthropomorphic artichok...
+[INFO ] 05:27:46 - core.app_controller - ============================================================
+[INFO ] 05:27:46 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_0 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=1)
+[INFO ] 05:27:46 - core.engine - [foreman-levanlin-0] Picked task group_20260319_052746_task_0 [running/init] progress=0% prompt_idx=0 workflow=T2V
+[INFO ] 05:27:46 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:27:46 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #1, 0.0/25s) — retry in 2.0s
+[DEBUG] 05:27:46 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=[]
+[INFO ] 05:27:46 - veo.tab_queue - [GroupCreate] gid=group_20260319_052746 name='18_Gan_Nhiem_Mo' children=10 expanded=True
+[INFO ] 05:27:46 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[INFO ] 05:27:48 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #2, 2.0/25s) — retry in 2.6s
+[DEBUG] 05:27:50 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 05:27:50 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:27:51 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:27:51 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #3, 4.6/25s) — retry in 3.4s
+[DEBUG] 05:27:52 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:27:52 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:27:52 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:27:52 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[INFO ] 05:27:52 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #4, 8.0/25s) — retry in 4.4s
+[DEBUG] 05:27:53 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:27:56 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:27:56 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #5, 12.4/25s) — retry in 5.0s
+[DEBUG] 05:27:58 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:28:01 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:28:01 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #6, 17.4/25s) — retry in 5.0s
+[DEBUG] 05:28:03 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:28:06 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:28:06 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #7, 22.4/25s) — retry in 5.0s
+[DEBUG] 05:28:08 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:28:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=1, accounts={'levanlinh.kma@gmail.com': 1}
+[DEBUG] 05:28:11 - core.task_journal - [TaskJournal] Snapshot saved — 10 tasks, save #1
+[WARNING] 05:28:11 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ grecaptcha not ready after 27.4s / 7 attempts — triggering full page reload for recovery
+[INFO ] 05:28:11 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [full] for levanlinh.kma@gmail.com — reCAPTCHA ready timeout after 7 attempts
+[INFO ] 05:28:11 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: header-refresh)
+[INFO ] 05:28:11 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 05:28:11 - core.extension_bridge - [ExtensionBridge] ⏸️ Post-reload cooldown set for levanlinh.kma@gmail.com — 15s quiet period for widget init
+[DEBUG] 05:28:11 - core.extension_bridge - [ExtensionBridge] RecaptchaPool paused for levanlinh.kma@gmail.com
+[INFO ] 05:28:11 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ Waiting 25s for reCAPTCHA widget to re-initialize after full reload...
+[DEBUG] 05:28:13 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:28:14 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 05:28:14 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:28:14 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:28:14 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:28:16 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:28:16 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:28:16 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:28:16 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:28:18 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:28:19 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:28:19 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:28:19 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:28:19 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[INFO ] 05:28:19 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 05:28:23 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:28:24 - urllib3.connectionpool - Resetting dropped connection: firestore.googleapis.com
+[DEBUG] 05:28:24 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:28:24 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veoauto-f54b5/databases/(default)/documents/_lic/ACF6-7B7F-1BC9-F33F-1294-CE62-56B7-3E21-BE29?key=AIzaSyBWvaGugfWmspFvRd9wcLbBdT8UCI6MNY8 HTTP/1.1" 200 None
+[DEBUG] 05:28:28 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:28:32 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 05:28:33 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:28:38 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:28:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=1, accounts={'levanlinh.kma@gmail.com': 1}
+[INFO ] 05:28:41 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=9s,cap=✅) | conns=1, pending=1
+[DEBUG] 05:28:42 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[DEBUG] 05:28:43 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[WARNING] 05:28:44 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (8.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[INFO ] 05:28:44 - core.extension_bridge - [ExtBridge] ⏱️ Response: check_recaptcha_ready for levanlinh.kma@gmail.com took 8.0s
+[DEBUG] 05:28:46 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:28:46 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:28:46 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:28:46 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-1] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-1] Stagger delay: 4.7s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-2] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-2] Stagger delay: 4.0s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-3] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-3] Stagger delay: 5.6s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-4] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-4] Stagger delay: 5.8s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-5] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-5] Stagger delay: 5.9s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-6] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-6] Stagger delay: 6.8s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-7] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-7] Stagger delay: 5.7s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-8] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-8] Stagger delay: 6.0s (anti-detect=on)
+[WARNING] 05:28:48 - core.engine - [foreman-levanlin-9] ⚠️ First submit timeout (90s) — starting anyway
+[DEBUG] 05:28:48 - core.engine - [foreman-levanlin-9] Stagger delay: 6.3s (anti-detect=on)
+[DEBUG] 05:28:48 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:28:49 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[INFO ] 05:28:52 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_1 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=2)
+[INFO ] 05:28:52 - core.engine - [foreman-levanlin-2] Picked task group_20260319_052746_task_1 [running/init] progress=0% prompt_idx=1 workflow=T2V
+[INFO ] 05:28:52 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:52 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:28:52 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_2 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=3)
+[INFO ] 05:28:52 - core.engine - [foreman-levanlin-1] Picked task group_20260319_052746_task_2 [running/init] progress=0% prompt_idx=2 workflow=T2V
+[INFO ] 05:28:52 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 05:28:53 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:28:53 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_3 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=4)
+[INFO ] 05:28:53 - core.engine - [foreman-levanlin-3] Picked task group_20260319_052746_task_3 [running/init] progress=0% prompt_idx=3 workflow=T2V
+[INFO ] 05:28:53 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:53 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_4 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=5)
+[INFO ] 05:28:53 - core.engine - [foreman-levanlin-7] Picked task group_20260319_052746_task_4 [running/init] progress=0% prompt_idx=4 workflow=T2V
+[INFO ] 05:28:53 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:53 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_5 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=6)
+[INFO ] 05:28:53 - core.engine - [foreman-levanlin-4] Picked task group_20260319_052746_task_5 [running/init] progress=0% prompt_idx=5 workflow=T2V
+[INFO ] 05:28:53 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:53 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_6 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=7)
+[INFO ] 05:28:53 - core.engine - [foreman-levanlin-5] Picked task group_20260319_052746_task_6 [running/init] progress=0% prompt_idx=6 workflow=T2V
+[INFO ] 05:28:53 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:54 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_7 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=8)
+[INFO ] 05:28:54 - core.engine - [foreman-levanlin-8] Picked task group_20260319_052746_task_7 [running/init] progress=0% prompt_idx=7 workflow=T2V
+[INFO ] 05:28:54 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:54 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_8 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=9)
+[INFO ] 05:28:54 - core.engine - [foreman-levanlin-9] Picked task group_20260319_052746_task_8 [running/init] progress=0% prompt_idx=8 workflow=T2V
+[INFO ] 05:28:54 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:54 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_9 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:28:54 - core.engine - [foreman-levanlin-6] Picked task group_20260319_052746_task_9 [running/init] progress=0% prompt_idx=9 workflow=T2V
+[INFO ] 05:28:54 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:28:55 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[WARNING] 05:28:55 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⚠️ reCAPTCHA still not ready after reload + 25s wait + 3 verify attempts
+[WARNING] 05:28:55 - core.engine - [Foreman:levanlinh.kma@gmail.com] 🔄 Escalating to HARD NAVIGATION (full page reload failed — forcing VEO URL navigation)
+[WARNING] 05:28:55 - core.extension_bridge - [ExtensionBridge] 🔄 Hard navigation for levanlinh.kma@gmail.com → https://labs.google/fx/vi/tools/flow (reCAPTCHA recovery)
+[INFO ] 05:28:55 - core.extension_bridge - [ExtensionBridge] 📍 Navigating levanlinh.kma@gmail.com to: https://labs.google/fx/vi/tools/flow
+[DEBUG] 05:28:58 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:29:01 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:29:01 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:29:01 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:29:01 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:29:03 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:29:08 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:29:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=10, accounts={'levanlinh.kma@gmail.com': 10}
+[DEBUG] 05:29:11 - core.task_journal - [TaskJournal] Snapshot saved — 10 tasks, save #2
+[DEBUG] 05:29:13 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:29:14 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 05:29:14 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:29:14 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:29:14 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:29:16 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 05:29:18 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:29:19 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[WARNING] 05:29:22 - core.extension_bridge - [ExtensionBridge] ❌ Navigation failed for levanlinh.kma@gmail.com: unknown
+[WARNING] 05:29:22 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: navigate_tab for levanlinh.kma@gmail.com took 26.6s (requestId=37884937)
+[ERROR] 05:29:22 - core.extension_bridge - [ExtensionBridge] ❌ Hard navigation failed for levanlinh.kma@gmail.com: no response
+[WARNING] 05:29:22 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_0
+[DEBUG] 05:29:22 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_0): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:22 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_0 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:22 - core.engine - [foreman-levanlin-0] Picked task group_20260319_052746_task_0 [running/init] progress=0% prompt_idx=0 workflow=T2V
+[INFO ] 05:29:22 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 05:29:23 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:29:26 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[WARNING] 05:29:27 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (5.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[INFO ] 05:29:27 - core.extension_bridge - [ExtBridge] ⏱️ Response: check_recaptcha_ready for levanlinh.kma@gmail.com took 5.0s
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_1
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_1): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_1 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-2] Picked task group_20260319_052746_task_1 [running/init] progress=0% prompt_idx=1 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_2
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_2): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_2 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-1] Picked task group_20260319_052746_task_2 [running/init] progress=0% prompt_idx=2 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_3
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_3): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_3 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-3] Picked task group_20260319_052746_task_3 [running/init] progress=0% prompt_idx=3 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_4
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_4): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_4 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-7] Picked task group_20260319_052746_task_4 [running/init] progress=0% prompt_idx=4 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_5
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_5): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_5 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-4] Picked task group_20260319_052746_task_5 [running/init] progress=0% prompt_idx=5 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_6
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_6): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_6 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-5] Picked task group_20260319_052746_task_6 [running/init] progress=0% prompt_idx=6 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_7
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_7): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_7 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-8] Picked task group_20260319_052746_task_7 [running/init] progress=0% prompt_idx=7 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_8
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_8): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_8 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-9] Picked task group_20260319_052746_task_8 [running/init] progress=0% prompt_idx=8 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_9
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_9): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_9 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-6] Picked task group_20260319_052746_task_9 [running/init] progress=0% prompt_idx=9 workflow=T2V
+[WARNING] 05:29:27 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ❌ reCAPTCHA not ready (tier 0, waited 25s) — requeue task group_20260319_052746_task_0
+[DEBUG] 05:29:27 - core.dispatcher - [Dispatcher] 🔄 requeue_task(group_20260319_052746_task_0): running → READY, account=levanlinh.kma@gmail.com → None, running_count=9
+[INFO ] 05:29:27 - core.dispatcher - [Dispatcher] 📋 Task group_20260319_052746_task_0 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=10)
+[INFO ] 05:29:27 - core.engine - [foreman-levanlin-0] Picked task group_20260319_052746_task_0 [running/init] progress=0% prompt_idx=0 workflow=T2V
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #1, 0.0/25s) — retry in 2.0s
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 05:29:27 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[DEBUG] 05:29:28 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:29:29 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #2, 2.0/25s) — retry in 2.6s
+[DEBUG] 05:29:30 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:29:30 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:29:30 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:29:30 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:29:33 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:29:33 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:29:33 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:29:33 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:29:33 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:29:36 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:29:36 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #3, 9.2/25s) — retry in 3.4s
+[DEBUG] 05:29:38 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:29:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=10, accounts={'levanlinh.kma@gmail.com': 10}
+[INFO ] 05:29:39 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:29:39 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #4, 12.6/25s) — retry in 4.4s
+[DEBUG] 05:29:41 - core.task_journal - [TaskJournal] Snapshot saved — 10 tasks, save #3
+[INFO ] 05:29:41 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=5s,cap=✅) | conns=1, pending=0
+[DEBUG] 05:29:43 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:29:44 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:29:44 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #5, 17.0/25s) — retry in 5.0s
+[DEBUG] 05:29:48 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:29:49 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:29:49 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #6, 22.0/25s) — retry in 5.0s
+[DEBUG] 05:29:53 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[WARNING] 05:29:54 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ grecaptcha not ready after 27.0s / 6 attempts — triggering full page reload for recovery
+[INFO ] 05:29:54 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [full] for levanlinh.kma@gmail.com — reCAPTCHA ready timeout after 6 attempts
+[INFO ] 05:29:54 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: header-refresh)
+[INFO ] 05:29:54 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 05:29:54 - core.extension_bridge - [ExtensionBridge] ⏸️ Post-reload cooldown set for levanlinh.kma@gmail.com — 15s quiet period for widget init
+[DEBUG] 05:29:54 - core.extension_bridge - [ExtensionBridge] RecaptchaPool paused for levanlinh.kma@gmail.com
+[INFO ] 05:29:54 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ Waiting 25s for reCAPTCHA widget to re-initialize after full reload...
+[INFO ] 05:29:54 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[DEBUG] 05:29:58 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:00 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:30:00 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:30:00 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:30:00 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:30:03 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:08 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:08 - core.dispatcher - [AUDIT] ✅ Counters OK — running=10, accounts={'levanlinh.kma@gmail.com': 10}
+[DEBUG] 05:30:13 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:14 - security.firebase_rest_client - [SSL] ✅ Certificate OK (issuer: Google Trust Services)
+[DEBUG] 05:30:14 - urllib3.connectionpool - Starting new HTTPS connection (1): firestore.googleapis.com:443
+[DEBUG] 05:30:14 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/client_settings?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:30:14 - urllib3.connectionpool - https://firestore.googleapis.com:443 "GET /v1/projects/veo-pro-max/databases/(default)/documents/_config/tier_defaults?key=AIzaSyDpVLX01lnwlwi54bX9A9fZL_55uET5W9w HTTP/1.1" 200 None
+[DEBUG] 05:30:14 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[DEBUG] 05:30:18 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:23 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:24 - core.extension_bridge - [ExtensionBridge] 🔥 reCAPTCHA warm for levanlinh.kma@gmail.com
+[INFO ] 05:30:24 - ui.tabs.tab_queue - [AutoStart] Deferred — engine still processing, retry in 5s
+[WARNING] 05:30:27 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (8.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[INFO ] 05:30:27 - core.extension_bridge - [ExtBridge] ⏱️ Response: check_recaptcha_ready for levanlinh.kma@gmail.com took 8.0s
+[DEBUG] 05:30:28 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:28 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:30:28 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:30:28 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:30:28 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:30:33 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[INFO ] 05:30:34 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[INFO ] 05:30:37 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[WARNING] 05:30:37 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⚠️ reCAPTCHA still not ready after reload + 25s wait + 3 verify attempts
+[WARNING] 05:30:37 - core.engine - [Foreman:levanlinh.kma@gmail.com] 🔄 Escalating to HARD NAVIGATION (full page reload failed — forcing VEO URL navigation)
+[WARNING] 05:30:37 - core.extension_bridge - [ExtensionBridge] 🔄 Hard navigation for levanlinh.kma@gmail.com → https://labs.google/fx/vi/tools/flow (reCAPTCHA recovery)
+[INFO ] 05:30:37 - core.extension_bridge - [ExtensionBridge] 📍 Navigating levanlinh.kma@gmail.com to: https://labs.google/fx/vi/tools/flow
+[DEBUG] 05:30:38 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:38 - core.dispatcher - [AUDIT] ✅ Counters OK — running=10, accounts={'levanlinh.kma@gmail.com': 10}
+[INFO ] 05:30:41 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=7s,cap=✅) | conns=1, pending=1
+[DEBUG] 05:30:43 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:44 - core.extension_bridge - [ExtensionBridge] Headers update for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[DEBUG] 05:30:44 - core.app_controller - [ExtensionBridge] Bearer token stored for levanlinh.kma@gmail.com (425 chars)
+[INFO ] 05:30:44 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 05:30:44 - veo - [Status] 🔑 levanlinh.kma@gmail.com: x-client-data received (68 chars) — tokens ready
+[DEBUG] 05:30:48 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:53 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:58 - veo.tab_queue - [QueueRefresh] 1 groups, 10 total tasks, existing_groups=['group_20260319_052746']
+[DEBUG] 05:30:58 - core.extension_bridge - [ExtensionBridge] Extension v2.3.6 matches local v2.3.6
+[INFO ] 05:30:58 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

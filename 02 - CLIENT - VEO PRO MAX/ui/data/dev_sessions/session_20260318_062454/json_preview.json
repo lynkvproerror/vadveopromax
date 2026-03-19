@@ -1,0 +1,102 @@
+{
+  "group_id": "group_20260318_060500",
+  "workflow": "I2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_i2v_s_fast_ultra_relaxed",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260318_060500_task_0",
+      "prompt": "[Scene 1] Animated 3D style. Mina's Vanity. Soft morning light. [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, looking in mirror, poking nose, sad expression. Audio of gentle sigh, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_1",
+      "prompt": "[Scene 2] Animated 3D style. Mina's Vanity. Soft morning light. [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, pops from bubble, waving wand, cheerful. Audio of magical chime, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_2",
+      "prompt": "[Scene 3] Animated 3D style. Mina's Vanity. Soft morning light. [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, summons large cleansing oil bottle, pointing instructively. [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, mimics washing motion, hopeful. Audio of bubbly splashing, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_3",
+      "prompt": "[Scene 4] Animated 3D style. Glow Dimension. Magical laboratory. Floating bubbles, citrus slices. >> [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, points to potion, explaining. [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, watches attentively. Audio of gentle bubbling, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_4",
+      "prompt": "[Scene 5] Animated 3D style. Mina's Vanity. Soft morning light. [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, applies serum, face instantly mattes. [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, watches approvingly. Audio of soft 'poof' sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_5",
+      "prompt": "[Scene 6] Animated 3D style. Mina's Vanity. Soft morning light. >> [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, wears clay mask, looking slightly strained. [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, uses small vacuum, sucking dirt, focused. Audio of gentle suction sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_6",
+      "prompt": "[Scene 7] Animated 3D style. Glow Dimension. Magical laboratory. Floating bubbles, citrus slices. >> [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, splashes Mina with vitamin C, smiling. [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, closes eyes, enjoying the sensation. Audio of refreshing splash, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_7",
+      "prompt": "[Scene 8] Animated 3D style. Glow Dimension. Magical laboratory. Floating bubbles, citrus slices. >> [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, conjures sunscreen shield, blocking sun rays. [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, stands behind it, protected. Audio of shimmering shield sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_8",
+      "prompt": "[Scene 9] Animated 3D style. Mina's Vanity. Soft morning light. >> [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, skin glows softly, pores vanish. [Mina] touches face, amazed expression. Audio of gentle humming, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260318_060500_task_9",
+      "prompt": "[Scene 10] Animated 3D style. Mina's Vanity. Soft morning light. >> [Mina] Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, Mina, 19-year-old college student, relatable skincare learner, 1.55m, soft peach porcelain, slightly shiny T-zone (stylized oiliness), Large expressive round eyes, small button nose, tiny stylized dots for pores on cheeks, dark espresso brown, bob cut with straight bangs, pastel cherry blossom pink oversized hoodie, clean white pleated tennis skirt, pale sky blue cat-ear headband, and [Glowie] Glowie, Ageless magical Skincare Fairy/Spirit, 0.30m (floating), iridescent pearl white, glowing aura, Huge sparkling star-shaped pupils, tiny smiling mouth, no nose, translucent light blue liquid-like hair, flowing upwards, shimmering alice blue silk tunic with gold trim, matching shimmering leggings, floating golden halo, emerald leaf wand, high-five. [Mina] smiles confidently at mirror. Audio of triumphant sparkle sound, no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers, no melting geometry, no color shifts, no texture distortion",
+      "model": "veo_3_1_i2v_s_fast_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}
