@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPlainTextEdit, QFrame,
     QScrollArea,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -35,6 +35,9 @@ class AccountsPage(QWidget):
         self._prewarm_data: dict = {}  # email → {total_prewarms, current_idle_secs, ...}
         self._circuit_data: dict = {}  # email → {state, consecutive_403, open_duration_sec}
         self._cooldown_data: dict = {} # email → {remaining_sec, backoff_level, until}
+        # Bug 7: Render coalescing — avoid 6× _render_all per tick
+        self._render_dirty = False
+        self._render_scheduled = False
         self._setup_ui()
 
     def _setup_ui(self):
@@ -109,35 +112,65 @@ class AccountsPage(QWidget):
 
     # ── Public API ────────────────────────────────────────────
 
+    def _schedule_render(self):
+        """Bug 7: Coalesce multiple data updates into one _render_all.
+        
+        Multiple update_* methods fire per 5s tick (session, extension,
+        dashboard→prewarm+circuit+cooldown). Without coalescing, _render_all
+        was called up to 6× per tick. Now it fires once on next event loop.
+        """
+        self._render_dirty = True
+        if not self._render_scheduled:
+            self._render_scheduled = True
+            QTimer.singleShot(0, self._do_render)
+    
+    def _do_render(self):
+        """Execute deferred render if dirty."""
+        self._render_scheduled = False
+        if self._render_dirty:
+            self._render_dirty = False
+            self._render_all()
+    
     def update_session_data(self, accounts: list):
         """Update session/token/cookie data (from AppController.get_session_data)."""
         self._session_data = accounts or []
-        self._render_all()
+        self._schedule_render()
 
     def update_browser_status(self, accounts: list):
         """Update browser status per account."""
         self._browser_data = accounts or []
-        self._render_all()
+        self._schedule_render()
 
     def update_extension_status(self, status: dict):
         """Update extension bridge data (connection per email)."""
         self._extension_data = status or {}
-        self._render_all()
+        self._schedule_render()
 
     def update_prewarm_data(self, prewarm: dict):
         """Update pre-warm stats from engine dashboard."""
         self._prewarm_data = prewarm.get('accounts', {}) if prewarm else {}
-        self._render_all()
+        self._schedule_render()
 
     def update_circuit_data(self, data: dict):
         """Update circuit breaker status per-account from engine dashboard."""
         self._circuit_data = data or {}
-        self._render_all()
+        self._schedule_render()
 
     def update_cooldown_data(self, data: dict):
         """Update cooldown status per-account from engine dashboard."""
         self._cooldown_data = data or {}
-        self._render_all()
+        self._schedule_render()
+    
+    def update_engine_extras(self, prewarm: dict, circuit: dict, cooldown: dict):
+        """Bug 11: Batch prewarm+circuit+cooldown into one call (one render).
+        
+        Called from tab_devconsole.update_engine_dashboard() instead of
+        3 separate update_prewarm/circuit/cooldown calls.
+        """
+        self._prewarm_data = prewarm.get('accounts', {}) if prewarm else {}
+        self._circuit_data = circuit or {}
+        self._cooldown_data = cooldown or {}
+        self._schedule_render()
 
     # ── Render ────────────────────────────────────────────────
 

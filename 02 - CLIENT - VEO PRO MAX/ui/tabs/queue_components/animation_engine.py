@@ -71,6 +71,12 @@ class QueueAnimationMixin:
                 
                 if pct <= 0.01:
                     # No progress yet — just shimmer sweep
+                    # Bug 9: Cache key to skip redundant setStyleSheet
+                    cache_key = (0, round(highlight_pos, 2), round(highlight_end, 2))
+                    if getattr(slot, '_last_shimmer_key', None) == cache_key:
+                        alive.append(slot)
+                        continue
+                    slot._last_shimmer_key = cache_key
                     slot.setStyleSheet(f"""
                         QLabel {{
                             background-color: qlineargradient(
@@ -93,6 +99,12 @@ class QueueAnimationMixin:
                     shimmer_in_fill = min(highlight_pos, pct)
                     shimmer_end_in_fill = min(highlight_end, pct)
                     
+                    # Bug 9: Cache key to skip redundant setStyleSheet
+                    cache_key = (round(pct, 2), round(shimmer_in_fill, 2), round(shimmer_end_in_fill, 2))
+                    if getattr(slot, '_last_shimmer_key', None) == cache_key:
+                        alive.append(slot)
+                        continue
+                    slot._last_shimmer_key = cache_key
                     slot.setStyleSheet(f"""
                         QLabel {{
                             background-color: qlineargradient(
@@ -511,6 +523,12 @@ class QueueAnimationMixin:
                     continue
                 
                 has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
+                # Bug 15: Cache spinner key to skip redundant setStyleSheet
+                spinner_key = (is_bright, has_pixmap)
+                if getattr(slot, '_last_spinner_key', None) == spinner_key:
+                    alive.append(slot)
+                    continue
+                slot._last_spinner_key = spinner_key
                 if has_pixmap:
                     slot.setStyleSheet(f"""
                         QLabel {{

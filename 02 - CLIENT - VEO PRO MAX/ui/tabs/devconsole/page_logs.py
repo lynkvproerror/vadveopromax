@@ -39,8 +39,8 @@ LEVEL_COLORS = {
     "CRITICAL": "#F38BA8",
 }
 
-# No hard limit on log buffer — user controls display via line count filter
-MAX_BUFFER = None  # Unlimited
+# Cap log buffer to prevent unbounded memory growth
+MAX_BUFFER = 50000
 # Batch flush interval (ms)
 FLUSH_INTERVAL_MS = 200
 
@@ -108,7 +108,7 @@ class LogsPage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._log_buffer: list = []  # Unlimited buffer: (level, msg, source_category)
+        self._log_buffer = deque(maxlen=MAX_BUFFER)  # Capped buffer: (level, msg, source_category)
         self._pending_logs: list = []
         self._auto_scroll = True
         self._api_debug = True
@@ -223,7 +223,7 @@ class LogsPage(QWidget):
         # ── Content: Logs + JSON ─────────────────────────────
         splitter = QSplitter(Qt.Vertical)
 
-        # Log text — no maxBlockCount limit, controlled by line count filter
+        # Log text — trimming handled by setMaximumBlockCount (O(1) vs cursor loop)
         self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
         self._log_text.setFont(QFont(Theme.FONT_FAMILY_MONO, 10))
@@ -232,6 +232,8 @@ class LogsPage(QWidget):
             f"border: none; padding: 4px;"
         )
         self._log_text.setPlainText("Waiting for log output...\n")
+        # Set initial display line limit (matches default 5K)
+        self._log_text.document().setMaximumBlockCount(self._line_count_limit or 0)
         # Intercept Ctrl+C to prevent freeze from concurrent flush
         self._log_text.installEventFilter(self)
         splitter.addWidget(self._log_text)
@@ -353,23 +355,10 @@ class LogsPage(QWidget):
         if not lines_to_add:
             return
 
-        # Batch append
+        # Batch append — trimming handled by Qt's setMaximumBlockCount
         cursor = self._log_text.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText("\n".join(lines_to_add) + "\n")
-
-        # Apply line count limit: trim old lines from display
-        if self._line_count_limit > 0:
-            block_count = self._log_text.document().blockCount()
-            if block_count > self._line_count_limit * 1.2:  # 20% hysteresis
-                excess = block_count - self._line_count_limit
-                cursor = self._log_text.textCursor()
-                cursor.movePosition(QTextCursor.Start)
-                for _ in range(excess):
-                    cursor.movePosition(QTextCursor.Down, QTextCursor.KeepAnchor)
-                cursor.movePosition(QTextCursor.StartOfLine, QTextCursor.KeepAnchor)
-                cursor.removeSelectedText()
-                cursor.deleteChar()  # Remove trailing newline
 
         # Update count (total buffer, not just displayed)
         total = len(self._log_buffer)
@@ -436,6 +425,11 @@ class LogsPage(QWidget):
 
     def _on_lines_changed(self, label: str):
         self._line_count_limit = LINE_COUNT_OPTIONS.get(label, 5000)
+        # Update Qt's built-in block limiter
+        if self._line_count_limit > 0:
+            self._log_text.document().setMaximumBlockCount(self._line_count_limit)
+        else:
+            self._log_text.document().setMaximumBlockCount(0)  # 0 = unlimited
         self._rerender_logs()
 
     def _on_source_changed(self, source: str):

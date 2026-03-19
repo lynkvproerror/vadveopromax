@@ -267,6 +267,9 @@ class QueueThumbnailMixin:
         # Once "ready" or empty → static border, no pulsing
         if upload_status in ('extracting', 'uploading'):
             self._input_pulse_thumbs.extend(container_thumbs)
+            # Bug 8: Start timer on-demand (no longer auto-started in __init__)
+            if container_thumbs and not self._input_pulse_timer.isActive():
+                self._input_pulse_timer.start()
         
         layout.addStretch()
         return container

@@ -381,25 +381,55 @@ class TabDevConsole(QWidget):
     # ── Logging Hook ──────────────────────────────────────────
     
     def _attach_logging(self):
-        """Attach to Python root logger to capture all app logs."""
+        """Attach to Python root logger to capture all app logs.
+        
+        Bug 5 fix: set handler level to INFO (not root to DEBUG).
+        Root stays at its current level for other handlers.
+        The huge volume of DEBUG logs from websockets/asyncio
+        was flooding the main thread via _on_log_received.
+        Level is adjusted dynamically when user changes the filter.
+        """
         handler = get_qt_log_handler()
         handler.bridge.log_received.connect(self._on_log_received)
+        handler.setLevel(logging.INFO)  # Default: INFO+ only
         
         root = logging.getLogger()
         if handler not in root.handlers:
             root.addHandler(handler)
+            # Ensure root can pass DEBUG to us when requested,
+            # but our handler filters at INFO by default
             if root.level > logging.DEBUG:
                 root.setLevel(logging.DEBUG)
     
+    def _sync_handler_level(self, ui_level: str):
+        """Sync QtLogHandler level with user's UI filter selection."""
+        level_map = {
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+        }
+        handler = get_qt_log_handler()
+        handler.setLevel(level_map.get(ui_level, logging.INFO))
+    
     @Slot(str, str, str)
     def _on_log_received(self, message: str, level: str, source: str = ""):
-        """Route incoming log message to LogsPage + Network API filter."""
-        # Forward to logs page with source for layer filtering
+        """Route incoming log message to LogsPage + Network API filter.
+        
+        Bug 4 fix: skip expensive UI updates (toolbar label, api_log
+        forwarding) when DevConsole tab is not visible. Logs still
+        buffer in _log_buffer for later viewing.
+        """
+        # Always buffer (cheap: deque append)
         self._logs_page.append_log(message, level, source)
+        
+        # Skip expensive UI work when tab is hidden (Bug 4)
+        if not self.isVisible():
+            return
         
         # Update toolbar log count
         count = len(self._logs_page._log_buffer)
-        self.log_count_label.setText(f"{count} logs")
+        self.log_count_label.setText(f"{count:,} logs")
         
         # API debug lines → also to Network page
         if "[API " in message or "HTTP" in message.upper():
@@ -452,13 +482,12 @@ class TabDevConsole(QWidget):
     def update_engine_dashboard(self, data: dict):
         """Update Engine Dashboard with aggregated monitoring data."""
         self._dashboard_page.update_dashboard(data)
-        # Forward per-account data to accounts page
-        if 'prewarm' in data:
-            self._accounts_page.update_prewarm_data(data['prewarm'])
-        if 'circuit_breaker_status' in data:
-            self._accounts_page.update_circuit_data(data['circuit_breaker_status'])
-        if 'cooldowns' in data:
-            self._accounts_page.update_cooldown_data(data['cooldowns'])
+        # Bug 11: Batch per-account data into single call (was 3 separate → 3 renders)
+        self._accounts_page.update_engine_extras(
+            data.get('prewarm'),
+            data.get('circuit_breaker_status'),
+            data.get('cooldowns'),
+        )
     
     def update_browser_status(self, accounts: list):
         """Update browser status for all accounts."""

@@ -94,11 +94,24 @@ class QueueController:
         # Convert to view items
         items = []
         for task in all_tasks[:limit]:
+            # ★ FIX: Combine task.state with upscale_status for accurate display
+            display_status = task.state.value
+            if task.state == TaskState.COMPLETED and getattr(task, 'video_outputs', None):
+                upscale_statuses = [
+                    getattr(vo, 'upscale_status', '') for vo in task.video_outputs
+                ]
+                if any(s in ("submitting", "polling") for s in upscale_statuses):
+                    display_status = "upscaling"
+                elif any(s == "failed" for s in upscale_statuses):
+                    # Check if task wanted upscale but it failed
+                    wants_upscale = getattr(task, 'download_quality', '720p') != '720p'
+                    if wants_upscale:
+                        display_status = "upscale_failed"
             item = QueueItemView(
                 id=task.id,
                 prompt=task.prompt[:50] + "..." if len(task.prompt) > 50 else task.prompt,
                 workflow=str(task.workflow_type) if task.workflow_type else "unknown",
-                status=task.state.value,
+                status=display_status,
                 progress=task.progress,
                 outputs=task.output_uris or [],
                 created_at=task.created_at or datetime.now(),

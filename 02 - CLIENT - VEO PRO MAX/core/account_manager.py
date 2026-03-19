@@ -303,10 +303,10 @@ class AccountManager:
                     return token
                 
                 # Token from page was also stale — reload tab and try again
-                log.info(f"[{self.email}] Page token stale, triggering tab reload...")
-                await self._extension_bridge.refresh_headers(self.email, timeout=15)
+                log.info(f"[{self.email}] Page token stale, triggering tab reload via cooldown manager...")
+                await self._extension_bridge._trigger_refresh(self.email, "Stale token recovery", level="full")
                 # Wait for page to reload and re-render __NEXT_DATA__
-                await asyncio.sleep(3)
+                await asyncio.sleep(5)
                 
                 result = await self._extension_bridge.request_access_token(self.email, timeout=10)
                 token = result if isinstance(result, str) else (result.get('token') if isinstance(result, dict) else None)

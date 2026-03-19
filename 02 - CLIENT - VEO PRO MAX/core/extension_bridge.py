@@ -1230,7 +1230,7 @@ class ExtensionBridge:
                 self._pending_requests.pop(request_id, None)
             
             # Wait for page + reCAPTCHA script to fully initialize
-            await asyncio.sleep(6)
+            await asyncio.sleep(12)
         except Exception as e:
             log.debug(f"[ExtensionBridge] Tab reload failed for {email}: {e}")
 

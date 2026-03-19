@@ -12,6 +12,7 @@ are in ui/tabs/queue_components/ as mixin classes.
 from typing import Optional, List, Dict
 import sys
 import time
+import time as _time
 from pathlib import Path
 from dataclasses import dataclass, field
 from collections import OrderedDict
@@ -115,7 +116,7 @@ class TabQueue(
         self._shimmer_offset = 0.0
         self._shimmer_active_slots: List[QLabel] = []
         self._shimmer_timer = QTimer(self)
-        self._shimmer_timer.setInterval(50)  # 20fps shimmer
+        self._shimmer_timer.setInterval(100)  # Bug 9: 10fps shimmer (was 50ms/20fps — halves CSS parse load)
         self._shimmer_timer.timeout.connect(self._tick_shimmer)
         # Completion glow pulse
         self._glow_slots: Dict[str, dict] = {}  # task_id → {slots, count, phase}
@@ -134,7 +135,15 @@ class TabQueue(
         self._input_pulse_timer = QTimer(self)
         self._input_pulse_timer.setInterval(800)  # 0.8s toggle
         self._input_pulse_timer.timeout.connect(self._tick_input_pulse)
-        self._input_pulse_timer.start()
+        # Bug 8: Don't auto-start — start when thumbs registered, stop when empty
+        # Round 4 Fix A: Unified completion refresh debounce timer
+        # Replaces scattered QTimer.singleShot(500) and _upscale_refresh_timer
+        # so N simultaneous completions/upscale phases coalesce into 1 refresh
+        self._completion_refresh_timer = QTimer(self)
+        self._completion_refresh_timer.setSingleShot(True)
+        self._completion_refresh_timer.setInterval(500)  # 500ms debounce
+        self._completion_refresh_timer.timeout.connect(self._refresh_queue_from_controller)
+        self._last_refresh_ts = 0.0  # monotonic timestamp of last actual refresh
         # Auto-refresh timer: periodic full queue refresh while engine is running
         self._auto_refresh_timer = QTimer(self)
         self._auto_refresh_timer.setInterval(5000)  # every 5s
@@ -220,19 +229,14 @@ class TabQueue(
                     pass
 
         # During download/upscale phase: trigger full refresh so thumb overlays update
+        # Round 4 Fix A: Use unified _completion_refresh_timer instead of separate timer
         is_refresh_phase = status_text and (
             "⬆️" in status_text or "Upscal" in status_text
             or "🔄" in status_text or "📥" in status_text
         )
-        if is_refresh_phase and not getattr(self, '_pause_refresh_for_menu', False):
-            if not hasattr(self, '_upscale_refresh_timer'):
-                self._upscale_refresh_timer = QTimer(self)  # parent=self to avoid leak
-                self._upscale_refresh_timer.setSingleShot(True)
-                self._upscale_refresh_timer.timeout.connect(
-                    self._refresh_queue_from_controller
-                )
-            if not self._upscale_refresh_timer.isActive():
-                self._upscale_refresh_timer.start(500)
+        if is_refresh_phase and not getattr(self, '_pause_refresh_for_menu', False) and self.isVisible():
+            if not self._completion_refresh_timer.isActive():
+                self._completion_refresh_timer.start()
         
         # Phase 2: Smooth progress interpolation
         smooth_pct = self._get_smooth_progress(task_id, progress) / 100.0
@@ -271,8 +275,10 @@ class TabQueue(
         
         # Auto-refresh: when progress hits 100%, trigger delayed refresh
         # so thumbnails load from just-generated files without right-click
-        if progress >= 100 and not getattr(self, '_pause_refresh_for_menu', False):
-            QTimer.singleShot(500, self._refresh_queue_from_controller)
+        # Round 4 Fix A: Use unified debounce timer (coalesces N completions → 1 refresh)
+        if progress >= 100 and not getattr(self, '_pause_refresh_for_menu', False) and self.isVisible():
+            if not self._completion_refresh_timer.isActive():
+                self._completion_refresh_timer.start()
         
         # Update status label
         if hasattr(widget, 'status_label'):
@@ -372,7 +378,10 @@ class TabQueue(
             self._refresh_queue_from_controller()
     
     def _on_auto_refresh_tick(self):
-        """Periodic queue refresh while engine is running (every 2s)."""
+        """Periodic queue refresh while engine is running (every 5s)."""
+        # Bug 10: Skip refresh when Queue tab is not visible
+        if not self.isVisible():
+            return
         # Skip refresh while context menu is open to prevent parent widget deletion
         if getattr(self, '_pause_refresh_for_menu', False):
             return
@@ -403,14 +412,22 @@ class TabQueue(
     def _tick_input_pulse(self):
         """BUG-A8 fix: Animate input thumbnails border (I2V/R2V modes)."""
         if not self._input_pulse_thumbs:
+            # Bug 8: Stop timer when no thumbs to animate
+            self._input_pulse_timer.stop()
             return
         self._input_pulse_phase = not self._input_pulse_phase
         bright = Theme.BLUE
         dim = "#3a4a6a"  # Muted blue
         border_color = bright if self._input_pulse_phase else dim
         alive = []
+        pulse_key = self._input_pulse_phase
         for thumb in self._input_pulse_thumbs:
             try:
+                # R6-A: Skip redundant setStyleSheet if phase unchanged for this thumb
+                if getattr(thumb, '_last_pulse_key', None) == pulse_key:
+                    alive.append(thumb)
+                    continue
+                thumb._last_pulse_key = pulse_key
                 thumb.setStyleSheet(f"""
                     QLabel {{
                         border: 1px solid {border_color};
@@ -423,6 +440,9 @@ class TabQueue(
             except RuntimeError:
                 continue
         self._input_pulse_thumbs = alive
+        # Bug 8: Stop timer when all thumbs have been GC'd
+        if not alive:
+            self._input_pulse_timer.stop()
     
     # ── UI Setup ─────────────────────────────────────────────────
     
@@ -1174,9 +1194,23 @@ class TabQueue(
     # ── Queue Refresh ────────────────────────────────────────────
     
     def _refresh_queue_from_controller(self):
-        """Refresh queue from controller using hierarchical group data."""
+        """Refresh queue from controller using hierarchical group data.
+        
+        Round 4 Fix B: 400ms cooldown guard prevents rapid-fire rebuilds.
+        If called within cooldown, defers via _completion_refresh_timer.
+        """
         if not self.controller:
             return
+        
+        # Round 4 Fix B: Cooldown guard — min 400ms between actual executions
+        now = _time.monotonic()
+        if (now - self._last_refresh_ts) < 0.4:
+            # Too soon — schedule deferred refresh
+            if not self._completion_refresh_timer.isActive():
+                remaining_ms = int((0.4 - (now - self._last_refresh_ts)) * 1000)
+                self._completion_refresh_timer.start(max(50, remaining_ms))
+            return
+        self._last_refresh_ts = now
         
         # BUG-A7 + A10 fix: Don't clear ALL animation slots — prune dead refs only
         # Clearing all slots causes shimmer/spinner flicker on every 2s refresh
@@ -1853,14 +1887,26 @@ class TabQueue(
         """Sync Queue dropdown → AppSettings (two-way sync with Settings tab)."""
         # ★ FIX: Use index-based mapping (locale-safe, no English/Vietnamese mismatch)
         _index_map = {0: "nothing", 1: "shutdown", 2: "sleep"}
+        new_action = _index_map.get(index, "nothing")
         try:
             from config.settings import get_settings, save_settings
             s = get_settings()
-            s.post_queue_action = _index_map.get(index, "nothing")
-            s.post_queue_action_enabled = (s.post_queue_action != "nothing")
+            s.post_queue_action = new_action
+            s.post_queue_action_enabled = (new_action != "nothing")
             save_settings()
         except Exception:
             pass
+        
+        # ★ BUG FIX: When user switches to Sleep/Shutdown, reset the
+        # "already triggered" guard so the action can fire.
+        # Without this, if queue completed while "Do Nothing" was selected,
+        # _post_queue_triggered=True permanently blocks future checks.
+        if new_action != "nothing":
+            self._post_queue_triggered = False
+            # ★ R2-5: If sweep is in progress, delay check until sweep finishes
+            # (QTimer.singleShot only fires once → would be wasted on _sweep_in_progress guard)
+            delay = 3000 if self._sweep_in_progress else 500
+            QTimer.singleShot(delay, self._check_post_queue_action)
     
     def _check_post_queue_action(self):
         """Check if ALL queue groups are done (including upscale) → trigger action.
@@ -1894,6 +1940,9 @@ class TabQueue(
         
         # Sync max sweep rounds from settings (user can change at runtime)
         self._max_sweep_rounds = getattr(s, 'auto_sweep_max_rounds', 5)
+        
+        # ★ R2-3: Init before try block to prevent NameError on exception
+        has_incomplete = False
         
         # Use dispatcher task states (source of truth, not UI widgets)
         try:
@@ -1932,28 +1981,27 @@ class TabQueue(
                     if stats.get('pending_jobs', 0) > 0 or stats.get('active_workers', 0) > 0:
                         return  # Upscale still running
             
-            # ── Account Readiness Gate ──
-            # Don't attempt re-upscale if no account has extension bridge connected
-            # (browser still launching after app restart → token refresh will fail)
-            _any_account_ready = False
-            try:
-                ma = getattr(self.controller, '_multi_account', None)
-                if ma:
-                    for acc in getattr(ma, '_accounts', []):
-                        if getattr(acc, 'extension_bridge', None) and getattr(acc, '_access_token', None):
-                            _any_account_ready = True
-                            break
-            except Exception:
-                pass
-            
-            if not _any_account_ready:
-                return  # Browser not ready yet — wait for next tick
-            
             # ── Auto-Sweep Gate (ALWAYS runs, independent of post_queue_action) ──
             # Guarantee 100% completion: retry failed/skipped tasks before any action
             has_incomplete = self._has_incomplete_work(dispatcher)
             
             if has_incomplete and self._sweep_count < self._max_sweep_rounds:
+                # ★ R2-2: Account Readiness Gate — only needed for auto-sweep
+                # (sleep/shutdown don't need extension bridge, but re-upscale does)
+                _any_account_ready = False
+                try:
+                    ma = getattr(self.controller, '_multi_account', None)
+                    if ma:
+                        for acc in getattr(ma, '_accounts', []):
+                            if getattr(acc, 'extension_bridge', None) and getattr(acc, '_access_token', None):
+                                _any_account_ready = True
+                                break
+                except Exception:
+                    pass
+                
+                if not _any_account_ready:
+                    return  # Browser not ready — wait for next tick before sweep
+                
                 self._run_auto_sweep(action)
                 return  # Don't trigger sleep/shutdown yet — sweep first
             
@@ -2217,14 +2265,9 @@ class TabQueue(
                     "Click Cancel below or run 'shutdown /a' to abort.",
                     "warning", duration=55000
                 )
-            # Show cancel button via separate timer
-            self._shutdown_cancel_timer = QTimer(self)
-            self._shutdown_cancel_timer.setSingleShot(True)
-            self._shutdown_cancel_timer.setInterval(55000)
-            self._shutdown_cancel_timer.timeout.connect(
-                lambda: setattr(self, '_post_queue_triggered', False)
-            )
-            self._shutdown_cancel_timer.start()
+            # ★ R2-4: Removed misleading cancel timer — it only reset the flag
+            # but didn't actually run `shutdown /a`. Use _cancel_post_queue_action()
+            # for real cancellation.
             
         elif action == "sleep":
             log.info("[Queue] Post-queue action: SLEEP")
@@ -2241,8 +2284,10 @@ class TabQueue(
         import subprocess
         import logging
         try:
+            # ★ R2-1: Fixed rundll32 syntax — must be a single string command,
+            # not a list (args with commas get mangled as separate argv entries).
             subprocess.Popen(
-                ["rundll32", "powrprof.dll,SetSuspendState", "0,1,0"],
+                "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
                 shell=True
             )
         except Exception as e:

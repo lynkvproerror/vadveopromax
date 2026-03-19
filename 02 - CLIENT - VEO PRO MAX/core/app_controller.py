@@ -420,7 +420,7 @@ class AppController:
                 self._multi_account.fix_short_client_data()
                 self._notify_status(f"🔑 {email}: x-client-data received ({len(new_cd)} chars) — tokens ready")
             
-            self._push_session_data()  # Refresh Dev Console instantly
+            self._push_all_status_debounced()  # Round 5 Fix G: Debounce instead of direct push from asyncio thread
         else:
             log.debug(f"[ExtensionBridge] No account found for {email} (headers ignored)")
     
@@ -460,7 +460,7 @@ class AppController:
         if account:
             self._ensure_account_bridge(account)
         
-        self._push_session_data()  # Instant DevConsole refresh
+        self._push_all_status_debounced()  # Round 4 Fix C: Coalesce instead of single push
         
         # Immediate data refresh — don't wait for auto-check
         import asyncio
@@ -698,9 +698,7 @@ class AppController:
                     log.info(f"[AutoAssign] 📧 Late-assign email: {email}")
                     assigned = await self._extension_bridge.assign_email(email)
                     if assigned:
-                        self._push_browser_status()
-                        self._push_extension_status()
-                        self._push_session_data()
+                        self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
         
         try:
             asyncio.ensure_future(_assign_pending())
@@ -728,9 +726,7 @@ class AppController:
                 evt.clear()  # Block all workers for this account
                 log.warning(f"[AppController] ⏸️ Workers paused for {email} (300s cooldown after logout)")
             
-            self._push_browser_status()
-            self._push_extension_status()
-            self._push_session_data()
+            self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
         except Exception as e:
             log.debug(f"[AppController] Status push failed after logout: {e}")
     
@@ -759,8 +755,7 @@ class AppController:
                     uq.pause_account(email)
                     log.warning(f"[AppController] ⏸️ UpscaleQueue paused for {email}")
             
-            self._push_browser_status()
-            self._push_extension_status()
+            self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
         except Exception as e:
             log.debug(f"[AppController] Status push failed after tab death: {e}")
     
@@ -786,8 +781,8 @@ class AppController:
     async def _refresh_extension_data(self, email: str):
         """Request fresh headers + access token from extension immediately."""
         try:
-            # 1. Refresh headers (triggers VEO tab reload → fresh x-browser-*)
-            await self._extension_bridge.refresh_headers(email, timeout=10)
+            # 1. Refresh headers (lightweight — avoids full VEO tab reload)
+            await self._extension_bridge.refresh_headers_lightweight(email, timeout=10)
             log.info(f"[ExtensionBridge] ✅ Startup headers refreshed for {email}")
             
             # 2. Probe for x-browser-validation (cross-origin fetch triggers Chrome to add it)
@@ -1135,9 +1130,7 @@ class AppController:
                         self._engine.add_account_hot(acc)
                         log.info(f"[HotAdd] ✅ Engine notified — workers will spawn for {email}")
                 
-                self._push_browser_status()
-                self._push_extension_status()
-                self._push_session_data()
+                self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
                 self._notify_status(f"✅ Profile {email} added and connected!")
                 log.info(f"[HotAdd] ✅ Hot-add complete: {email}")
                 
@@ -1214,21 +1207,20 @@ class AppController:
         
         Can be called from any thread. Uses QMetaObject.invokeMethod
         to ensure the actual Qt widget update runs on the GUI thread.
+        Round 4 Fix D: Don't call get_browser_status() on background thread.
         """
         if not hasattr(self, '_dev_console') or not self._dev_console:
             return
         
-        status = self.get_browser_status()
-        
-        # Use QMetaObject to safely update from any thread
         from PySide6.QtCore import QMetaObject, Qt, QThread
-        from functools import partial
         
         if QThread.currentThread() == self._dev_console.thread():
             # Already on GUI thread — safe to call directly
+            status = self.get_browser_status()
             self._dev_console.update_browser_status(status)
         else:
             # Background thread — schedule on GUI thread
+            # (get_browser_status will be called by update_browser_status_safe on GUI thread)
             QMetaObject.invokeMethod(
                 self._dev_console, "update_browser_status_safe",
                 Qt.ConnectionType.QueuedConnection
@@ -1272,15 +1264,38 @@ class AppController:
                 Qt.ConnectionType.QueuedConnection
             )
     
+    def _push_all_status_debounced(self):
+        """Coalesce browser + session + extension status pushes (300ms debounce).
+        
+        Round 4 Fix C: Prevents triple-push storms when extension connect /
+        browser state change fires all three pushes simultaneously.
+        """
+        if not hasattr(self, '_status_push_timer') or self._status_push_timer is None:
+            from PySide6.QtCore import QTimer
+            self._status_push_timer = QTimer()
+            self._status_push_timer.setSingleShot(True)
+            self._status_push_timer.setInterval(300)
+            self._status_push_timer.timeout.connect(self._flush_all_status_push)
+        if not self._status_push_timer.isActive():
+            self._status_push_timer.start()
+    
+    def _flush_all_status_push(self):
+        """Execute all three status pushes in one batch (on GUI thread via timers)."""
+        # R6-C: Skip if DevConsole not attached — nothing to push to
+        if not self._dev_console:
+            return
+        self._push_browser_status()
+        self._push_session_data()
+        self._push_extension_status()
+    
     def _on_debug_browser_state_change(self, email: str, state: str):
         """Callback when a debug browser changes state (visible/hidden/closed/disconnected).
         
         Called from background browser thread. Thread-safe via _push_browser_status.
         Log only — do NOT kill or restart browser automatically.
+        Round 4 Fix C: Coalesce triple push into single debounced batch.
         """
-        self._push_browser_status()
-        self._push_session_data()
-        self._push_extension_status()
+        self._push_all_status_debounced()
         
         if state in ("closed", "disconnected"):
             log.info(f"[AppController] Browser {state} for {email} — no auto-restart (by design)")
@@ -2189,15 +2204,18 @@ class AppController:
         return result
     
     def _push_session_data(self):
-        """Push session data to DevConsole (thread-safe)."""
+        """Push session data to DevConsole (thread-safe).
+        
+        Round 5 Fix E: Don't call get_session_data() on background thread.
+        get_session_data() does SQLite I/O + file reads — must run on GUI thread.
+        """
         if not hasattr(self, '_dev_console') or not self._dev_console:
             return
-        
-        data = self.get_session_data()
         
         from PySide6.QtCore import QMetaObject, Qt, QThread
         
         if QThread.currentThread() == self._dev_console.thread():
+            data = self.get_session_data()
             self._dev_console.update_session_data(data)
         else:
             QMetaObject.invokeMethod(
@@ -2240,21 +2258,36 @@ class AppController:
         except Exception:
             pass
         
-        # Also refresh extension status + session data on each tick
+        # Bug 14: Skip extension status push when DevConsole is hidden
         try:
-            self._push_extension_status()
+            if self._dev_console.isVisible():
+                self._push_extension_status()
         except Exception:
             pass
+        # Bug 6 fix: throttle session data push from every 5s to every 15s
+        # get_session_data() copies SQLite cookies per account — expensive I/O
         try:
-            self._push_session_data()
+            if not hasattr(self, '_session_push_tick'):
+                self._session_push_tick = 0
+            self._session_push_tick += 1
+            if self._session_push_tick >= 3:  # 3 × 5s = 15s
+                self._session_push_tick = 0
+                self._push_session_data()
         except Exception:
             pass
         
         # Push Engine Dashboard (aggregated monitoring data)
+        # Bug 14: Throttle to every 10s (2 ticks) — pulls from 5+ subsystems
         try:
-            dashboard = self.get_engine_dashboard()
-            if dashboard and hasattr(self._dev_console, 'update_engine_dashboard'):
-                self._dev_console.update_engine_dashboard(dashboard)
+            if not hasattr(self, '_dashboard_push_tick'):
+                self._dashboard_push_tick = 0
+            self._dashboard_push_tick += 1
+            if self._dashboard_push_tick >= 2:  # 2 × 5s = 10s
+                self._dashboard_push_tick = 0
+                if self._dev_console.isVisible():
+                    dashboard = self.get_engine_dashboard()
+                    if dashboard and hasattr(self._dev_console, 'update_engine_dashboard'):
+                        self._dev_console.update_engine_dashboard(dashboard)
         except Exception:
             pass
     

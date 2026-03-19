@@ -25,9 +25,14 @@ from config.theme import Theme
 class NetworkPage(QWidget):
     """Extension Bridge + API activity view."""
 
+    # Batch flush interval for API logs (ms)
+    _API_FLUSH_MS = 200
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._pending_api_logs: list = []
         self._setup_ui()
+        self._setup_api_flush_timer()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -126,19 +131,42 @@ class NetworkPage(QWidget):
         self._ext_text.setPlainText("\n".join(lines))
         self._timestamp.setText(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
 
+    def _setup_api_flush_timer(self):
+        """Batch-flush API logs every _API_FLUSH_MS instead of per-message."""
+        from PySide6.QtCore import QTimer
+        # Let Qt handle line trimming internally — O(1) vs manual O(N) split
+        self._api_text.document().setMaximumBlockCount(200)
+        self._api_flush_timer = QTimer(self)
+        self._api_flush_timer.timeout.connect(self._flush_api_logs)
+        # Bug 16: Don't auto-start — start on-demand when logs arrive
+
     def append_api_log(self, message: str):
-        """Append an API activity log entry."""
+        """Queue an API activity log entry for batched rendering."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        entry = f"[{timestamp}] {message}"
+        self._pending_api_logs.append(f"[{timestamp}] {message}")
+        # Bug 16: Start flush timer on-demand
+        if not self._api_flush_timer.isActive():
+            self._api_flush_timer.start(self._API_FLUSH_MS)
 
-        # Append and cap at 200 lines
-        text = self._api_text.toPlainText()
-        lines = text.split("\n")
-        lines.append(entry)
-        if len(lines) > 200:
-            lines = lines[-200:]
-        self._api_text.setPlainText("\n".join(lines))
+    def _flush_api_logs(self):
+        """Batch-flush all pending API logs to the widget."""
+        if not self._pending_api_logs:
+            # Bug 16: Stop timer when buffer empty
+            self._api_flush_timer.stop()
+            return
 
-        # Scroll to bottom
+        # Bug 16: Skip rendering when DevConsole/Network page not visible
+        if not self.isVisible():
+            return
+
+        from PySide6.QtGui import QTextCursor
+
+        cursor = self._api_text.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText("\n".join(self._pending_api_logs) + "\n")
+        self._pending_api_logs.clear()
+
+        # Auto-scroll to bottom
         sb = self._api_text.verticalScrollBar()
         sb.setValue(sb.maximum())
+

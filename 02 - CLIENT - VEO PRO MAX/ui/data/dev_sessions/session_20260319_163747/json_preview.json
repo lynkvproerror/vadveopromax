@@ -1,0 +1,102 @@
+{
+  "group_id": "group_20260319_163009",
+  "workflow": "T2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 4,
+  "tasks": [
+    {
+      "id": "group_20260319_163009_task_0",
+      "prompt": "Hook scene [2 SEG]. 3D animation, warm countryside kitchen morning lighting. SEG1: Wide shot, slow dolly in. Vietnamese countryside kitchen, morning, herb preparation area, clay pot, Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights, small bitter warm sea green lips, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, standing on kitchen counter, stern bitter pose. >> SEG2: Close-up, quick zoom. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights, small bitter warm sea green lips, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, mouth opening speaking firmly to camera. Audio of countryside kitchen lofi BGM, pot boiling SFX. [Giọng: Nữ, 45-50 tuổi] \"Tao là rau đắng, đắng thật đấy nhưng gan sạch mỡ máu giảm thì phải gọi tao\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_1",
+      "prompt": "Problem scene. Medium shot, static. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights wide disapprovingly, small bitter warm sea green lips speaking bluntly, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, on counter, arms crossed. [Giọng: Nữ, 45-50 tuổi] \"Mỡ máu cao gan yếu mà cứ chê tao đắng, ai chê tao rồi cũng phải quay lại\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_2",
+      "prompt": "Reaction scene. Close-up, dolly in. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights narrowed passive-aggressively, small bitter warm sea green lips smirking bitterly, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, on counter, bitter knowing pose. [Giọng: Nữ, 45-50 tuổi] \"Tao biết tao đắng, mày nhăn mặt cũng đúng, nhưng thuốc đắng dã tật nha con\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_3",
+      "prompt": "Tip 1 scene [2 SEG]. 3D animation, warm countryside lighting. SEG1: Medium shot, dolly in. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights bright instructive, small bitter warm sea green lips open speaking instructively, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, standing next to bowl of bitter herb soup. >> SEG2: Close-up, macro. Bowl of dark green bitter herb soup, clear green broth, liver detox visual. Audio of herb chopping SFX. [Giọng: Nữ, 45-50 tuổi] \"Nấu canh tao giải độc gan nè, ăn đều đặn gan sạch mát từ trong ra ngoài\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_4",
+      "prompt": "Tip 2 scene. Medium shot. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights knowing, small bitter warm sea green lips speaking, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, on counter, pointing at clay pot decoction. [Giọng: Nữ, 45-50 tuổi] \"Sắc nước tao uống hạ mỡ máu nè, uống đều đặn mỡ máu giảm rõ rệt\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_5",
+      "prompt": "Tip 3 scene [2 SEG]. 3D animation, warm countryside lighting. SEG1: Medium shot. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights proud, small bitter warm sea green lips speaking proudly, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, gesturing at plate of fresh raw bitter herbs. >> SEG2: Close-up. Plate of fresh raw dark green bitter herb leaves, crisp fresh texture, raw eating visual. Audio of herb chopping SFX. [Giọng: Nữ, 45-50 tuổi] \"Ăn sống tao thanh nhiệt nè, nhúng lẩu hay ăn kèm mắm tao đắng mà ngon\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_6",
+      "prompt": "Demo scene [2 SEG]. 3D animation, warm countryside kitchen morning lighting. SEG1: Wide shot, slow pan. Kitchen counter with three demos: bowl soup, clay pot decoction, plate raw herbs, Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights content, small bitter warm sea green lips speaking, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, pointing at each sternly. >> SEG2: Close-up. Three items on counter, warm morning light. [Giọng: Nữ, 45-50 tuổi] \"Canh giải độc, sắc hạ mỡ, ăn sống thanh nhiệt, tao đắng nhưng đa năng\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_7",
+      "prompt": "Practice scene. Medium shot, dolly in. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights watching camera warmly, small bitter warm sea green lips speaking encouragingly, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, on counter, gesturing invitingly. [Giọng: Nữ, 45-50 tuổi] \"Nấu tô canh rau đắng tối nay đi, đắng chút mà gan khoẻ re\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_8",
+      "prompt": "Result scene. Medium shot, dolly out. Warm golden morning light. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense eyes deep jet black with medium sea green highlights content beaming, small bitter warm sea green lips speaking proudly, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, on counter, stern proud pose. [Giọng: Nữ, 45-50 tuổi] \"Đó thấy chưa, gan sạch mỡ giảm, tao đắng nhưng đáng giá lắm\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_163009_task_9",
+      "prompt": "Hook-end scene. Close-up, static. Rau Đắng, an anthropomorphic bitter herb leaf liver detox and cholesterol fighter, thin elongated leaf body 15cm, deep medium sea green thin elongated bitter herb leaf body with fine serrations and bitter taste, large stern no-nonsense deep jet black eyes with medium sea green highlights giving stern wink, small bitter warm sea green lips bitter smile speaking firmly to camera, tiny bitter herb flower on top as bitter crown, natural deep medium sea green thin elongated bitter herb leaf body with fine serrations, smaller elongated leaf extensions as arms, thin elongated serrated texture with medium sea green color, stern bitter final pose, blurred warm countryside kitchen morning background. [Giọng: Nữ, 45-50 tuổi] \"Tao là rau đắng, đắng miệng nhưng tốt bụng, nhớ ghi lại nha\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

@@ -35,6 +35,7 @@ class ExtensionDebugPage(QWidget):
         super().__init__(parent)
         self.controller = controller
         self._last_count = 0  # Track message count for incremental updates
+        self._last_filter_key = (None, None)  # E2: (filter_text, dir_filter) for change detection
         self._setup_ui()
         self._start_auto_refresh()
 
@@ -193,19 +194,47 @@ class ExtensionDebugPage(QWidget):
 
     def _do_refresh(self):
         """Fetch latest messages from bridge and update table."""
+        # E1: Skip when page not visible (timer still ticks but no work)
+        if not self.isVisible():
+            return
         bridge = self._get_bridge()
         if not bridge:
             return
 
         messages = bridge.get_message_log(last_n=300)
-        if len(messages) == self._last_count:
-            return  # No new messages
-        self._last_count = len(messages)
+        new_count = len(messages)
 
-        # Apply filters
+        # E2: Detect filter change → force full rebuild
         filter_text = self._filter_input.text().strip().lower()
         dir_filter = self._dir_filter.currentText()
+        current_filter_key = (filter_text, dir_filter)
+        filter_changed = current_filter_key != self._last_filter_key
+        self._last_filter_key = current_filter_key
 
+        if not filter_changed and new_count == self._last_count:
+            return  # No new messages and filter unchanged
+
+        # Determine if full rebuild or incremental append
+        need_full_rebuild = filter_changed or new_count < self._last_count
+
+        if need_full_rebuild:
+            # Full rebuild: filter all messages and repopulate table
+            filtered = self._apply_filter(messages, filter_text, dir_filter)
+            self._messages_data = filtered
+            self._full_rebuild_table(filtered)
+        else:
+            # Incremental: only process new messages (appended to deque)
+            new_messages = messages[self._last_count:]
+            new_filtered = self._apply_filter(new_messages, filter_text, dir_filter)
+            if new_filtered:
+                self._messages_data.extend(new_filtered)
+                self._append_rows(new_filtered)
+
+        self._last_count = new_count
+        self._msg_count_label.setText(f"{len(self._messages_data)}/{new_count} messages")
+
+    def _apply_filter(self, messages: list, filter_text: str, dir_filter: str) -> list:
+        """Apply direction and text filters to a list of messages."""
         filtered = []
         for m in messages:
             if dir_filter == "IN ←" and m['dir'] != 'IN':
@@ -217,65 +246,79 @@ class ExtensionDebugPage(QWidget):
                     filter_text not in m.get('email', '').lower()):
                     continue
             filtered.append(m)
+        return filtered
 
-        self._messages_data = filtered
-        self._update_table(filtered)
-        self._msg_count_label.setText(f"{len(filtered)}/{len(messages)} messages")
+    def _set_row(self, row: int, m: dict):
+        """Populate a single table row from a message dict."""
+        # Direction
+        d = m['dir']
+        dir_item = QTableWidgetItem("← IN" if d == 'IN' else "→ OUT")
+        dir_item.setForeground(QColor(Theme.GREEN if d == 'IN' else Theme.BLUE))
+        dir_item.setTextAlignment(Qt.AlignCenter)
+        self._table.setItem(row, 0, dir_item)
 
-    def _update_table(self, messages: list):
-        """Populate table with messages."""
+        # Timestamp
+        ts = datetime.fromtimestamp(m['ts']).strftime("%H:%M:%S")
+        ts_item = QTableWidgetItem(ts)
+        ts_item.setForeground(QColor(Theme.OVERLAY0))
+        self._table.setItem(row, 1, ts_item)
+
+        # Action
+        action = m.get('action', '?')
+        action_item = QTableWidgetItem(action)
+        action_colors = {
+            'register': Theme.GREEN,
+            'headers_update': Theme.YELLOW,
+            'recaptcha_response': Theme.PEACH if hasattr(Theme, 'PEACH') else Theme.YELLOW,
+            'request_recaptcha': Theme.BLUE,
+            'submit_prompt': Theme.BLUE,
+            'heartbeat': Theme.SUBTEXT0,
+            'content_heartbeat': Theme.SUBTEXT0,
+            'pong': Theme.SUBTEXT0,
+        }
+        color = action_colors.get(action, Theme.TEXT)
+        action_item.setForeground(QColor(color))
+        self._table.setItem(row, 2, action_item)
+
+        # Email
+        email = m.get('email', '')
+        email_item = QTableWidgetItem(email[:35])
+        self._table.setItem(row, 3, email_item)
+
+        # Preview (compact)
+        preview = m.get('preview', {})
+        compact = {k: v for k, v in preview.items()
+                   if k not in ('action', 'email')}
+        preview_str = json.dumps(compact, ensure_ascii=False, default=str)
+        if len(preview_str) > 120:
+            preview_str = preview_str[:120] + "..."
+        preview_item = QTableWidgetItem(preview_str)
+        preview_item.setForeground(QColor(Theme.SUBTEXT0))
+        self._table.setItem(row, 4, preview_item)
+
+    def _full_rebuild_table(self, messages: list):
+        """Full table rebuild (used on filter change or log wrap)."""
         self._table.setRowCount(len(messages))
         for i, m in enumerate(messages):
-            # Direction
-            d = m['dir']
-            dir_item = QTableWidgetItem("← IN" if d == 'IN' else "→ OUT")
-            dir_item.setForeground(QColor(Theme.GREEN if d == 'IN' else Theme.BLUE))
-            dir_item.setTextAlignment(Qt.AlignCenter)
-            self._table.setItem(i, 0, dir_item)
+            self._set_row(i, m)
+        # E3: Smart auto-scroll — only if user was at bottom
+        self._smart_scroll()
 
-            # Timestamp
-            ts = datetime.fromtimestamp(m['ts']).strftime("%H:%M:%S")
-            ts_item = QTableWidgetItem(ts)
-            ts_item.setForeground(QColor(Theme.OVERLAY0))
-            self._table.setItem(i, 1, ts_item)
+    def _append_rows(self, new_messages: list):
+        """E2: Append only new rows to existing table (incremental)."""
+        old_count = self._table.rowCount()
+        self._table.setRowCount(old_count + len(new_messages))
+        for i, m in enumerate(new_messages):
+            self._set_row(old_count + i, m)
+        # E3: Smart auto-scroll
+        self._smart_scroll()
 
-            # Action
-            action = m.get('action', '?')
-            action_item = QTableWidgetItem(action)
-            # Color-code common actions
-            action_colors = {
-                'register': Theme.GREEN,
-                'headers_update': Theme.YELLOW,
-                'recaptcha_response': Theme.PEACH if hasattr(Theme, 'PEACH') else Theme.YELLOW,
-                'request_recaptcha': Theme.BLUE,
-                'submit_prompt': Theme.BLUE,
-                'heartbeat': Theme.SUBTEXT0,
-                'content_heartbeat': Theme.SUBTEXT0,
-                'pong': Theme.SUBTEXT0,
-            }
-            color = action_colors.get(action, Theme.TEXT)
-            action_item.setForeground(QColor(color))
-            self._table.setItem(i, 2, action_item)
-
-            # Email
-            email = m.get('email', '')
-            email_item = QTableWidgetItem(email[:35])
-            self._table.setItem(i, 3, email_item)
-
-            # Preview (compact)
-            preview = m.get('preview', {})
-            # Remove redundant fields already shown in columns
-            compact = {k: v for k, v in preview.items()
-                       if k not in ('action', 'email')}
-            preview_str = json.dumps(compact, ensure_ascii=False, default=str)
-            if len(preview_str) > 120:
-                preview_str = preview_str[:120] + "..."
-            preview_item = QTableWidgetItem(preview_str)
-            preview_item.setForeground(QColor(Theme.SUBTEXT0))
-            self._table.setItem(i, 4, preview_item)
-
-        # Auto-scroll to bottom
-        if messages:
+    def _smart_scroll(self):
+        """E3: Only scrollToBottom if user is already at the bottom."""
+        sb = self._table.verticalScrollBar()
+        # Consider "at bottom" if within 2 rows of maximum
+        at_bottom = sb.value() >= sb.maximum() - 2
+        if at_bottom:
             self._table.scrollToBottom()
 
     def _on_row_selected(self, row, col, prev_row, prev_col):

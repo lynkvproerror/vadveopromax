@@ -175,11 +175,13 @@ async def _remedy_hard_restart(account, ext_bridge, **kwargs):
 
 
 async def _remedy_reload_tab(account, ext_bridge, **kwargs):
-    """Reload the active VEO tab."""
+    """Reload the active VEO tab (respects 30s cooldown)."""
     if ext_bridge:
         try:
-            await ext_bridge.refresh_headers(account.email, timeout=10)
-            log.info(f"[Remedy] {account.email}: tab reloaded via refresh_headers")
+            await ext_bridge._trigger_refresh(
+                account.email, "remedy_reload_tab", level="full"
+            )
+            log.info(f"[Remedy] {account.email}: tab reloaded via _trigger_refresh")
             return True
         except Exception as e:
             log.warning(f"[Remedy] reload_tab failed: {e}")
@@ -187,11 +189,13 @@ async def _remedy_reload_tab(account, ext_bridge, **kwargs):
 
 
 async def _remedy_refresh_token(account, ext_bridge, **kwargs):
-    """Refresh OAuth access token via extension."""
+    """Refresh OAuth access token via extension (respects 30s cooldown)."""
     if ext_bridge:
         try:
-            await ext_bridge.refresh_headers(account.email, timeout=15)
-            log.info(f"[Remedy] {account.email}: token refreshed via extension")
+            await ext_bridge._trigger_refresh(
+                account.email, "remedy_refresh_token", level="full"
+            )
+            log.info(f"[Remedy] {account.email}: token refreshed via _trigger_refresh")
             return True
         except Exception as e:
             log.warning(f"[Remedy] refresh_token failed: {e}")

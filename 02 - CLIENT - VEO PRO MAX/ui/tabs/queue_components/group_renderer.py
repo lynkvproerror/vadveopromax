@@ -199,7 +199,6 @@ class QueueGroupMixin:
         pct = group_data.get('progress', 0)
         gw['progress_label'].setText(f"🔄 {completed}/{total} ({pct}%)")
         gw['name_label'].setText(f"📁 {group_data['name']}")
-        gw['name_label'].setStyleSheet(self._name_label_style(pct))
         
         # Update elapsed timer
         elapsed = group_data.get('elapsed_seconds', 0)
@@ -214,8 +213,17 @@ class QueueGroupMixin:
         if 'timer_label' in gw:
             gw['timer_label'].setText(timer_text)
         
-        status_color = Theme.BLUE if group_data['status'] == 'running' else (
-            Theme.GREEN if group_data['status'] == 'completed' else Theme.SUBTEXT0
+        # Bug 13: Cache header key — skip CSS rebuild if status+pct unchanged
+        status = group_data['status']
+        header_key = (status, pct)
+        if gw.get('_last_header_key') == header_key:
+            return
+        gw['_last_header_key'] = header_key
+        
+        gw['name_label'].setStyleSheet(self._name_label_style(pct))
+        
+        status_color = Theme.BLUE if status == 'running' else (
+            Theme.GREEN if status == 'completed' else Theme.SUBTEXT0
         )
         header.setStyleSheet(f"""
             QFrame#queueGroupHeader {{
@@ -326,7 +334,7 @@ class QueueGroupMixin:
                 else:
                     widget.retry_btn.hide()
             
-            # Update left border accent color
+            # Bug 12: Cache accent — skip setStyleSheet if border color unchanged
             status_colors = {
                 'ready': Theme.SUBTEXT0, 'pending': Theme.SUBTEXT0,
                 'waiting': Theme.YELLOW if hasattr(Theme, 'YELLOW') else Theme.SUBTEXT0,
@@ -335,17 +343,19 @@ class QueueGroupMixin:
                 'cancelled': Theme.SUBTEXT0,
             }
             accent = status_colors.get(new_status, Theme.SUBTEXT0)
-            widget.setStyleSheet(f"""
-                QFrame#queueItemRow {{
-                    background-color: {Theme.SURFACE1};
-                    border-bottom: 1px solid {Theme.SURFACE0};
-                    border-left: 3px solid {accent};
-                }}
-                QFrame#queueItemRow:hover {{
-                    background-color: {Theme.SURFACE2};
-                }}
-                QFrame#queueItemRow > * {{ border: none; }}
-            """)
+            if getattr(widget, '_last_accent', None) != accent:
+                widget._last_accent = accent
+                widget.setStyleSheet(f"""
+                    QFrame#queueItemRow {{
+                        background-color: {Theme.SURFACE1};
+                        border-bottom: 1px solid {Theme.SURFACE0};
+                        border-left: 3px solid {accent};
+                    }}
+                    QFrame#queueItemRow:hover {{
+                        background-color: {Theme.SURFACE2};
+                    }}
+                    QFrame#queueItemRow > * {{ border: none; }}
+                """)
         except RuntimeError:
             pass
     
@@ -853,13 +863,17 @@ class QueueGroupMixin:
         print(f"[Queue] Deleted group: {group_id}")
     
     def _on_concat_group(self, group_id: str):
-        """Concat all videos in a group into one final video using FFmpeg.
+        """Concat all videos in a group into joined files using FFmpeg.
         
-        Collects best_file from each task's video_outputs in order,
-        checks for missing videos, and runs FFmpeg concat (stream copy).
+        Multi-output support: groups clips by video_index (slot position).
+        - 1 output/prompt → 1 joined file (same as before)
+        - 2+ outputs/prompt → separate files per track:
+          Track A (slot 0): 001a → 002a → 003a
+          Track B (slot 1): 001b → 002b → 003b
         """
         import os
         import logging
+        from collections import defaultdict
         _log = logging.getLogger("veo.tab_queue")
         
         if not self.controller or not hasattr(self.controller, 'dispatcher'):
@@ -868,26 +882,27 @@ class QueueGroupMixin:
         if not group:
             return
         
-        # Collect video files in task order (skip replacement tasks)
-        clips = []      # [(task_index, video_index, file_path)]
-        missing = []     # [(task_index, video_index)]
+        # ── Collect clips grouped by video_index (track/slot position) ──
+        # tracks[video_index] = [(task_idx, file_path)]
+        tracks = defaultdict(list)
+        missing = []     # [(task_idx, video_index)]
         task_idx = 0
         for task in group.tasks:
             if task.replace_target:
                 continue  # Skip replacement tasks
             task_idx += 1
             if not task.video_outputs:
-                # Task has no video outputs at all
                 missing.append((task_idx, 0))
                 continue
             for vi, vo in enumerate(task.video_outputs):
                 bf = vo.best_file
                 if bf and os.path.isfile(bf):
-                    clips.append((task_idx, vi, bf))
+                    tracks[vi].append((task_idx, bf))
                 else:
                     missing.append((task_idx, vi))
         
-        if not clips:
+        total_clips = sum(len(t) for t in tracks.values())
+        if total_clips == 0:
             mw = self.window()
             if mw and hasattr(mw, 'show_toast'):
                 mw.show_toast("❌ No video files found in this group", "error")
@@ -899,7 +914,7 @@ class QueueGroupMixin:
             if not show_confirm(
                 self, "⚠️ Missing Videos",
                 f"{len(missing)} video(s) missing: {missing_desc}\n\n"
-                f"Concat {len(clips)} available clips anyway?",
+                f"Concat {total_clips} available clips anyway?",
                 danger=False
             ):
                 return
@@ -913,11 +928,12 @@ class QueueGroupMixin:
                 project_name = task.project_name or ""
                 break
         
-        if not output_folder:
-            # Fallback: same folder as first clip
-            output_folder = os.path.dirname(clips[0][2])
+        if not output_folder and tracks:
+            first_track = tracks[min(tracks.keys())]
+            if first_track:
+                output_folder = os.path.dirname(first_track[0][1])
         
-        # Build output filename
+        # Build output filename base
         from datetime import datetime
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         group_name = group.name or "concat"
@@ -929,7 +945,52 @@ class QueueGroupMixin:
         else:
             final_dir = output_folder
         os.makedirs(final_dir, exist_ok=True)
-        final_path = os.path.join(final_dir, f"{safe_name}_{ts}_joined.mp4")
+        
+        # Build per-track output paths
+        num_tracks = len(tracks)
+        track_labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        track_paths = {}  # {video_index: final_path}
+        for vi in sorted(tracks.keys()):
+            if num_tracks == 1:
+                # Single track → no suffix (backward compatible)
+                track_paths[vi] = os.path.join(final_dir, f"{safe_name}_{ts}_joined.mp4")
+            else:
+                label = track_labels[vi] if vi < len(track_labels) else str(vi + 1)
+                track_paths[vi] = os.path.join(
+                    final_dir, f"{safe_name}_{ts}_track{label}_joined.mp4"
+                )
+        
+        # ── Check for existing joined files (prevent accidental re-join) ──
+        existing_files = []
+        # Also scan for ANY previous joined files with same group name
+        import glob
+        for vi, path in track_paths.items():
+            if os.path.isfile(path):
+                existing_files.append(path)
+        # Scan for older timestamps with same pattern
+        old_pattern = os.path.join(final_dir, f"{safe_name}_*_joined.mp4")
+        if num_tracks > 1:
+            old_pattern_track = os.path.join(final_dir, f"{safe_name}_*_track*_joined.mp4")
+            old_files = glob.glob(old_pattern) + glob.glob(old_pattern_track)
+        else:
+            old_files = glob.glob(old_pattern)
+        # Deduplicate and exclude current paths
+        old_files = [f for f in set(old_files) if f not in track_paths.values()]
+        
+        if existing_files or old_files:
+            all_existing = existing_files + old_files
+            file_list = "\n".join(
+                f"  • {os.path.basename(f)} ({os.path.getsize(f) / 1024 / 1024:.1f} MB)"
+                for f in all_existing if os.path.isfile(f)
+            )
+            count = len(all_existing)
+            if not show_confirm(
+                self, "⚠️ Joined File Already Exists",
+                f"{count} joined file(s) already exist:\n\n{file_list}\n\n"
+                f"Join again? (new files will overwrite current output)",
+                danger=True
+            ):
+                return
         
         # Get FFmpeg path
         try:
@@ -947,81 +1008,121 @@ class QueueGroupMixin:
         # Show progress toast
         mw = self.window()
         if mw and hasattr(mw, 'show_toast'):
-            mw.show_toast(f"⏳ Joining {len(clips)} clips...", "info")
+            if num_tracks == 1:
+                mw.show_toast(f"⏳ Joining {total_clips} clips...", "info")
+            else:
+                mw.show_toast(
+                    f"⏳ Joining {num_tracks} tracks × {len(tracks[min(tracks.keys())])} clips...",
+                    "info"
+                )
         
-        # Run FFmpeg in background thread
+        # Run FFmpeg in background thread — one concat per track
         import threading
         def _run_concat():
             import subprocess
-            try:
-                # Write concat list
-                concat_list = os.path.join(final_dir, f"_concat_{ts}.txt")
-                with open(concat_list, "w", encoding="utf-8") as f:
-                    for _, _, path in clips:
-                        safe = path.replace("\\", "/")
-                        f.write(f"file '{safe}'\n")
+            success_tracks = []
+            failed_tracks = []
+            total_size = 0.0
+            
+            for vi in sorted(tracks.keys()):
+                track_clips = tracks[vi]
+                final_path = track_paths[vi]
+                label = track_labels[vi] if vi < len(track_labels) else str(vi + 1)
                 
-                cmd = [
-                    ffmpeg_path, "-y",
-                    "-f", "concat", "-safe", "0",
-                    "-i", concat_list,
-                    "-c", "copy",
-                    final_path,
-                ]
-                
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=600,
-                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
-                )
-                
-                # Cleanup concat list
                 try:
-                    os.remove(concat_list)
-                except OSError:
-                    pass
-                
-                if result.returncode == 0 and os.path.isfile(final_path):
-                    size_mb = os.path.getsize(final_path) / 1024 / 1024
-                    _log.info(f"[Queue] JOIN: ✅ {len(clips)} clips → {final_path} ({size_mb:.1f} MB)")
-                    # Show success on main thread
-                    from PySide6.QtCore import QTimer
-                    QTimer.singleShot(0, lambda: self._on_concat_complete(
-                        True, final_path, len(clips), size_mb, len(missing)
-                    ))
-                else:
-                    err = result.stderr[:300] if result.stderr else "Unknown error"
-                    _log.error(f"[Queue] JOIN: ❌ FFmpeg failed: {err}")
-                    from PySide6.QtCore import QTimer
-                    QTimer.singleShot(0, lambda: self._on_concat_complete(
-                        False, err, len(clips), 0, len(missing)
-                    ))
-            except subprocess.TimeoutExpired:
-                _log.error("[Queue] JOIN: ❌ FFmpeg timeout (>10 min)")
-                from PySide6.QtCore import QTimer
+                    concat_list = os.path.join(
+                        final_dir, f"_concat_{ts}_track{label}.txt"
+                    )
+                    with open(concat_list, "w", encoding="utf-8") as f:
+                        for _, path in track_clips:
+                            safe = path.replace("\\", "/")
+                            f.write(f"file '{safe}'\n")
+                    
+                    cmd = [
+                        ffmpeg_path, "-y",
+                        "-f", "concat", "-safe", "0",
+                        "-i", concat_list,
+                        "-c", "copy",
+                        final_path,
+                    ]
+                    
+                    result = subprocess.run(
+                        cmd, capture_output=True, text=True, timeout=600,
+                        creationflags=(
+                            subprocess.CREATE_NO_WINDOW
+                            if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                        ),
+                    )
+                    
+                    # Cleanup concat list
+                    try:
+                        os.remove(concat_list)
+                    except OSError:
+                        pass
+                    
+                    if result.returncode == 0 and os.path.isfile(final_path):
+                        size_mb = os.path.getsize(final_path) / 1024 / 1024
+                        total_size += size_mb
+                        success_tracks.append((label, len(track_clips), final_path, size_mb))
+                        _log.info(
+                            f"[Queue] JOIN track {label}: ✅ "
+                            f"{len(track_clips)} clips → {final_path} ({size_mb:.1f} MB)"
+                        )
+                    else:
+                        err = result.stderr[:200] if result.stderr else "Unknown"
+                        failed_tracks.append((label, err))
+                        _log.error(f"[Queue] JOIN track {label}: ❌ FFmpeg: {err}")
+                        
+                except subprocess.TimeoutExpired:
+                    failed_tracks.append((label, "Timeout >10 min"))
+                    _log.error(f"[Queue] JOIN track {label}: ❌ timeout")
+                except Exception as e:
+                    failed_tracks.append((label, str(e)))
+                    _log.error(f"[Queue] JOIN track {label}: ❌ {e}")
+            
+            # Report results on main thread
+            from PySide6.QtCore import QTimer
+            if success_tracks and not failed_tracks:
+                # All tracks succeeded
+                first_path = success_tracks[0][2]
                 QTimer.singleShot(0, lambda: self._on_concat_complete(
-                    False, "FFmpeg timeout (>10 min)", len(clips), 0, len(missing)
+                    True, first_path, total_clips, total_size,
+                    len(missing), num_tracks=len(success_tracks)
                 ))
-            except Exception as e:
-                _log.error(f"[Queue] JOIN: ❌ {e}")
-                from PySide6.QtCore import QTimer
+            elif success_tracks:
+                # Partial success
+                first_path = success_tracks[0][2]
+                fail_info = "; ".join(f"Track {l}: {e}" for l, e in failed_tracks)
                 QTimer.singleShot(0, lambda: self._on_concat_complete(
-                    False, str(e), len(clips), 0, len(missing)
+                    True, first_path, total_clips, total_size,
+                    len(missing), num_tracks=len(success_tracks),
+                    partial_fail=fail_info
+                ))
+            else:
+                # All failed
+                fail_info = "; ".join(f"Track {l}: {e}" for l, e in failed_tracks)
+                QTimer.singleShot(0, lambda: self._on_concat_complete(
+                    False, fail_info, total_clips, 0, len(missing)
                 ))
         
         t = threading.Thread(target=_run_concat, daemon=True)
         t.start()
     
     def _on_concat_complete(self, success: bool, path_or_error: str,
-                            clip_count: int, size_mb: float, missing_count: int):
+                            clip_count: int, size_mb: float, missing_count: int,
+                            *, num_tracks: int = 1, partial_fail: str = ""):
         """Handle concat completion on main thread."""
         mw = self.window()
         if success:
             missing_note = f" ({missing_count} missing)" if missing_count else ""
+            if num_tracks > 1:
+                msg = f"✅ Joined {num_tracks} tracks ({clip_count} clips){missing_note} → {size_mb:.1f} MB"
+            else:
+                msg = f"✅ Joined {clip_count} clips{missing_note} → {size_mb:.1f} MB"
+            if partial_fail:
+                msg += f"\n⚠️ {partial_fail}"
             if mw and hasattr(mw, 'show_toast'):
-                mw.show_toast(
-                    f"✅ Joined {clip_count} clips{missing_note} → {size_mb:.1f} MB",
-                    "success"
-                )
+                mw.show_toast(msg, "success")
             # Open output folder
             import os, subprocess
             folder = os.path.dirname(path_or_error)
@@ -1030,3 +1131,4 @@ class QueueGroupMixin:
         else:
             if mw and hasattr(mw, 'show_toast'):
                 mw.show_toast(f"❌ Concat failed: {path_or_error[:100]}", "error")
+

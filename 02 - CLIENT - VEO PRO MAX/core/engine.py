@@ -4398,14 +4398,13 @@ class Engine:
                                     f"backoff={backoff}s)"
                                 )
                             else:
-                                # Non-reCAPTCHA, non-403 errors: refresh headers
+                                # Non-reCAPTCHA, non-403 errors: refresh headers (lightweight — no tab reload)
                                 if account.extension_bridge:
                                     try:
-                                        await account.extension_bridge.refresh_headers(
+                                        await account.extension_bridge.refresh_headers_lightweight(
                                             account.email, timeout=10
                                         )
-                                        log.info(f"[Recovery] {acct_email}: Extension headers refreshed")
-                                        await self._wait_for_recaptcha_ready(account, max_wait=20.0)
+                                        log.info(f"[Recovery] {acct_email}: Extension headers refreshed (lightweight)")
                                     except Exception as e:
                                         log.debug(f"[Recovery] Extension header refresh failed: {e}")
                                     backoff = max(backoff, 10)
@@ -5311,14 +5310,42 @@ class Engine:
                 self._task_available.set()
 
         # ── Complete task ──
-        task.stage = TaskStage.COMPLETED
-        self._dispatcher.update_progress(task.id, 100, "✅ Done")
-        self._dispatcher.complete_task(
-            task.id,
-            output_uris=task.output_uris,
-            continuation_frame_uri=continuation_frame_uri,
-            continuation_frame_local_path=continuation_frame_local,
+        # ★ FIX: Defer completion if upscale is pending in UpscaleQueue.
+        # _poll_operation sets task.stage=UPSCALING at L6914 before enqueue.
+        # UpscaleQueue._process_job will call complete_task() when upscale finishes.
+        # Also check upscale_media_ids as a safety net (set at L6913).
+        has_pending_upscale = (
+            task.stage == TaskStage.UPSCALING
+            or (
+                getattr(task, 'download_quality', '720p') != '720p'
+                and getattr(task, 'upscale_media_ids', None)
+                and any(
+                    getattr(vo, 'upscale_status', '') in ('submitting', 'polling', 'pending', '')
+                    for vo in (task.video_outputs or [])
+                    if getattr(vo, 'upscale_status', '') not in ('success', 'failed', 'skipped')
+                )
+            )
         )
+        
+        if has_pending_upscale:
+            # Don't call complete_task — UpscaleQueue owns completion.
+            # Keep stage as UPSCALING (already set by _poll_operation).
+            self._dispatcher.update_progress(
+                task.id, 88, f"⬆️ Upscaling {getattr(task, 'download_quality', '?')}..."
+            )
+            log.info(
+                f"[Finalizer] Task {task.id}: upscale pending — "
+                f"deferring complete_task to UpscaleQueue"
+            )
+        else:
+            task.stage = TaskStage.COMPLETED
+            self._dispatcher.update_progress(task.id, 100, "✅ Done")
+            self._dispatcher.complete_task(
+                task.id,
+                output_uris=task.output_uris,
+                continuation_frame_uri=continuation_frame_uri,
+                continuation_frame_local_path=continuation_frame_local,
+            )
         self._download_count += len(task.output_uris or [])
         emit_event(EventType.TASK_COMPLETED, {
             "task_id": task.id,
@@ -8641,6 +8668,14 @@ class Engine:
                 f"⬆️ Upscaling {video_label}"
             )
             
+            # ★ Proactive token refresh: every 10 polls (~50-80s) to prevent
+            # token expiry during long polling (access tokens valid ~60min).
+            if poll_num > 0 and poll_num % 10 == 0:
+                try:
+                    await account.ensure_valid_token()
+                except Exception:
+                    pass  # Best-effort — poll will continue with current token
+            
             # Risk 7 fix: Limit concurrent API calls per account
             sem = self._get_api_semaphore(account.email)
             async with sem:
@@ -8656,7 +8691,12 @@ class Engine:
                 )
             
             if not poll_resp.success:
-                continue  # Network error → retry next poll
+                # ★ Token might have expired — refresh and retry
+                try:
+                    await account.ensure_valid_token()
+                except Exception:
+                    pass
+                continue  # Retry next poll with (possibly) refreshed token
             
             poll_ops = poll_resp.data.get("operations", [])
             if not poll_ops:
