@@ -245,7 +245,7 @@ class TrialMarkerManager:
     # =========================================================================
     
     _XATTR_KEY = "com.veo.trial.ts"
-    _XATTR_KEY2 = "com.apple.metadata:veo_ts"  # Looks like Apple system attr
+    _XATTR_KEY2 = "com.apple.cs.veo"  # Blends with Apple code-signing attrs
     
     def _write_xattr_markers(self, trial_start: datetime):
         """Write trial start as extended attributes on Home folder.
@@ -354,53 +354,55 @@ class TrialMarkerManager:
         Get trial start from any available source.
         
         Priority: Firebase > Keychain > xattr > Files
-        If found in a lower-priority source, re-write to ALL sources
-        (self-healing: restores markers that user deleted).
+        If found in a lower-priority source, re-write to ALL higher-priority
+        sources (self-healing: restores markers that user deleted).
         """
-        # Firebase first (most tamper-resistant, cannot be deleted by user)
-        fb = self._read_firebase_marker()
-        if fb:
-            self._heal_markers(fb)  # Restore any deleted local markers
-            return fb
+        results = {}
         
-        # Keychain second (very hard to find/delete)
-        kc = self._read_keychain_marker()
-        if kc:
-            self._heal_markers(kc)
-            return kc
+        # Collect from all sources (don't short-circuit)
+        results['firebase'] = self._read_firebase_marker()
+        results['keychain'] = self._read_keychain_marker()
+        results['xattr'] = self._read_xattr_markers()
+        results['files'] = self._read_file_markers()
         
-        # xattr third (invisible in Finder)
-        xa = self._read_xattr_markers()
-        if xa:
-            self._heal_markers(xa)
-            return xa
+        # Find the first non-None value (by priority)
+        trial_start = None
+        for source in ('firebase', 'keychain', 'xattr', 'files'):
+            if results[source] is not None:
+                trial_start = results[source]
+                break
         
-        # Files last (easiest to delete, but still a layer)
-        fl = self._read_file_markers()
-        if fl:
-            self._heal_markers(fl)
-            return fl
+        if trial_start is None:
+            return None
         
-        return None
+        # Self-healing: restore any MISSING markers
+        missing = [k for k, v in results.items() if v is None]
+        if missing:
+            self._heal_markers(trial_start, missing)
+        
+        return trial_start
     
-    def _heal_markers(self, trial_start: datetime):
-        """Re-write trial markers to ALL locations (self-healing).
+    def _heal_markers(self, trial_start: datetime, missing: list):
+        """Re-write ONLY missing trial markers (self-healing).
         
-        If user deleted some markers but not all, this restores them.
-        Called whenever trial_start is found from any source.
+        Only writes to locations where markers were deleted.
+        Avoids redundant writes on every call.
         """
-        try:
-            self._write_keychain_marker(trial_start)
-        except Exception:
-            pass
-        try:
-            self._write_xattr_markers(trial_start)
-        except Exception:
-            pass
-        try:
-            self._write_file_markers(trial_start)
-        except Exception:
-            pass
+        if 'keychain' in missing:
+            try:
+                self._write_keychain_marker(trial_start)
+            except Exception:
+                pass
+        if 'xattr' in missing:
+            try:
+                self._write_xattr_markers(trial_start)
+            except Exception:
+                pass
+        if 'files' in missing:
+            try:
+                self._write_file_markers(trial_start)
+            except Exception:
+                pass
     
     def validate_trial(self) -> TrialStatus:
         """
@@ -471,7 +473,7 @@ def activate_trial_key(machine_id: str, trial_key: str) -> TrialStatus:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Trial Protection v2.0 - Test")
+    print("Trial Protection v3.0 - Test (macOS Hardened)")
     print("=" * 60)
     
     # Test with dummy machine ID
