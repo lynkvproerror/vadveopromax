@@ -1,18 +1,20 @@
 """
-Trial Protection v2.0 - Multi-Layer Anti-Crack System
-Implements: Registry markers, multiple file markers, Firebase backup, time verification
+Trial Protection v3.0 - Multi-Layer Anti-Crack System (macOS Hardened)
+Implements: Keychain, xattr, file markers, Firebase backup, time verification
 
 Features:
 - Trial KEY required (no automatic trial)
-- 3 file marker locations (hidden)
-- 2 Windows Registry locations
-- Firebase backup (online verification)
+- 3 file marker locations (hidden dot-files)
+- macOS Keychain marker (very hard to find/delete)
+- xattr marker on Home folder (invisible in Finder)
+- Firebase backup (online verification — planned)
 - Clock manipulation detection
 """
 
 import os
 import sys
 import json
+import subprocess
 import hashlib
 import urllib.request
 from pathlib import Path
@@ -107,13 +109,13 @@ class TrialMarkerManager:
     """
     Multi-layer trial marker system.
     
-    Storage locations:
-    1. File: %USERPROFILE%/.veoauto/.trial (hidden)
-    2. File: %APPDATA%/VEO/.trial.dat (hidden)
-    3. File: %LOCALAPPDATA%/VEO/trial.bin (hidden)
-    4. Registry: HKCU\\Software\\VEO\\Trial
-    5. Registry: HKCU\\Software\\Classes\\.veo\\Shell (hidden in file association)
-    6. Firebase: _trials/{machine_id_hash}
+    Storage locations (priority order):
+    1. Firebase: _trials/{machine_id_hash} (online, cannot be deleted by user)
+    2. macOS Keychain: com.veo.trial (very hard to find/delete)
+    3. xattr: com.veo.trial.ts on Home folder (invisible in Finder)
+    4. File: ~/.veoauto/.trial (hidden dot-file)
+    5. File: ~/Library/Application Support/VEO/.trial.dat (hidden)
+    6. File: /tmp/.veo_trial.bin (volatile)
     """
     
     TRIAL_DAYS = 7
@@ -185,20 +187,105 @@ class TrialMarkerManager:
         return None
     
     # =========================================================================
-    # REGISTRY MARKERS (2 locations)
+    # KEYCHAIN MARKER (macOS — very hard to find/delete)
     # =========================================================================
     
-    def _get_registry_keys(self) -> list:
-        """Get registry key paths (disabled on macOS)."""
-        return []  # No Registry on macOS
+    _KEYCHAIN_SERVICE = "com.veo.trial"
+    _KEYCHAIN_ACCOUNT = "VEO_Trial_Marker"
     
-    def _write_registry_markers(self, trial_start: datetime):
-        """Write trial start to Registry (disabled on macOS)."""
-        pass  # No Registry on macOS
+    def _write_keychain_marker(self, trial_start: datetime):
+        """Write trial start to macOS Keychain.
+        
+        User must open Keychain Access.app and know the exact service name
+        to find and delete this. 99% of users won't know how.
+        """
+        encoded = self._encode_timestamp(trial_start)
+        value = f"{self._marker_hash}:{encoded}"
+        try:
+            # Delete existing entry first (ignore errors)
+            subprocess.run(
+                ['security', 'delete-generic-password',
+                 '-a', self._KEYCHAIN_ACCOUNT,
+                 '-s', self._KEYCHAIN_SERVICE],
+                capture_output=True, timeout=5,
+            )
+            # Add new entry
+            subprocess.run(
+                ['security', 'add-generic-password',
+                 '-a', self._KEYCHAIN_ACCOUNT,
+                 '-s', self._KEYCHAIN_SERVICE,
+                 '-w', value,
+                 '-U'],  # Update if exists
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass  # Non-fatal: other markers still work
     
-    def _read_registry_markers(self):
-        """Read trial start from Registry (disabled on macOS)."""
-        return None  # No Registry on macOS
+    def _read_keychain_marker(self) -> Optional[datetime]:
+        """Read trial start from macOS Keychain."""
+        try:
+            result = subprocess.run(
+                ['security', 'find-generic-password',
+                 '-a', self._KEYCHAIN_ACCOUNT,
+                 '-s', self._KEYCHAIN_SERVICE,
+                 '-w'],  # Output password value only
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                content = result.stdout.strip()
+                hash_part, encoded = content.split(":")
+                if hash_part == self._marker_hash:
+                    return self._decode_timestamp(encoded)
+        except Exception:
+            pass
+        return None
+    
+    # =========================================================================
+    # XATTR MARKER (invisible metadata on Home folder)
+    # =========================================================================
+    
+    _XATTR_KEY = "com.veo.trial.ts"
+    _XATTR_KEY2 = "com.apple.metadata:veo_ts"  # Looks like Apple system attr
+    
+    def _write_xattr_markers(self, trial_start: datetime):
+        """Write trial start as extended attributes on Home folder.
+        
+        xattr is invisible in Finder. User would need to know:
+        1. That xattr exists on their Home folder
+        2. The exact attribute name
+        3. How to use `xattr -d` to remove it
+        """
+        encoded = self._encode_timestamp(trial_start)
+        value = f"{self._marker_hash}:{encoded}"
+        home = str(Path.home())
+        
+        for attr_name in (self._XATTR_KEY, self._XATTR_KEY2):
+            try:
+                subprocess.run(
+                    ['xattr', '-w', attr_name, value, home],
+                    capture_output=True, timeout=5,
+                )
+            except Exception:
+                continue
+    
+    def _read_xattr_markers(self) -> Optional[datetime]:
+        """Read trial start from extended attributes on Home folder."""
+        home = str(Path.home())
+        
+        for attr_name in (self._XATTR_KEY, self._XATTR_KEY2):
+            try:
+                result = subprocess.run(
+                    ['xattr', '-p', attr_name, home],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    content = result.stdout.strip()
+                    hash_part, encoded = content.split(":")
+                    if hash_part == self._marker_hash:
+                        return self._decode_timestamp(encoded)
+            except Exception:
+                continue
+        return None
     
     # =========================================================================
     # FIREBASE MARKERS (Online backup)
@@ -247,10 +334,11 @@ class TrialMarkerManager:
         # Start new trial
         now = self.time_verifier.get_verified_now()
         
-        # Write to ALL locations
-        self._write_file_markers(now)
-        self._write_registry_markers(now)
-        self._write_firebase_marker(now)
+        # Write to ALL locations (redundancy = resilience)
+        self._write_keychain_marker(now)   # Hardest to find/delete
+        self._write_xattr_markers(now)     # Invisible in Finder
+        self._write_file_markers(now)      # Hidden dot-files
+        self._write_firebase_marker(now)   # Online backup (future)
         
         expires = now + timedelta(days=self.TRIAL_DAYS)
         
@@ -265,20 +353,54 @@ class TrialMarkerManager:
         """
         Get trial start from any available source.
         
-        Priority: Firebase > Registry > Files
+        Priority: Firebase > Keychain > xattr > Files
+        If found in a lower-priority source, re-write to ALL sources
+        (self-healing: restores markers that user deleted).
         """
-        # Firebase first (most tamper-resistant)
+        # Firebase first (most tamper-resistant, cannot be deleted by user)
         fb = self._read_firebase_marker()
         if fb:
+            self._heal_markers(fb)  # Restore any deleted local markers
             return fb
         
-        # Registry second
-        reg = self._read_registry_markers()
-        if reg:
-            return reg
+        # Keychain second (very hard to find/delete)
+        kc = self._read_keychain_marker()
+        if kc:
+            self._heal_markers(kc)
+            return kc
         
-        # Files last
-        return self._read_file_markers()
+        # xattr third (invisible in Finder)
+        xa = self._read_xattr_markers()
+        if xa:
+            self._heal_markers(xa)
+            return xa
+        
+        # Files last (easiest to delete, but still a layer)
+        fl = self._read_file_markers()
+        if fl:
+            self._heal_markers(fl)
+            return fl
+        
+        return None
+    
+    def _heal_markers(self, trial_start: datetime):
+        """Re-write trial markers to ALL locations (self-healing).
+        
+        If user deleted some markers but not all, this restores them.
+        Called whenever trial_start is found from any source.
+        """
+        try:
+            self._write_keychain_marker(trial_start)
+        except Exception:
+            pass
+        try:
+            self._write_xattr_markers(trial_start)
+        except Exception:
+            pass
+        try:
+            self._write_file_markers(trial_start)
+        except Exception:
+            pass
     
     def validate_trial(self) -> TrialStatus:
         """
