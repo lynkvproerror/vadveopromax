@@ -1,19 +1,24 @@
 """
-Trial Protection v2.0 - Multi-Layer Anti-Crack System
-Implements: Registry markers, multiple file markers, Firebase backup, time verification
+Trial Protection v3.0 - Multi-Layer Anti-Crack System (Windows Hardened)
+Implements: Credential Manager, NTFS ADS, Registry, file markers, time verification
 
 Features:
 - Trial KEY required (no automatic trial)
-- 3 file marker locations (hidden)
-- 2 Windows Registry locations
-- Firebase backup (online verification)
+- 3 file marker locations (hidden + attrib +H +S)
+- 2 Windows Registry locations + shadow Crypto key
+- Windows Credential Manager (very hard to find/delete)
+- NTFS Alternate Data Streams (invisible in Explorer)
+- Self-healing: auto-restores deleted markers
+- Firebase backup (online verification planned)
 - Clock manipulation detection
 """
 
 import os
 import sys
 import json
+import subprocess
 import hashlib
+import ctypes
 import winreg
 import urllib.request
 from pathlib import Path
@@ -106,15 +111,18 @@ class TimeVerifier:
 
 class TrialMarkerManager:
     """
-    Multi-layer trial marker system.
+    Multi-layer trial marker system (v3.0 Hardened).
     
-    Storage locations:
-    1. File: %USERPROFILE%/.veoauto/.trial (hidden)
-    2. File: %APPDATA%/VEO/.trial.dat (hidden)
-    3. File: %LOCALAPPDATA%/VEO/trial.bin (hidden)
+    Storage locations (priority order):
+    1. Firebase: _trials/{machine_id_hash} (online, cannot be deleted)
+    2. Credential Manager: VEO_Trial_Marker (very hard to find/delete)
+    3. NTFS ADS: hidden data stream on USERPROFILE (invisible in Explorer)
     4. Registry: HKCU\\Software\\VEO\\Trial
-    5. Registry: HKCU\\Software\\Classes\\.veo\\Shell (hidden in file association)
-    6. Firebase: _trials/{machine_id_hash}
+    5. Registry: HKCU\\Software\\Classes\\.veo\\Shell
+    6. Shadow: HKCU\\Software\\Microsoft\\Cryptography\\VEO
+    7-9. File markers (hidden + system attributes)
+    
+    Self-healing: if ANY marker survives, ALL others are auto-restored.
     """
     
     TRIAL_DAYS = 7
@@ -227,20 +235,124 @@ class TrialMarkerManager:
         return None
     
     # =========================================================================
+    # CREDENTIAL MANAGER MARKER (very hard to find/delete)
+    # =========================================================================
+    
+    _CRED_TARGET = "VEO_Trial_Marker"
+    
+    def _write_credential_marker(self, trial_start: datetime):
+        """Write trial start to Windows Credential Manager + shadow registry.
+        
+        User must open Control Panel > Credential Manager and know
+        the exact target name to find and delete this. <1% of users know how.
+        """
+        encoded = self._encode_timestamp(trial_start)
+        value = f"{self._marker_hash}:{encoded}"
+        try:
+            subprocess.run(
+                ['cmdkey', '/generic:' + self._CRED_TARGET,
+                 '/user:VEO', '/pass:' + value],
+                capture_output=True, timeout=5,
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+            )
+        except Exception:
+            pass
+        # Also write to shadow registry (deeply hidden path)
+        self._write_credential_shadow(trial_start)
+    
+    def _read_credential_marker(self) -> Optional[datetime]:
+        """Read trial start from shadow registry key."""
+        try:
+            key = winreg.OpenKeyEx(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Cryptography\VEO",
+                0, winreg.KEY_READ
+            )
+            encoded, _ = winreg.QueryValueEx(key, "_d")
+            hash_val, _ = winreg.QueryValueEx(key, "_h")
+            winreg.CloseKey(key)
+            if hash_val == self._marker_hash:
+                return self._decode_timestamp(encoded)
+        except Exception:
+            pass
+        return None
+    
+    def _write_credential_shadow(self, trial_start: datetime):
+        """Write to a deeply-hidden registry location (looks like Windows system key)."""
+        encoded = self._encode_timestamp(trial_start)
+        try:
+            key = winreg.CreateKeyEx(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Cryptography\VEO",
+                0, winreg.KEY_WRITE
+            )
+            winreg.SetValueEx(key, "_d", 0, winreg.REG_SZ, encoded)
+            winreg.SetValueEx(key, "_h", 0, winreg.REG_SZ, self._marker_hash)
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+    
+    # =========================================================================
+    # NTFS ALTERNATE DATA STREAMS (invisible in Explorer)
+    # =========================================================================
+    
+    def _get_ads_paths(self) -> list:
+        """Get NTFS Alternate Data Stream paths.
+        
+        ADS are completely invisible in Windows Explorer, dir command,
+        and most file managers. Only detectable via 'dir /R' or PowerShell.
+        """
+        home = str(Path.home())
+        return [
+            os.path.join(home, f"NTUSER.DAT:{self._CRED_TARGET}"),
+            os.path.join(home, "Desktop.ini:veo_ts"),
+        ]
+    
+    def _write_ads_markers(self, trial_start: datetime):
+        """Write trial start as NTFS Alternate Data Streams.
+        
+        NTFS ADS are invisible in Explorer and most tools.
+        User would need to know ADS exists, the exact stream name,
+        and how to use 'more < file:stream' to read it.
+        """
+        encoded = self._encode_timestamp(trial_start)
+        value = f"{self._marker_hash}:{encoded}"
+        
+        for ads_path in self._get_ads_paths():
+            try:
+                with open(ads_path, 'w') as f:
+                    f.write(value)
+            except Exception:
+                continue
+    
+    def _read_ads_markers(self) -> Optional[datetime]:
+        """Read trial start from NTFS Alternate Data Streams."""
+        for ads_path in self._get_ads_paths():
+            try:
+                with open(ads_path, 'r') as f:
+                    content = f.read().strip()
+                hash_part, encoded = content.split(":")
+                if hash_part == self._marker_hash:
+                    return self._decode_timestamp(encoded)
+            except Exception:
+                continue
+        return None
+    
+    # =========================================================================
     # FIREBASE MARKERS (Online backup)
     # =========================================================================
     
     def _write_firebase_marker(self, trial_start: datetime):
         """Write trial start to Firebase via REST API.
-        NOTE: Legacy v1 — disabled. Trial v2 uses register_trial() via admin/seller approve.
+        NOTE: Legacy v1 disabled. Trial v2 uses register_trial() via admin/seller approve.
         """
-        pass  # v1 disabled — FirebaseRESTClient has no set_document()
+        pass  # v1 disabled
     
     def _read_firebase_marker(self) -> Optional[datetime]:
         """Read trial start from Firebase via REST API.
-        NOTE: Legacy v1 — disabled. Trial v2 uses check_trial_status() via admin/seller approve.
+        NOTE: Legacy v1 disabled. Trial v2 uses check_trial_status() via admin/seller approve.
         """
-        return None  # v1 disabled — FirebaseRESTClient has no get_document()
+        return None  # v1 disabled
     
     # =========================================================================
     # MAIN API
@@ -273,10 +385,12 @@ class TrialMarkerManager:
         # Start new trial
         now = self.time_verifier.get_verified_now()
         
-        # Write to ALL locations
-        self._write_file_markers(now)
-        self._write_registry_markers(now)
-        self._write_firebase_marker(now)
+        # Write to ALL locations (redundancy = resilience)
+        self._write_credential_marker(now)   # Credential Manager + shadow key
+        self._write_ads_markers(now)          # NTFS ADS (invisible)
+        self._write_registry_markers(now)     # Standard registry
+        self._write_file_markers(now)         # Hidden files
+        self._write_firebase_marker(now)      # Online backup (future)
         
         expires = now + timedelta(days=self.TRIAL_DAYS)
         
@@ -291,20 +405,64 @@ class TrialMarkerManager:
         """
         Get trial start from any available source.
         
-        Priority: Firebase > Registry > Files
+        Priority: Firebase > Credential > ADS > Registry > Files
+        If found in a lower-priority source, re-write to ALL sources
+        (self-healing: restores markers that user deleted).
         """
-        # Firebase first (most tamper-resistant)
+        # Firebase first (cannot be deleted by user)
         fb = self._read_firebase_marker()
         if fb:
+            self._heal_markers(fb)
             return fb
         
-        # Registry second
+        # Credential Manager second (very hard to find)
+        cred = self._read_credential_marker()
+        if cred:
+            self._heal_markers(cred)
+            return cred
+        
+        # NTFS ADS third (invisible in Explorer)
+        ads = self._read_ads_markers()
+        if ads:
+            self._heal_markers(ads)
+            return ads
+        
+        # Registry fourth
         reg = self._read_registry_markers()
         if reg:
+            self._heal_markers(reg)
             return reg
         
-        # Files last
-        return self._read_file_markers()
+        # Files last (easiest to delete)
+        fl = self._read_file_markers()
+        if fl:
+            self._heal_markers(fl)
+            return fl
+        
+        return None
+    
+    def _heal_markers(self, trial_start: datetime):
+        """Re-write trial markers to ALL locations (self-healing).
+        
+        If user deleted some markers but not all, this restores them.
+        Called whenever trial_start is found from any source.
+        """
+        try:
+            self._write_credential_marker(trial_start)
+        except Exception:
+            pass
+        try:
+            self._write_ads_markers(trial_start)
+        except Exception:
+            pass
+        try:
+            self._write_registry_markers(trial_start)
+        except Exception:
+            pass
+        try:
+            self._write_file_markers(trial_start)
+        except Exception:
+            pass
     
     def validate_trial(self) -> TrialStatus:
         """
@@ -375,7 +533,7 @@ def activate_trial_key(machine_id: str, trial_key: str) -> TrialStatus:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Trial Protection v2.0 - Test")
+    print("Trial Protection v3.0 - Test (Windows Hardened)")
     print("=" * 60)
     
     # Test with dummy machine ID
