@@ -1,0 +1,236 @@
+# ═══════════════════════════════════════════════════════════
+# VEO Pro Max — macOS Build via GitHub Actions
+# ═══════════════════════════════════════════════════════════
+#
+# Build macOS .app bundle on GitHub's macOS runner (FREE).
+# No Mac hardware required — push code → get .app artifact.
+#
+# Trigger:
+#   - Manual dispatch (Actions tab → Run workflow)
+#   - Push to any branch when 04-MAC files change
+#   - Push tag 'v*-mac'
+#
+# Output:
+#   - VEO_Pro_Max.app (in ZIP artifact)
+#   - VEO_Pro_Max_v{VER}_macOS.zip
+#   - VEO_Pro_Max_v{VER}_macOS.dmg
+# ═══════════════════════════════════════════════════════════
+
+name: Build macOS App
+
+on:
+  # Manual trigger from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      create_dmg:
+        description: 'Create DMG installer'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      skip_sign:
+        description: 'Skip code signing'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+  # Auto-trigger on push (only when macOS files change)
+  push:
+    branches:
+      - main
+      - build-macos
+    paths:
+      - '04 - MAC/**'
+      - '04.1 - macOS build script Nuitka/**'
+    tags:
+      - 'v*-mac'
+
+jobs:
+  build:
+    runs-on: macos-14  # Apple Silicon (M1) runner — FREE tier
+    timeout-minutes: 60
+
+    steps:
+      # ── Step 1: Checkout code ──
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ── Step 2: Setup Python ──
+      - name: 🐍 Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: |
+            04 - MAC/requirements.txt
+            04.1 - macOS build script Nuitka/requirements_build.txt
+
+      # ── Step 3: Install dependencies ──
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          
+          # App dependencies
+          pip install -r "04 - MAC/requirements.txt"
+          
+          # Build tools
+          pip install -r "04.1 - macOS build script Nuitka/requirements_build.txt"
+          
+          # Playwright chromium (some modules reference it)
+          python -m playwright install chromium 2>/dev/null || echo "⚠️ Playwright install skipped (non-critical)"
+          
+          # Verify
+          echo "✅ Python: $(python --version)"
+          echo "✅ Nuitka: $(python -c 'import nuitka; print(nuitka.__version__)')"
+          echo "✅ PySide6: $(python -c 'import PySide6; print(PySide6.__version__)')"
+
+      # ── Step 4: Read version ──
+      - name: 🏷️ Read APP_VERSION
+        id: version
+        run: |
+          VERSION=$(python -c "
+          import re
+          text = open('04 - MAC/config/constants.py', encoding='utf-8').read()
+          m = re.search(r\"APP_VERSION\s*=\s*[\\\"']([^\\\"']+)[\\\"']\", text)
+          print(m.group(1) if m else '0.0.0')
+          ")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 APP_VERSION: $VERSION"
+          echo "📌 Architecture: $(uname -m)"
+          echo "📌 macOS: $(sw_vers -productVersion)"
+
+      # ── Step 5: Nuitka compile ──
+      - name: 🔨 Nuitka Compile (.app bundle)
+        run: |
+          cd "04.1 - macOS build script Nuitka"
+          
+          # Build arguments
+          BUILD_ARGS="--skip-publish"
+          
+          SKIP_SIGN="${{ github.event.inputs.skip_sign }}"
+          if [ "$SKIP_SIGN" = "true" ]; then
+            BUILD_ARGS="$BUILD_ARGS --skip-sign"
+          fi
+          
+          echo "🔨 Running: python build_release_macos.py $BUILD_ARGS"
+          python build_release_macos.py $BUILD_ARGS
+        timeout-minutes: 45
+
+      # ── Step 6: Post-build ad-hoc sign ──
+      - name: 🔏 Code Sign (ad-hoc)
+        if: github.event.inputs.skip_sign != 'true'
+        run: |
+          APP_BUNDLE="04.2 - macOS final build/VEO_Pro_Max.app"
+          if [ -d "$APP_BUNDLE" ]; then
+            codesign --force --sign - --timestamp --deep --options runtime "$APP_BUNDLE" 2>/dev/null || true
+            codesign -v "$APP_BUNDLE" 2>/dev/null && echo "✅ Signature valid" || echo "⚠️ Signature check skipped"
+          fi
+
+      # ── Step 7: Create DMG ──
+      - name: 💿 Create DMG
+        if: github.event.inputs.create_dmg != 'false'
+        run: |
+          APP_BUNDLE="04.2 - macOS final build/VEO_Pro_Max.app"
+          VERSION="${{ steps.version.outputs.version }}"
+          DMG_PATH="04.2 - macOS final build/VEO_Pro_Max_v${VERSION}_macOS.dmg"
+          
+          if [ -d "$APP_BUNDLE" ]; then
+            DMG_STAGING=$(mktemp -d)
+            cp -R "$APP_BUNDLE" "$DMG_STAGING/VEO Pro Max.app"
+            ln -s /Applications "$DMG_STAGING/Applications"
+            
+            hdiutil create "$DMG_PATH" \
+              -volname "VEO Pro Max" \
+              -srcfolder "$DMG_STAGING" \
+              -ov -format UDZO
+            
+            rm -rf "$DMG_STAGING"
+            
+            SIZE_MB=$(du -m "$DMG_PATH" | cut -f1)
+            echo "✅ DMG: $(basename $DMG_PATH) (${SIZE_MB} MB)"
+          else
+            echo "⚠️ .app not found — skipping DMG"
+          fi
+
+      # ── Step 8: Create ZIP ──
+      - name: 📦 Create Release ZIP
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd "04.2 - macOS final build"
+          
+          if [ -d "VEO_Pro_Max.app" ]; then
+            zip -r -y "VEO_Pro_Max_v${VERSION}_macOS.zip" "VEO_Pro_Max.app"
+            SIZE_MB=$(du -m "VEO_Pro_Max_v${VERSION}_macOS.zip" | cut -f1)
+            echo "✅ ZIP: VEO_Pro_Max_v${VERSION}_macOS.zip (${SIZE_MB} MB)"
+          fi
+
+      # ── Step 9: Upload artifacts ──
+      - name: 📤 Upload macOS App
+        uses: actions/upload-artifact@v4
+        with:
+          name: VEO-Pro-Max-macOS-v${{ steps.version.outputs.version }}
+          path: |
+            04.2 - macOS final build/VEO_Pro_Max_v*_macOS.zip
+            04.2 - macOS final build/VEO_Pro_Max_v*_macOS.dmg
+            04.2 - macOS final build/version.json
+            04.2 - macOS final build/build_info.json
+          retention-days: 90
+          if-no-files-found: warn
+          compression-level: 0  # Already compressed
+
+      # ── Step 10: Summary ──
+      - name: 📋 Build Summary
+        if: always()
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "## 🍎 macOS Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`v$VERSION\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runner | \`$(uname -m)\` macOS \`$(sw_vers -productVersion)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Python | \`$(python --version 2>&1)\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Output Files" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          ls -lh "04.2 - macOS final build/" 2>/dev/null || echo "(empty)"
+          ls -lh "04.2 - macOS final build/" 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "No output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔓 User Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "Download the artifact → unzip → right-click .app → Open → Open" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Or run: \`xattr -cr VEO_Pro_Max.app\` to bypass Gatekeeper" >> $GITHUB_STEP_SUMMARY
+
+  # ═══════════════════════════════════════════════════════
+  #  Auto-create GitHub Release on tag push
+  # ═══════════════════════════════════════════════════════
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: VEO-Pro-Max-macOS-*
+          merge-multiple: true
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            VEO_Pro_Max_v*_macOS.zip
+            VEO_Pro_Max_v*_macOS.dmg
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

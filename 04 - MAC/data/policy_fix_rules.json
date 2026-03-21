@@ -1,0 +1,502 @@
+{
+  "version": "2.1",
+  "description": "Local policy fix rules. Expanded to cover Copyright, Public Figures, Medical, Phobias, and advanced Negative Prompts.",
+  "dangerous_phrases": [
+    {
+      "pattern": "no deformed \\w+",
+      "replacement": "",
+      "note": "body horror trigger"
+    },
+    {
+      "pattern": "no mutated \\w+",
+      "replacement": "",
+      "note": "gore/mutation trigger"
+    },
+    {
+      "pattern": "no melting \\w+",
+      "replacement": "",
+      "note": "body horror trigger"
+    },
+    {
+      "pattern": "no extra (fingers|limbs|arms|legs|hands|toes|eyes|heads)",
+      "replacement": "",
+      "note": "body horror trigger"
+    },
+    {
+      "pattern": "no (disfigured|dismembered|severed|amputated) \\w+",
+      "replacement": "",
+      "note": "gore/violence trigger"
+    },
+    {
+      "pattern": "no (blood|bleeding|bloody|gore|gory) \\w*",
+      "replacement": "",
+      "note": "violence trigger"
+    },
+    {
+      "pattern": "no (naked|nude|nudity|nsfw|sexual|erotic|sensual|seductive) \\w*",
+      "replacement": "",
+      "note": "NSFW trigger"
+    },
+    {
+      "pattern": "no (dead|death|dying|corpse|cadaver|zombie) \\w*",
+      "replacement": "",
+      "note": "death/gore trigger"
+    },
+    {
+      "pattern": "no (ugly|grotesque|horrific|terrifying|disturbing) \\w*",
+      "replacement": "",
+      "note": "negative descriptor trigger"
+    },
+    {
+      "pattern": "no (weapon|weapons|gun|guns|knife|knives|sword|swords) \\w*",
+      "replacement": "",
+      "note": "weapon/violence trigger"
+    },
+    {
+      "pattern": "no (injury|injuries|wound|wounds|scar|scars) \\w*",
+      "replacement": "",
+      "note": "injury/violence trigger"
+    },
+    {
+      "pattern": "(?:no|without|avoid|prevent|never)\\s+(?:deform(?:ed|ity)?|mutat(?:ed|ion)?|melt(?:ing|ed)?|distort(?:ed|ion)?)",
+      "replacement": "",
+      "note": "generic negative quality"
+    },
+    {
+      "pattern": "(?:no|without|avoid)\\s+(?:sudden color shifts?|texture distortion|visual artifacts?|glitch(?:es|ing)?)",
+      "replacement": "",
+      "note": "technical negative prompt"
+    },
+    {
+      "pattern": "(?:no|without|avoid)\\s+(?:poorly drawn|bad anatomy|bad proportions|unnatural pose)",
+      "replacement": "",
+      "note": "common negative prompt cleanup"
+    },
+    {
+      "pattern": ",?\\s*and absolutely no texture distortion",
+      "replacement": "",
+      "note": "common VEO negative suffix"
+    },
+    {
+      "pattern": "\\bno\\s+(?:text|subtitles|labels|watermarks|signatures)(?:\\s*,\\s*no\\s+(?:text|subtitles|labels|watermarks|signatures))*",
+      "replacement": "",
+      "note": "text/watermark negative (safe to keep but compact)"
+    },
+    {
+      "pattern": "in the style of (?:Disney|Pixar|Marvel|DC|Studio Ghibli|Nintendo)",
+      "replacement": "in a highly detailed, premium cinematic animation style",
+      "note": "Copyright/IP style trigger"
+    },
+    {
+      "pattern": "(?:holding|pointing|aiming) a (?:gun|rifle|pistol|shotgun|sniper|firearm)",
+      "replacement": "holding a dynamic action pose",
+      "note": "Action/Violence context trigger"
+    },
+    {
+      "pattern": "(?:child|kid|toddler|baby|girl|boy|infant)\\s+(?:in lingerie|in underwear|naked|nude|bleeding|crying|injured|tied up|bound)",
+      "replacement": "happy child playing safely in modest clothing",
+      "note": "Strict Child Safety trigger"
+    },
+    {
+      "pattern": "(?:animal|dog|cat|pet)\\s+(?:abuse|fighting|bleeding|dead|injured|suffering)",
+      "replacement": "cute animal resting peacefully",
+      "note": "Animal welfare trigger"
+    },
+    {
+      "pattern": "no (?:cross-eyed|strabismus|asymmetric|proportions|bad anatomy|poorly drawn face|poorly drawn hands)",
+      "replacement": "",
+      "note": "Generic negative prompt cleanup"
+    },
+    {
+      "pattern": "(?:plane crash|car crash|car wreck|train derailment|burning building)\\s+(?:with victims|dead bodies|fatal)",
+      "replacement": "dramatic action movie set",
+      "note": "Disaster/Tragedy trigger"
+    },
+    {
+      "pattern": "blood(?:stains|spatter|splatter|pool|dripping)",
+      "replacement": "red paint splatters",
+      "note": "Visual gore trigger"
+    }
+  ],
+  "trigger_words": [
+    {
+      "word": "gore",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "gory",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "dismember",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "dismembered",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "decapitate",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "decapitated",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "eviscerate",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "disembowel",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "bloodbath",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "massacre",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "slaughter",
+      "replacement": "",
+      "note": "violence"
+    },
+    {
+      "word": "torture",
+      "replacement": "",
+      "note": "violence/abuse"
+    },
+    {
+      "word": "torment",
+      "replacement": "",
+      "note": "violence/abuse"
+    },
+    {
+      "word": "pornographic",
+      "replacement": "",
+      "note": "NSFW"
+    },
+    {
+      "word": "hentai",
+      "replacement": "anime style",
+      "note": "NSFW/Style"
+    },
+    {
+      "word": "orgasm",
+      "replacement": "euphoric expression",
+      "note": "NSFW"
+    },
+    {
+      "word": "genitalia",
+      "replacement": "",
+      "note": "NSFW"
+    },
+    {
+      "word": "topless",
+      "replacement": "wearing a modest summer top",
+      "note": "NSFW"
+    },
+    {
+      "word": "undressing",
+      "replacement": "changing outfits",
+      "note": "NSFW"
+    },
+    {
+      "word": "lingerie",
+      "replacement": "elegant silk sleepwear",
+      "note": "NSFW borderline"
+    },
+    {
+      "word": "bikini",
+      "replacement": "one-piece swimsuit",
+      "note": "NSFW borderline"
+    },
+    {
+      "word": "cleavage",
+      "replacement": "modest neckline",
+      "note": "NSFW borderline"
+    },
+    {
+      "word": "upskirt",
+      "replacement": "",
+      "note": "NSFW extreme"
+    },
+    {
+      "word": "corpse",
+      "replacement": "sleeping figure",
+      "note": "death"
+    },
+    {
+      "word": "cadaver",
+      "replacement": "sleeping figure",
+      "note": "death"
+    },
+    {
+      "word": "suicide",
+      "replacement": "",
+      "note": "self-harm"
+    },
+    {
+      "word": "self-harm",
+      "replacement": "",
+      "note": "self-harm"
+    },
+    {
+      "word": "drug",
+      "replacement": "medication",
+      "note": "substance (standalone)"
+    },
+    {
+      "word": "cocaine",
+      "replacement": "white powder",
+      "note": "substance"
+    },
+    {
+      "word": "heroin",
+      "replacement": "",
+      "note": "substance"
+    },
+    {
+      "word": "meth",
+      "replacement": "blue crystals",
+      "note": "substance"
+    },
+    {
+      "word": "terrorist",
+      "replacement": "rebel fighter",
+      "note": "terrorism"
+    },
+    {
+      "word": "terrorism",
+      "replacement": "rebellion",
+      "note": "terrorism"
+    },
+    {
+      "word": "extremist",
+      "replacement": "radical",
+      "note": "extremism"
+    },
+    {
+      "word": "propaganda",
+      "replacement": "political poster",
+      "note": "extremism"
+    },
+    {
+      "word": "mickey mouse",
+      "replacement": "anthropomorphic cartoon mouse in red shorts",
+      "note": "Copyright IP"
+    },
+    {
+      "word": "spider-man",
+      "replacement": "superhero in a red and blue webbed suit",
+      "note": "Copyright IP"
+    },
+    {
+      "word": "batman",
+      "replacement": "dark masked vigilante in a black cape",
+      "note": "Copyright IP"
+    },
+    {
+      "word": "harry potter",
+      "replacement": "young wizard boy with round glasses",
+      "note": "Copyright IP"
+    },
+    {
+      "word": "donald trump",
+      "replacement": "blonde businessman in a suit",
+      "note": "Public figure/Politics"
+    },
+    {
+      "word": "joe biden",
+      "replacement": "elderly politician in a suit",
+      "note": "Public figure/Politics"
+    },
+    {
+      "word": "taylor swift",
+      "replacement": "blonde pop star singing on stage",
+      "note": "Public figure"
+    },
+    {
+      "word": "elon musk",
+      "replacement": "tech billionaire entrepreneur",
+      "note": "Public figure"
+    },
+    {
+      "word": "syringe",
+      "replacement": "glowing vial",
+      "note": "Medical/Phobia"
+    },
+    {
+      "word": "trypophobia",
+      "replacement": "intricate honeycomb pattern",
+      "note": "Phobia trigger"
+    },
+    {
+      "word": "asylum",
+      "replacement": "abandoned Victorian hospital",
+      "note": "Sensitive location/Mental health"
+    },
+    {
+      "word": "nazi",
+      "replacement": "historical military uniform",
+      "note": "Hate speech"
+    },
+    {
+      "word": "slave",
+      "replacement": "laborer",
+      "note": "Hate/History"
+    },
+    {
+      "word": "bomb",
+      "replacement": "glowing energy device",
+      "note": "Weapon/Violence"
+    },
+    {
+      "word": "loli",
+      "replacement": "cute anime character",
+      "note": "CSAM/NSFW trigger"
+    },
+    {
+      "word": "shota",
+      "replacement": "young anime character",
+      "note": "CSAM/NSFW trigger"
+    },
+    {
+      "word": "pedophile",
+      "replacement": "",
+      "note": "CSAM/Crime"
+    },
+    {
+      "word": "rape",
+      "replacement": "",
+      "note": "Sexual violence"
+    },
+    {
+      "word": "vomit",
+      "replacement": "spilled colorful liquid",
+      "note": "Bodily fluids/Gross"
+    },
+    {
+      "word": "urine",
+      "replacement": "puddle of water",
+      "note": "Bodily fluids"
+    },
+    {
+      "word": "feces",
+      "replacement": "mud",
+      "note": "Bodily fluids"
+    },
+    {
+      "word": "saliva",
+      "replacement": "water droplets",
+      "note": "Bodily fluids/Fetish trigger"
+    },
+    {
+      "word": "drooling",
+      "replacement": "smiling",
+      "note": "Fetish borderline"
+    },
+    {
+      "word": "anorexic",
+      "replacement": "slender",
+      "note": "Eating disorder/Self-harm"
+    },
+    {
+      "word": "emaciated",
+      "replacement": "thin",
+      "note": "Eating disorder/Self-harm"
+    },
+    {
+      "word": "starving",
+      "replacement": "hungry",
+      "note": "Self-harm/Suffering"
+    },
+    {
+      "word": "joint",
+      "replacement": "cigarette",
+      "note": "Drugs (borderline)"
+    },
+    {
+      "word": "bong",
+      "replacement": "glass vase",
+      "note": "Drugs paraphernalia"
+    },
+    {
+      "word": "vape",
+      "replacement": "electronic device",
+      "note": "Tobacco/Substance"
+    },
+    {
+      "word": "intoxicated",
+      "replacement": "dizzy",
+      "note": "Substance abuse"
+    },
+    {
+      "word": "pikachu",
+      "replacement": "yellow electric mouse monster",
+      "note": "Nintendo IP"
+    },
+    {
+      "word": "mario",
+      "replacement": "plumber in red shirt and blue overalls",
+      "note": "Nintendo IP"
+    },
+    {
+      "word": "darth vader",
+      "replacement": "sci-fi villain in black armor and helmet",
+      "note": "Disney/Star Wars IP"
+    },
+    {
+      "word": "hogwarts",
+      "replacement": "magical gothic castle at night",
+      "note": "Warner Bros IP"
+    },
+    {
+      "word": "putin",
+      "replacement": "european politician",
+      "note": "Political figure"
+    },
+    {
+      "word": "obama",
+      "replacement": "american politician",
+      "note": "Political figure"
+    },
+    {
+      "word": "hitler",
+      "replacement": "historical military dictator",
+      "note": "Hate speech/History"
+    }
+  ],
+  "dialogue_strip": {
+    "enabled": true,
+    "patterns": [
+      "(?:saying|speaking|whispering|yelling|shouting|exclaiming|murmuring|crying|chanting|singing)\\s*[,:]?\\s*[\"'][^\"']+[\"']",
+      "(?:says|said|whispers|yells|shouts|exclaims|murmurs|cries|chants|sings)\\s*[,:]?\\s*[\"'][^\"']+[\"']",
+      "(?:thinking|pondering)\\s*[,:]?\\s*[\"'][^\"']+[\"']"
+    ],
+    "replacement_template": "expressing {tone} through body language",
+    "default_tone": "a natural and fitting emotion"
+  },
+  "quality_tags": {
+    "positive": "Masterpiece quality, flawless anatomy, perfect physical proportions, seamless high-resolution textures, pristine rendering, physically based rendering (PBR), high aesthetic value, cinematic lighting, studio-quality output, highly detailed.",
+    "append_when": "dangerous_phrases_removed",
+    "style_specific_append": {
+      "3d_animation": "Octane render, Unreal Engine 5 style, ray tracing, volumetric lighting.",
+      "photography": "8k resolution, raw photo, DSLR, sharp focus, hyper-realistic.",
+      "illustration": "trending on ArtStation, intricate details, vivid colors, digital painting."
+    }
+  }
+}

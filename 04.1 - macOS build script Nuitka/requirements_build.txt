@@ -1,0 +1,17 @@
+# Build dependencies for macOS Nuitka compilation
+# Run: pip install -r requirements_build.txt
+
+# Nuitka compiler
+nuitka>=2.0
+ordered-set
+zstandard
+
+# Encryption (workflow data + extension obfuscation)
+cryptography
+
+# These should already be installed from app requirements:
+# PySide6
+# aiohttp
+# playwright
+# psutil
+# etc.

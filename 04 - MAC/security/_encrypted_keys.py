@@ -1,0 +1,7 @@
+# AES-256 Encrypted API Keys (static key mode)
+# Re-encrypted: 2026-02-28
+# Decrypted with static key at runtime — no _keys.dat needed
+
+PRIMARY_KEY_ENCRYPTED = b'gAAAAABpopJRdreTiozGhy1PktCm0p-Z_W3_rrZKYpOoZwQwLSFCvmv6mNo9RAKES9UztDiwdhkyO5vC7OCrKHaw3c5bmVeqS4pGnkD-YmAwAwzhYIixHYolP8BdSIkYxvq4Z2JTz1zi'
+
+BACKUP_KEY_ENCRYPTED = b'gAAAAABpopJRSTF0XT88kuUbWcEPFGIHLa0bm_uJveaEdF8RIGnyl7yqor__UUcgiqXw9q9mcpl-swKSNXvQm-ZwdlV40K9AGua2W8UX0P7JaEC-0SVm8axXLeRmRmwSuOx4LwCO2Pkt'

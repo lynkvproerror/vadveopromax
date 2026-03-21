@@ -1,0 +1,5 @@
+🔧 macOS Build v1.0.0
+- Porting từ Windows version
+- Nuitka .app bundle compilation
+- AppleScript extension installer
+- macOS Chrome management (branded + CfT)
