@@ -6,6 +6,9 @@ nuitka>=2.0
 ordered-set
 zstandard
 
+# Icon conversion (.ico → .icns on macOS)
+imageio
+
 # Encryption (workflow data + extension obfuscation)
 cryptography
 
