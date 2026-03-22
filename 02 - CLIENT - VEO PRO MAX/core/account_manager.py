@@ -641,6 +641,10 @@ class AccountManager:
             self._session.browser_copyright = ""
             self._session.browser_year = ""
             self._token_cache = TokenCache()
+            # ★ Reset reCAPTCHA circuit-breaker — fresh Chrome = fresh state
+            # Without this, stale counter (up to 8) causes 120s backoff
+            # even though the new Chrome's reCAPTCHA is perfectly healthy.
+            self._recaptcha_consecutive_failures = 0
             
             # Step 5: Re-attach via ensure_browser (extracts fresh token + headers)
             try:

@@ -6,6 +6,7 @@ Version: 2.3.4
 
 import sys
 import logging
+import logging.handlers
 import os
 import subprocess
 from pathlib import Path
@@ -37,12 +38,20 @@ _terminal_handler.setFormatter(logging.Formatter(
 logging.getLogger().addHandler(_terminal_handler)
 
 # In compiled mode (Nuitka/frozen), console is disabled.
-# Add file handler to capture all logs for debugging.
+# Add rotating file handler to capture all logs for debugging.
+# RotatingFileHandler: 10 MB max, 2 backups → max 30 MB on disk.
 if getattr(sys, 'frozen', False) or '__compiled__' in dir():
     _log_dir = Path.home() / ".veoauto"
     _log_dir.mkdir(parents=True, exist_ok=True)
-    _file_handler = logging.FileHandler(
-        _log_dir / "veo_debug.log", mode='w', encoding='utf-8'
+    
+    # Per-session log file with timestamp
+    from datetime import datetime as _dt
+    _session_ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+    _file_handler = logging.handlers.RotatingFileHandler(
+        _log_dir / f"veo_session_{_session_ts}.log",
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=2,
+        encoding='utf-8',
     )
     _file_handler.setLevel(logging.DEBUG)
     _file_handler.setFormatter(logging.Formatter(
@@ -50,6 +59,20 @@ if getattr(sys, 'frozen', False) or '__compiled__' in dir():
         datefmt="%H:%M:%S",
     ))
     logging.getLogger().addHandler(_file_handler)
+    
+    # Cleanup old session logs (older than log_retention_days)
+    try:
+        import time as _time
+        _retention_days = 7  # Default; settings not loaded yet at this point
+        _cutoff = _time.time() - (_retention_days * 86400)
+        for _old_log in _log_dir.glob("veo_session_*.log*"):
+            try:
+                if _old_log.stat().st_mtime < _cutoff:
+                    _old_log.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def _hide_runtime_files():

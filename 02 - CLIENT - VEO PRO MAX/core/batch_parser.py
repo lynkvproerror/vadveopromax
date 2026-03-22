@@ -418,7 +418,13 @@ class BatchParser:
                 continue
             
             # Extract prompt text (required)
-            prompt_text = scene.get('prompt_en', '') or scene.get('prompt', '')
+            # Support common key names: prompt_en, prompt, prompt_text, text
+            prompt_text = (
+                scene.get('prompt_en', '')
+                or scene.get('prompt', '')
+                or scene.get('prompt_text', '')
+                or scene.get('text', '')
+            )
             if not prompt_text:
                 continue
             
@@ -427,9 +433,11 @@ class BatchParser:
             
             # Collect metadata (all non-prompt, non-duration fields)
             metadata = {}
-            for key in ('description_vi', 'narration_vi', 'style', 'negative'):
+            for key in ('description_vi', 'narration_vi', 'style', 'negative',
+                        'setting_chosen', 'type', 'instruments'):
                 if key in scene and scene[key]:
-                    metadata[key] = str(scene[key])
+                    val = scene[key]
+                    metadata[key] = str(val) if not isinstance(val, list) else ', '.join(str(v) for v in val)
             
             # ── Extract image references ──
             # Supports: "image": "path" (single) or "images": ["p1", "p2"] (array)

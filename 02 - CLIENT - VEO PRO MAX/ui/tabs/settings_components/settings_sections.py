@@ -89,7 +89,7 @@ class SettingsSectionsMixin:
         vq_options = ["720p", "1080p", "4K"]
         combo = self._create_setting_row(layout, t("settings.defaults_sub.download_quality"), vq_options)
         if _s:
-            _vq = getattr(_s, 'default_download_quality', '1080p')
+            _vq = getattr(_s, 'default_download_quality', '720p')
             if _vq in vq_options:
                 combo.setCurrentText(_vq)
         self.setting_combos["Download Quality"] = combo
@@ -192,6 +192,95 @@ class SettingsSectionsMixin:
             layout.addWidget(checkbox)
             self.output_toggles[label] = checkbox
 
+        # Auto-clear completed tasks spinner
+        _acm = getattr(_s, 'auto_clear_tasks_max', 2000) if _s else 2000
+        ac_row = QHBoxLayout()
+        ac_label = QLabel(t("settings.output_toggles.auto_clear_tasks"))
+        ac_label.setFixedWidth(220)
+        ac_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        ac_row.addWidget(ac_label)
+
+        self._auto_clear_combo = QComboBox()
+        _ac_options = [("Off", 0), ("500", 500), ("1,000", 1000), ("2,000", 2000), ("5,000", 5000), ("10,000", 10000)]
+        for display, val in _ac_options:
+            self._auto_clear_combo.addItem(display, val)
+        # Set current value
+        for i, (_, val) in enumerate(_ac_options):
+            if val == _acm:
+                self._auto_clear_combo.setCurrentIndex(i)
+                break
+        self._auto_clear_combo.setFixedWidth(100)
+        self._auto_clear_combo.currentIndexChanged.connect(self._save_output_settings)
+        ac_row.addWidget(self._auto_clear_combo)
+        ac_row.addStretch()
+        layout.addLayout(ac_row)
+
+        # Time-based prune (remove tasks older than N minutes)
+        _pam = getattr(_s, 'prune_age_minutes', 0) if _s else 0
+        pa_row = QHBoxLayout()
+        pa_label = QLabel(t("settings.output_toggles.prune_age"))
+        pa_label.setFixedWidth(220)
+        pa_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        pa_row.addWidget(pa_label)
+
+        self._prune_age_combo = QComboBox()
+        _pa_options = [("Off", 0), ("30 min", 30), ("1h", 60), ("2h", 120), ("4h", 240), ("8h", 480)]
+        for display, val in _pa_options:
+            self._prune_age_combo.addItem(display, val)
+        for i, (_, val) in enumerate(_pa_options):
+            if val == _pam:
+                self._prune_age_combo.setCurrentIndex(i)
+                break
+        self._prune_age_combo.setFixedWidth(100)
+        self._prune_age_combo.currentIndexChanged.connect(self._save_output_settings)
+        pa_row.addWidget(self._prune_age_combo)
+        pa_row.addStretch()
+        layout.addLayout(pa_row)
+
+        # Log Buffer Size (RAM)
+        _lbm = getattr(_s, 'log_buffer_max', 20000) if _s else 20000
+        lb_row = QHBoxLayout()
+        lb_label = QLabel(t("settings.output_toggles.log_buffer_size"))
+        lb_label.setFixedWidth(220)
+        lb_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        lb_row.addWidget(lb_label)
+
+        self._log_buffer_combo = QComboBox()
+        _lb_options = [("5K", 5000), ("10K", 10000), ("20K", 20000), ("50K", 50000)]
+        for display, val in _lb_options:
+            self._log_buffer_combo.addItem(display, val)
+        for i, (_, val) in enumerate(_lb_options):
+            if val == _lbm:
+                self._log_buffer_combo.setCurrentIndex(i)
+                break
+        self._log_buffer_combo.setFixedWidth(100)
+        self._log_buffer_combo.currentIndexChanged.connect(self._save_output_settings)
+        lb_row.addWidget(self._log_buffer_combo)
+        lb_row.addStretch()
+        layout.addLayout(lb_row)
+
+        # Gemini Log Lines
+        _glm = getattr(_s, 'gemini_log_max_blocks', 2000) if _s else 2000
+        gl_row = QHBoxLayout()
+        gl_label = QLabel(t("settings.output_toggles.gemini_log_lines"))
+        gl_label.setFixedWidth(220)
+        gl_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        gl_row.addWidget(gl_label)
+
+        self._gemini_log_combo = QComboBox()
+        _gl_options = [("500", 500), ("1K", 1000), ("2K", 2000), ("5K", 5000)]
+        for display, val in _gl_options:
+            self._gemini_log_combo.addItem(display, val)
+        for i, (_, val) in enumerate(_gl_options):
+            if val == _glm:
+                self._gemini_log_combo.setCurrentIndex(i)
+                break
+        self._gemini_log_combo.setFixedWidth(100)
+        self._gemini_log_combo.currentIndexChanged.connect(self._save_output_settings)
+        gl_row.addWidget(self._gemini_log_combo)
+        gl_row.addStretch()
+        layout.addLayout(gl_row)
+
         # Wire folder save
         self.output_folder_entry.textChanged.connect(self._save_output_settings)
 
@@ -292,6 +381,94 @@ class SettingsSectionsMixin:
             layout.addWidget(checkbox)
             self.output_toggles[label] = checkbox
 
+        # Auto-clear completed tasks spinner
+        _acm = getattr(_s, 'auto_clear_tasks_max', 2000) if _s else 2000
+        ac_row = QHBoxLayout()
+        ac_label = QLabel(t("settings.output_toggles.auto_clear_tasks"))
+        ac_label.setFixedWidth(220)
+        ac_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        ac_row.addWidget(ac_label)
+
+        self._auto_clear_combo = QComboBox()
+        _ac_options = [("Off", 0), ("500", 500), ("1,000", 1000), ("2,000", 2000), ("5,000", 5000), ("10,000", 10000)]
+        for display, val in _ac_options:
+            self._auto_clear_combo.addItem(display, val)
+        for i, (_, val) in enumerate(_ac_options):
+            if val == _acm:
+                self._auto_clear_combo.setCurrentIndex(i)
+                break
+        self._auto_clear_combo.setFixedWidth(100)
+        self._auto_clear_combo.currentIndexChanged.connect(self._save_output_settings)
+        ac_row.addWidget(self._auto_clear_combo)
+        ac_row.addStretch()
+        layout.addLayout(ac_row)
+
+        # Time-based prune (remove tasks older than N minutes)
+        _pam = getattr(_s, 'prune_age_minutes', 0) if _s else 0
+        pa_row = QHBoxLayout()
+        pa_label = QLabel(t("settings.output_toggles.prune_age"))
+        pa_label.setFixedWidth(220)
+        pa_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        pa_row.addWidget(pa_label)
+
+        self._prune_age_combo = QComboBox()
+        _pa_options = [("Off", 0), ("30 min", 30), ("1h", 60), ("2h", 120), ("4h", 240), ("8h", 480)]
+        for display, val in _pa_options:
+            self._prune_age_combo.addItem(display, val)
+        for i, (_, val) in enumerate(_pa_options):
+            if val == _pam:
+                self._prune_age_combo.setCurrentIndex(i)
+                break
+        self._prune_age_combo.setFixedWidth(100)
+        self._prune_age_combo.currentIndexChanged.connect(self._save_output_settings)
+        pa_row.addWidget(self._prune_age_combo)
+        pa_row.addStretch()
+        layout.addLayout(pa_row)
+
+        # Log Buffer Size (RAM)
+        _lbm = getattr(_s, 'log_buffer_max', 20000) if _s else 20000
+        lb_row = QHBoxLayout()
+        lb_label = QLabel(t("settings.output_toggles.log_buffer_size"))
+        lb_label.setFixedWidth(220)
+        lb_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        lb_row.addWidget(lb_label)
+
+        self._log_buffer_combo = QComboBox()
+        _lb_options = [("5K", 5000), ("10K", 10000), ("20K", 20000), ("50K", 50000)]
+        for display, val in _lb_options:
+            self._log_buffer_combo.addItem(display, val)
+        for i, (_, val) in enumerate(_lb_options):
+            if val == _lbm:
+                self._log_buffer_combo.setCurrentIndex(i)
+                break
+        self._log_buffer_combo.setFixedWidth(100)
+        self._log_buffer_combo.currentIndexChanged.connect(self._save_output_settings)
+        lb_row.addWidget(self._log_buffer_combo)
+        lb_row.addStretch()
+        layout.addLayout(lb_row)
+
+        # Gemini Log Lines
+        _glm = getattr(_s, 'gemini_log_max_blocks', 2000) if _s else 2000
+        gl_row = QHBoxLayout()
+        gl_label = QLabel(t("settings.output_toggles.gemini_log_lines"))
+        gl_label.setFixedWidth(220)
+        gl_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
+        gl_row.addWidget(gl_label)
+
+        self._gemini_log_combo = QComboBox()
+        _gl_options = [("500", 500), ("1K", 1000), ("2K", 2000), ("5K", 5000)]
+        for display, val in _gl_options:
+            self._gemini_log_combo.addItem(display, val)
+        for i, (_, val) in enumerate(_gl_options):
+            if val == _glm:
+                self._gemini_log_combo.setCurrentIndex(i)
+                break
+        self._gemini_log_combo.setFixedWidth(100)
+        self._gemini_log_combo.currentIndexChanged.connect(self._save_output_settings)
+        gl_row.addWidget(self._gemini_log_combo)
+        gl_row.addStretch()
+        layout.addLayout(gl_row)
+
         # Wire folder save
         self.output_folder_entry.textChanged.connect(self._save_output_settings)
 
@@ -318,6 +495,18 @@ class SettingsSectionsMixin:
             for idx, (key, toggle) in enumerate(self.output_toggles.items()):
                 if idx < len(attr_map):
                     setattr(settings, attr_map[idx], toggle.isChecked())
+            # Auto-clear tasks cap
+            if hasattr(self, '_auto_clear_combo'):
+                settings.auto_clear_tasks_max = self._auto_clear_combo.currentData() or 0
+            # Time-based prune age
+            if hasattr(self, '_prune_age_combo'):
+                settings.prune_age_minutes = self._prune_age_combo.currentData() or 0
+            # Log buffer size
+            if hasattr(self, '_log_buffer_combo'):
+                settings.log_buffer_max = self._log_buffer_combo.currentData() or 20000
+            # Gemini log lines
+            if hasattr(self, '_gemini_log_combo'):
+                settings.gemini_log_max_blocks = self._gemini_log_combo.currentData() or 2000
             settings.save()
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save output settings: {e}')

@@ -77,7 +77,11 @@
             "include_quality": "Include quality in filename",
             "auto_start_queue": "Auto-start queue when adding",
             "pause_on_error": "Pause on error",
-            "download_non_watermark": "Download Non-Watermark"
+            "download_non_watermark": "Download Non-Watermark",
+            "auto_clear_tasks": "Auto-clear completed tasks:",
+            "prune_age": "Auto-remove old tasks:",
+            "log_buffer_size": "Log Buffer (RAM):",
+            "gemini_log_lines": "Gemini Log Lines:"
         },
         "notification_sub": {
             "in_app_toast": "In-App Toast:",

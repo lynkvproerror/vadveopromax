@@ -2,18 +2,84 @@
 Queue Thumbnail System — pixmap cache, file existence checks, thumb slot creation.
 
 Mixin class for TabQueue. All methods operate on `self` (the TabQueue instance).
+
+Performance: 3-tier thumbnail strategy for 200+ prompt queues:
+  Tier 1 (Micro):  40×40 pre-generated .webp files (~2-5KB) for grid display
+  Tier 2 (Hover):  300px zoom loaded on-demand from original file (300ms delay)
+  Tier 3 (Click):  Full-res preview loaded on click from original file
 """
 
 import time
+import hashlib
+import logging
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
 
-from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout
-from PySide6.QtGui import QPixmap, QCursor
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QScrollArea
+from PySide6.QtGui import QPixmap, QImage, QCursor
+from PySide6.QtCore import Qt, Signal, QObject
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
+
+_log = logging.getLogger("veo.thumb_system")
+
+
+# ── Background Micro-Thumbnail Generator ────────────────────────
+
+class _MicroThumbWorker(QObject):
+    """Signals for background micro-thumbnail generation results."""
+    thumb_ready = Signal(str, str)  # (original_path, micro_thumb_path)
+
+_micro_worker = _MicroThumbWorker()
+_micro_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="micro_thumb")
+_micro_pending: set = set()  # Paths currently being generated
+
+
+def _get_micro_thumb_dir() -> Path:
+    """Get/create the micro-thumbnail cache directory."""
+    cache_dir = Path.home() / ".veoauto" / "cache" / "micro_thumbs"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _micro_thumb_path(source_path: str) -> Path:
+    """Compute the micro-thumbnail path for a given source image/video frame."""
+    h = hashlib.md5(source_path.encode('utf-8', errors='replace')).hexdigest()[:12]
+    return _get_micro_thumb_dir() / f"{h}.webp"
+
+
+def _generate_micro_thumb_bg(source_path: str):
+    """Background thread: generate a 40×40 WebP micro-thumbnail.
+    
+    Uses QImage (thread-safe for loading) instead of QPixmap.
+    Emits thumb_ready signal when done.
+    """
+    try:
+        micro_path = _micro_thumb_path(source_path)
+        if micro_path.exists():
+            _micro_pending.discard(source_path)
+            _micro_worker.thumb_ready.emit(source_path, str(micro_path))
+            return
+        
+        img = QImage(source_path)
+        if img.isNull():
+            _micro_pending.discard(source_path)
+            return
+        
+        scaled = img.scaled(
+            40, 40,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        scaled.save(str(micro_path), "WEBP", 75)
+        _micro_pending.discard(source_path)
+        _micro_worker.thumb_ready.emit(source_path, str(micro_path))
+    except Exception as e:
+        _micro_pending.discard(source_path)
+        _log.debug(f"[MicroThumb] Failed for {source_path}: {e}")
 
 
 class QueueThumbnailMixin:
@@ -27,6 +93,27 @@ class QueueThumbnailMixin:
     
     # ── Performance Caches ───────────────────────────────────────
     
+    def _init_micro_thumb_system(self):
+        """Initialize micro-thumbnail background generation system.
+        
+        Call this once during __init__ after super().__init__().
+        """
+        _micro_worker.thumb_ready.connect(self._on_micro_thumb_ready)
+    
+    def _on_micro_thumb_ready(self, source_path: str, micro_path: str):
+        """Slot: micro-thumbnail generated in background → update pixmap cache."""
+        # Update the LRU cache with the new micro-thumbnail
+        cache_key = f"{source_path}:40"
+        if cache_key not in self._pixmap_cache:
+            pix = QPixmap(micro_path)
+            if not pix.isNull():
+                self._pixmap_cache[cache_key] = pix
+                while len(self._pixmap_cache) > self._pixmap_cache_max:
+                    self._pixmap_cache.popitem(last=False)
+        # Trigger a lightweight refresh to swap in the new thumbnail
+        if hasattr(self, '_completion_refresh_timer') and not self._completion_refresh_timer.isActive():
+            self._completion_refresh_timer.start()
+    
     def _cached_file_exists(self, path: str) -> bool:
         """Check if file exists with 10s TTL cache to avoid disk I/O on main thread."""
         if not path:
@@ -37,6 +124,11 @@ class QueueThumbnailMixin:
             return entry[0]
         exists = Path(path).exists()
         self._file_exists_cache[path] = (exists, now)
+        # Evict oldest 50% when cache exceeds 2000 entries to prevent unbounded growth
+        if len(self._file_exists_cache) > 2000:
+            sorted_keys = sorted(self._file_exists_cache, key=lambda k: self._file_exists_cache[k][1])
+            for k in sorted_keys[:len(sorted_keys) // 2]:
+                del self._file_exists_cache[k]
         return exists
     
     def _invalidate_file_cache(self, path: str):
@@ -44,11 +136,37 @@ class QueueThumbnailMixin:
         self._file_exists_cache.pop(path, None)
     
     def _get_cached_pixmap(self, path: str, size: int = 40) -> 'QPixmap':
-        """Get scaled QPixmap from LRU cache. Avoids repeated disk decode."""
+        """Get scaled QPixmap from LRU cache with micro-thumbnail acceleration.
+        
+        For size=40 (grid thumbnails), tries to load a pre-generated 40×40 .webp
+        micro-thumbnail (~2-5KB) instead of the full-res source (~200-500KB).
+        If the micro-thumbnail doesn't exist, queues background generation and
+        returns a synchronously-scaled version in the meantime.
+        
+        For other sizes (e.g. hover zoom), loads from original file.
+        """
         cache_key = f"{path}:{size}"
         if cache_key in self._pixmap_cache:
             self._pixmap_cache.move_to_end(cache_key)
             return self._pixmap_cache[cache_key]
+        
+        # ── Tier 1: Try micro-thumbnail for grid display (size=40) ──
+        if size <= 40:
+            micro = _micro_thumb_path(path)
+            if micro.exists():
+                pixmap = QPixmap(str(micro))
+                if not pixmap.isNull():
+                    self._pixmap_cache[cache_key] = pixmap
+                    while len(self._pixmap_cache) > self._pixmap_cache_max:
+                        self._pixmap_cache.popitem(last=False)
+                    return pixmap
+            else:
+                # Queue background generation (non-blocking)
+                if path not in _micro_pending:
+                    _micro_pending.add(path)
+                    _micro_executor.submit(_generate_micro_thumb_bg, path)
+        
+        # ── Fallback: load + scale from original (first time only) ──
         pixmap = QPixmap(path)
         if pixmap.isNull():
             return pixmap
@@ -59,6 +177,40 @@ class QueueThumbnailMixin:
         while len(self._pixmap_cache) > self._pixmap_cache_max:
             self._pixmap_cache.popitem(last=False)
         return scaled
+    
+    # ── Viewport Awareness ───────────────────────────────────────
+    
+    def _is_widget_in_viewport(self, widget: QWidget, buffer_px: int = 80) -> bool:
+        """Check if a widget is within the visible scroll viewport (±buffer).
+        
+        Used to skip expensive thumbnail updates for off-screen rows.
+        Returns True if viewport can't be determined (safe fallback).
+        """
+        try:
+            scroll_area = None
+            parent = widget.parent()
+            while parent:
+                if isinstance(parent, QScrollArea):
+                    scroll_area = parent
+                    break
+                parent = parent.parent()
+            
+            if not scroll_area:
+                return True  # Can't determine → assume visible
+            
+            viewport = scroll_area.viewport()
+            if not viewport:
+                return True
+            
+            # Map widget position to scroll area viewport coordinates
+            widget_pos = widget.mapTo(viewport, widget.rect().topLeft())
+            widget_bottom = widget_pos.y() + widget.height()
+            viewport_height = viewport.height()
+            
+            # Widget is visible if it overlaps viewport rect (with buffer)
+            return widget_bottom >= -buffer_px and widget_pos.y() <= viewport_height + buffer_px
+        except (RuntimeError, AttributeError):
+            return True  # Widget deleted or can't determine → assume visible
     
     # ── Thumb Slot Creation ──────────────────────────────────────
     
@@ -105,9 +257,15 @@ class QueueThumbnailMixin:
                     f"background-color: {Theme.BASE}; padding: 1px; }}"
                     f"QLabel:hover {{ border-color: {Theme.LAVENDER}; }}"
                 )
-                if video_path and self._cached_file_exists(video_path):
+                # ★ Click → in-app preview (image or video)
+                preview_path = video_path if (video_path and self._cached_file_exists(video_path)) else thumbnail_path
+                if preview_path:
                     slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-                    slot.mousePressEvent = lambda e, p=video_path: self._open_video(p) if e.button() == Qt.MouseButton.LeftButton else None
+                    slot.mousePressEvent = lambda e, p=preview_path: self._open_media(p) if e.button() == Qt.MouseButton.LeftButton else None
+                
+                # ★ Hover → zoom tooltip
+                from ui.popups.media_preview import attach_hover_zoom
+                attach_hover_zoom(slot, thumbnail_path)
                 
                 # Per-video right-click context menu (for completed videos)
                 if video_info:
@@ -139,10 +297,10 @@ class QueueThumbnailMixin:
                     }}
                 """)
             
-            # Click to play if video exists
+            # ★ Click → in-app preview
             if video_path and self._cached_file_exists(video_path):
                 slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-                slot.mousePressEvent = lambda e, p=video_path: self._open_video(p) if e.button() == Qt.MouseButton.LeftButton else None
+                slot.mousePressEvent = lambda e, p=video_path: self._open_media(p) if e.button() == Qt.MouseButton.LeftButton else None
             
             return slot
         
@@ -275,7 +433,11 @@ class QueueThumbnailMixin:
         return container
     
     def _update_thumb_slots(self, widget, task_data: dict):
-        """Update thumbnail slots on an existing row widget during refresh."""
+        """Update thumbnail slots on an existing row widget during refresh.
+        
+        ★ Anti-flicker: Uses per-slot fingerprints to skip redundant updates.
+        Only rebuilds slots whose data actually changed.
+        """
         if not hasattr(widget, 'thumb_slots'):
             return
         
@@ -294,6 +456,15 @@ class QueueThumbnailMixin:
                 )
             else:
                 video = output_files[vi] if vi < len(output_files) else None
+            
+            # ★ Anti-flicker: Compute fingerprint — skip update if nothing changed
+            bc_name = vi_info.get('border_color', 'gray') if vi_info else 'gray'
+            us = vi_info.get('upscale_status', '') if vi_info else ''
+            fp = f"{thumb}|{video}|{bc_name}|{us}|{status}|{progress}"
+            if getattr(slot, '_slot_fingerprint', None) == fp:
+                continue  # Nothing changed — skip expensive repaint
+            slot._slot_fingerprint = fp
+            
             new_slot = self._create_thumb_slot(
                 vi, status, progress, thumb, video, video_info=vi_info
             )
@@ -325,16 +496,29 @@ class QueueThumbnailMixin:
             
             if video and self._cached_file_exists(video):
                 slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-                slot.mousePressEvent = lambda e, p=video: self._open_video(p) if e.button() == Qt.MouseButton.LeftButton else None
+                slot.mousePressEvent = lambda e, p=video: self._open_media(p) if e.button() == Qt.MouseButton.LeftButton else None
+            # ★ Hover-zoom on updated thumbnail
+            thumb = thumbnails[vi] if vi < len(thumbnails) else None
+            if thumb and self._cached_file_exists(thumb):
+                from ui.popups.media_preview import attach_hover_zoom
+                attach_hover_zoom(slot, thumb)
             # Copy context menu policy for red thumbnails
             slot.setContextMenuPolicy(new_slot.contextMenuPolicy())
             new_slot.deleteLater()
+
     
-    def _open_video(self, video_path: str):
-        """Open video file using system default player."""
+    def _open_media(self, file_path: str):
+        """Open image/video using in-app MediaPreviewPopup."""
         try:
+            from ui.popups.media_preview import MediaPreviewPopup
+            MediaPreviewPopup.preview(self if hasattr(self, 'window') else None, str(Path(file_path).resolve()))
+        except Exception as e:
+            # Fallback to system player
+            print(f"[Queue] MediaPreview failed, falling back: {e}")
             from PySide6.QtGui import QDesktopServices
             from PySide6.QtCore import QUrl
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(video_path).resolve())))
-        except Exception as e:
-            print(f"[Queue] Failed to open video: {e}")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(file_path).resolve())))
+
+    def _open_video(self, video_path: str):
+        """Legacy alias — redirects to _open_media."""
+        self._open_media(video_path)

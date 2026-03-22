@@ -1279,7 +1279,7 @@ class TabSettings(
             if "AI Model" in self.setting_combos:
                 self.setting_combos["AI Model"].setCurrentText("Veo 3.1 - Fast")
             if "Download Quality" in self.setting_combos:
-                self.setting_combos["Download Quality"].setCurrentText("1080p")
+                self.setting_combos["Download Quality"].setCurrentText("720p")
             if "Image AI Model" in self.setting_combos:
                 self.setting_combos["Image AI Model"].setCurrentText("🔥 Nano Banana Pro")
             if "Image Quality" in self.setting_combos:

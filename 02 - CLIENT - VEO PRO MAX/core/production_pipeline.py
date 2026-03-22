@@ -2043,13 +2043,24 @@ YÊU CẦU:
             )
             
             # Find character images by matching [tag] in prompt text
-            # Uses diacritic-insensitive matching: [Tam] matches character "TẤM"
+            # Uses diacritic-insensitive matching + alias extraction:
+            #   [Milo] matches "Mèo Em (Milo)" via parenthesized alias
+            #   [Tam] matches "TẤM" via diacritic stripping
             import re as _re
             prompt_tags = {t.strip().lower() for t in _re.findall(r'\[([^\]]+)\]', base)}
             scene_char_images = []
             for cr in char_refs:
                 cr_name_stripped = self._strip_diacritics(cr["name"])
-                if any(self._strip_diacritics(tag) == cr_name_stripped for tag in prompt_tags):
+                # Build alias set: full name + parenthesized parts + base name
+                cr_aliases = {cr_name_stripped}
+                parens = _re.findall(r'\(([^)]+)\)', cr["name"])
+                for p in parens:
+                    cr_aliases.add(self._strip_diacritics(p.strip()))
+                # Base name without parenthesized part: "Mèo Em (Milo)" → "Mèo Em"
+                base_name = _re.sub(r'\s*\([^)]*\)\s*', '', cr["name"]).strip()
+                if base_name:
+                    cr_aliases.add(self._strip_diacritics(base_name))
+                if any(self._strip_diacritics(tag) in cr_aliases for tag in prompt_tags):
                     scene_char_images.append(cr["image_path"])
             
             mode = "I2I" if scene_char_images else "T2I"
@@ -2143,6 +2154,12 @@ YÊU CẦU:
         
         output_folder = config.get("output_folder", "")
         
+        # ★ Diagnostic logging
+        log.info(f"[Pipeline] Stage 7: START — {len(scenes)} scenes, output_folder='{output_folder}'")
+        for s in scenes:
+            has_file = os.path.isfile(s.video_path) if s.video_path else False
+            log.info(f"[Pipeline] Stage 7: scene[{s.index}] video_path='{s.video_path}' exists={has_file}")
+        
         # Collect video paths
         clips = []
         missing = []
@@ -2156,20 +2173,64 @@ YÊU CẦU:
         # Queue downloads videos to output folder but scene.video_path may not be set.
         # Scan for files matching {index:03d}_*_720p.mp4 or {index:03d}_*.mp4 pattern.
         if missing and output_folder:
-            import glob
+            import glob, re as _re
+            
+            # ★ FIX: Use project_name from config (same as Stage 6 output folder)
+            project_slug = config.get("project_name", "")
+            if not project_slug:
+                # Fallback: derive from topic (may not match Stage 6 folder)
+                topic_raw_resolve = self.state.topic[:50] or "production"
+                project_slug = _re.sub(r'[<>:"/\\|?*]', '', topic_raw_resolve).replace(" ", "_").strip("._")
+                log.warning(f"[Pipeline] Stage 7: No project_name in config, using fallback: '{project_slug}'")
+            
             video_dirs = [
+                # Project subfolder paths (where Stage 6 actually saves)
+                os.path.join(output_folder, project_slug, "video", "720p"),
+                os.path.join(output_folder, project_slug, "video"),
+                os.path.join(output_folder, project_slug),
+                # Direct paths (legacy/fallback)
                 os.path.join(output_folder, "video", "720p"),
                 os.path.join(output_folder, "video"),
                 output_folder,
             ]
+            
+            # Also scan numbered project folders (e.g. "001 - Project_Name")
+            try:
+                for entry in os.scandir(output_folder):
+                    if entry.is_dir() and project_slug in entry.name:
+                        video_dirs.insert(0, os.path.join(entry.path, "video", "720p"))
+                        video_dirs.insert(1, os.path.join(entry.path, "video"))
+                        video_dirs.insert(2, entry.path)
+            except OSError:
+                pass
+            
+            log.info(f"[Pipeline] Stage 7: {len(missing)} missing scenes, scanning {len(video_dirs)} dirs")
+            
             resolved = []
             for scene_idx in list(missing):
                 found_path = None
+                # Get scene tag for tag-based matching
+                scene_tag = None
+                for s in scenes:
+                    if s.index == scene_idx:
+                        scene_tag = (s.title or "").strip()
+                        break
+                safe_tag = _re.sub(r'[<>:"/\\|?*]', '_', scene_tag) if scene_tag else None
+                
                 for vdir in video_dirs:
                     if not os.path.isdir(vdir):
                         continue
-                    # Try 720p variant first, then any mp4
-                    for pattern in [f"{scene_idx:03d}_*_720p.mp4", f"{scene_idx:03d}_*.mp4"]:
+                    # Try multiple filename patterns
+                    patterns = [
+                        f"{scene_idx:03d}_*_720p.mp4",
+                        f"{scene_idx:03d}_*.mp4",
+                    ]
+                    # Also try scene-tag based pattern (e.g. "Canh_1_*.mp4")
+                    if safe_tag:
+                        patterns.append(f"{safe_tag}*.mp4")
+                        patterns.append(f"*{safe_tag}*.mp4")
+                    
+                    for pattern in patterns:
                         matches = glob.glob(os.path.join(vdir, pattern))
                         if matches:
                             found_path = matches[0]
@@ -2187,6 +2248,8 @@ YÊU CẦU:
                     resolved.append(scene_idx)
                     missing.remove(scene_idx)
                     log.info(f"[Pipeline] Stage 7: Auto-resolved scene {scene_idx} → {found_path}")
+                else:
+                    log.warning(f"[Pipeline] Stage 7: Could NOT resolve scene {scene_idx} (tag='{scene_tag}')")
             
             if resolved:
                 log.info(f"[Pipeline] Stage 7: Auto-resolved {len(resolved)}/{len(resolved)+len(missing)} missing video paths")
@@ -2195,13 +2258,27 @@ YÊU CẦU:
         
         # Generate output path
         import re
-        topic_raw = self.state.topic[:50] or "production"
-        topic_slug = re.sub(r'[<>:"/\\|?*]', '', topic_raw).replace(" ", "_").strip("._")
+        # ★ Use config project_name (consistent with Stage 6 folder)
+        project_name = config.get("project_name", "")
+        if not project_name:
+            topic_raw = self.state.topic[:50] or "production"
+            project_name = re.sub(r'[<>:"/\\|?*]', '', topic_raw).replace(" ", "_").strip("._")
         from datetime import datetime
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_path = os.path.join(output_folder, f"{topic_slug}_{ts}_final.mp4") if output_folder else f"{topic_slug}_{ts}_final.mp4"
+        
+        # ★ FIX: Output final video in project subfolder (same as Stage 6 videos)
+        if output_folder:
+            project_dir = os.path.join(output_folder, project_name)
+            os.makedirs(project_dir, exist_ok=True)
+            final_path = os.path.join(project_dir, f"{project_name}_{ts}_final.mp4")
+        else:
+            final_path = f"{project_name}_{ts}_final.mp4"
         
         self.state.final_video_path = final_path
+        log.info(
+            f"[Pipeline] Stage 7: {len(clips)} clips ready, {len(missing)} missing. "
+            f"Output → {final_path}"
+        )
         
         # ── Execute FFmpeg concat if all clips ready ──
         concat_success = False
@@ -2249,6 +2326,8 @@ YÊU CẦU:
                         cmd,
                         capture_output=True,
                         text=True,
+                        encoding='utf-8',
+                        errors='replace',
                         timeout=300,  # 5 min timeout
                         creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                     )

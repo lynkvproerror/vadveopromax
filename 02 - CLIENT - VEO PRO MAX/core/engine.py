@@ -443,21 +443,21 @@ class AccountSupervisor:
                         )
                     except Exception:
                         pass
-                await asyncio.sleep(15)
+                if await engine._interruptible_sleep(15): return  # Stop-aware
                 await engine._wait_for_recaptcha_ready(account, max_wait=30.0)
         
         elif phase == 1:
             # Soft recovery
             if count <= 2:
                 await engine._do_browser_recovery(account, "supervisor", "soft")
-                await asyncio.sleep(8)
+                if await engine._interruptible_sleep(8): return  # Stop-aware
                 await engine._wait_for_recaptcha_ready(account, max_wait=20.0)
         
         elif phase == 2:
             # Extended soft recovery (NO browser kill — preserves in-flight tasks)
             log.warning(f"🔄 [Supervisor:{self.email}] Phase 2 → extended soft recovery (no kill)")
             await engine._do_browser_recovery(account, "supervisor", "soft")
-            await asyncio.sleep(15)
+            if await engine._interruptible_sleep(15): return  # Stop-aware
             await engine._wait_for_recaptcha_ready(account, max_wait=30.0)
         
         else:  # phase >= 3
@@ -491,16 +491,16 @@ class AccountSupervisor:
                     )
                 except Exception:
                     pass
-            await asyncio.sleep(20)
+            if await engine._interruptible_sleep(20): return  # Stop-aware
         elif freeze_count <= 5:
             # Escalation 3-5: Soft browser recovery
             await engine._do_browser_recovery(account, "supervisor", "soft")
-            await asyncio.sleep(10)
+            if await engine._interruptible_sleep(10): return  # Stop-aware
         else:
             # Escalation 6+: Extended soft recovery (no kill — preserves in-flight tasks)
             log.warning(f"🔄 [Supervisor:{self.email}] Tab freeze #{freeze_count} → extended soft recovery")
             await engine._do_browser_recovery(account, "supervisor", "soft")
-            await asyncio.sleep(20)
+            if await engine._interruptible_sleep(20): return  # Stop-aware
         
         await self._recaptcha_gate()
     
@@ -517,6 +517,10 @@ class AccountSupervisor:
             return
         
         for attempt in range(20):  # Max 60s
+            # ★ Fix 3: Check stop event each iteration
+            if self.engine._stop_event.is_set() or not self._running:
+                log.info(f"[Supervisor:{self.email}] reCAPTCHA gate interrupted by stop")
+                return
             try:
                 ready = await bridge.check_recaptcha_ready(self.email)
                 if ready:
@@ -525,7 +529,7 @@ class AccountSupervisor:
                 log.info(f"[Supervisor:{self.email}] ⏳ reCAPTCHA gate CLOSED (attempt {attempt+1})")
             except Exception as e:
                 log.warning(f"[Supervisor:{self.email}] reCAPTCHA check error: {e}")
-            await asyncio.sleep(3)
+            if await self.engine._interruptible_sleep(3): return  # Stop-aware
         
         log.warning(f"[Supervisor:{self.email}] reCAPTCHA gate timeout (60s)")
 
@@ -586,12 +590,13 @@ class Engine:
         self._browser_recovery_locks: Dict[str, asyncio.Lock] = {}   # Per-account browser recovery dedup
         self._browser_recovery_epoch: Dict[str, int] = {}             # Tracks recovery generation
         self._account_rate_locks: Dict[str, asyncio.Lock] = {}  # Bug 13: per-account rate limiter
-        # ── RC2 fix: Global cross-account submit throttle ──
-        # Google detects coordinated submissions from same IP across accounts.
-        # This lock ensures minimum 10s gap between ANY two submits.
-        self._global_submit_lock = asyncio.Lock()
-        self._global_last_submit_ts: float = 0.0
-        self._GLOBAL_MIN_SUBMIT_GAP: float = 10.0  # seconds between any two submits (video)
+        # ── RC2 fix: Per-account submit throttle ──
+        # Anti-detect: minimum gap between submits on the SAME account.
+        # Different accounts submit independently (no cross-account gate).
+        # Google's rate limiting is per-account/per-cookie, not per-IP.
+        self._per_account_submit_locks: Dict[str, asyncio.Lock] = {}
+        self._per_account_last_submit_ts: Dict[str, float] = {}
+        self._GLOBAL_MIN_SUBMIT_GAP: float = 10.0  # seconds between submits (same account, video)
         self._GLOBAL_MIN_SUBMIT_GAP_T2I: float = 3.0  # T2I images are lighter — smaller gap OK
         # (Removed: _submitted_tasks queue — scheduler now owns full lifecycle directly)
         # Risk 7 fix: Max 2 concurrent API calls per account (any type: submit, poll, upload, upscale)
@@ -1194,6 +1199,9 @@ class Engine:
         """Clear cooldown on successful API call (reset backoff counter)."""
         self._account_cooldowns.pop(email, None)
         self._account_cooldown_backoff.pop(email, None)
+        # Also reset 429 counter on success
+        if hasattr(self, '_account_429_count'):
+            self._account_429_count.pop(email, None)
         # Cancel timer and wake waiters
         old_timer = self._cooldown_timers.pop(email, None)
         if old_timer:
@@ -1734,6 +1742,30 @@ class Engine:
         
         log.info(f"✅ [CircuitBreaker] {email}: CLOSED — extension healthy, workers resuming.")
         
+        # ★ Reset AccountManager reCAPTCHA circuit-breaker too
+        # Without this, stale _recaptcha_consecutive_failures (up to 8)
+        # causes 120s backoff in refresh_recaptcha() even with healthy Chrome.
+        account = next(
+            (a for a in self._account_manager._accounts if a.email == email),
+            None,
+        )
+        if account:
+            old_rc_fails = getattr(account, '_recaptcha_consecutive_failures', 0)
+            if old_rc_fails > 0:
+                account._recaptcha_consecutive_failures = 0
+                log.info(
+                    f"✅ [CircuitBreaker] {email}: Reset reCAPTCHA "
+                    f"consecutive failures {old_rc_fails} → 0"
+                )
+        
+        # ★ Reset cooldown backoff — fresh Chrome should start from 30s, not 180s
+        self.clear_account_cooldown(email)
+        
+        # ★ Reset recovery phase state machine — fresh Chrome = phase 0
+        self._account_recovery_phase[email] = 0
+        self._account_phase_403_count[email] = 0
+        self._account_403_last_epoch[email] = -1
+        
         # DD4: Clear abort signal → foreman can resume
         supervisor = self._supervisors.get(email)
         if supervisor:
@@ -2025,7 +2057,8 @@ class Engine:
                                                     f"✅ [CircuitBreaker] {email}: hard navigation sent, "
                                                     f"waiting 25s for reCAPTCHA widget..."
                                                 )
-                                                await asyncio.sleep(25)
+                                                if await self._interruptible_sleep(25):
+                                                    return  # Stop-aware
                                                 self._recaptcha_unhealthy_since.pop(email, None)
                                         except Exception as e:
                                             log.error(
@@ -3613,6 +3646,10 @@ class Engine:
                             worker_count += extra
                         else:
                             # Not enough capacity — requeue task, wait with backoff
+                            # ★ BUG-B19 fix: notify=False prevents thundering herd.
+                            # Without this, requeue_task() wakes ALL idle foremen
+                            # who each grab the same task, fail capacity, requeue
+                            # → infinite READY→RUNNING loop at ~10x/sec.
                             # Throttle log: only emit once per 30s per task to avoid spam
                             _cap_key = f"_cap_log_{task.id}"
                             _now = time.monotonic()
@@ -3624,11 +3661,12 @@ class Engine:
                                     f"output_count={output_count} "
                                     f"(need {output_count}, have {account.session.available_workers + 1})"
                                 )
-                            self._dispatcher.requeue_task(task)
+                            self._dispatcher.requeue_task(task, notify=False)
                             account.release_workers(worker_count)
                             worker_count = 0
                             # 15s base + random jitter prevents all workers retrying simultaneously
-                            await asyncio.sleep(15.0 + random.uniform(0, 5.0))
+                            if await self._interruptible_sleep(15.0 + random.uniform(0, 5.0)):
+                                continue  # Stop-aware — re-check loop condition
                             continue
                     
                     # H3 fix: Store worker_count on task for proper cleanup
@@ -3709,14 +3747,24 @@ class Engine:
                             f"RESUMING from stage {task.stage.value} → concurrent pipeline"
                         )
                         task.state = TaskState.WAITING_POLL
-                        # ★ Fire-and-forget: pipeline runs concurrently
+                        # ★ Partial worker release: free extra slots, keep 1 as pipeline slot
+                        # Each task acquired output_count workers (e.g. 4). Pipeline only needs
+                        # 1 slot to track concurrency. Release (output_count-1) so foremen
+                        # can pick new tasks. Pipeline finally releases the remaining 1.
+                        # max_workers=20 → max 20 concurrent pipelines (not 5).
+                        _release = worker_count - 1
+                        if _release > 0:
+                            account.release_workers(_release)
+                            _cap_evt = self._workers_available.get(account.email)
+                            if _cap_evt:
+                                _cap_evt.set()  # Wake foremen waiting for capacity
                         t = asyncio.create_task(
-                            self._foreman_dispatch_workers(task, account, worker_count,
+                            self._foreman_dispatch_workers(task, account, 1,
                                                           supervisor=supervisor)
                         )
                         active_pipelines.add(t)
                         t.add_done_callback(active_pipelines.discard)
-                        worker_count = 0  # Ownership transferred to pipeline
+                        worker_count = 0
                         continue
                     
                     # Bug 13: Per-account rate limiter — serialize requests per account
@@ -3960,32 +4008,35 @@ class Engine:
                                 result = None  # No result — task was never attempted
                                 break  # Exit retry loop — task is safely back in queue
                             
-                            # ── RC2: Global cross-account submit gate ──
-                            # Wait for minimum gap since LAST submit (any account).
-                            # Prevents coordinated bot detection across accounts on same IP.
-                            async with self._global_submit_lock:
+                            # ── RC2: Per-account submit gate ──
+                            # Minimum gap between submits on SAME account (anti-detect).
+                            # Different accounts submit independently.
+                            _acct_lock = self._per_account_submit_locks.setdefault(
+                                account.email, asyncio.Lock()
+                            )
+                            async with _acct_lock:
                                 now = time.time()
-                                elapsed = now - self._global_last_submit_ts
+                                elapsed = now - self._per_account_last_submit_ts.get(account.email, 0)
                                 gap = self._GLOBAL_MIN_SUBMIT_GAP
                                 if elapsed < gap:
                                     wait_time = gap - elapsed
                                     log.info(
-                                        f"[GlobalGate:{account.email}] Waiting {wait_time:.1f}s "
-                                        f"(global inter-submit spacing)"
+                                        f"[SubmitGate:{account.email}] Waiting {wait_time:.1f}s "
+                                        f"(per-account inter-submit spacing)"
                                     )
                                     await asyncio.sleep(wait_time)
-                                # Re-check cooldown after global wait
+                                # Re-check cooldown after wait
                                 if self.is_account_on_cooldown(account.email):
                                     log.info(
                                         f"[Foreman:{account.email}] Task {task.id}: cooldown detected "
-                                        f"after global gate — requeueing"
+                                        f"after submit gate — requeueing"
                                     )
                                     self._dispatcher.requeue_task(task)
                                     account.release_workers(worker_count)
                                     worker_count = 0
                                     result = None
                                     break
-                                self._global_last_submit_ts = time.time()
+                                self._per_account_last_submit_ts[account.email] = time.time()
                             
                             # Step 6: Anti-Detect Spam — adaptive delay (SERIALIZED per account)
                             if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else getattr(self, '_anti_detect_enabled', True):
@@ -4309,6 +4360,67 @@ class Engine:
                             # Old: 2, 4, 8, 16, 30  →  New: 5, 10, 20, 40, 60
                             backoff = min(5 * (2 ** attempt), 60)
                             
+                            # ★ Fix 2B: Extended pause on persistent 429 (quota exhaustion)
+                            error_str = result.error or ""
+                            if "429" in error_str or "exhausted" in error_str.lower():
+                                # ★ Per-ACCOUNT counter (not per-task) — ensures escalation
+                                # works even when different tasks each hit 429 independently.
+                                if not hasattr(self, '_account_429_count'):
+                                    self._account_429_count = {}
+                                consecutive_429 = self._account_429_count.get(account.email, 0) + 1
+                                self._account_429_count[account.email] = consecutive_429
+                                
+                                # ★ Soft 429: first hit = per-task backoff only, no account cooldown.
+                                # Other foremen can still try different prompts — sometimes
+                                # the API rejects one request but accepts the next.
+                                # Account cooldown only on consecutive≥2 (quota truly exhausted).
+                                if consecutive_429 >= 2:
+                                    # Quota confirmed exhausted — block all foremen
+                                    cooldown_secs = min(30 * consecutive_429, 120)  # 60s, 90s, 120s...
+                                    self.set_account_cooldown(
+                                        account.email,
+                                        f"429/quota_exhausted (consecutive={consecutive_429})"
+                                    )
+                                    log.warning(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"429 quota exhausted x{consecutive_429} → account cooldown {cooldown_secs}s"
+                                    )
+                                else:
+                                    # First 429 — just this task backs off, others can try
+                                    backoff = 10  # Short backoff for first 429
+                                    log.info(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"429 (first hit) → per-task backoff {backoff}s, "
+                                        f"other prompts can still submit"
+                                    )
+                                
+                                if consecutive_429 >= 3:
+                                    backoff = 120  # 2min for quota reset
+                                    # ★ BUG-B19 fix: Release workers during extended 429 pause.
+                                    # Without this, 5+ foremen sleeping 120s each hold workers,
+                                    # starving new tasks of capacity → triggers thundering herd.
+                                    if worker_count > 0:
+                                        log.info(
+                                            f"[Foreman:{account.email}] Task {task.id}: "
+                                            f"releasing {worker_count} worker(s) for 429 extended pause"
+                                        )
+                                        account.release_workers(worker_count)
+                                        worker_count = 0
+                                    # Requeue task so another foreman can try after quota resets
+                                    self._dispatcher.requeue_task(task, notify=False)
+                                    log.warning(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"{consecutive_429}x consecutive 429 → requeued + pause {backoff}s"
+                                    )
+                                    # Sleep for quota reset, then loop back (task already requeued)
+                                    await self._interruptible_sleep(backoff)
+                                    result = None  # Signal: task was requeued
+                                    break  # Exit retry loop — task is back in queue
+                            else:
+                                # Non-429 error → reset account 429 counter
+                                if hasattr(self, '_account_429_count'):
+                                    self._account_429_count.pop(account.email, None)
+                            
                             # ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
                             # TIERED 403 RECOVERY STATE MACHINE
                             # Phase 0: 3x 403 → kill browser + restart
@@ -4498,14 +4610,24 @@ class Engine:
                                 f"→ concurrent pipeline (first={result.operation_name[:12]}...)"
                             )
                             # ★ CONCURRENT PIPELINE: fire-and-forget
-                            # Foreman immediately loops back to pick next task
+                            # ★ Partial worker release: keep 1 slot, release the rest
+                            # Submit done — pipeline only polls/downloads/upscales.
+                            # Release (output_count-1) workers so foreman can pick new tasks.
+                            # Pipeline finally releases the remaining 1 worker.
+                            # max_workers=20 → max 20 concurrent pipelines (not 5).
+                            _release = worker_count - 1
+                            if _release > 0:
+                                account.release_workers(_release)
+                                _cap_evt = self._workers_available.get(account.email)
+                                if _cap_evt:
+                                    _cap_evt.set()  # Wake foremen waiting for capacity
                             t = asyncio.create_task(
-                                self._foreman_dispatch_workers(task, account, worker_count,
+                                self._foreman_dispatch_workers(task, account, 1,
                                                               supervisor=supervisor)
                             )
                             active_pipelines.add(t)
                             t.add_done_callback(active_pipelines.discard)
-                            worker_count = 0  # Ownership transferred to pipeline
+                            worker_count = 0
                         else:
                             # Sync operation (T2I/I2I) — launch download+upscale pipeline
                             if result.output_uris:
@@ -4764,6 +4886,15 @@ class Engine:
                 _cap_evt = self._workers_available.get(account.email)
                 if _cap_evt:
                     _cap_evt.set()
+            # ★ Fix M1: Force prewarm for NEXT task by backdating last_submit.
+            # Video pipeline took minutes — session context (reCAPTCHA,
+            # headers, cookies) has gone stale. Setting to 0 guarantees
+            # _maybe_prewarm() triggers before the next submit.
+            self._last_successful_submit[account.email] = 0
+            log.info(
+                f"[Fix-M1:{account.email}] Task {task.id}: pipeline done "
+                f"— forced prewarm for next task"
+            )
 
     async def _video_worker(
         self, task: Task, account: AccountManager,
@@ -4796,6 +4927,56 @@ class Engine:
 
             if not fife_url:
                 error_msg = poll_error or "Poll failed or timeout"
+                
+                # ★ Fix 2A: Auto-retry for server-side VIDEO_GENERATION_TIMED_OUT
+                # Re-submit via force_retry_video instead of marking FAILED immediately
+                timeout_retry_key = f'_timeout_retry_{video_index}'
+                timeout_retries = getattr(task, timeout_retry_key, 0)
+                if (error_msg.startswith("RETRYABLE_TIMEOUT:") 
+                        and timeout_retries < 2
+                        and not self._stop_event.is_set()):
+                    actual_error = error_msg.split(":", 1)[1]
+                    setattr(task, timeout_retry_key, timeout_retries + 1)
+                    log.warning(
+                        f"{log_prefix} ⏱️ SERVER TIMEOUT → auto-retry "
+                        f"#{timeout_retries + 1}/2: {actual_error}"
+                    )
+                    # Wait 30s before re-submit (server cooldown)
+                    await asyncio.sleep(30)
+                    if self._stop_event.is_set():
+                        error_msg = "Stopped during timeout retry wait"
+                    else:
+                        retried = self._dispatcher.force_retry_video(task.id, video_index)
+                        if retried:
+                            # ★ BUG-2 FIX: Propagate timeout retry counter to replacement task
+                            # Without this, each new task starts with timeout_retries=0
+                            # → infinite retry chain (2 retries × N levels = unlimited)
+                            for rep_id, (oid, vidx) in self._dispatcher._replace_target_map.items():
+                                if oid == task.id and vidx == video_index:
+                                    rep_task = self._dispatcher._all_tasks.get(rep_id)
+                                    if rep_task:
+                                        setattr(rep_task, '_timeout_retry_0', timeout_retries + 1)
+                                    break
+                            log.info(
+                                f"{log_prefix} ♻️ force_retry_video issued for timeout retry "
+                                f"#{timeout_retries + 1}/2"
+                            )
+                            # Signal result as timeout_retry — finalize will handle
+                            results_dict[video_index] = WorkerVideoResult(
+                                index=video_index, op_name=op_name,
+                                quality="timeout_retry",
+                                error=f"auto-retry #{timeout_retries + 1}/2 → re-queued",
+                            )
+                            return
+                        else:
+                            log.warning(f"{log_prefix} force_retry_video failed — marking as failed")
+                            error_msg = actual_error  # Use original error
+                elif error_msg.startswith("RETRYABLE_TIMEOUT:"):
+                    # Strip prefix for final error message (retries exhausted)
+                    error_msg = error_msg.split(":", 1)[1]
+                    if timeout_retries >= 2:
+                        error_msg += f" (after {timeout_retries} auto-retries)"
+                
                 log.warning(f"{log_prefix} Poll returned no result (failed/timeout): {error_msg}")
                 task.video_outputs[video_index].quality = "failed"
                 results_dict[video_index] = WorkerVideoResult(
@@ -4818,6 +4999,9 @@ class Engine:
             task.video_outputs[video_index].media_id = media_id
             task.video_outputs[video_index].quality = "downloading"
             log.info(f"{log_prefix} ✅ SUCCESSFUL → downloading")
+
+            # ★ Fix M2: Session health check between poll → download
+            await self._ensure_session_health(account, "post-poll")
 
             # ── Phase 2: Download 720p ──
             local_720p = await self._download_single(
@@ -4843,6 +5027,9 @@ class Engine:
             )
             if thumb_path:
                 task.video_outputs[video_index].thumbnail_path = thumb_path
+
+            # ★ Fix M2: Session health check between download → upscale
+            await self._ensure_session_health(account, "post-download")
 
             # ── Phase 3: Upscale (if needed) ──
             local_final = local_720p
@@ -4903,6 +5090,47 @@ class Engine:
                 quality="failed", error=str(e),
             )
 
+    async def _ensure_session_health(self, account, phase: str):
+        """Fix M2: Lightweight session health check between video pipeline phases.
+        
+        Verifies extension bridge connectivity and refreshes stale headers.
+        Called at poll→download and download→upscale boundaries to prevent
+        session rot during long-running video tasks.
+        """
+        email = account.email
+        bridge = getattr(account, 'extension_bridge', None)
+        
+        # 1. Check extension bridge alive
+        if bridge and not bridge.is_connected(email):
+            log.warning(f"[SessionHealth:{email}] Bridge disconnected at {phase}")
+            for _ in range(3):
+                await asyncio.sleep(2)
+                if bridge.is_connected(email):
+                    log.info(f"[SessionHealth:{email}] Bridge reconnected at {phase}")
+                    break
+            else:
+                log.warning(f"[SessionHealth:{email}] Bridge still disconnected after 6s")
+                return  # Can't do more without bridge
+        
+        # 2. Refresh headers if stale (>5min since last refresh)
+        if bridge and bridge.is_connected(email):
+            last_hdr = getattr(bridge, f'_last_header_ts_{email}', 0)
+            if time.time() - last_hdr > 300:  # 5 min
+                try:
+                    await bridge.refresh_headers_lightweight(email, timeout=5)
+                    setattr(bridge, f'_last_header_ts_{email}', time.time())
+                    log.info(f"[SessionHealth:{email}] Headers refreshed at {phase}")
+                except Exception as e:
+                    log.debug(f"[SessionHealth:{email}] Header refresh failed: {e}")
+        
+        # 3. Refresh access token if expired or close to expiry
+        if account.session.is_token_expired:
+            try:
+                await account.refresh_access_token()
+                log.info(f"[SessionHealth:{email}] Token refreshed at {phase}")
+            except Exception as e:
+                log.debug(f"[SessionHealth:{email}] Token refresh failed: {e}")
+
     async def _worker_poll_op(
         self, task: Task, account: AccountManager,
         op_name: str, scene_id: str, video_index: int,
@@ -4920,6 +5148,7 @@ class Engine:
         max_poll_time = AppConstants.MAX_POLL_TIME
         status = "MEDIA_GENERATION_STATUS_PENDING"
         poll_count = 0
+        poll_403_count = 0  # Fix M3: Track consecutive 403 during poll
 
         while elapsed < max_poll_time and not self._stop_event.is_set():
             # 2-phase poll interval
@@ -4958,6 +5187,20 @@ class Engine:
                 if not response.success:
                     if response.response_code == 401:
                         await account.refresh_access_token()
+                    elif response.response_code == 403:
+                        # ★ Fix M3: 403 during poll = session corruption
+                        poll_403_count += 1
+                        log.warning(
+                            f"{log_prefix} Poll 403 #{poll_403_count}: {response.error}"
+                        )
+                        if poll_403_count >= 3:
+                            log.error(
+                                f"{log_prefix} 3x consecutive 403 during poll "
+                                f"— session degraded, aborting"
+                            )
+                            return None, None, "Session degraded (3x 403 during poll)"
+                        # Try lightweight session recovery
+                        await self._ensure_session_health(account, "poll-403")
                     else:
                         log.warning(f"{log_prefix} Poll failed: {response.error}")
                     continue
@@ -4979,6 +5222,9 @@ class Engine:
                 elif op_status == "MEDIA_GENERATION_STATUS_FAILED":
                     error = op.get("operation", {}).get("error", {}).get("message", "unknown")
                     log.warning(f"{log_prefix} Op FAILED: {error}")
+                    # Signal retryable server-side timeout with prefix
+                    if "TIMED_OUT" in error.upper():
+                        return None, None, f"RETRYABLE_TIMEOUT:{error}"
                     return None, None, error
 
                 else:
@@ -5202,6 +5448,9 @@ class Engine:
                     f"in {delay}s"
                 )
                 await asyncio.sleep(delay)
+                # ★ Fix 3: Exit if engine stopping during retry delay
+                if self._stop_event.is_set():
+                    return
                 # Reset operation state for fresh submit
                 task.operation_names.clear()
                 task.stage = TaskStage.INIT
@@ -5448,10 +5697,10 @@ class Engine:
                 f"(active={self._t2i_active_outputs.get(account.email, 0)})"
             )
             
-            # ★ BUG FIX: T2I multi-image loop
-            # F12 verified: website sends 1 HTTP request per image, NOT all in batch.
-            # All images share the same batchId + sessionId.
-            # We loop output_count times, submitting 1 image per API call.
+            # ★ Fix G: CONCURRENT T2I submission
+            # F12 verified: website fires all 4 requests simultaneously (~0ms apart).
+            # Each HTTP request takes ~30s for server response.
+            # Sequential: 4 × 30s = 120s. Concurrent: max(30s) = 30s.
             all_output_uris = []
             all_media_ids = []
             
@@ -5463,280 +5712,390 @@ class Engine:
             
             base_seed = task.seed if task.seed is not None else None
             
-            for img_idx in range(_oc):
-                if self._stop_event.is_set():
-                    break
-                if task.state in (TaskState.CANCELLED, TaskState.FAILED):
+            # ── Phase 1: Gate + Lock (ONCE for entire batch) ──
+            gate_ok = await self._pre_submit_gate(account, task, 0)
+            if not gate_ok:
+                self._dispatcher.requeue_task(task)
+                account.release_workers(worker_count)
+                worker_count = 0
+                return
+            
+            async with self._account_rate_locks[account.email]:
+                if self.is_account_on_cooldown(account.email):
                     log.info(
-                        f"[T2I-Worker:{account.email}] Task {task.id}: "
-                        f"cancelled (state={task.state.value}) — aborting at image {img_idx+1}/{_oc}"
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"cooldown inside rate lock — requeuing"
                     )
-                    break
-                
-                # Per-image progress: e.g. "📤 Submitting image 2/4"
-                _img_progress_base = int(10 + (img_idx / _oc) * 60)
-                self._dispatcher.update_progress(
-                    task.id, _img_progress_base,
-                    f"📤 Submitting image {img_idx+1}/{_oc}..."
+                    self._dispatcher.requeue_task(task)
+                    account.release_workers(worker_count)
+                    worker_count = 0
+                    return
+                _acct_lock = self._per_account_submit_locks.setdefault(
+                    account.email, asyncio.Lock()
                 )
+                async with _acct_lock:
+                    now = time.time()
+                    elapsed = now - self._per_account_last_submit_ts.get(account.email, 0)
+                    gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I
+                    if elapsed < gap:
+                        await asyncio.sleep(gap - elapsed)
+                    if self.is_account_on_cooldown(account.email):
+                        self._dispatcher.requeue_task(task)
+                        account.release_workers(worker_count)
+                        worker_count = 0
+                        return
+                    self._per_account_last_submit_ts[account.email] = time.time()
                 
-                # Per-image seed: unique seed per image in batch
+                _settings = self._settings
+                _anti_detect = getattr(_settings, 'anti_detect_enabled', True) if _settings else True
+                if _anti_detect:
+                    log.info(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"adaptive delay before batch submit ({_oc} images)"
+                    )
+                    await self._burst_controller_t2i.wait(account.email)
+            
+            # ── Phase 2: Build all request bodies upfront ──
+            ext_bridge = getattr(account, 'extension_bridge', None)
+            if not ext_bridge or not ext_bridge.is_connected(account.email):
+                log.warning(
+                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                    f"extension not connected — requeuing"
+                )
+                self._dispatcher.requeue_task(task)
+                account.release_workers(worker_count)
+                worker_count = 0
+                return
+            
+            from config.constants import get_timeout_tier
+            tier = get_timeout_tier(0)
+            bridge_timeout = tier.get('t2i_bridge_timeout', tier['bridge_timeout'])
+            
+            request_bodies = []
+            for img_idx in range(_oc):
                 img_seed = (base_seed + img_idx) if base_seed is not None else None
+                endpoint_key, body = self._api_client.build_request_body(
+                    workflow_type=task.workflow_type,
+                    prompt=task.prompt or "",
+                    project_id=account.project_id or "",
+                    aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
+                    model=task.model or "GEM_PIX_2",
+                    output_count=1,
+                    seed=img_seed,
+                    paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                    image_uris=task.image_uris,
+                    batch_id=shared_batch_id,
+                    session_id=shared_session_id,
+                )
+                request_bodies.append((img_idx, endpoint_key, body))
+            
+            # ── Phase 3: Fire ALL requests concurrently ──
+            # ★ Fix H2: simulate_activity ONCE for entire batch (not per-image)
+            try:
+                await ext_bridge.simulate_activity(account.email, timeout=3.0)
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
+            
+            self._dispatcher.update_progress(
+                task.id, 30,
+                f"📤 Submitting {_oc} images concurrently..."
+            )
+            
+            async def _submit_one(img_idx: int, endpoint_key: str, body: dict):
+                """Submit a single image and return (img_idx, result_or_error)."""
+                try:
+                    log.info(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"📦 submitting T2I (image {img_idx+1}/{_oc})"
+                    )
+                    result = await asyncio.wait_for(
+                        ext_bridge.submit_prompt(
+                            email=account.email,
+                            endpoint=endpoint_key,
+                            body=body,
+                            needs_recaptcha=True,
+                            attempt=0,
+                            timeout=bridge_timeout,
+                            lock_free=True,  # ★ Fix H2: batch already gated
+                        ),
+                        timeout=bridge_timeout + 10,
+                    )
+                    return (img_idx, result, None)
+                except Exception as exc:
+                    return (img_idx, None, exc)
+            
+            log.info(
+                f"[T2I-BG:{account.email}] Task {task.id}: "
+                f"🚀 firing {_oc} concurrent submit requests"
+            )
+            
+            concurrent_results = await asyncio.gather(
+                *[_submit_one(idx, ep, bd) for idx, ep, bd in request_bodies],
+                return_exceptions=False,
+            )
+            
+            # ★ Fix N4: Yield to event loop after heavy gather completes —
+            # lets UI updates process before download phase starts.
+            await asyncio.sleep(0)
+            
+            # ── Phase 4: Parse all results ──
+            failed_indices = []  # Images that need retry
+            consecutive_400_count = 0  # ★ Fix I: track transient 400s
+            for img_idx, ext_result, exc in concurrent_results:
+                if exc:
+                    log.warning(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"image {img_idx+1}/{_oc} exception: "
+                        f"{type(exc).__name__}: {exc}"  # ★ Fix H3
+                    )
+                    failed_indices.append(img_idx)
+                    continue
                 
-                # ═══ Inner retry loop for each single image ═══
-                _single_success = False
-                for attempt in range(max_retries + 1):
+                if ext_result and ext_result.get('success'):
+                    data = ext_result.get('data', {})
+                    img_uris = []
+                    img_mids = []
+                    
+                    if 'media' in data:
+                        for item in data['media']:
+                            gen_img = (item.get('image') or {}).get('generatedImage', {})
+                            fife_url = gen_img.get('fifeUrl', '')
+                            mid = item.get('mediaId', '') or item.get('name', '')
+                            if fife_url:
+                                img_uris.append(fife_url)
+                                img_mids.append(mid)
+                        log.info(
+                            f"[T2I-BG:{account.email}] "
+                            f"[T2I-Parse] image {img_idx+1}/{_oc}: "
+                            f"{len(img_uris)} image(s), "
+                            f"mediaIds={[m[:20] for m in img_mids]}"
+                        )
+                    
+                    self._burst_controller_t2i.record_success(account.email)
+                    self.record_circuit_success(account.email)
+                    
+                    if img_uris:
+                        all_output_uris.extend(img_uris)
+                        all_media_ids.extend(img_mids)
+                    else:
+                        log.warning(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"0 output URIs in response (image {img_idx+1}/{_oc})"
+                        )
+                
+                elif ext_result:
+                    error = ext_result.get('error', 'unknown')
+                    status_code = ext_result.get('status', 0)
+                    error_lower = (error or "").lower()
+                    
+                    log.warning(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"image {img_idx+1}/{_oc} failed: {error}"
+                    )
+                    
+                    if "403" in str(error) or "recaptcha" in error_lower:
+                        self._burst_controller_t2i.record_error(
+                            account.email, status_code or 403
+                        )
+                        self.record_circuit_403(account.email)
+                        self.set_account_cooldown(
+                            account.email, f"403/{error}"
+                        )
+                    
+                    if status_code == 400 or "invalid argument" in error_lower:
+                        consecutive_400_count += 1  # ★ Fix I
+                        log.warning(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"HTTP 400 — will retry "
+                            f"(count={consecutive_400_count}/3, "
+                            f"model={task.model}, ar={task.aspect_ratio})"
+                        )
+                        if consecutive_400_count >= 3:
+                            log.error(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"3+ consecutive 400s — failing task "
+                                f"(model={task.model}, ar={task.aspect_ratio})"
+                            )
+                            self._dispatcher.fail_task(
+                                task.id, f"Invalid request: {error[:120]}"
+                            )
+                            return
+                        failed_indices.append(img_idx)
+                        continue
+                    
+                    failed_indices.append(img_idx)
+                else:
+                    log.warning(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"no response from extension (image {img_idx+1}/{_oc})"
+                    )
+                    failed_indices.append(img_idx)
+            
+            # ── Phase 5: Sequential retry for failed images ──
+            if failed_indices:
+                log.info(
+                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                    f"{len(failed_indices)}/{_oc} images failed — retrying sequentially"
+                )
+                for img_idx in failed_indices:
                     if self._stop_event.is_set():
                         break
                     if task.state in (TaskState.CANCELLED, TaskState.FAILED):
                         break
                     
-                    # ★ Layer 4+5 gate: check BEFORE each retry (skip attempt 0)
-                    if attempt > 0:
+                    img_seed = (base_seed + img_idx) if base_seed is not None else None
+                    _retry_success = False
+                    
+                    for attempt in range(1, max_retries + 1):
+                        if self._stop_event.is_set():
+                            break
+                        
                         await self.wait_for_cooldown(account.email)
                         await self._wait_for_circuit(account.email)
-                        await self.wait_for_cooldown(account.email)
-                    
-                    # ── Pre-Submit Gate: validate xcd + reCAPTCHA ──
-                    gate_ok = await self._pre_submit_gate(account, task, attempt)
-                    if not gate_ok:
-                        self._dispatcher.requeue_task(task)
-                        account.release_workers(worker_count)
-                        worker_count = 0
-                        return
-                    
-                    # ═══ Sequential submit (under rate lock) ═══
-                    async with self._account_rate_locks[account.email]:
-                        # Cooldown check inside rate lock
-                        if self.is_account_on_cooldown(account.email):
-                            log.info(
-                                f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"cooldown inside rate lock — requeuing"
-                            )
+                        
+                        gate_ok = await self._pre_submit_gate(account, task, attempt)
+                        if not gate_ok:
                             self._dispatcher.requeue_task(task)
                             account.release_workers(worker_count)
                             worker_count = 0
                             return
                         
-                        # Global cross-account submit gate
-                        async with self._global_submit_lock:
-                            now = time.time()
-                            elapsed = now - self._global_last_submit_ts
-                            gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I
-                            if elapsed < gap:
-                                await asyncio.sleep(gap - elapsed)
+                        async with self._account_rate_locks[account.email]:
                             if self.is_account_on_cooldown(account.email):
                                 self._dispatcher.requeue_task(task)
                                 account.release_workers(worker_count)
                                 worker_count = 0
                                 return
-                            self._global_last_submit_ts = time.time()
+                            _acct_lock = self._per_account_submit_locks.setdefault(
+                                account.email, asyncio.Lock()
+                            )
+                            async with _acct_lock:
+                                now = time.time()
+                                elapsed = now - self._per_account_last_submit_ts.get(account.email, 0)
+                                gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I
+                                if elapsed < gap:
+                                    await asyncio.sleep(gap - elapsed)
+                                self._per_account_last_submit_ts[account.email] = time.time()
+                            await self._burst_controller_t2i.wait(account.email)
                         
-                        # Anti-detect burst delay
-                        _settings = self._settings
-                        if getattr(_settings, 'anti_detect_enabled', True) if _settings else True:
+                        try:
+                            endpoint_key_r, body_r = self._api_client.build_request_body(
+                                workflow_type=task.workflow_type,
+                                prompt=task.prompt or "",
+                                project_id=account.project_id or "",
+                                aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
+                                model=task.model or "GEM_PIX_2",
+                                output_count=1,
+                                seed=img_seed,
+                                paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                                image_uris=task.image_uris,
+                                batch_id=shared_batch_id,
+                                session_id=shared_session_id,
+                            )
+                            
+                            tier_r = get_timeout_tier(attempt)
+                            bt_r = tier_r.get('t2i_bridge_timeout', tier_r['bridge_timeout'])
+                            
                             log.info(
                                 f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"adaptive delay → submit attempt {attempt+1}/{max_retries+1} "
-                                f"(image {img_idx+1}/{_oc})"
+                                f"📦 retry #{attempt} image {img_idx+1}/{_oc}"
                             )
-                            await self._burst_controller_t2i.wait(account.email)
-                    
-                    # ═══ OUTSIDE rate lock: submit + parse ═══
-                    try:
-                        ext_bridge = getattr(account, 'extension_bridge', None)
-                        if not ext_bridge or not ext_bridge.is_connected(account.email):
-                            log.warning(
-                                f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"extension not connected — retrying..."
+                            
+                            ext_result_r = await asyncio.wait_for(
+                                ext_bridge.submit_prompt(
+                                    email=account.email,
+                                    endpoint=endpoint_key_r,
+                                    body=body_r,
+                                    needs_recaptcha=True,
+                                    attempt=attempt,
+                                    timeout=bt_r,
+                                ),
+                                timeout=bt_r + 10,
                             )
-                            continue
-                        
-                        _wt_sub = (task.workflow_type or "").upper()
-                        
-                        # Cooldown gate
-                        if self.is_account_on_cooldown(account.email):
-                            self._dispatcher.update_progress(
-                                task.id, _img_progress_base, "⏳ Account cooldown..."
-                            )
-                            await self.wait_for_cooldown(account.email)
-                        
-                        self._dispatcher.update_progress(
-                            task.id, _img_progress_base + 5,
-                            f"📤 Submitting image {img_idx+1}/{_oc}..."
-                        )
-                        
-                        # ★ Build request for 1 image (F12: website sends 1 per HTTP call)
-                        endpoint_key, body = self._api_client.build_request_body(
-                            workflow_type=task.workflow_type,
-                            prompt=task.prompt or "",
-                            project_id=account.project_id or "",
-                            aspect_ratio=task.aspect_ratio or "IMAGE_ASPECT_RATIO_LANDSCAPE",
-                            model=task.model or "GEM_PIX_2",
-                            output_count=1,  # ★ FIX: always 1 per API call
-                            seed=img_seed,
-                            paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
-                            image_uris=task.image_uris,
-                            batch_id=shared_batch_id,
-                            session_id=shared_session_id,
-                        )
-                        
-                        log.info(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"📦 submitting T2I (image {img_idx+1}/{_oc})"
-                        )
-                        
-                        # Progressive timeout
-                        from config.constants import get_timeout_tier
-                        tier = get_timeout_tier(attempt)
-                        bridge_timeout = tier.get('t2i_bridge_timeout', tier['bridge_timeout'])
-                        
-                        ext_result = await asyncio.wait_for(
-                            ext_bridge.submit_prompt(
-                                email=account.email,
-                                endpoint=endpoint_key,
-                                body=body,
-                                needs_recaptcha=True,
-                                attempt=attempt,
-                                timeout=bridge_timeout,
-                            ),
-                            timeout=bridge_timeout + 10,
-                        )
-                        
-                        # Parse response
-                        if ext_result and ext_result.get('success'):
-                            data = ext_result.get('data', {})
-                            img_uris = []
-                            img_mids = []
                             
-                            if 'media' in data:
-                                for item in data['media']:
-                                    gen_img = (item.get('image') or {}).get('generatedImage', {})
-                                    fife_url = gen_img.get('fifeUrl', '')
-                                    mid = item.get('mediaId', '') or item.get('name', '')
-                                    if fife_url:
-                                        img_uris.append(fife_url)
-                                        img_mids.append(mid)
-                                log.info(
-                                    f"[T2I-BG:{account.email}] "
-                                    f"[T2I-Parse] image {img_idx+1}/{_oc}: "
-                                    f"{len(img_uris)} image(s), "
-                                    f"mediaIds={[m[:20] for m in img_mids]}"
-                                )
-                            
-                            # Record success
-                            self._burst_controller_t2i.record_success(account.email)
-                            self.record_circuit_success(account.email)
-                            
-                            if img_uris:
-                                all_output_uris.extend(img_uris)
-                                all_media_ids.extend(img_mids)
-                                _single_success = True
-                                break  # ← Exit retry loop for this image
-                            else:
+                            if ext_result_r and ext_result_r.get('success'):
+                                data_r = ext_result_r.get('data', {})
+                                if 'media' in data_r:
+                                    for item in data_r['media']:
+                                        gen_img = (item.get('image') or {}).get('generatedImage', {})
+                                        fife_url = gen_img.get('fifeUrl', '')
+                                        mid = item.get('mediaId', '') or item.get('name', '')
+                                        if fife_url:
+                                            all_output_uris.append(fife_url)
+                                            all_media_ids.append(mid)
+                                    log.info(
+                                        f"[T2I-BG:{account.email}] "
+                                        f"[T2I-Retry] image {img_idx+1}/{_oc}: OK"
+                                    )
+                                self._burst_controller_t2i.record_success(account.email)
+                                self.record_circuit_success(account.email)
+                                _retry_success = True
+                                break
+                            elif ext_result_r:
+                                err_r = ext_result_r.get('error', 'unknown')
+                                sc_r = ext_result_r.get('status', 0)
+                                err_r_lower = (err_r or "").lower()
                                 log.warning(
                                     f"[T2I-BG:{account.email}] Task {task.id}: "
-                                    f"0 output URIs in response (image {img_idx+1}/{_oc})"
+                                    f"retry #{attempt} image {img_idx+1}/{_oc} failed: {err_r}"
                                 )
-                                # Don't abort entire task — try remaining images
-                                _single_success = True  # Mark as "attempted"
-                                break
-                        
-                        elif ext_result:
-                            error = ext_result.get('error', 'unknown')
-                            status_code = ext_result.get('status', 0)
-                            error_lower = (error or "").lower()
-                            
-                            log.warning(
-                                f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"submit failed (attempt {attempt+1}, "
-                                f"image {img_idx+1}/{_oc}): {error}"
-                            )
-                            
-                            if "403" in str(error) or "recaptcha" in error_lower:
-                                self._burst_controller_t2i.record_error(
-                                    account.email, status_code or 403
-                                )
-                                self.record_circuit_403(account.email)
-                                self.set_account_cooldown(
-                                    account.email, f"403/{error}"
-                                )
-                                
-                                ext_br = getattr(account, 'extension_bridge', None)
-                                recovery_ctx = {
-                                    "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
-                                }
-                                recovery_result = await execute_recovery(
-                                    account=account,
-                                    error_msg=error or "",
-                                    context=recovery_ctx,
-                                    ext_bridge=ext_br,
-                                    dispatcher=self._dispatcher,
-                                    credit_window=self._credit_window,
-                                    multi_account=self._account_manager,
-                                )
-                                
-                                if recovery_result.failover:
-                                    log.warning(
-                                        f"[T2I-BG:{account.email}] FAILOVER — requeuing"
+                                # ★ Fix I: 400 in retry → transient, just delay and retry
+                                if sc_r == 400 or "invalid argument" in err_r_lower:
+                                    log.info(
+                                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                                        f"retry #{attempt} got 400 — treating as transient"
                                     )
-                                    self._dispatcher.requeue_task(task)
-                                    account.release_workers(worker_count)
-                                    worker_count = 0
-                                    return
-                                
-                                continue
-                            
-                            # ★ HTTP 400 = bad request body — permanent failure
-                            if status_code == 400 or "invalid argument" in error_lower:
-                                log.error(
-                                    f"[T2I-BG:{account.email}] Task {task.id}: "
-                                    f"HTTP 400 INVALID ARGUMENT — failing task "
-                                    f"(model={task.model}, ar={task.aspect_ratio})"
-                                )
-                                self._dispatcher.fail_task(
-                                    task.id, f"Invalid request: {error[:120]}"
-                                )
-                                return
-                            
-                            if attempt < max_retries:
-                                await asyncio.sleep(5)
-                                continue
-                        else:
+                                    if attempt < max_retries:
+                                        await asyncio.sleep(8)
+                                        continue
+                                elif "403" in str(err_r) or "recaptcha" in err_r_lower:
+                                    self._burst_controller_t2i.record_error(account.email, sc_r or 403)
+                                    self.record_circuit_403(account.email)
+                                    self.set_account_cooldown(account.email, f"403/{err_r}")
+                                    
+                                    ext_br = getattr(account, 'extension_bridge', None)
+                                    recovery_ctx = {
+                                        "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
+                                    }
+                                    recovery_result = await execute_recovery(
+                                        account=account, error_msg=err_r or "",
+                                        context=recovery_ctx, ext_bridge=ext_br,
+                                        dispatcher=self._dispatcher,
+                                        credit_window=self._credit_window,
+                                        multi_account=self._account_manager,
+                                    )
+                                    if recovery_result.failover:
+                                        self._dispatcher.requeue_task(task)
+                                        account.release_workers(worker_count)
+                                        worker_count = 0
+                                        return
+                                if attempt < max_retries:
+                                    await asyncio.sleep(5)
+                                    continue
+                        except asyncio.TimeoutError:
                             log.warning(
                                 f"[T2I-BG:{account.email}] Task {task.id}: "
-                                f"no response from extension (image {img_idx+1}/{_oc})"
+                                f"retry timeout image {img_idx+1}/{_oc}"
                             )
                             if attempt < max_retries:
-                                await asyncio.sleep(5)
+                                await asyncio.sleep(min(10 * (2 ** attempt), 60))
+                                continue
+                        except Exception as e:
+                            log.error(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"retry error image {img_idx+1}/{_oc}: {e}",
+                                exc_info=True,
+                            )
+                            if attempt < max_retries:
+                                await asyncio.sleep(min(10 * (2 ** attempt), 60))
                                 continue
                     
-                    except asyncio.TimeoutError:
+                    if not _retry_success:
                         log.warning(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"submit timeout (attempt {attempt+1}, image {img_idx+1}/{_oc})"
+                            f"image {img_idx+1}/{_oc} failed all retries — skipping"
                         )
-                        if attempt < max_retries:
-                            _backoff = min(10 * (2 ** attempt), 60)
-                            await asyncio.sleep(_backoff)
-                            continue
-                    except Exception as e:
-                        log.error(
-                            f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"submit error (image {img_idx+1}/{_oc}): {e}",
-                            exc_info=True,
-                        )
-                        if attempt < max_retries:
-                            _backoff = min(10 * (2 ** attempt), 60)
-                            await asyncio.sleep(_backoff)
-                            continue
-                
-                # If this image failed all retries, log but continue with next
-                if not _single_success:
-                    log.warning(
-                        f"[T2I-BG:{account.email}] Task {task.id}: "
-                        f"image {img_idx+1}/{_oc} failed all retries — skipping"
-                    )
             
             # ═══ After multi-image loop: download + upscale pipeline ═══
             log.info(
@@ -5864,13 +6223,17 @@ class Engine:
             self._dispatcher.update_progress(
                 task.id, 75, f"🎨 Generating..."
             )
-            log.info(f"[T2I-Pipeline] Task {task.id}: waiting 45s before download check")
-            await asyncio.sleep(45)
+            # ★ Fix B: T2I images generate much faster than videos
+            # Old: 45s (copied from video pipeline — too long for images)
+            # New: 15s + download retry handles slow generation
+            _t2i_generation_wait = 15
+            log.info(f"[T2I-Pipeline] Task {task.id}: waiting {_t2i_generation_wait}s before download")
+            await asyncio.sleep(_t2i_generation_wait)
             
             # ★ Download with retry: 3 attempts, 20s apart
             local_paths = []
             _T2I_DL_MAX_RETRIES = 3
-            _T2I_DL_RETRY_INTERVAL = 20
+            _T2I_DL_RETRY_INTERVAL = 10  # ★ Fix C: reduced from 20s
             for dl_attempt in range(1, _T2I_DL_MAX_RETRIES + 1):
                 if self._stop_event.is_set():
                     break
@@ -7466,10 +7829,24 @@ class Engine:
             log.error(f"[ReExtract] Error: {e}")
             return None
     
-    def clear_upload_cache(self):
-        """Clear the upload cache. Call between sessions/batches if needed."""
-        self._upload_cache.clear()
-        log.debug("[Engine] Upload cache cleared")
+    def clear_upload_cache(self, max_size: int = 0):
+        """Clear the upload cache, or prune if max_size > 0.
+        
+        Args:
+            max_size: If > 0, only prune when cache exceeds this size (keeps newest half).
+                      If 0, clear everything.
+        """
+        if max_size > 0:
+            if len(self._upload_cache) <= max_size:
+                return  # Within limits
+            # Evict oldest half (dict preserves insertion order in Python 3.7+)
+            keys = list(self._upload_cache.keys())
+            for k in keys[:len(keys) // 2]:
+                del self._upload_cache[k]
+            log.debug(f"[Engine] Upload cache pruned to {len(self._upload_cache)} entries")
+        else:
+            self._upload_cache.clear()
+            log.debug("[Engine] Upload cache cleared")
     
     async def _wait_for_recaptcha_ready(
         self, account: AccountManager, max_wait: float = 30.0
@@ -8039,6 +8416,13 @@ class Engine:
                     else:
                         slot.error = upload_resp.error or "upload_failed"
                         log.warning(f"  Upload failed for {Path(slot.path).name}: {slot.error} (attempt {attempt}/{MAX_RETRIES})")
+                        # ★ FIX 401: Force token refresh by invalidating local TTL
+                        # ensure_valid_token() uses is_token_expired which checks local datetime.
+                        # If server rejects token (expired/revoked early), local TTL is still valid
+                        # → same stale token returned on retry. Invalidating forces refresh.
+                        if upload_resp.response_code == 401:
+                            log.warning(f"  🔑 401 UNAUTHENTICATED — invalidating token for {account.email}")
+                            account._session.token_expires = None
                 except Exception as e:
                     slot.error = str(e)
                     log.warning(f"  Upload error for {Path(slot.path).name}: {e} (attempt {attempt}/{MAX_RETRIES})")
@@ -9423,10 +9807,11 @@ class Engine:
                                 await asyncio.sleep(delay)
                                 continue
                             
-                            # Download the content
-                            with open(filepath, "wb") as f:
-                                async for chunk in resp.content.iter_chunked(8192):
-                                    f.write(chunk)
+                            # ★ Fix K: Non-blocking download — read into memory,
+                            # then write to disk on thread pool (avoids blocking event loop)
+                            data = await resp.read()
+                            loop = asyncio.get_event_loop()
+                            await loop.run_in_executor(None, filepath.write_bytes, data)
                         
                         # Validate downloaded file size
                         file_size = filepath.stat().st_size
@@ -9504,17 +9889,18 @@ class Engine:
                                            or filepath.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
                                 
                                 if is_image:
-                                    # Image: resize using PIL (no ffmpeg needed)
-                                    from PIL import Image
-                                    with Image.open(str(filepath)) as img:
-                                        # Resize to 80px width, maintain aspect ratio
-                                        ratio = 80 / img.width
-                                        new_size = (80, max(1, int(img.height * ratio)))
-                                        thumb_img = img.resize(new_size, Image.LANCZOS)
-                                        # Convert RGBA → RGB for JPEG
-                                        if thumb_img.mode in ('RGBA', 'P'):
-                                            thumb_img = thumb_img.convert('RGB')
-                                        thumb_img.save(str(thumb_path), 'JPEG', quality=85)
+                                    # ★ Fix K: Offload PIL thumbnail to thread pool
+                                    def _gen_image_thumb(_src, _dst):
+                                        from PIL import Image
+                                        with Image.open(str(_src)) as img:
+                                            ratio = 80 / img.width
+                                            new_size = (80, max(1, int(img.height * ratio)))
+                                            thumb = img.resize(new_size, Image.LANCZOS)
+                                            if thumb.mode in ('RGBA', 'P'):
+                                                thumb = thumb.convert('RGB')
+                                            thumb.save(str(_dst), 'JPEG', quality=85)
+                                    loop = asyncio.get_event_loop()
+                                    await loop.run_in_executor(None, _gen_image_thumb, filepath, thumb_path)
                                     log.info(f"Thumbnail (image): {thumb_path.name}")
                                 else:
                                     # Video: extract first frame using ffmpeg (with fallback)
@@ -9524,16 +9910,19 @@ class Engine:
                                     _ffmpeg_bin = get_ffmpeg_path()
                                     
                                     if _ffmpeg_bin:
-                                        # Try at 1s first, then at 0s for short videos
+                                        # ★ Fix K: Offload ffmpeg to thread pool
+                                        loop = asyncio.get_event_loop()
                                         for ss_val in ['1', '0']:
                                             try:
-                                                result = subprocess.run(
-                                                    [_ffmpeg_bin, '-y', '-ss', ss_val, '-i', str(filepath),
-                                                     '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
-                                                     str(thumb_path)],
-                                                    capture_output=True, timeout=10,
-                                                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
-                                                )
+                                                def _run_ffmpeg(_ss=ss_val):
+                                                    return subprocess.run(
+                                                        [_ffmpeg_bin, '-y', '-ss', _ss, '-i', str(filepath),
+                                                         '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                                                         str(thumb_path)],
+                                                        capture_output=True, timeout=10,
+                                                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                                                    )
+                                                result = await loop.run_in_executor(None, _run_ffmpeg)
                                                 if thumb_path.exists() and thumb_path.stat().st_size > 100:
                                                     ffmpeg_ok = True
                                                     log.info(f"Thumbnail (ffmpeg -ss {ss_val}): {thumb_path.name}")
@@ -9547,19 +9936,24 @@ class Engine:
                                     
                                     # PIL fallback: decode first frame from video container
                                     if not ffmpeg_ok:
-                                        try:
+                                        # ★ Fix K: Offload cv2 fallback to thread pool
+                                        def _gen_cv2_thumb(_src, _dst):
                                             import cv2
-                                            cap = cv2.VideoCapture(str(filepath))
+                                            from PIL import Image
+                                            cap = cv2.VideoCapture(str(_src))
                                             ret, frame = cap.read()
                                             cap.release()
                                             if ret and frame is not None:
-                                                from PIL import Image
-                                                import numpy as np
                                                 img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
                                                 ratio = 80 / img.width
                                                 new_size = (80, max(1, int(img.height * ratio)))
-                                                thumb_img = img.resize(new_size, Image.LANCZOS)
-                                                thumb_img.save(str(thumb_path), 'JPEG', quality=85)
+                                                thumb = img.resize(new_size, Image.LANCZOS)
+                                                thumb.save(str(_dst), 'JPEG', quality=85)
+                                                return True
+                                            return False
+                                        try:
+                                            ok = await loop.run_in_executor(None, _gen_cv2_thumb, filepath, thumb_path)
+                                            if ok:
                                                 log.info(f"Thumbnail (cv2 fallback): {thumb_path.name}")
                                         except ImportError:
                                             log.warning(

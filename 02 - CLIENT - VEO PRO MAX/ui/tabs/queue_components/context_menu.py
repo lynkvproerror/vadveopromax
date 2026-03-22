@@ -463,7 +463,7 @@ class QueueContextMenuMixin:
         """Add an image file to the Image Library with tag input dialog."""
         from PySide6.QtWidgets import (
             QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-            QPushButton, QComboBox, QDialogButtonBox,
+            QPushButton, QComboBox,
         )
         from PySide6.QtGui import QPixmap
         
@@ -478,7 +478,7 @@ class QueueContextMenuMixin:
         
         dialog = QDialog(self)
         dialog.setWindowTitle("🖼️ Add to Image Library")
-        dialog.setFixedSize(400, 340)
+        dialog.setFixedSize(400, 460)
         dialog.setStyleSheet(f"background-color: {Theme.BASE}; color: {Theme.TEXT};")
         
         layout = QVBoxLayout(dialog)
@@ -511,22 +511,31 @@ class QueueContextMenuMixin:
         
         # Tag input
         tag_label = QLabel("Tags (comma separated):")
-        tag_label.setStyleSheet(f"color: {Theme.TEXT}; font-weight: bold;")
+        tag_label.setStyleSheet(
+            f"color: {Theme.TEXT}; font-weight: bold; border: none; background: transparent;"
+        )
         layout.addWidget(tag_label)
         
         tag_input = QLineEdit(Path(file_path).stem)
         tag_input.setMinimumHeight(32)
         tag_input.setPlaceholderText("e.g. cat, sunset, hero")
-        tag_input.setStyleSheet(
-            f"background-color: {Theme.SURFACE0}; color: {Theme.TEXT}; "
-            f"border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 4px 8px;"
-        )
+        tag_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE0}; color: {Theme.TEXT};
+                border: 1px solid {Theme.SURFACE2}; border-radius: 4px; padding: 4px 8px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {Theme.BLUE};
+            }}
+        """)
         layout.addWidget(tag_input)
         
         # Category combo
         cat_row = QHBoxLayout()
         cat_lbl = QLabel("Category:")
-        cat_lbl.setStyleSheet(f"color: {Theme.TEXT};")
+        cat_lbl.setStyleSheet(
+            f"color: {Theme.TEXT}; border: none; background: transparent;"
+        )
         cat_row.addWidget(cat_lbl)
         
         cat_combo = QComboBox()
@@ -537,10 +546,30 @@ class QueueContextMenuMixin:
         layout.addLayout(cat_row)
         
         # Buttons
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        _btn_base = (
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"padding: 8px 20px; font-weight: bold; font-size: 13px;"
+        )
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        
+        ok_btn = QPushButton("OK")
+        ok_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: #B8F0B2; }}"
+        )
+        ok_btn.clicked.connect(dialog.accept)
+        btn_row.addWidget(ok_btn)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.SURFACE2}; color: {Theme.TEXT}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: {Theme.OVERLAY0}; }}"
+        )
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_row.addWidget(cancel_btn)
+        
+        layout.addLayout(btn_row)
         
         tag_input.setFocus()
         tag_input.selectAll()

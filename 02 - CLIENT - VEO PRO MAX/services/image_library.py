@@ -351,9 +351,21 @@ class ImageLibrary:
             self._notify_change()
         return len(to_remove)
     
+    @staticmethod
+    def _strip_diacritics(text: str) -> str:
+        """Remove Vietnamese diacritics for fuzzy matching."""
+        import unicodedata
+        nfkd = unicodedata.normalize('NFKD', text)
+        return ''.join(c for c in nfkd if not unicodedata.combining(c)).lower()
+    
     def resolve_tag(self, tag: str) -> Optional[LibraryImage]:
         """
         Resolve a tag to an image.
+        
+        Phase 1: Exact match (current behavior).
+        Phase 2: Diacritic-stripped + substring match (fallback).
+          - "milo" matches stored tag "mèo em (milo)"
+          - "tam" matches stored tag "tấm"
         
         Args:
             tag: The tag to resolve (without brackets)
@@ -362,10 +374,21 @@ class ImageLibrary:
             LibraryImage if found, None otherwise
         """
         normalized = tag.lower().strip().strip('[]')
+        # Phase 1: Exact match
         for image in self._images:
-            # Match against stored tags, also stripping brackets for backward compat
             for stored_tag in image.tags:
                 if stored_tag.strip('[]') == normalized:
+                    return image
+        # Phase 2: Diacritic-stripped + substring match
+        norm_stripped = self._strip_diacritics(normalized)
+        if not norm_stripped:
+            return None
+        for image in self._images:
+            for stored_tag in image.tags:
+                tag_stripped = self._strip_diacritics(stored_tag.strip('[]'))
+                # Substring: "milo" in "meo em (milo)" or vice versa
+                if (len(norm_stripped) >= 2 and len(tag_stripped) >= 2
+                        and (norm_stripped in tag_stripped or tag_stripped in norm_stripped)):
                     return image
         return None
     
@@ -636,9 +659,18 @@ class ImageLibrary:
                                 )
                                 await asyncio.sleep(wait)
                                 continue
+                            # ★ FIX 401: Invalidate token and retry with fresh one
+                            elif resp.response_code == 401:
+                                log.warning(f"[ImageLibrary] 🔑 401 on {img.filename} → refreshing token for {email}")
+                                account._session.token_expires = None
+                                token = await account.ensure_valid_token()
+                                if not token:
+                                    log.warning(f"[ImageLibrary] Token refresh failed for {email}, stopping pre-upload")
+                                    break
+                                continue  # Retry with fresh token
                             else:
                                 log.warning(f"[ImageLibrary] Upload failed: {img.filename} ({email}): {resp.error}")
-                                break  # Non-429 error → skip image
+                                break  # Non-429/401 error → skip image
                     
                     # Small delay between uploads for rate limiting
                     await asyncio.sleep(0.5)

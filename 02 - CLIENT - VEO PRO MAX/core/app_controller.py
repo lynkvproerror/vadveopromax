@@ -150,6 +150,7 @@ class AppController:
         # Performance tracking
         self._start_time = datetime.now()
         self._perf_timer = None  # QTimer, started when DevConsole opens
+        self._prune_timer = None  # QTimer: periodic task memory cleanup
         
         # Async event loop
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -174,6 +175,10 @@ class AppController:
         self._extension_bridge.on_account_logged_out = self._on_account_logged_out
         self._extension_bridge.on_tab_dead = self._on_tab_dead
         self._extension_bridge.on_extension_lost = self._on_extension_lost
+        
+        # ★ Fix 2: Tab death tracking for auto Chrome kill on repeated failures
+        self._tab_death_tracker: dict = {}   # email → last death timestamp
+        self._tab_death_count: dict = {}     # email → consecutive count within window
         
         # Wire extension bridge into RefreshManager for auto header refresh
         self._refresh_manager.set_extension_bridge(self._extension_bridge)
@@ -309,6 +314,9 @@ class AppController:
         self._task_journal.start(loop=self._loop)
         self._status_aggregator.start()
         
+        # Start periodic task pruning (every 10 min → free RAM from completed tasks)
+        self._start_prune_timer()
+        
         # Crash recovery: load journal snapshot if available
         snapshot = self._task_journal.load_snapshot()
         if snapshot and snapshot.get("task_count", 0) > 0:
@@ -377,6 +385,7 @@ class AppController:
         self._task_journal.stop()
         self._task_watchdog.stop()
         self._status_aggregator.stop()
+        self._stop_prune_timer()
         
         # Stop Tab Keepalive service
         self._stop_tab_keepalive()
@@ -733,12 +742,28 @@ class AppController:
     def _on_tab_dead(self, email: str, reason: str):
         """Callback from ExtensionBridge when a VEO tab is declared dead.
         
-        Pause workers for this account (same pattern as logout) to prevent
-        infinite retry loops on reCAPTCHA/submit failures.
-        Chrome stays alive; extension may reconnect on its own.
+        ★ Fix 2: Track consecutive tab deaths per account.
+        - 1st death within 10 min: pause workers (existing cooldown behavior)
+        - 2nd+ death within 10 min: kill Chrome + restart browser (breaks recovery loop)
         On reconnect → _on_extension_connect will clear cooldown + unpause.
         """
-        log.warning(f"[AppController] 💀 Tab dead: {email} (reason: {reason}) — pausing workers")
+        import time as _time
+        now = _time.time()
+        
+        # ── Track consecutive tab deaths ──
+        last_death = self._tab_death_tracker.get(email, 0)
+        if now - last_death < 600:  # Within 10 minute window
+            deaths = self._tab_death_count.get(email, 0) + 1
+        else:
+            deaths = 1  # Reset — outside window
+        self._tab_death_tracker[email] = now
+        self._tab_death_count[email] = deaths
+        
+        log.warning(
+            f"[AppController] 💀 Tab dead #{deaths}: {email} "
+            f"(reason: {reason}) — pausing workers"
+        )
+        
         try:
             # Pause engine workers — set long cooldown so workers stop attempting
             if hasattr(self, '_engine') and self._engine:
@@ -748,16 +773,77 @@ class AppController:
                 evt.clear()  # Block all engine workers for this account
                 log.warning(f"[AppController] ⏸️ Engine workers paused for {email} (300s cooldown after tab death)")
             
-            # Pause upscale queue workers — stop picking up new jobs for this account
+            # Pause upscale queue workers
             if hasattr(self, '_engine') and self._engine:
                 uq = getattr(self._engine, '_upscale_queue', None)
                 if uq and hasattr(uq, 'pause_account'):
                     uq.pause_account(email)
                     log.warning(f"[AppController] ⏸️ UpscaleQueue paused for {email}")
             
+            # ★ Fix 2: 2+ deaths in 10 min → Kill Chrome + restart browser
+            if deaths >= 2:
+                log.warning(
+                    f"[AppController] 💀💀 Tab dead #{deaths} for {email} "
+                    f"— KILLING Chrome and restarting browser"
+                )
+                self._force_restart_browser(email)
+            
             self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
         except Exception as e:
             log.debug(f"[AppController] Status push failed after tab death: {e}")
+    
+    def _force_restart_browser(self, email: str):
+        """Kill Chrome process + restart browser for an account.
+        
+        ★ Fix 2: Breaks infinite recovery loop when frozen tab/extension
+        cannot self-recover. Runs in background thread to avoid blocking.
+        On success, _on_extension_connect will auto-clear cooldown.
+        """
+        import threading
+        def _do_restart():
+            import time as _time
+            try:
+                # 1. Find profile path
+                pc = self._profiles_controller
+                profile = pc.get_profile(email) if pc else None
+                profile_path = getattr(profile, 'browser_profile_path', None) if profile else None
+                
+                if not profile_path:
+                    log.error(f"[AppController] Cannot force-restart: no profile_path for {email}")
+                    return
+                
+                # 2. Kill Chrome
+                from core.chrome_manager import kill_chrome
+                killed = kill_chrome(profile_path)
+                log.info(
+                    f"[AppController] Chrome {'killed' if killed else 'already dead'} "
+                    f"for {email}"
+                )
+                
+                # 3. Short delay for process cleanup
+                _time.sleep(3)
+                
+                # 4. Relaunch browser via ensure_browser (async)
+                account = self._multi_account.get_account(email)
+                if account and self._loop and not self._loop.is_closed():
+                    async def _relaunch():
+                        try:
+                            await account.ensure_browser(headless=True)
+                            log.info(f"[AppController] ✅ Browser force-restarted for {email}")
+                        except Exception as e:
+                            log.error(f"[AppController] Browser relaunch failed for {email}: {e}")
+                    
+                    import asyncio
+                    asyncio.run_coroutine_threadsafe(_relaunch(), self._loop)
+                else:
+                    log.warning(f"[AppController] No account/loop for relaunch: {email}")
+                    
+            except Exception as e:
+                log.error(f"[AppController] Force-restart error for {email}: {e}")
+        
+        threading.Thread(
+            target=_do_restart, name=f"force-restart-{email}", daemon=True
+        ).start()
     
     def _on_extension_lost(self):
         """Callback from ExtensionBridge when all connections are lost for >60s.
@@ -1497,7 +1583,10 @@ class AppController:
             return {}
         
         results = {}
-        for email, entry in pc._debug_browsers.items():
+        # ★ Snapshot dict — install_if_needed() may trigger browser callbacks
+        #   that modify _debug_browsers mid-iteration (→ RuntimeError)
+        browser_snapshot = list(pc._debug_browsers.items())
+        for email, entry in browser_snapshot:
             # ⚡ FIX: Read CDP port from in-memory entry FIRST (set by open_browser_for_debug),
             # fall back to PID file on disk only if entry doesn't have it.
             # Previously only read from PID file → "no CDP port" when file is stale/missing.
@@ -2423,6 +2512,41 @@ class AppController:
             self._perf_timer.deleteLater()
             self._perf_timer = None
     
+    def _start_prune_timer(self):
+        """Start periodic task pruning timer (every 10 min → free RAM)."""
+        if self._prune_timer is not None:
+            return  # Already running
+        
+        from PySide6.QtCore import QTimer
+        self._prune_timer = QTimer()
+        self._prune_timer.timeout.connect(self._do_prune)
+        self._prune_timer.start(10 * 60 * 1000)  # Every 10 minutes
+    
+    def _stop_prune_timer(self):
+        """Stop periodic task pruning timer."""
+        if self._prune_timer:
+            self._prune_timer.stop()
+            self._prune_timer.deleteLater()
+            self._prune_timer = None
+    
+    def _do_prune(self):
+        """Prune completed tasks from dispatcher to free RAM."""
+        try:
+            from config.settings import get_settings
+            settings = get_settings()
+            
+            # Time-based prune: only if prune_age_minutes > 0
+            age = getattr(settings, 'prune_age_minutes', 0)
+            if age > 0:
+                self._dispatcher.prune_completed_tasks(max_age_minutes=age)
+            
+            # Count-based cap: if auto_clear_tasks_max > 0, enforce hard limit
+            cap = getattr(settings, 'auto_clear_tasks_max', 0)
+            if cap > 0:
+                self._dispatcher.enforce_task_cap(cap)
+        except Exception as e:
+            log.debug(f"[AppController] Prune error: {e}")
+    
     def _start_async_loop(self):
         """Start background async event loop."""
         loop_ready = threading.Event()
@@ -2503,6 +2627,18 @@ class AppController:
         # Step 3: Unregister from monitors
         self._session_monitor.unregister_session(email)
         self._refresh_manager.unregister_session(email)
+        
+        # Step 4: Cleanup per-email state to prevent unbounded growth
+        try:
+            self._extension_bridge.cleanup_account(email)
+        except Exception:
+            pass
+        try:
+            from core.account_logger import cleanup_single_account_handler
+            cleanup_single_account_handler(email)
+        except Exception:
+            pass
+        
         return result
     
     # toggle_account defined at L1541 — single source of truth
@@ -2704,6 +2840,16 @@ class AppController:
                     try:
                         future.result(timeout=5.0)
                         log.info(f"Removed stale runtime account: {acc.email}")
+                        # Cleanup per-email state
+                        try:
+                            self._extension_bridge.cleanup_account(acc.email)
+                        except Exception:
+                            pass
+                        try:
+                            from core.account_logger import cleanup_single_account_handler
+                            cleanup_single_account_handler(acc.email)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
         

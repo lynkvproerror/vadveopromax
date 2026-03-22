@@ -416,9 +416,9 @@ class TabDevConsole(QWidget):
     def _on_log_received(self, message: str, level: str, source: str = ""):
         """Route incoming log message to LogsPage + Network API filter.
         
-        Bug 4 fix: skip expensive UI updates (toolbar label, api_log
-        forwarding) when DevConsole tab is not visible. Logs still
-        buffer in _log_buffer for later viewing.
+        Bug 4 fix: skip expensive UI updates when DevConsole tab is not visible.
+        ★ Fix N5: throttle visible-tab UI updates to max 10/s (100ms gate).
+        Logs still buffer in _log_buffer for later viewing.
         """
         # Always buffer (cheap: deque append)
         self._logs_page.append_log(message, level, source)
@@ -426,6 +426,14 @@ class TabDevConsole(QWidget):
         # Skip expensive UI work when tab is hidden (Bug 4)
         if not self.isVisible():
             return
+        
+        # ★ Fix N5: Throttle UI updates to max 10/s — reduces GUI thread
+        # contention during peak load (50+ log lines from submit/reCAPTCHA).
+        import time
+        now = time.time()
+        if now - getattr(self, '_last_log_ui_update', 0) < 0.1:
+            return
+        self._last_log_ui_update = now
         
         # Update toolbar log count
         count = len(self._logs_page._log_buffer)

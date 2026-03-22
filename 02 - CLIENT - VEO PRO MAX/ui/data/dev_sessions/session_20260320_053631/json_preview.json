@@ -1,0 +1,102 @@
+{
+  "group_id": "group_20260320_052615",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260320_052615_task_0",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_1",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_2",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_3",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_4",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_5",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_6",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_7",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_8",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_052615_task_9",
+      "prompt": "Soft tender young terminalia healing and oral wellness supporter, broad oval young leaf body 16cm, #90EE90 light green soft broad oval young leaf body with visible delicate veins and slightly wavy edge, large gentle hopeful eyes #1A1A1A deep jet black with #90EE90 light green highlights, small soft warm #3CB371 medium sea green lips, tiny #ADFF2F green yellow tiny unfurling leaf bud on top as fresh bud crown, natural #90EE90 light green soft broad oval young leaf body with visible delicate veins, smaller soft oval leaf extensions as arms, soft tender broad oval texture with light green color and delicate veins",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

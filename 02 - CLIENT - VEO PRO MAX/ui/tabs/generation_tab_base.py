@@ -82,6 +82,10 @@ class GenerationTabBase(QWidget):
             pass
         return False
     
+    def get_searchable_widgets(self):
+        """Return editable text widgets for global Search/Replace."""
+        return [self.prompt_input] if hasattr(self, 'prompt_input') else []
+
     def _init_extra(self):
         """Hook for subclass-specific init (e.g. FrameMode enum)."""
         pass
@@ -231,6 +235,12 @@ class GenerationTabBase(QWidget):
         self.clear_btn.setProperty("variant", "secondary")
         self.clear_btn.clicked.connect(self._on_clear)
         btn_layout.addWidget(self.clear_btn)
+        
+        self._find_btn = QPushButton("🔍 Find")
+        self._find_btn.setProperty("variant", "secondary")
+        self._find_btn.setToolTip("Find & Replace (Ctrl+H)")
+        self._find_btn.clicked.connect(self._on_open_find_replace)
+        btn_layout.addWidget(self._find_btn)
         
         btn_layout.addStretch()
         
@@ -423,6 +433,12 @@ class GenerationTabBase(QWidget):
         self.prompt_table.set_prompts([])
         self._update_parsed_count(0)
     
+    def _on_open_find_replace(self):
+        """Open Find & Replace dialog via MainWindow."""
+        win = self.window()
+        if hasattr(win, '_toggle_search'):
+            win._toggle_search(replace=True)
+    
     def _on_select_all_cont(self):
         """Select all prompts for continuation."""
         # Trial guard: block continuation
@@ -495,7 +511,11 @@ class GenerationTabBase(QWidget):
             self._library_popup.activateWindow()
             return
         from ui.popups.complex_popups import ImageManagerPopup
-        self._library_popup = ImageManagerPopup(self, on_select=self._handle_library_select)
+        self._library_popup = ImageManagerPopup(
+            self,
+            on_select=self._handle_library_select,
+            on_use_for_all=self._handle_library_use_for_all,
+        )
         self._library_popup.show()
     
     def _handle_library_select(self, tag: str):
@@ -504,6 +524,30 @@ class GenerationTabBase(QWidget):
         cursor.insertText(f"[{tag}] ")
         self.prompt_input.setTextCursor(cursor)
         self._parse_prompts()
+
+    def _handle_library_use_for_all(self, tag: str):
+        """Prepend [tag] to every parsed prompt line."""
+        text = self.prompt_input.toPlainText()
+        if not text.strip():
+            return
+        tag_ref = f"[{tag}]"
+        lines = text.split("\n")
+        new_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                new_lines.append(line)
+            elif tag_ref in line:
+                # Already has this tag — skip
+                new_lines.append(line)
+            else:
+                new_lines.append(f"{tag_ref} {line}")
+        self.prompt_input.setPlainText("\n".join(new_lines))
+        self._parse_prompts()
+        # Toast feedback
+        main_win = self.window()
+        if hasattr(main_win, 'show_toast'):
+            main_win.show_toast(f"📋 [{tag}] applied to all prompts", "success")
     
     # ── Add to Queue (shared concurrency warning + submit) ───────
     

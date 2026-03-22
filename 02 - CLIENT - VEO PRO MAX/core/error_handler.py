@@ -112,7 +112,10 @@ class ErrorHandler:
         self._logger = logging.getLogger("veo_errors")
         self._logger.setLevel(logging.ERROR)
         
-        handler = logging.FileHandler(self._log_file, encoding='utf-8')
+        from logging.handlers import RotatingFileHandler
+        handler = RotatingFileHandler(
+            self._log_file, maxBytes=5*1024*1024, backupCount=2, encoding='utf-8'
+        )
         handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(levelname)s - %(message)s'
         ))

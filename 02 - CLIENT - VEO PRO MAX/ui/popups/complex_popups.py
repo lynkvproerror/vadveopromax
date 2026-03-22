@@ -578,8 +578,10 @@ class ImageManagerPopup(BasePopup):
         self,
         parent: Optional[QWidget] = None,
         on_select: Optional[Callable[[str], None]] = None,
+        on_use_for_all: Optional[Callable[[str], None]] = None,
     ):
         self._on_select = on_select
+        self._on_use_for_all = on_use_for_all
         self._selected_category = "All"
         self._library = None
         self._cat_buttons: Dict[str, QPushButton] = {}
@@ -870,6 +872,18 @@ class ImageManagerPopup(BasePopup):
         select_btn.clicked.connect(lambda _, t=tag_text: self._on_image_select(t))
         btn_row.addWidget(select_btn)
         
+        # Use for All Prompts button
+        if self._on_use_for_all:
+            all_btn = QPushButton("📋")
+            all_btn.setMinimumSize(28, 20)
+            all_btn.setStyleSheet(
+                f"QPushButton {{ background: {Theme.LAVENDER}; color: {Theme.CRUST}; {_btn_base} }}"
+                f"QPushButton:hover {{ background: #B4BEFE; }}"
+            )
+            all_btn.setToolTip("Use for ALL parsed prompts")
+            all_btn.clicked.connect(lambda _, t=tag_text: self._on_image_use_for_all(t))
+            btn_row.addWidget(all_btn)
+        
         # Edit tags button
         edit_btn = QPushButton("✏️")
         edit_btn.setMinimumSize(28, 20)
@@ -1034,19 +1048,18 @@ class ImageManagerPopup(BasePopup):
         """Delete ALL images from library with confirmation."""
         if not self._library or not self._library.image_count:
             return
-        from PySide6.QtWidgets import QMessageBox
+        from ui.popups import show_confirm
         count = self._library.image_count
-        reply = QMessageBox.warning(
+        if not show_confirm(
             self, "🗑️ Delete All Images",
             f"Xoá tất cả {count} ảnh khỏi library?\n\n"
             "Lưu ý: File ảnh trên ổ đĩa không bị xoá,\n"
             "chỉ xoá khỏi danh sách library.",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
-        )
-        if reply == QMessageBox.Yes:
-            removed = self._library.remove_all(delete_files=False)
-            self._reload_grid()
+            danger=True,
+        ):
+            return
+        removed = self._library.remove_all(delete_files=False)
+        self._reload_grid()
     
     def _on_add_category(self):
         """Add new category via styled input dialog."""
@@ -1145,6 +1158,11 @@ class ImageManagerPopup(BasePopup):
         """Handle image selection — insert [tag] in prompt without closing."""
         if self._on_select:
             self._on_select(tag)
+
+    def _on_image_use_for_all(self, tag: str):
+        """Handle 'Use for All Prompts' — prepend [tag] to every parsed prompt."""
+        if self._on_use_for_all:
+            self._on_use_for_all(tag)
 
     def _move_image_to_category(self, image_id: str, category: str):
         """Move a library image to another category (called by droppable category buttons)."""

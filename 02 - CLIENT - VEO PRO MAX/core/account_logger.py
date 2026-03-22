@@ -25,8 +25,10 @@ Usage:
 """
 
 import logging
+import logging.handlers
 import re
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -91,9 +93,21 @@ _EMAIL_RE = re.compile(
 )
 
 # ── Per-account file handlers ───────────────────────────────────────
-_account_handlers: dict[str, logging.FileHandler] = {}
+_account_handlers: dict[str, logging.Handler] = {}
 _log_dir: Path | None = None
 _installed = False
+
+# Rotation config: read from settings (with fallback defaults)
+_ROTATE_BACKUP_COUNT = 2
+
+
+def _get_rotation_bytes() -> int:
+    """Get rotation max bytes from settings (dynamic, read at handler creation)."""
+    try:
+        from config.settings import get_settings
+        return get_settings().log_rotation_max_mb * 1024 * 1024
+    except Exception:
+        return 5 * 1024 * 1024  # Fallback: 5 MB
 
 
 def _get_log_dir() -> Path:
@@ -122,8 +136,8 @@ def _extract_email(message: str) -> str | None:
     return m.group(0) if m else None
 
 
-def _get_account_handler(email: str) -> logging.FileHandler:
-    """Get or create file handler for an account."""
+def _get_account_handler(email: str) -> logging.Handler:
+    """Get or create rotating file handler for an account."""
     if email in _account_handlers:
         return _account_handlers[email]
     
@@ -131,7 +145,12 @@ def _get_account_handler(email: str) -> logging.FileHandler:
     safe_name = email.replace("@", "_at_").replace(".", "_")
     filepath = log_dir / f"{safe_name}.log"
     
-    handler = logging.FileHandler(filepath, encoding="utf-8", mode="a")
+    handler = logging.handlers.RotatingFileHandler(
+        filepath,
+        maxBytes=_get_rotation_bytes(),
+        backupCount=_ROTATE_BACKUP_COUNT,
+        encoding="utf-8",
+    )
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter(
         "%(asctime)s [%(levelname)-5s] %(message)s",
@@ -139,14 +158,19 @@ def _get_account_handler(email: str) -> logging.FileHandler:
     ))
     _account_handlers[email] = handler
     
-    # Session separator
-    handler.stream.write(
+    # Session separator — emit as a real LogRecord (compatible with rotation)
+    sep_msg = (
         f"\n{'='*70}\n"
         f"  Session: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"  Account: {email}\n"
-        f"{'='*70}\n\n"
+        f"{'='*70}"
     )
-    handler.stream.flush()
+    sep_record = logging.LogRecord(
+        name="account_logger", level=logging.INFO,
+        pathname="", lineno=0, msg=sep_msg,
+        args=None, exc_info=None,
+    )
+    handler.emit(sep_record)
     
     return handler
 
@@ -192,16 +216,97 @@ class AccountLogInterceptor(logging.Handler):
             pass  # Never crash the app due to logging
 
 
+def cleanup_old_log_files(max_age_days: int = None):
+    """Delete old log files on startup to prevent disk bloat.
+    
+    Cleans up:
+    1. logs/reports/session_*.json  older than max_age_days
+    2. logs/dev_logs_*.txt          older than max_age_days
+    3. logs/accounts/*.log.1, *.log.2 (rotated backups) older than max_age_days
+    4. data/dev_sessions/session_*/  older than max_age_days
+    """
+    import shutil
+    
+    if max_age_days is None:
+        try:
+            from config.settings import get_settings
+            max_age_days = get_settings().log_retention_days
+        except Exception:
+            max_age_days = 7  # Fallback
+    
+    app_root = Path(__file__).parent.parent
+    cutoff = time.time() - (max_age_days * 86400)
+    removed = 0
+    
+    # 1. Session reports
+    reports_dir = app_root / "logs" / "reports"
+    if reports_dir.exists():
+        for f in reports_dir.glob("session_*.json"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    removed += 1
+            except Exception:
+                pass
+    
+    # 2. Dev log exports
+    logs_dir = app_root / "logs"
+    if logs_dir.exists():
+        for f in logs_dir.glob("dev_logs_*.txt"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    removed += 1
+            except Exception:
+                pass
+    
+    # 3. Rotated account log backups (.log.1, .log.2)
+    acct_dir = app_root / "logs" / "accounts"
+    if acct_dir.exists():
+        for f in acct_dir.iterdir():
+            if f.is_file() and re.search(r'\.log\.\d+$', f.name):
+                try:
+                    if f.stat().st_mtime < cutoff:
+                        f.unlink()
+                        removed += 1
+                except Exception:
+                    pass
+    
+    # 4. Dev session folders
+    sessions_dir = app_root / "data" / "dev_sessions"
+    if sessions_dir.exists():
+        for d in sessions_dir.iterdir():
+            if d.is_dir() and d.name.startswith("session_"):
+                try:
+                    if d.stat().st_mtime < cutoff:
+                        shutil.rmtree(d, ignore_errors=True)
+                        removed += 1
+                except Exception:
+                    pass
+    
+    if removed:
+        logging.getLogger("core.account_logger").info(
+            f"[Cleanup] Removed {removed} old log file(s) (>{max_age_days} days)"
+        )
+
+
 def install_account_logging():
     """Install the account log interceptor. Call once at startup.
     
     Attaches to core.engine, core.extension_bridge, core.api_client loggers
     to intercept their messages and route to per-account files.
+    Also runs startup cleanup of old log files.
     """
     global _installed
     if _installed:
         return
     _installed = True
+    
+    # Startup cleanup — remove old logs before creating new handlers
+    try:
+        cleanup_old_log_files()
+    except Exception:
+        pass  # Never block startup
     
     interceptor = AccountLogInterceptor()
     
@@ -221,6 +326,23 @@ def install_account_logging():
     logging.getLogger("core.engine").info(
         "[AccountLogger] Per-account logging installed → logs/accounts/"
     )
+
+
+def cleanup_single_account_handler(email: str):
+    """Close and remove the file handler for a single account.
+    
+    Call when an account is permanently removed to prevent
+    _account_handlers from growing indefinitely over long sessions.
+    """
+    handler = _account_handlers.pop(email, None)
+    if handler:
+        try:
+            handler.close()
+        except Exception:
+            pass
+        logging.getLogger("core.account_logger").info(
+            f"[AccountLogger] Closed handler for {email}"
+        )
 
 
 def cleanup_account_logging():

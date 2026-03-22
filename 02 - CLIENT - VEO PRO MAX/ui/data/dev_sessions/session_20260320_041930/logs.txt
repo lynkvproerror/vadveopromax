@@ -1,0 +1,479 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260320_041930
+Total: 472 entries
+============================================================
+
+[INFO ] 04:12:18 - core.session_manager - [Session] Loaded from 2026-03-20T04:12:04.301547
+[INFO ] 04:12:18 - veo.tab_queue - [GroupCreate] gid=group_20260319_162752 name='26_Cuc_Tan' children=10 expanded=True
+[INFO ] 04:12:19 - veo.tab_queue - [GroupCreate] gid=group_20260319_162900 name='27_Cay_Long_Quy' children=10 expanded=True
+[INFO ] 04:12:19 - veo.tab_queue - [GroupCreate] gid=group_20260319_163009 name='28_Rau_Dang' children=10 expanded=True
+[INFO ] 04:12:20 - veo.tab_queue - [GroupCreate] gid=group_20260319_173940 name='29_Rau_Ma' children=10 expanded=True
+[INFO ] 04:12:20 - veo.tab_queue - [GroupCreate] gid=group_20260319_174010 name='30_Cai_Dai' children=10 expanded=True
+[INFO ] 04:12:21 - veo.tab_queue - [GroupCreate] gid=group_20260319_174019 name='31_Co_Sua' children=10 expanded=True
+[INFO ] 04:12:21 - veo.tab_queue - [GroupCreate] gid=group_20260319_174028 name='32_Cay_Dung_Dinh' children=10 expanded=True
+[INFO ] 04:12:22 - veo.tab_queue - [GroupCreate] gid=group_20260319_174037 name='33_Hoa_Dam_But' children=10 expanded=True
+[INFO ] 04:12:22 - veo.tab_queue - [GroupCreate] gid=group_20260319_174046 name='34_La_Bep' children=10 expanded=True
+[INFO ] 04:12:22 - veo.tab_queue - [GroupCreate] gid=group_20260319_174055 name='35_Me_Chua_Dat' children=10 expanded=True
+[INFO ] 04:12:23 - veo.tab_queue - [GroupCreate] gid=group_20260319_174105 name='36_Cay_May' children=10 expanded=True
+[INFO ] 04:12:23 - veo.tab_queue - [GroupCreate] gid=group_20260320_032522 name='character' children=6 expanded=True
+[INFO ] 04:12:23 - veo.tab_queue - [GroupCreate] gid=group_20260320_032611 name='character' children=10 expanded=True
+[INFO ] 04:12:24 - veo.tab_queue - [GroupCreate] gid=group_20260320_032643 name='character' children=10 expanded=True
+[INFO ] 04:12:24 - veo.tab_queue - [GroupCreate] gid=group_20260320_032710 name='character' children=10 expanded=True
+[INFO ] 04:12:24 - veo.tab_queue - [GroupCreate] gid=group_20260320_033115 name='character' children=10 expanded=True
+[INFO ] 04:12:24 - veo.tab_queue - [GroupCreate] gid=group_20260320_033136 name='character' children=10 expanded=True
+[INFO ] 04:12:25 - veo.tab_queue - [GroupCreate] gid=group_20260320_033156 name='character' children=10 expanded=True
+[INFO ] 04:12:25 - veo.tab_queue - [GroupCreate] gid=group_20260320_033220 name='character' children=10 expanded=True
+[INFO ] 04:12:26 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 04:12:26 - veo.pipeline - [Pipeline] Activated version 1/1: Version 1
+[INFO ] 04:12:26 - veo.tab_project - [Pipeline] Full restore: 38 scenes, 2 characters, topic='## 1. PROJECT INFO
+
+**Topic:** Kịch Bản Phim Ngắn:'
+[INFO ] 04:12:26 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Hành Trình Đến Vùng Đất Ánh Sáng: 7 completed stage(s), current=concat, FULL session
+[INFO ] 04:12:30 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 04:12:30 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 04:12:30 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 04:12:30 - core.token_manager - [TokenManager] No tokens found for levanlinh.kma@gmail.com
+[INFO ] 04:12:30 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: levanlinh.kma@gmail.com...
+[INFO ] 04:12:30 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 04:12:30 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_fed78075
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] Chrome launched: PID=43292, port=9223
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 43292
+[INFO ] 04:12:30 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 04:12:30 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 04:12:31 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 04:12:31 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[INFO ] 04:12:31 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.8
+[INFO ] 04:12:31 - core.extension_manager - [ExtMgr] Extension v2.3.8 up-to-date — skipping
+[INFO ] 04:12:31 - core.profiles_controller - [ProfilesController] Chrome PID=43292, port=9223 (new)
+[INFO ] 04:12:31 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 57166)
+[INFO ] 04:12:31 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser visible (smart-hide disabled)
+[INFO ] 04:12:31 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 04:12:31 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 04:12:31 - core.account_manager - [levanlinh.kma@gmail.com] ⏳ Debug browser starting, waiting...
+[INFO ] 04:12:31 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[WARNING] 04:12:32 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[INFO ] 04:12:32 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 04:12:32 - core.account_manager - [levanlinh.kma@gmail.com] 🔗 Attaching to debug browser (page access only)
+[INFO ] 04:12:32 - core.multi_account - All account browsers initialized
+[INFO ] 04:12:32 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 04:12:32 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 04:12:35 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: levanlinh.kma@gmail.com
+[INFO ] 04:12:35 - core.extension_bridge - [ExtensionBridge] 📧 Assigned email to extension: levanlinh.kma@gmail.com
+[INFO ] 04:12:35 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 04:12:35 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 04:12:35 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 04:12:35 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['levanlinh.kma@gmail.com']
+[INFO ] 04:12:35 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 04:12:35 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/EA8332861971F14DA90699C710...
+[INFO ] 04:12:37 - core.extension_manager - [ExtMgr] Closed extensions tab EA833286... (PUT)
+[INFO ] 04:12:37 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 04:12:37 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.8
+[INFO ] 04:12:37 - core.app_controller - [AppController] Extension v2.3.8 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 04:12:37 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 04:12:37 - core.app_controller - [AutoLaunch] Extension check complete: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 04:12:37 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 04:12:37 - core.app_controller - [TierCheck] ✅ levanlinh.kma@gmail.com: Ultra
+[INFO ] 04:12:37 - core.app_controller - [TierCheck] ✅ All accounts are Pro or Ultra
+[INFO ] 04:12:37 - core.app_controller - [AutoLaunch] ✅ Account tier enforcement complete
+[INFO ] 04:12:37 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 04:12:37 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 04:12:37 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 04:12:37 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 04:12:37 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 04:12:37 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 04:12:37 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 04:12:41 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:12:50 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:12:59 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 04:12:59 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 04:12:59 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[WARNING] 04:12:59 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 04:12:59 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 04:12:59 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 04:12:59 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 04:12:59 - core.app_controller - [Engine] Processing started
+[INFO ] 04:12:59 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 04:12:59 - core.multi_account - All account browsers initialized
+[INFO ] 04:12:59 - core.multi_account - ⏳ No account has good x-client-data yet (best=8 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 04:12:59 - core.engine - Engine starting: 1 accounts, 65 ready tasks in queue
+[INFO ] 04:12:59 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[INFO ] 04:12:59 - core.engine - [G1:levanlinh.kma@gmail.com] max_foremen=-1, raw_foreman=5, existing=0
+[INFO ] 04:12:59 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Spawned CHỦ + 5 Foremen (max_workers=20, output=4, retry=3, timeout=120s)
+[INFO ] 04:12:59 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=900s, POLL timeout=900s, scan every 30s
+[INFO ] 04:12:59 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Started
+[INFO ] 04:12:59 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Refreshing browser headers...
+[INFO ] 04:12:59 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 04:12:59 - core.engine - [CreditWindow] Recovery timer started
+[INFO ] 04:12:59 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[INFO ] 04:13:03 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:13:07 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[WARNING] 04:13:07 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for levanlinh.kma@gmail.com took 20.0s (requestId=7e583206)
+[WARNING] 04:13:07 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 04:13:07 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[WARNING] 04:13:07 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 04:13:07 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 1)
+[INFO ] 04:13:07 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 3s...
+[INFO ] 04:13:13 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:13:16 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ checkAppAvailability: AVAILABLE
+[INFO ] 04:13:17 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2062 chars
+[INFO ] 04:13:17 - core.extension_bridge - [ExtBridge] ⏱️ Response: request_recaptcha for levanlinh.kma@gmail.com took 6.6s
+[INFO ] 04:13:17 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 2)
+[INFO ] 04:13:17 - core.trpc_client - TRPC: Created project 'My Video Project' → 76b8740d-ec57-422f-8a5b-3bf170ef18bb
+[INFO ] 04:13:17 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Project ready: 76b8740d-ec57-422f-8a5b-3bf170ef18bb
+[INFO ] 04:13:17 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Pre-warming reCAPTCHA...
+[INFO ] 04:13:17 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2084 chars)
+[INFO ] 04:13:17 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ✅ reCAPTCHA ready on retry
+[INFO ] 04:13:17 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.1s)
+[INFO ] 04:13:17 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 04:13:17 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:13:17 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2169 chars)
+[INFO ] 04:13:18 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:13:18 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:13:18 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2105 chars)
+[INFO ] 04:13:19 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:13:19 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 1/2) — validating reCAPTCHA token...
+[INFO ] 04:13:19 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:13:19 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 ✅ Probe OK — reCAPTCHA token valid (2105 chars)
+[INFO ] 04:13:19 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Startup complete — unblocking foremen
+[INFO ] 04:13:19 - core.dispatcher - [Dispatcher] 📋 Task group_20260320_032611_task_5 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=1)
+[INFO ] 04:13:19 - core.engine - [foreman-levanlin-0] Picked task group_20260320_032611_task_5 [running/init] progress=0% prompt_idx=5 workflow=T2I
+[INFO ] 04:13:20 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: 🎨 T2I worker dispatch (4 workers)
+[INFO ] 04:13:20 - core.engine - [T2I-Worker:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: acquired 4 output slots (active=4)
+[INFO ] 04:13:20 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.0s)
+[INFO ] 04:13:20 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 04:13:20 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:13:20 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2148 chars)
+[INFO ] 04:13:20 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:13:21 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2084 chars
+[INFO ] 04:13:21 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:13:21 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2084 chars)
+[INFO ] 04:13:22 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:13:22 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 0)
+[INFO ] 04:13:22 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: adaptive delay → submit attempt 1/11 (image 1/4)
+[INFO ] 04:13:23 - core.dispatcher - [Dispatcher] 📋 Task group_20260320_032611_task_6 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=2)
+[INFO ] 04:13:23 - core.engine - [foreman-levanlin-4] Picked task group_20260320_032611_task_6 [running/init] progress=0% prompt_idx=6 workflow=T2I
+[INFO ] 04:13:23 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 🎨 T2I worker dispatch (4 workers)
+[INFO ] 04:13:23 - core.engine - [T2I-Worker:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: acquired 4 output slots (active=8)
+[INFO ] 04:13:23 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2105 chars)
+[INFO ] 04:13:23 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:13:24 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:13:24 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:13:24 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2105 chars)
+[INFO ] 04:13:24 - core.dispatcher - [Dispatcher] 📋 Task group_20260320_032611_task_7 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=3)
+[INFO ] 04:13:24 - core.engine - [foreman-levanlin-1] Picked task group_20260320_032611_task_7 [running/init] progress=0% prompt_idx=7 workflow=T2I
+[INFO ] 04:13:24 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 🎨 T2I worker dispatch (4 workers)
+[INFO ] 04:13:24 - core.engine - [T2I-Worker:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: acquired 4 output slots (active=12)
+[INFO ] 04:13:24 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 04:13:25 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:13:25 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:13:25 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2105 chars)
+[INFO ] 04:13:25 - core.dispatcher - [Dispatcher] 📋 Task group_20260320_032611_task_8 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=4)
+[INFO ] 04:13:25 - core.engine - [foreman-levanlin-3] Picked task group_20260320_032611_task_8 [running/init] progress=0% prompt_idx=8 workflow=T2I
+[INFO ] 04:13:25 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: 🎨 T2I worker dispatch (4 workers)
+[INFO ] 04:13:25 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: 📦 submitting T2I (image 1/4)
+[INFO ] 04:13:26 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:13:26 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 0)
+[INFO ] 04:13:26 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: adaptive delay → submit attempt 1/11 (image 1/4)
+[INFO ] 04:13:26 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 0)
+[INFO ] 04:13:26 - core.dispatcher - [Dispatcher] 📋 Task group_20260320_032611_task_9 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=5)
+[INFO ] 04:13:26 - core.engine - [foreman-levanlin-2] Picked task group_20260320_032611_task_9 [running/init] progress=0% prompt_idx=9 workflow=T2I
+[INFO ] 04:13:26 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260320_032611_task_9: 🎨 T2I worker dispatch (4 workers)
+[INFO ] 04:13:28 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 1/4)
+[INFO ] 04:13:29 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: adaptive delay → submit attempt 1/11 (image 1/4)
+[INFO ] 04:13:30 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=13s,cap=✅) | conns=1, pending=1
+[INFO ] 04:13:31 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:13:33 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 1/4)
+[INFO ] 04:13:58 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2105 chars)
+[WARNING] 04:13:58 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 32.8s (requestId=971a1414)
+[INFO ] 04:13:58 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 1/4: 1 image(s), mediaIds=['ef1e7132-0944-4943-9']
+[INFO ] 04:13:58 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: intra-batch jitter 0.4s (image 2/4)
+[INFO ] 04:13:59 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: 📦 submitting T2I (image 2/4)
+[INFO ] 04:14:03 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:14:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:14:28 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2148 chars)
+[WARNING] 04:14:28 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 29.8s (requestId=d0dd3fcd)
+[INFO ] 04:14:28 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 1/4: 1 image(s), mediaIds=['1e241e33-f750-41ba-8']
+[INFO ] 04:14:28 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: intra-batch jitter 0.3s (image 2/4)
+[INFO ] 04:14:29 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 2/4)
+[INFO ] 04:14:30 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=13s,cap=✅) | conns=1, pending=1
+[INFO ] 04:14:33 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:15:01 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2212 chars)
+[WARNING] 04:15:01 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 32.5s (requestId=942591d3)
+[INFO ] 04:15:01 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 1/4: 1 image(s), mediaIds=['e8a67a30-e878-40c2-b']
+[INFO ] 04:15:01 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: intra-batch jitter 0.7s (image 2/4)
+[INFO ] 04:15:01 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 2/4)
+[INFO ] 04:15:05 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:15:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:15:30 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=13s,cap=✅) | conns=1, pending=1
+[INFO ] 04:15:32 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2148 chars)
+[WARNING] 04:15:32 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 31.3s (requestId=c3dc397f)
+[INFO ] 04:15:32 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 2/4: 1 image(s), mediaIds=['4933dfc4-e3bb-4c41-9']
+[INFO ] 04:15:32 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: intra-batch jitter 0.5s (image 3/4)
+[INFO ] 04:15:33 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: 📦 submitting T2I (image 3/4)
+[INFO ] 04:15:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:16:03 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2169 chars)
+[WARNING] 04:16:03 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 31.3s (requestId=9c97dd4f)
+[INFO ] 04:16:03 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 2/4: 1 image(s), mediaIds=['bde19656-c8f2-49d1-9']
+[INFO ] 04:16:03 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: intra-batch jitter 0.4s (image 3/4)
+[INFO ] 04:16:04 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 04:16:04 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:16:04 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 3/4)
+[INFO ] 04:16:08 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:16:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:16:30 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=13s,cap=✅) | conns=1, pending=1
+[INFO ] 04:16:35 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2169 chars)
+[WARNING] 04:16:35 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 31.1s (requestId=271d21ce)
+[INFO ] 04:16:35 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 2/4: 1 image(s), mediaIds=['9942d6e5-b497-4834-b']
+[INFO ] 04:16:35 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: intra-batch jitter 0.5s (image 3/4)
+[INFO ] 04:16:35 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 3/4)
+[INFO ] 04:16:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:17:09 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2169 chars)
+[WARNING] 04:17:09 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 34.0s (requestId=9848da8c)
+[INFO ] 04:17:09 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 3/4: 1 image(s), mediaIds=['6ff6149d-210a-4354-8']
+[INFO ] 04:17:09 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: intra-batch jitter 0.4s (image 4/4)
+[INFO ] 04:17:09 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: 📦 submitting T2I (image 4/4)
+[INFO ] 04:17:13 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:17:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:17:30 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=13s,cap=✅) | conns=1, pending=1
+[INFO ] 04:17:57 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2169 chars)
+[WARNING] 04:17:57 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 48.0s (requestId=d99ffede)
+[INFO ] 04:17:57 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 3/4: 1 image(s), mediaIds=['35b2d03d-f58d-453c-b']
+[INFO ] 04:17:57 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: intra-batch jitter 0.7s (image 4/4)
+[INFO ] 04:17:57 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 04:17:57 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:17:57 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 4/4)
+[WARNING] 04:17:58 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:17:58 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: submit failed (attempt 1, image 3/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:18:03 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:03 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 1 (attempt 1) → xcd=30s, reCAPTCHA=35s
+[INFO ] 04:18:03 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2105 chars)
+[INFO ] 04:18:03 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:18:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:30 - core.extension_bridge - [ExtensionBridge] ✅ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 200 (token 2126 chars)
+[WARNING] 04:18:30 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: submit_prompt for levanlinh.kma@gmail.com took 31.7s (requestId=5549f9f3)
+[INFO ] 04:18:30 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] [T2I-Parse] image 4/4: 1 image(s), mediaIds=['1b84bd08-82ca-497e-8']
+[INFO ] 04:18:30 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: multi-image loop complete: 4/4 images
+[INFO ] 04:18:30 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: 🚀 fire-and-forget → download 4 images
+[INFO ] 04:18:30 - core.engine - [T2I-Pipeline:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: downloading 4 image(s)
+[INFO ] 04:18:30 - core.engine - [T2I-Pipeline] Task group_20260320_032611_task_5: waiting 15s before download
+[INFO ] 04:18:30 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=13s,cap=✅) | conns=1, pending=1
+[WARNING] 04:18:30 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:18:30 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: submit failed (attempt 1, image 4/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:18:30 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:18:30 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:31 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:18:31 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:31 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2105 chars)
+[INFO ] 04:18:32 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:18:32 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:32 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2126 chars)
+[INFO ] 04:18:33 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:18:33 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 1)
+[INFO ] 04:18:33 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: adaptive delay → submit attempt 2/11 (image 3/4)
+[INFO ] 04:18:35 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:35 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 1 (attempt 1) → xcd=30s, reCAPTCHA=35s
+[INFO ] 04:18:36 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2148 chars)
+[INFO ] 04:18:36 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:18:36 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 04:18:36 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:36 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2148 chars)
+[INFO ] 04:18:37 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 3/4)
+[INFO ] 04:18:37 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 04:18:37 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:37 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2148 chars)
+[INFO ] 04:18:38 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:18:38 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 1)
+[INFO ] 04:18:38 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: adaptive delay → submit attempt 2/11 (image 4/4)
+[WARNING] 04:18:38 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:18:38 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: submit failed (attempt 2, image 3/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:18:42 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 4/4)
+[INFO ] 04:18:42 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 04:18:43 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:18:43 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: submit failed (attempt 2, image 4/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:18:43 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 2) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:18:43 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2148 chars)
+[INFO ] 04:18:43 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:18:43 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2084 chars
+[INFO ] 04:18:43 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:43 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2084 chars)
+[INFO ] 04:18:45 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2084 chars
+[INFO ] 04:18:45 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:45 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2084 chars)
+[INFO ] 04:18:46 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:18:46 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:18:46 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: adaptive delay → submit attempt 3/11 (image 3/4)
+[INFO ] 04:18:46 - core.engine - Downloaded: 006a_20260320_041845_1K.png → D:\Music\Ruby\Produce for Customer\Research\My Content\Meo_Tet_2026\38_Cay_Xau_Ho\character\1K
+[INFO ] 04:18:46 - core.engine - Thumbnail (image): group_20260320_032611_task_5_0.jpg
+[INFO ] 04:18:47 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:47 - core.engine - Downloaded: 006b_20260320_041846_1K.png → D:\Music\Ruby\Produce for Customer\Research\My Content\Meo_Tet_2026\38_Cay_Xau_Ho\character\1K
+[INFO ] 04:18:47 - core.engine - Thumbnail (image): group_20260320_032611_task_5_1.jpg
+[INFO ] 04:18:48 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 2) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:18:48 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2126 chars)
+[INFO ] 04:18:48 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:18:48 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:18:48 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:48 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2126 chars)
+[INFO ] 04:18:48 - core.engine - Downloaded: 006c_20260320_041847_1K.png → D:\Music\Ruby\Produce for Customer\Research\My Content\Meo_Tet_2026\38_Cay_Xau_Ho\character\1K
+[INFO ] 04:18:48 - core.engine - Thumbnail (image): group_20260320_032611_task_5_2.jpg
+[INFO ] 04:18:49 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 3/4)
+[INFO ] 04:18:49 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:18:49 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:49 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2126 chars)
+[INFO ] 04:18:50 - core.engine - Downloaded: 006d_20260320_041848_1K.png → D:\Music\Ruby\Produce for Customer\Research\My Content\Meo_Tet_2026\38_Cay_Xau_Ho\character\1K
+[INFO ] 04:18:50 - core.engine - Thumbnail (image): group_20260320_032611_task_5_3.jpg
+[INFO ] 04:18:50 - core.engine - [T2I-Pipeline] Task group_20260320_032611_task_5: download OK (attempt 1, 4 files)
+[INFO ] 04:18:50 - core.engine - [T2I-Pipeline] Task group_20260320_032611_task_5: downloaded 4 image(s) to 1K/
+[INFO ] 04:18:50 - core.engine - [T2I-Pipeline] Task group_20260320_032611_task_5: has_media_ids=True, download_quality='1k', should_upscale=False, media_ids=['ef1e7132-0944-4943-9ebe-5fe3ced9b47a', '4933dfc4-e3bb-4c41-9c05-8e7c4c166c42', '6ff6149d-210a-4354-838e-5bd264a7f9c7']
+[INFO ] 04:18:50 - core.engine - [T2I-Pipeline] Task group_20260320_032611_task_5: download_quality=1k, no upscale needed
+[INFO ] 04:18:50 - core.dispatcher - [Dispatcher] ✅ Task group_20260320_032611_task_5 → COMPLETED (account=levanlinh.kma@gmail.com, outputs=4, running_count=4)
+[INFO ] 04:18:50 - core.engine - [T2I-Pipeline] Task group_20260320_032611_task_5: ✅ DONE (4 files, quality=1K)
+[INFO ] 04:18:50 - core.engine - [T2I-Pipeline:levanlinh.kma@gmail.com] Task group_20260320_032611_task_5: released 4 output slots (active=8)
+[WARNING] 04:18:50 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:18:50 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: submit failed (attempt 3, image 3/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:18:50 - core.engine - [T2I-Worker:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: acquired 4 output slots (active=12)
+[INFO ] 04:18:50 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 04:18:50 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:18:50 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:18:50 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: adaptive delay → submit attempt 3/11 (image 4/4)
+[INFO ] 04:18:50 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 0)
+[INFO ] 04:18:52 - core.dispatcher - [Dispatcher] 📋 Task group_20260320_032643_task_0 READY → RUNNING (account=levanlinh.kma@gmail.com, running_count=5)
+[INFO ] 04:18:52 - core.engine - [foreman-levanlin-0] Picked task group_20260320_032643_task_0 [running/init] progress=0% prompt_idx=0 workflow=T2I
+[INFO ] 04:18:52 - core.engine - [Foreman:levanlinh.kma@gmail.com] Task group_20260320_032643_task_0: 🎨 T2I worker dispatch (4 workers)
+[INFO ] 04:18:53 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 4/4)
+[INFO ] 04:18:53 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: adaptive delay → submit attempt 1/11 (image 1/4)
+[WARNING] 04:18:54 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:18:54 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: submit failed (attempt 3, image 4/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:18:54 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:55 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 3) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:18:55 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2105 chars)
+[INFO ] 04:18:55 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:18:56 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:18:56 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:56 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2126 chars)
+[INFO ] 04:18:56 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: 📦 submitting T2I (image 1/4)
+[WARNING] 04:18:57 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:18:57 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: submit failed (attempt 1, image 1/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:18:57 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:18:57 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:57 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2105 chars)
+[INFO ] 04:18:58 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:18:58 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:18:58 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:18:58 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: adaptive delay → submit attempt 4/11 (image 3/4)
+[INFO ] 04:18:59 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 3) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:18:59 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2126 chars)
+[INFO ] 04:18:59 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:18:59 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2169 chars
+[INFO ] 04:18:59 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:18:59 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2169 chars)
+[INFO ] 04:19:00 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:19:00 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:00 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2126 chars)
+[INFO ] 04:19:01 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:01 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:19:01 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:19:02 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 3/4)
+[INFO ] 04:19:02 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: adaptive delay → submit attempt 4/11 (image 4/4)
+[INFO ] 04:19:02 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 1 (attempt 1) → xcd=30s, reCAPTCHA=35s
+[INFO ] 04:19:02 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2126 chars)
+[INFO ] 04:19:02 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[WARNING] 04:19:03 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:19:03 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: submit failed (attempt 4, image 3/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:19:03 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:19:03 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:03 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2105 chars)
+[INFO ] 04:19:04 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:19:04 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:04 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2126 chars)
+[INFO ] 04:19:04 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 4/4)
+[INFO ] 04:19:05 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:19:05 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 1)
+[INFO ] 04:19:05 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: adaptive delay → submit attempt 2/11 (image 1/4)
+[WARNING] 04:19:05 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:19:05 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: submit failed (attempt 4, image 4/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:19:07 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:08 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 4) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:19:08 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2105 chars)
+[INFO ] 04:19:08 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:19:08 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:19:08 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:08 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2126 chars)
+[INFO ] 04:19:08 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: 📦 submitting T2I (image 1/4)
+[WARNING] 04:19:09 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:19:09 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: submit failed (attempt 2, image 1/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:19:09 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:09 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2105 chars
+[INFO ] 04:19:09 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:09 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2105 chars)
+[INFO ] 04:19:10 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 4) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:19:10 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 04:19:10 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:19:10 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:19:10 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: adaptive delay → submit attempt 5/11 (image 3/4)
+[INFO ] 04:19:10 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:19:13 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:14 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 3/4)
+[INFO ] 04:19:14 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: adaptive delay → submit attempt 5/11 (image 4/4)
+[INFO ] 04:19:14 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 2) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:19:14 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2105 chars)
+[INFO ] 04:19:14 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[WARNING] 04:19:15 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:19:15 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: submit failed (attempt 5, image 3/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:19:15 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 04:19:15 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:15 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2148 chars)
+[INFO ] 04:19:16 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 04:19:16 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:16 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2148 chars)
+[INFO ] 04:19:17 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 4/4)
+[WARNING] 04:19:17 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:19:17 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: submit failed (attempt 5, image 4/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:19:17 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:19:17 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:19:17 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: adaptive delay → submit attempt 3/11 (image 1/4)
+[INFO ] 04:19:19 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:20 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 5) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:19:20 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2148 chars)
+[INFO ] 04:19:20 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 04:19:20 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: 📦 submitting T2I (image 1/4)
+[INFO ] 04:19:20 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2084 chars
+[INFO ] 04:19:20 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:20 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2084 chars)
+[WARNING] 04:19:21 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:19:21 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: submit failed (attempt 3, image 1/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:19:21 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:22 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 04:19:22 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:22 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2148 chars)
+[INFO ] 04:19:22 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 5) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:19:22 - core.engine - [Foreman:levanlinh.kma@gmail.com] reCAPTCHA recovery already in progress by another foreman — waiting for lock...
+[INFO ] 04:19:23 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:19:23 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:19:23 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: adaptive delay → submit attempt 6/11 (image 3/4)
+[INFO ] 04:19:23 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:19:25 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 04:19:26 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: 📦 submitting T2I (image 3/4)
+[INFO ] 04:19:26 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: adaptive delay → submit attempt 6/11 (image 4/4)
+[INFO ] 04:19:26 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ⏱️ Timeout Tier 2 (attempt 3) → xcd=40s, reCAPTCHA=45s
+[INFO ] 04:19:26 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2126 chars)
+[INFO ] 04:19:26 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[WARNING] 04:19:27 - core.extension_bridge - [ExtensionBridge] ❌ submit_prompt T2I for levanlinh.kma@gmail.com: HTTP 401 — Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[WARNING] 04:19:27 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_7: submit failed (attempt 6, image 3/4): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.
+[INFO ] 04:19:27 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2126 chars
+[INFO ] 04:19:27 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:27 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (1/2, 2126 chars)
+[INFO ] 04:19:28 - core.extension_bridge - [ExtensionBridge] ✅ reCAPTCHA token for levanlinh.kma@gmail.com: 2148 chars
+[INFO ] 04:19:28 - core.account_manager - [levanlinh.kma@gmail.com] 🧩 reCAPTCHA refreshed via Extension bridge (attempt 1)
+[INFO ] 04:19:28 - core.recaptcha_pool - [RecaptchaPool] Priority prefetch for levanlinh.kma@gmail.com (2/2, 2148 chars)
+[INFO ] 04:19:29 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_6: 📦 submitting T2I (image 4/4)
+[INFO ] 04:19:29 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 2 token(s) cached for continuation
+[INFO ] 04:19:29 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 2)
+[INFO ] 04:19:29 - core.engine - [T2I-BG:levanlinh.kma@gmail.com] Task group_20260320_032611_task_8: adaptive delay → submit attempt 4/11 (image 1/4)
+[INFO ] 04:19:30 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

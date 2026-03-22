@@ -318,7 +318,40 @@ class MainWindow(QMainWindow):
     
     def _bind_hotkeys(self):
         """Bind keyboard shortcuts."""
-        pass  # No hotkeys currently needed
+        # Global Search & Replace (Notepad++ style popup)
+        from ui.components.search_replace_bar import SearchReplaceBar
+        self._search_bar = SearchReplaceBar(self)
+
+        search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        search_shortcut.activated.connect(lambda: self._toggle_search(replace=False))
+
+        replace_shortcut = QShortcut(QKeySequence("Ctrl+H"), self)
+        replace_shortcut.activated.connect(lambda: self._toggle_search(replace=True))
+
+    def _toggle_search(self, replace: bool = False):
+        """Show global Find/Replace dialog for current tab."""
+        bar = self._search_bar
+
+        # Get current tab's searchable widgets
+        current_tab = self.tabview.currentWidget()
+        widgets = []
+        if hasattr(current_tab, 'get_searchable_widgets'):
+            widgets = current_tab.get_searchable_widgets()
+
+        if not widgets:
+            return
+
+        # Find focused widget or default to first
+        from PySide6.QtWidgets import QApplication
+        focused = QApplication.focusWidget()
+        target = widgets[0]
+        for w in widgets:
+            if w is focused or (focused and w.isAncestorOf(focused)):
+                target = w
+                break
+
+        bar.attach(target)
+        bar.show_bar(replace=replace)
     
     def _show_dev_console(self):
         """Show DevConsole tab (auto-called on startup for Tester role).
@@ -739,12 +772,7 @@ class MainWindow(QMainWindow):
             import logging
             logging.getLogger("veo.ui").debug(f"[StatusBar] Accounts poll error: {e}")
         
-        # Workers: running_tasks / total_capacity
-        # Uses dispatcher._running_count (all tasks in RUNNING state).
-        # Safe now that HardCap in get_next_task() prevents _per_account_running
-        # from exceeding max_workers — guarantees _running_count ≤ total_capacity.
-        # Note: session.active_workers would underreport (e.g., 16/40 vs 23 processing)
-        # because T2I fire-and-forget releases workers immediately after submit.
+        # Workers: true processing count + worker slots
         try:
             acc = self.controller.get_account_summary()
             running = acc.get("running_tasks", 0)
@@ -757,6 +785,7 @@ class MainWindow(QMainWindow):
                     total_capacity = ma.total_capacity
             except Exception:
                 pass
+            
             if "workers" in self._status_widgets:
                 # ★ Pool Separation: always show ops + upscale counts
                 active_upscale = acc.get("active_upscale", 0)
@@ -764,9 +793,8 @@ class MainWindow(QMainWindow):
                 self._status_widgets["workers"].setText(
                     f"👷 {active_workers}/{total_capacity} ops "
                     f"| ⬆️ {active_upscale}/{max_upscale} "
-                    f"| 📋 {running}"
                 )
-                color = Theme.GREEN if running > 0 else Theme.SUBTEXT0
+                color = Theme.GREEN if active_workers > 0 else Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
         except Exception as e:
             import logging

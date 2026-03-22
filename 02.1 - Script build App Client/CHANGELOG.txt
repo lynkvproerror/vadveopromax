@@ -1,10 +1,10 @@
-v2.3.5 — Sửa lỗi Upscale video
-
-⬆️ Upscale
-• Sửa lỗi chỉ upscale video đầu tiên trong mỗi task — giờ tất cả video (a, b, c, d) đều được upscale đúng
-• Sửa lỗi crash khi download file upscale (fife_uri)
-• Thumbnail hiển thị đúng trạng thái upscale cho từng video
+v2.3.9 — Cải thiện xử lý lỗi Rate Limit
 
 🔧 Ổn định
-• Cải thiện xử lý đồng thời khi upscale nhiều video
-• Tối ưu quy trình upscale background
+• Xử lý 429 (quota exhausted) thông minh hơn — lần đầu chỉ chờ 10s cho prompt đó, prompt khác vẫn gửi được
+• Account cooldown chỉ kích hoạt khi bị 429 liên tiếp 2 lần, tránh block không cần thiết
+• Reset 429 counter khi submit thành công, giúp hệ thống recovery nhanh hơn
+
+🚀 Hiệu năng
+• Giảm thời gian chờ khi gặp lỗi rate limit tạm thời
+• Tối ưu throughput — các prompt khác không bị block khi 1 prompt gặp lỗi

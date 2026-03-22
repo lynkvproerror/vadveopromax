@@ -15,6 +15,7 @@ the live browser, not token rotation. Focus is on:
 - Re-extracting session when cookies expire
 """
 
+from collections import deque
 from dataclasses import dataclass
 from typing import Optional, Callable, Dict, List
 from datetime import datetime, timedelta
@@ -66,7 +67,7 @@ class CookieRefreshManager:
     
     def __init__(self):
         self._pending_requests: Dict[str, RefreshRequest] = {}
-        self._refresh_history: List[RefreshRequest] = []
+        self._refresh_history: deque = deque(maxlen=200)  # FIFO eviction prevents unbounded growth
         
         # Callbacks
         self._on_refresh_needed: Optional[Callable[[str, str], None]] = None

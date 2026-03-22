@@ -1,0 +1,102 @@
+{
+  "group_id": "group_20260319_174105",
+  "workflow": "T2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 4,
+  "tasks": [
+    {
+      "id": "group_20260319_174105_task_0",
+      "prompt": "Hook scene [2 SEG]. 3D animation, warm forest morning lighting. SEG1: Wide shot, slow dolly in. Vietnamese forest edge, morning, rattan climbing plants, simple outdoor cooking area, Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights, small sturdy warm dark goldenrod lips, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, standing on cooking area, tough resilient pose. >> SEG2: Close-up, quick zoom. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights, small sturdy warm dark goldenrod lips, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, mouth opening speaking confidently to camera. Audio of forest morning lofi BGM, cooking SFX. [Giọng: Nam, 35-40 tuổi] \"Tao là đọt mây, dẻo dai mà bổ dưỡng lắm nha, ai ăn tao rồi phải khen\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_1",
+      "prompt": "Problem scene. Medium shot, static. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights wide challengingly, small sturdy warm dark goldenrod lips speaking firmly, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, on area, flexing. [Giọng: Nam, 35-40 tuổi] \"Thiếu chất xơ khoáng chất mà cứ ăn đồ chế biến, tao ở rừng chờ mà không ai tới\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_2",
+      "prompt": "Reaction scene. Close-up, dolly in. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights narrowed confidently, small sturdy warm dark goldenrod lips smirking toughly, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, on area, tough confident pose. [Giọng: Nam, 35-40 tuổi] \"Tao dẻo vậy mà giàu chất xơ khoáng chất vitamin lắm, đừng có coi thường\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_3",
+      "prompt": "Tip 1 scene [2 SEG]. 3D animation, warm forest lighting. SEG1: Medium shot, dolly in. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights bright instructive, small sturdy warm dark goldenrod lips open speaking instructively, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, standing next to bowl of rattan shoot soup. >> SEG2: Close-up, macro. Bowl of steaming golden rattan shoot soup, tender shoot pieces in nutritious broth, premium nutrition visual. Audio of cooking SFX. [Giọng: Nam, 35-40 tuổi] \"Nấu canh đọt mây bổ dưỡng nè, giàu chất xơ khoáng chất tuyệt vời\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_4",
+      "prompt": "Tip 2 scene. Medium shot. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights knowing, small sturdy warm dark goldenrod lips speaking, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, on area, pointing at plate of stir-fried rattan shoots. [Giọng: Nam, 35-40 tuổi] \"Xào tao ăn giàu chất xơ nè, giòn ngon mà ruột sạch nha\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_5",
+      "prompt": "Tip 3 scene [2 SEG]. 3D animation, warm forest lighting. SEG1: Medium shot. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights proud, small sturdy warm dark goldenrod lips speaking proudly, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, gesturing at plate of boiled rattan shoots with fish sauce. >> SEG2: Close-up. Plate of tender boiled rattan shoots with fish sauce dip, golden tender pieces, nutritious dipping visual. Audio of chopping SFX. [Giọng: Nam, 35-40 tuổi] \"Luộc tao chấm mắm ăn dinh dưỡng cao nè, ngọt giòn tự nhiên ngon lắm\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_6",
+      "prompt": "Demo scene [2 SEG]. 3D animation, warm forest morning lighting. SEG1: Wide shot, slow pan. Cooking area with three demos: bowl soup, plate stir-fried, plate boiled with sauce, Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights content, small sturdy warm dark goldenrod lips speaking, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, pointing at each proudly. >> SEG2: Close-up. Three items on area, warm forest morning light. [Giọng: Nam, 35-40 tuổi] \"Canh bổ dưỡng, xào chất xơ, luộc chấm mắm, tao dẻo mà đỉnh\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_7",
+      "prompt": "Practice scene. Medium shot, dolly in. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights watching camera warmly, small sturdy warm dark goldenrod lips speaking encouragingly, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, on area, gesturing invitingly. [Giọng: Nam, 35-40 tuổi] \"Vô rừng hái đọt mây nấu canh thử đi, ngon bổ lắm\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_8",
+      "prompt": "Result scene. Medium shot, dolly out. Warm golden morning light. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient eyes deep jet black with goldenrod highlights content beaming, small sturdy warm dark goldenrod lips speaking proudly, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, on area, tough proud pose. [Giọng: Nam, 35-40 tuổi] \"Đó thấy chưa, no bụng khoẻ người, tao chiến binh rừng dẻo dai nha\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260319_174105_task_9",
+      "prompt": "Hook-end scene. Close-up, static. Đọt Mây, an anthropomorphic rattan shoot mineral and fiber powerhouse, long thin curled shoot body 20cm, pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments and tender curled tip, large tough resilient deep jet black eyes with goldenrod highlights giving tough wink, small sturdy warm dark goldenrod lips tough smile speaking confidently to camera, tiny curled tender tip on top as curled tip crown, natural pale goldenrod long thin curled rattan shoot body with smooth bamboo-like segments, smaller curled shoot extensions as arms, long thin segmented texture with goldenrod color and curled tender tip, tough resilient final pose, blurred warm forest morning background. [Giọng: Nam, 35-40 tuổi] \"Tao là đọt mây, chiến binh rừng dẻo dai, nhớ ghi lại nha\"",
+      "model": "veo_3_1_t2v_fast_portrait_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

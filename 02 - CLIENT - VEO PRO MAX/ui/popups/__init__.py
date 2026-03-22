@@ -102,7 +102,7 @@ def show_confirm(parent, title: str, message: str, danger: bool = False) -> bool
     icon = QMessageBox.Icon.Warning if danger else QMessageBox.Icon.Question
     box = QMessageBox(icon, title, message, parent=parent)
     box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-    box.setDefaultButton(QMessageBox.StandardButton.No if danger else QMessageBox.StandardButton.Yes)
+    box.setDefaultButton(QMessageBox.StandardButton.Yes)
     box.setStyleSheet(_themed_stylesheet())
     return box.exec() == QMessageBox.StandardButton.Yes
 
@@ -121,7 +121,7 @@ def show_confirm_with_checkbox(
     icon = QMessageBox.Icon.Warning if danger else QMessageBox.Icon.Question
     box = QMessageBox(icon, title, message, parent=parent)
     box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-    box.setDefaultButton(QMessageBox.StandardButton.No if danger else QMessageBox.StandardButton.Yes)
+    box.setDefaultButton(QMessageBox.StandardButton.Yes)
     cb = QCheckBox(checkbox_text)
     box.setCheckBox(cb)
     box.setStyleSheet(_themed_stylesheet())

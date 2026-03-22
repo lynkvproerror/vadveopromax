@@ -27,6 +27,7 @@ class NetworkPage(QWidget):
 
     # Batch flush interval for API logs (ms)
     _API_FLUSH_MS = 200
+    _MAX_PENDING = 500  # Cap pending buffer to prevent memory leak when hidden
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -144,6 +145,9 @@ class NetworkPage(QWidget):
         """Queue an API activity log entry for batched rendering."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         self._pending_api_logs.append(f"[{timestamp}] {message}")
+        # Cap pending list to prevent unbounded growth when page is hidden
+        if len(self._pending_api_logs) > self._MAX_PENDING:
+            self._pending_api_logs = self._pending_api_logs[-self._MAX_PENDING:]
         # Bug 16: Start flush timer on-demand
         if not self._api_flush_timer.isActive():
             self._api_flush_timer.start(self._API_FLUSH_MS)
@@ -155,16 +159,19 @@ class NetworkPage(QWidget):
             self._api_flush_timer.stop()
             return
 
-        # Bug 16: Skip rendering when DevConsole/Network page not visible
+        # Always drain the buffer to prevent memory growth.
+        # Only skip *rendering* when the page is hidden.
+        logs_to_render = list(self._pending_api_logs)
+        self._pending_api_logs.clear()
+
         if not self.isVisible():
-            return
+            return  # Drained but skip render — buffer is freed
 
         from PySide6.QtGui import QTextCursor
 
         cursor = self._api_text.textCursor()
         cursor.movePosition(QTextCursor.End)
-        cursor.insertText("\n".join(self._pending_api_logs) + "\n")
-        self._pending_api_logs.clear()
+        cursor.insertText("\n".join(logs_to_render) + "\n")
 
         # Auto-scroll to bottom
         sb = self._api_text.verticalScrollBar()

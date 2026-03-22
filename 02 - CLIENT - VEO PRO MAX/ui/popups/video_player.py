@@ -520,6 +520,19 @@ class VideoPlayerPopup(BasePopup):
         name = status_names.get(status, f"Unknown({status})")
         _dbg(f"_on_media_status_changed: {name}")
         
+        # ★ Auto-play: start playback as soon as media is loaded
+        if status in (
+            QMediaPlayer.MediaStatus.LoadedMedia,
+            QMediaPlayer.MediaStatus.BufferedMedia,
+        ):
+            if (
+                self._player
+                and self._player.playbackState()
+                != QMediaPlayer.PlaybackState.PlayingState
+            ):
+                _dbg("Auto-play: media loaded → starting playback")
+                self._player.play()
+        
         if status == QMediaPlayer.MediaStatus.InvalidMedia:
             err = self._player.errorString() if self._player else "unknown"
             log.error(f"[VideoPlayer] InvalidMedia: {err}")

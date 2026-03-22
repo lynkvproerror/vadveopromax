@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 14
+SETTINGS_VERSION = 16
 
 
 @dataclass
@@ -30,7 +30,7 @@ class AppSettings:
     default_aspect_ratio: str = "LANDSCAPE"
     default_model: str = "Veo 3.1 - Fast"       # Display name (matches sidebar dropdown)
     default_output_count: int = 4                # Match sidebar default
-    default_download_quality: str = "1080p"      # Video download quality
+    default_download_quality: str = "720p"      # Video download quality
     default_image_quality: str = "1k"            # Image download quality
     default_image_model: str = "🔥 Nano Banana Pro"  # Image AI model display name
     auto_enhance_prompt: bool = False
@@ -128,6 +128,12 @@ class AppSettings:
     log_buffer_max: int = 20_000         # Max log entries in DevConsole buffer (0 = unlimited)
     session_errors_max: int = 2_000      # Max session error entries to keep
     auto_clear_tasks_max: int = 2_000    # Auto-clear completed tasks when count exceeds (0 = disabled)
+    prune_age_minutes: int = 0           # Remove completed tasks older than N minutes (0 = disabled)
+    
+    # === LOG FILE MANAGEMENT ===
+    log_rotation_max_mb: int = 5         # Max size per account log file before rotation (MB)
+    log_retention_days: int = 7          # Days to keep old log files before cleanup
+    gemini_log_max_blocks: int = 2_000   # Max lines in Gemini DevConsole log view (0 = unlimited)
     
     # === NOTIFICATIONS ===
     notify_toast_enabled: bool = True        # In-app toast on group complete
@@ -270,6 +276,16 @@ class AppSettings:
             # 13 → 14: Add auto-clear completed tasks cap
             13: lambda d: {**d,
                 'auto_clear_tasks_max': 2_000,
+            },
+            # 14 → 15: Add log file management settings
+            14: lambda d: {**d,
+                'log_rotation_max_mb': 5,
+                'log_retention_days': 7,
+                'gemini_log_max_blocks': 2_000,
+            },
+            # 15 → 16: Add prune_age_minutes setting (default OFF)
+            15: lambda d: {**d,
+                'prune_age_minutes': 0,
             },
         }
         

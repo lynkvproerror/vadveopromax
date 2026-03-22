@@ -132,6 +132,13 @@ class ExtensionBridge:
         self._pending_request_actions: Dict[str, str] = {}  # requestId → action name
         self._pending_request_emails: Dict[str, str] = {}  # requestId → email
 
+        # ★ Fix J+N1: Per-account submit throttle — prevent freeze from too many
+        # concurrent pending submits on a single WebSocket connection.
+        # 4 = 1 foreman batch. Extension processes sequentially on 1 Tab JS thread,
+        # so >4 just queues without throughput gain while choking event loop.
+        self._MAX_CONCURRENT_SUBMITS = 4
+        self._submit_semaphores: Dict[str, asyncio.Semaphore] = {}  # email → Semaphore
+
         # ── Debug message log (ring buffer for DevConsole) ──
         self._message_log: deque = deque(maxlen=500)  # {dir, action, email, ts, payload_preview}
         
@@ -489,6 +496,42 @@ class ExtensionBridge:
                 f"{', '.join(cleared)}"
             )
 
+    def cleanup_account(self, email: str):
+        """Remove all per-email state when an account is permanently removed.
+
+        Prevents unbounded growth of per-email dicts over long sessions.
+        Should be called when an account is removed from the system.
+        """
+        per_email_dicts = [
+            self._preserved_headers,
+            self._headers_debounce_latest,
+            self._connection_events,
+            self._content_heartbeats,
+            self._recaptcha_readiness,
+            self._short_token_counts,
+            self._stale_log_times,
+            self._frozen_tab_counts,
+            self._frozen_tab_first_at,
+            self._refresh_cooldown_times,
+            self._reload_grace,
+            self._recaptcha_locks,
+            self._submit_semaphores,
+            self._check_ready_cache,
+            self._browser_close_cooldown,
+        ]
+        removed = 0
+        for d in per_email_dicts:
+            if email in d:
+                del d[email]
+                removed += 1
+        # Cancel pending debounce timer
+        timer = self._headers_debounce_timers.pop(email, None)
+        if timer:
+            timer.cancel()
+            removed += 1
+        if removed:
+            log.info(f"[ExtensionBridge] 🗑️ Cleaned up {removed} per-email entries for {email}")
+
     # Port fallback list: try primary → backup1 → backup2
     FALLBACK_PORTS = [8765, 8766, 8767]
     
@@ -838,6 +881,7 @@ class ExtensionBridge:
         needs_recaptcha: bool = True,
         timeout: float = 45.0,
         attempt: int = 0,
+        lock_free: bool = False,
     ) -> Optional[dict]:
         """Submit prompt via Extension — reCAPTCHA + API call from page context.
 
@@ -873,99 +917,144 @@ class ExtensionBridge:
         # uses page-context fetch — Chrome auto-adds the real x-client-data header.
         # The cached value (from CDP) may be 8 chars but the actual request has the full header.
 
-        # Guard: ALWAYS simulate activity before submit (prevent bot detection)
-        try:
-            await self.simulate_activity(email, timeout=3.0)
-            await asyncio.sleep(0.3)
-        except Exception:
-            pass
-
-        # Serialize submissions per account (same lock as reCAPTCHA)
-        if email not in self._recaptcha_locks:
-            self._recaptcha_locks[email] = asyncio.Lock()
-
-        async with self._recaptcha_locks[email]:
-            request_id = str(uuid.uuid4())
-            future = asyncio.get_running_loop().create_future()
-            conn = self._find_connection(email)
-            if not conn:
-                log.warning(f"[ExtensionBridge] Connection lost for {email} during submit_prompt")
-                return None
-            self._pending_requests[request_id] = future
-            self._pending_request_conns[request_id] = conn
-
+        # Guard: simulate activity before submit (skip for lock_free batch calls)
+        # ★ Fix H1: lock_free=True means caller already handled gate + activity
+        if not lock_free:
             try:
-                # ── Progressive timeout: calculate tier-based timeouts ──
-                from config.constants import get_timeout_tier
-                tier = get_timeout_tier(attempt)
-                rc_timeout_ms = tier['rc_execute_ms']
-                fetch_timeout_ms = tier['fetch_ms']
-                bridge_timeout = tier['bridge_timeout']
-                # ★ Use caller-provided timeout when larger (T2I sync: 105-125s)
-                effective_timeout = max(timeout, bridge_timeout)
-                
-                await self._ws_send(conn, {
-                    'action': 'submit_prompt',
-                    'requestId': request_id,
-                    'email': email,
-                    'endpoint': endpoint,
-                    'payload': {'body': body},
-                    'needsRecaptcha': needs_recaptcha,
-                    'rcTimeout': rc_timeout_ms,       # ★ Dynamic reCAPTCHA timeout
-                    'fetchTimeout': fetch_timeout_ms,  # ★ Dynamic fetch timeout
-                    'attempt': attempt,                # ★ For Extension logging
-                })
+                await self.simulate_activity(email, timeout=3.0)
+                await asyncio.sleep(0.3)
+            except Exception:
+                pass
 
-                result = await asyncio.wait_for(future, timeout=effective_timeout)
-
-                success = result.get('success', False)
-                status = result.get('status', 0)
-                error = result.get('error', '')
-                token_len = result.get('tokenLength', 0)
-
-                if success:
-                    # Guard 3: Validate token length even on success
-                    if token_len > 0 and token_len < self.MIN_TOKEN_LENGTH:
-                        log.warning(
-                            f"[ExtensionBridge] ⚠️ submit_prompt {endpoint} for {email}: "
-                            f"HTTP {status} SUCCESS but token only {token_len} chars "
-                            f"(need ≥{self.MIN_TOKEN_LENGTH}) — may be rejected by Google"
-                        )
-                        self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
-                    else:
-                        log.info(
-                            f"[ExtensionBridge] ✅ submit_prompt {endpoint} for {email}: "
-                            f"HTTP {status} (token {token_len} chars)"
-                        )
-                        # Reset short token counter on success with valid token
-                        self._short_token_counts[email] = 0
-                    return result
-                else:
-                    # Check if it's a reCAPTCHA issue
-                    if error and ('too short' in error.lower() or 'recaptcha' in error.lower()):
-                        self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
-                        count = self._short_token_counts[email]
-                        log.warning(
-                            f"[ExtensionBridge] ❌ submit_prompt reCAPTCHA failed for {email}: "
-                            f"{error} — consecutive #{count}"
-                        )
-                    else:
-                        log.warning(
-                            f"[ExtensionBridge] ❌ submit_prompt {endpoint} for {email}: "
-                            f"HTTP {status} — {error}"
-                        )
-                    return result
-
-            except asyncio.TimeoutError:
-                log.error(
-                    f"[ExtensionBridge] submit_prompt timed out for {email} "
-                    f"({timeout}s) — endpoint={endpoint}"
+        # ★ Fix H1: lock_free bypasses per-account lock for batch concurrent calls
+        if lock_free:
+            return await self._submit_prompt_core(
+                email, endpoint, body, needs_recaptcha, timeout, attempt
+            )
+        else:
+            # Serialize submissions per account (same lock as reCAPTCHA)
+            if email not in self._recaptcha_locks:
+                self._recaptcha_locks[email] = asyncio.Lock()
+            async with self._recaptcha_locks[email]:
+                return await self._submit_prompt_core(
+                    email, endpoint, body, needs_recaptcha, timeout, attempt
                 )
-                return None
-            finally:
-                self._cleanup_request_timing(request_id)
-                self._pending_requests.pop(request_id, None)
-                self._pending_request_conns.pop(request_id, None)
+
+    async def _submit_prompt_core(
+        self,
+        email: str,
+        endpoint: str,
+        body: dict,
+        needs_recaptcha: bool,
+        timeout: float,
+        attempt: int,
+    ) -> Optional[dict]:
+        """Core submit logic — extracted for lock_free support."""
+        # ★ Fix J: throttle concurrent submits per account
+        if email not in self._submit_semaphores:
+            self._submit_semaphores[email] = asyncio.Semaphore(
+                self._MAX_CONCURRENT_SUBMITS
+            )
+        async with self._submit_semaphores[email]:
+            return await self._submit_prompt_core_inner(
+                email, endpoint, body, needs_recaptcha, timeout, attempt
+            )
+
+    async def _submit_prompt_core_inner(
+        self,
+        email: str,
+        endpoint: str,
+        body: dict,
+        needs_recaptcha: bool,
+        timeout: float,
+        attempt: int,
+    ) -> Optional[dict]:
+        """Core submit logic — runs inside per-account semaphore."""
+        request_id = str(uuid.uuid4())
+        future = asyncio.get_running_loop().create_future()
+        conn = self._find_connection(email)
+        if not conn:
+            log.warning(f"[ExtensionBridge] Connection lost for {email} during submit_prompt")
+            return None
+        self._pending_requests[request_id] = future
+        self._pending_request_conns[request_id] = conn
+
+        try:
+            # ── Progressive timeout: calculate tier-based timeouts ──
+            from config.constants import get_timeout_tier
+            tier = get_timeout_tier(attempt)
+            rc_timeout_ms = tier['rc_execute_ms']
+            fetch_timeout_ms = tier['fetch_ms']
+            bridge_timeout = tier['bridge_timeout']
+            # ★ Use caller-provided timeout when larger (T2I sync: 105-125s)
+            effective_timeout = max(timeout, bridge_timeout)
+            
+            await self._ws_send(conn, {
+                'action': 'submit_prompt',
+                'requestId': request_id,
+                'email': email,
+                'endpoint': endpoint,
+                'payload': {'body': body},
+                'needsRecaptcha': needs_recaptcha,
+                'rcTimeout': rc_timeout_ms,       # ★ Dynamic reCAPTCHA timeout
+                'fetchTimeout': fetch_timeout_ms,  # ★ Dynamic fetch timeout
+                'attempt': attempt,                # ★ For Extension logging
+            })
+
+            # ★ Fix N2: Yield to event loop before blocking wait — lets UI updates
+            # and other coroutines run while we wait 28-49s for Extension response.
+            await asyncio.sleep(0)
+
+            result = await asyncio.wait_for(future, timeout=effective_timeout)
+
+            success = result.get('success', False)
+            status = result.get('status', 0)
+            error = result.get('error', '')
+            token_len = result.get('tokenLength', 0)
+
+            if success:
+                # Guard 3: Validate token length even on success
+                if token_len > 0 and token_len < self.MIN_TOKEN_LENGTH:
+                    log.warning(
+                        f"[ExtensionBridge] ⚠️ submit_prompt {endpoint} for {email}: "
+                        f"HTTP {status} SUCCESS but token only {token_len} chars "
+                        f"(need ≥{self.MIN_TOKEN_LENGTH}) — may be rejected by Google"
+                    )
+                    self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
+                else:
+                    log.info(
+                        f"[ExtensionBridge] ✅ submit_prompt {endpoint} for {email}: "
+                        f"HTTP {status} (token {token_len} chars)"
+                    )
+                    # Reset short token counter on success with valid token
+                    self._short_token_counts[email] = 0
+                return result
+            else:
+                # Check if it's a reCAPTCHA issue
+                if error and ('too short' in error.lower() or 'recaptcha' in error.lower()):
+                    self._short_token_counts[email] = self._short_token_counts.get(email, 0) + 1
+                    count = self._short_token_counts[email]
+                    log.warning(
+                        f"[ExtensionBridge] ❌ submit_prompt reCAPTCHA failed for {email}: "
+                        f"{error} — consecutive #{count}"
+                    )
+                else:
+                    log.warning(
+                        f"[ExtensionBridge] ❌ submit_prompt {endpoint} for {email}: "
+                        f"HTTP {status} — {error}"
+                    )
+                return result
+
+        except asyncio.TimeoutError:
+            log.error(
+                f"[ExtensionBridge] submit_prompt timed out for {email} "
+                f"({timeout}s) — endpoint={endpoint}"
+            )
+            return None
+        finally:
+            self._cleanup_request_timing(request_id)
+            self._pending_requests.pop(request_id, None)
+            self._pending_request_conns.pop(request_id, None)
 
     async def submit_upscale(
         self,
@@ -1757,7 +1846,9 @@ class ExtensionBridge:
                 
                 try:
                     loop = asyncio.get_running_loop()
-                    self._headers_debounce_timers[email] = loop.call_later(2.0, _fire_debounced)
+                    # ★ Fix N3: 5s debounce (was 2s) — headers rarely change mid-batch,
+                    # reduces GUI thread callback pressure during heavy T2I load.
+                    self._headers_debounce_timers[email] = loop.call_later(5.0, _fire_debounced)
                 except RuntimeError:
                     # No event loop — fire immediately
                     _fire_debounced()

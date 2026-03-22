@@ -192,8 +192,9 @@ class PipelinePromptTable(QWidget):
             thumb_btn.setIcon(pix)
             thumb_btn.setIconSize(QSize(self._thumb_w - 4, self._thumb_h - 4))
             thumb_btn.setToolTip(f"Click to preview: {item.thumbnail_path}")
-            fp = item.thumbnail_path
-            thumb_btn.clicked.connect(lambda checked=False, p=fp: os.startfile(p))
+            thumb_btn.clicked.connect(
+                lambda checked=False, idx=row_idx: self._open_image_preview(idx)
+            )
         else:
             thumb_btn.setText("\u23f3\n\U0001f5bc\ufe0f")
             thumb_btn.setToolTip("Image will appear after generation")
@@ -228,9 +229,10 @@ class PipelinePromptTable(QWidget):
                 vid_btn.setIcon(pix)
                 vid_btn.setIconSize(QSize(self._thumb_w - 4, self._thumb_h - 4))
                 # Try to find actual video file for click-to-open
-                vid_file = item.metadata.get("video_path", item.video_thumbnail_path) if item.metadata else item.video_thumbnail_path
-                vid_btn.setToolTip(f"Click to play: {vid_file}")
-                vid_btn.clicked.connect(lambda checked=False, p=vid_file: os.startfile(p))
+                vid_btn.setToolTip(f"Click to play video")
+                vid_btn.clicked.connect(
+                    lambda checked=False, idx=row_idx: self._open_video_preview(idx)
+                )
             else:
                 vid_btn.setText("\u23f3\n\U0001f3ac")
                 vid_btn.setToolTip("Video will appear after Queue processes this task")
@@ -294,6 +296,37 @@ class PipelinePromptTable(QWidget):
         action_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         action_lay.addWidget(edit_btn)
         self.table.setCellWidget(row_idx, col_action, action_container)
+
+    # ── In-app preview helpers ───────────────────────────────────
+
+    def _open_image_preview(self, row_idx: int):
+        """Open in-app image viewer at the given row, with all items navigable."""
+        from ui.tabs.project_components.media_preview import ImagePreviewDialog
+        paths = [it.thumbnail_path for it in self._items if it.thumbnail_path]
+        labels = [it.name for it in self._items if it.thumbnail_path]
+        if not paths:
+            return
+        # Map row_idx to index in filtered paths list
+        target_path = self._items[row_idx].thumbnail_path if row_idx < len(self._items) else ""
+        start = paths.index(target_path) if target_path in paths else 0
+        ImagePreviewDialog.show_preview(self, paths, start, labels)
+
+    def _open_video_preview(self, row_idx: int):
+        """Open in-app video player at the given row, with all items navigable."""
+        from ui.tabs.project_components.media_preview import VideoPreviewDialog
+        paths, labels = [], []
+        for it in self._items:
+            vp = (it.metadata or {}).get("video_path", it.video_thumbnail_path)
+            if vp and os.path.isfile(vp):
+                paths.append(vp)
+                labels.append(it.name)
+        if not paths:
+            return
+        # Map row_idx → index in filtered list
+        item = self._items[row_idx] if row_idx < len(self._items) else None
+        target = (item.metadata or {}).get("video_path", item.video_thumbnail_path) if item else ""
+        start = paths.index(target) if target in paths else 0
+        VideoPreviewDialog.show_preview(self, paths, start, labels)
 
     def _on_edit(self, row_idx: int):
         """Open modal edit dialog — same styling as PromptTable._on_edit."""

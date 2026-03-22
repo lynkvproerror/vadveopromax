@@ -6,6 +6,7 @@ Role: Monitor sessions for expiry and errors
 """
 
 from dataclasses import dataclass
+from collections import deque
 from typing import Optional, Callable, List, Dict
 from datetime import datetime, timedelta
 from enum import Enum
@@ -71,7 +72,7 @@ class SessionMonitor:
     
     def __init__(self):
         self._sessions: Dict[str, AccountSession] = {}
-        self._errors: List[SessionError] = []
+        self._errors: deque = deque(maxlen=500)  # FIFO eviction prevents unbounded growth
         
         # Callbacks
         self._on_session_expired: Optional[Callable[[str, SessionEvent], None]] = None

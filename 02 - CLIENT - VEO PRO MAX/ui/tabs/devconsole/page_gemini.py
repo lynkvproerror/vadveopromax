@@ -87,6 +87,14 @@ class GeminiApiPage(QWidget):
 
         self._log_view = QTextEdit()
         self._log_view.setReadOnly(True)
+        # Limit log growth — read from settings with fallback
+        _gemini_max_blocks = 2000
+        try:
+            from config.settings import get_settings
+            _gemini_max_blocks = get_settings().gemini_log_max_blocks
+        except Exception:
+            pass
+        self._log_view.document().setMaximumBlockCount(_gemini_max_blocks)  # Prevent unbounded memory growth
         self._log_view.setStyleSheet(f"""
             QTextEdit {{
                 background-color: {Theme.MANTLE};

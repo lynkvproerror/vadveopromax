@@ -267,7 +267,7 @@ class VideoSidebar(SidebarBase):
         self.download_quality = QComboBox()
         self.download_quality.addItems(["720p", "1080p", "4K"])
         if _s:
-            _dq = getattr(_s, 'default_download_quality', '1080p')
+            _dq = getattr(_s, 'default_download_quality', '720p')
             self.download_quality.setCurrentText(_dq)
         self._layout.addWidget(self.download_quality)
         
@@ -311,7 +311,7 @@ class VideoSidebar(SidebarBase):
             if idx >= 0:
                 self.model.setCurrentIndex(idx)
             # Download Quality
-            dq = getattr(s, 'default_download_quality', '1080p')
+            dq = getattr(s, 'default_download_quality', '720p')
             self.download_quality.setCurrentText(dq)
         except Exception:
             pass

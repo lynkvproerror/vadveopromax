@@ -208,9 +208,13 @@ class ConfirmDialog(BasePopup):
         
         self._main_layout.addWidget(self.footer)
     
+    def accept(self):
+        """Override: Enter key triggers Qt's accept() — set result before closing."""
+        self._result = True
+        super().accept()
+    
     def _on_confirm(self):
         """Handle confirm action."""
-        self._result = True
         self.accept()
     
     def _on_close(self):
@@ -318,6 +322,19 @@ class RenameDialog(BasePopup):
         self.name_entry = QLineEdit()
         self.name_entry.setPlaceholderText(self._placeholder)
         self.name_entry.setMinimumHeight(36)
+        self.name_entry.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {Theme.SURFACE1};
+                color: {Theme.TEXT};
+                border: 1px solid {Theme.SURFACE2};
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 13px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {Theme.BLUE};
+            }}
+        """)
         if self._initial_value:
             self.name_entry.setText(self._initial_value)
             self.name_entry.selectAll()

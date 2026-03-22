@@ -77,7 +77,11 @@
             "include_quality": "Đính kèm chất lượng vào tên file",
             "auto_start_queue": "Tự động bắt đầu hàng đợi khi thêm",
             "pause_on_error": "Tạm dừng khi lỗi",
-            "download_non_watermark": "Download Non-Watermark"
+            "download_non_watermark": "Download Non-Watermark",
+            "auto_clear_tasks": "Tự xóa task hoàn thành:",
+            "prune_age": "Tự xóa task cũ hơn:",
+            "log_buffer_size": "Bộ nhớ Log (RAM):",
+            "gemini_log_lines": "Dòng Log Gemini:"
         },
         "notification_sub": {
             "in_app_toast": "Thông báo ứng dụng:",

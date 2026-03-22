@@ -1,0 +1,169 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260322_102204
+Total: 164 entries
+============================================================
+
+[INFO ] 10:20:46 - core.session_manager - [Session] Loaded from 2026-03-22T10:20:35.436197
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_10_retry_v0_091833117038: restored replace_target → (group_20260321_195316_task_10, video[0])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v1_094122857669: restored replace_target → (group_20260321_195316_task_30, video[1])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v3_094123684020: restored replace_target → (group_20260321_195316_task_30, video[3])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v0_094124032095: restored replace_target → (group_20260321_195316_task_30, video[0])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v2_094127234714: restored replace_target → (group_20260321_195316_task_30, video[2])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v0_095003689343: restored replace_target → (group_20260321_195316_task_30_retry_v1_094122857669, video[0])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v0_095021593848: restored replace_target → (group_20260321_195316_task_30_retry_v2_094127234714, video[0])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v0_095025994742: restored replace_target → (group_20260321_195316_task_30_retry_v3_094123684020, video[0])
+[INFO ] 10:20:46 - core.dispatcher - [SessionRestore] Task group_20260321_195316_task_30_retry_v0_095225191527: restored replace_target → (group_20260321_195316_task_30_retry_v0_094124032095, video[0])
+[INFO ] 10:20:46 - veo.tab_queue - [GroupCreate] gid=group_20260321_195316 name='RELAX FOOTAGE 2' LAZY (deferred) expanded=False
+[INFO ] 10:20:46 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 10:20:46 - veo.pipeline - [Pipeline] Activated version 1/1: Version 1
+[INFO ] 10:20:46 - veo.tab_project - [Pipeline] Full restore: 62 scenes, 3 characters, topic='Kịch Bản Chibi: Siêu Nhân Cứu MèoPhần 1: Tình Huốn'
+[INFO ] 10:20:55 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Production: 6 completed stage(s), current=video_gen, FULL session
+[INFO ] 10:20:58 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 10:20:58 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 10:20:58 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 10:20:58 - core.token_manager - [TokenManager] No tokens found for levanlinh.kma@gmail.com
+[INFO ] 10:20:58 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: levanlinh.kma@gmail.com...
+[INFO ] 10:20:58 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 10:20:58 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_fed78075
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] Chrome launched: PID=30612, port=9223
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 30612
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 10:20:58 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 10:20:58 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 56499)
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 10:20:58 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[INFO ] 10:20:58 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.8
+[INFO ] 10:20:58 - core.extension_manager - [ExtMgr] Extension v2.3.8 up-to-date — skipping
+[INFO ] 10:20:58 - core.profiles_controller - [ProfilesController] Chrome PID=30612, port=9223 (new)
+[INFO ] 10:20:59 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[WARNING] 10:20:59 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[INFO ] 10:20:59 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser visible (smart-hide disabled)
+[INFO ] 10:20:59 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 10:20:59 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 10:20:59 - core.account_manager - [levanlinh.kma@gmail.com] ⏳ Debug browser starting, waiting...
+[INFO ] 10:21:00 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.8)
+[INFO ] 10:21:00 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 10:21:00 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 10:21:00 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 10:21:00 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 10:21:01 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 10:21:01 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 10:21:01 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 10:21:03 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 10:21:03 - core.account_manager - [levanlinh.kma@gmail.com] 🔗 Attaching to debug browser (page access only)
+[INFO ] 10:21:03 - core.multi_account - All account browsers initialized
+[INFO ] 10:21:03 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 10:21:03 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 10:21:06 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 10:21:06 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['levanlinh.kma@gmail.com']
+[INFO ] 10:21:06 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 10:21:06 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/2B27B4AC8B13A21E9094E62C28...
+[INFO ] 10:21:07 - core.extension_manager - [ExtMgr] Closed extensions tab 2B27B4AC... (PUT)
+[INFO ] 10:21:07 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 10:21:07 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.8
+[INFO ] 10:21:07 - core.app_controller - [AppController] Extension v2.3.8 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 10:21:07 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 10:21:07 - core.app_controller - [AutoLaunch] Extension check complete: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 10:21:07 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 10:21:07 - core.app_controller - [TierCheck] ✅ levanlinh.kma@gmail.com: Ultra
+[INFO ] 10:21:07 - core.app_controller - [TierCheck] ✅ All accounts are Pro or Ultra
+[INFO ] 10:21:07 - core.app_controller - [AutoLaunch] ✅ Account tier enforcement complete
+[INFO ] 10:21:07 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 10:21:07 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 10:21:07 - core.app_controller - [AutoLaunch] 📸 Image Library: 45 images, all already uploaded
+[INFO ] 10:21:09 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 10:21:10 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2190 chars)
+[INFO ] 10:21:10 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ✅ reCAPTCHA pre-warmed — token cached, ready for instant Start All
+[INFO ] 10:21:10 - veo - [Status] ✅ levanlinh.kma@gmail.com: reCAPTCHA ready — account prepared
+[INFO ] 10:21:17 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 10:21:17 - veo.tab_queue - [LazyExpand] gid=group_20260321_195316 built 204 children (chunked)
+[INFO ] 10:21:25 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_41: found 0 children: []
+[INFO ] 10:21:25 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_41: state=ready, prompt_index=41 preserved, all generated data purged
+[INFO ] 10:21:25 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_41 fully purged and re-queued
+[INFO ] 10:21:27 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_44: found 0 children: []
+[INFO ] 10:21:27 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_44: state=ready, prompt_index=44 preserved, all generated data purged
+[INFO ] 10:21:27 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_44 fully purged and re-queued
+[INFO ] 10:21:28 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_45: found 0 children: []
+[INFO ] 10:21:28 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_45: state=ready, prompt_index=45 preserved, all generated data purged
+[INFO ] 10:21:28 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_45 fully purged and re-queued
+[INFO ] 10:21:29 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_47: found 0 children: []
+[INFO ] 10:21:29 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_47: state=ready, prompt_index=47 preserved, all generated data purged
+[INFO ] 10:21:29 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_47 fully purged and re-queued
+[INFO ] 10:21:30 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_49: found 0 children: []
+[INFO ] 10:21:30 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_49: state=ready, prompt_index=49 preserved, all generated data purged
+[INFO ] 10:21:30 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_49 fully purged and re-queued
+[INFO ] 10:21:32 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_50: found 0 children: []
+[INFO ] 10:21:32 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_50: state=ready, prompt_index=50 preserved, all generated data purged
+[INFO ] 10:21:32 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_50 fully purged and re-queued
+[INFO ] 10:21:36 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_36: found 0 children: []
+[INFO ] 10:21:36 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_36: state=ready, prompt_index=36 preserved, all generated data purged
+[INFO ] 10:21:36 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_36 fully purged and re-queued
+[INFO ] 10:21:37 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_37: found 0 children: []
+[INFO ] 10:21:37 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_37: state=ready, prompt_index=37 preserved, all generated data purged
+[INFO ] 10:21:37 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_37 fully purged and re-queued
+[INFO ] 10:21:38 - core.app_controller - [ReUpscale] Starting re-upscale for task group_20260321_195316_task_38 (failed_only=False)
+[INFO ] 10:21:38 - core.engine - Re-upscale group_20260321_195316_task_38: upscale_media_ids state = [(0, True)]
+[INFO ] 10:21:38 - core.engine - Re-upscale group_20260321_195316_task_38: media_ids validity = [(0, True)]
+[INFO ] 10:21:38 - core.upscale_queue - [UpscaleQueue] Auto-started for re-upscale job
+[INFO ] 10:21:38 - core.upscale_queue - [UpscaleQueue] Started worker for levanlinh.kma@gmail.com
+[INFO ] 10:21:38 - core.upscale_queue - [UpscaleQueue] Enqueued re-upscale for task group_20260321_195316_task_38 (1 videos, 1080p) → levanlinh.kma@gmail.com
+[INFO ] 10:21:38 - core.engine - Re-upscale group_20260321_195316_task_38: enqueued 1 videos to UpscaleQueue (all)
+[INFO ] 10:21:38 - core.app_controller - [ReUpscale] Task group_20260321_195316_task_38 finished: success
+[INFO ] 10:21:38 - core.upscale_queue - [UpscaleQueue] levanlinh.kma@gmail.com: launched job group_20 (active=1, burst=0/2)
+[INFO ] 10:21:38 - core.upscale_queue - [UpscaleQueue] Processing task group_20260321_195316_task_38: 1 videos → 1080p (parallel poll)
+[INFO ] 10:21:38 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2105 chars)
+[INFO ] 10:21:38 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 10:21:38 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 0 token(s) cached for continuation
+[INFO ] 10:21:38 - core.upscale_queue - [UpscaleQueue] levanlinh.kma@gmail.com: pre-warm activity simulated (age=0s, rounds=1), waiting 10s for reCAPTCHA trust score...
+[INFO ] 10:21:39 - core.upscale_queue - [UpscaleQueue] cancel_task_jobs(group_202603): evicted 0 queued jobs, cleared 1 dedup keys
+[INFO ] 10:21:39 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_38: found 0 children: []
+[INFO ] 10:21:39 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_38: state=ready, prompt_index=38 preserved, all generated data purged
+[INFO ] 10:21:39 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_38 fully purged and re-queued
+[INFO ] 10:21:40 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_39: found 0 children: []
+[INFO ] 10:21:40 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_39: state=ready, prompt_index=39 preserved, all generated data purged
+[INFO ] 10:21:40 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_39 fully purged and re-queued
+[INFO ] 10:21:43 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_40: found 0 children: []
+[INFO ] 10:21:43 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_40: state=ready, prompt_index=40 preserved, all generated data purged
+[INFO ] 10:21:43 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_40 fully purged and re-queued
+[INFO ] 10:21:44 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_38: found 0 children: []
+[INFO ] 10:21:44 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_38: state=ready, prompt_index=38 preserved, all generated data purged
+[INFO ] 10:21:44 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_38 fully purged and re-queued
+[INFO ] 10:21:47 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_34: found 0 children: []
+[INFO ] 10:21:47 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_34: state=ready, prompt_index=34 preserved, all generated data purged
+[INFO ] 10:21:47 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_34 fully purged and re-queued
+[INFO ] 10:21:48 - core.extension_bridge - [ExtensionBridge] ✅ grecaptcha ready for levanlinh.kma@gmail.com (trial token: 2126 chars)
+[INFO ] 10:21:48 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ grecaptcha ready (attempt #1, waited 0.2s)
+[INFO ] 10:21:48 - core.engine - [Foreman:levanlinh.kma@gmail.com] Priority prefetch: 0 token(s) cached for continuation
+[INFO ] 10:21:48 - core.engine - [PreSubmitGate:levanlinh.kma@gmail.com] ✅ Gate passed — submitting (tier 0)
+[INFO ] 10:21:48 - core.upscale_queue - Upscale 1/0: anti-detect delay (5.5s) → attempt 1/5
+[INFO ] 10:21:49 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_33: found 0 children: []
+[INFO ] 10:21:49 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_33: state=ready, prompt_index=33 preserved, all generated data purged
+[INFO ] 10:21:49 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_33 fully purged and re-queued
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Cancelled orphan replacement group_20260321_195316_task_30_retry_v1_094122857669
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Cancelled orphan replacement group_20260321_195316_task_30_retry_v3_094123684020
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Cancelled orphan replacement group_20260321_195316_task_30_retry_v0_094124032095
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Cancelled orphan replacement group_20260321_195316_task_30_retry_v2_094127234714
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Cleaned 4 replacement task(s) for group_20260321_195316_task_30
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_30: found 0 children: []
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_30: state=ready, prompt_index=30 preserved, all generated data purged
+[INFO ] 10:21:51 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_30 fully purged and re-queued
+[INFO ] 10:21:52 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_27: found 0 children: []
+[INFO ] 10:21:52 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_27: state=ready, prompt_index=27 preserved, all generated data purged
+[INFO ] 10:21:52 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_27 fully purged and re-queued
+[INFO ] 10:21:58 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=18s,cap=✅) | conns=1, pending=1
+[INFO ] 10:21:59 - core.extension_bridge - [ExtensionBridge] ✅ submit_upscale for levanlinh.kma@gmail.com: HTTP 200 (token 2105 chars)
+[INFO ] 10:21:59 - core.extension_bridge - [ExtBridge] ⏱️ Response: submit_prompt for levanlinh.kma@gmail.com took 6.3s
+[INFO ] 10:22:00 - core.upscale_queue - [UpscaleQueue] Upscale 1/0 submitted: op=44a2adbf-5e45-4fc6-b072-89f86252606e_upsampled
+[INFO ] 10:22:00 - core.upscale_queue - [UpscaleQueue] Phase 2: Polling 1 operations in parallel
+[INFO ] 10:22:01 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 10:22:03 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_9: found 0 children: []
+[INFO ] 10:22:03 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_9: state=ready, prompt_index=9 preserved, all generated data purged
+[INFO ] 10:22:03 - core.dispatcher - [ForceRetry] Task group_20260321_195316_task_9 fully purged and re-queued
+[INFO ] 10:22:04 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

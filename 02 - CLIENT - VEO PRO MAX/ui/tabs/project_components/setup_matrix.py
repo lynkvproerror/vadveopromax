@@ -374,7 +374,6 @@ class SetupMatrixPanel(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Match SidebarBase: fixed width, same background
         self.setFixedWidth(Theme.SIDEBAR_WIDTH)
         self.setObjectName("sidebarPanel")
 
@@ -399,10 +398,38 @@ class SetupMatrixPanel(QFrame):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        # Thin overlay-style scrollbar so it doesn't cover the right border
+        scroll.setStyleSheet(f"""
+            QScrollArea {{
+                border: none;
+                background: transparent;
+            }}
+            QScrollArea > QWidget > QWidget {{
+                background: transparent;
+            }}
+            QScrollBar:vertical {{
+                background-color: transparent;
+                width: 4px;
+                margin: 2px 4px 2px 0px;
+                border-radius: 2px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {Theme.SURFACE2};
+                border-radius: 2px;
+                min-height: 20px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {Theme.OVERLAY0};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
+        """)
 
         inner = QWidget()
-        inner.setMaximumWidth(Theme.SIDEBAR_WIDTH)
         self._layout = QVBoxLayout(inner)
         self._layout.setContentsMargins(
             Theme.SIDEBAR_PADDING, Theme.SIDEBAR_PADDING,
@@ -886,7 +913,7 @@ class SetupMatrixPanel(QFrame):
         prod_layout.addWidget(self.video_model)
         self.video_quality = QComboBox()
         self.video_quality.addItems(["720p", "1080p", "4K"])
-        self.video_quality.setCurrentText("1080p")
+        self.video_quality.setCurrentText("720p")
         self.video_quality.setMinimumHeight(34)
         self.video_quality.setStyleSheet(combo_style)
         prod_layout.addWidget(self.video_quality)
@@ -925,7 +952,7 @@ class SetupMatrixPanel(QFrame):
                 idx = self.video_model.findText(_vm)
                 if idx >= 0:
                     self.video_model.setCurrentIndex(idx)
-                _vq = getattr(s, 'default_download_quality', '1080p')
+                _vq = getattr(s, 'default_download_quality', '720p')
                 idx = self.video_quality.findText(_vq)
                 if idx >= 0:
                     self.video_quality.setCurrentIndex(idx)

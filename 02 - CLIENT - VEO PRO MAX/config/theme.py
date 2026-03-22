@@ -91,7 +91,7 @@ class Theme:
     FONT_BUTTON = ("Segoe UI", 13)
     
     # === SIDEBAR ===
-    SIDEBAR_WIDTH = 240          # Form sidebars (Video, Image, Project Builder)
+    SIDEBAR_WIDTH = 254          # Form sidebars (Video, Image, Project Builder)
     SIDEBAR_NAV_WIDTH = 180      # Navigation sidebars (Dev Console)
     SIDEBAR_PADDING = 8          # Contents margins (top, right, bottom, left)
     SIDEBAR_SPACING = 4          # Spacing between widgets
@@ -780,6 +780,7 @@ QFrame#settingsSection {{
 /* === SIDEBAR CONTAINER === */
 QWidget#sidebarPanel {{
     background-color: {cls.SURFACE0};
+    border-right: 1px solid {cls.BORDER};
 }}
 """
 

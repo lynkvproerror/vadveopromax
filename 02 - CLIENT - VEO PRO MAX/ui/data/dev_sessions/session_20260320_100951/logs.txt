@@ -1,0 +1,110 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260320_100951
+Total: 100 entries
+============================================================
+
+[INFO ] 10:05:07 - core.session_manager - [Session] Loaded from 2026-03-20T10:04:32.169656
+[INFO ] 10:05:27 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 10:05:27 - veo.pipeline - [Pipeline] Activated version 1/1: Version 1
+[INFO ] 10:05:27 - veo.tab_project - [Pipeline] Full restore: 38 scenes, 2 characters, topic='## 1. PROJECT INFO
+
+**Topic:** Kịch Bản Phim Ngắn:'
+[INFO ] 10:05:27 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Hành Trình Đến Vùng Đất Ánh Sáng: 7 completed stage(s), current=concat, FULL session
+[INFO ] 10:05:18 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 10:05:18 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 10:05:18 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 10:05:18 - core.token_manager - [TokenManager] No tokens found for levanlinh.kma@gmail.com
+[INFO ] 10:05:18 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: levanlinh.kma@gmail.com...
+[INFO ] 10:05:18 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 10:05:18 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 10:05:18 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[INFO ] 10:05:19 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser visible (smart-hide disabled)
+[INFO ] 10:05:19 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 10:05:19 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 10:05:19 - core.account_manager - [levanlinh.kma@gmail.com] ⏳ Debug browser starting, waiting...
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] PID 45136 alive but CDP port 9223 not responding
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] ✅ Variations seed copied to browser_session_fed78075 (seed=60952 chars, 6 keys)
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9224, profile=browser_session_fed78075
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9224 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] Chrome launched: PID=43532, port=9224
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 43532
+[INFO ] 10:05:21 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 10:05:21 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9224 (timeout=30s)...
+[INFO ] 10:05:50 - core.account_manager - [levanlinh.kma@gmail.com] No debug browser — extension-only mode (TRPCClient unavailable)
+[INFO ] 10:05:50 - core.multi_account - All account browsers initialized
+[INFO ] 10:05:50 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 10:05:50 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[WARNING] 10:05:51 - core.chrome_manager - [ChromeManager] CDP NOT responding after 30s on port 9224
+[WARNING] 10:05:51 - core.chrome_manager - [ChromeManager] CDP not responding after 30s
+[WARNING] 10:05:53 - core.chrome_manager - [ChromeManager] Failed to list tabs on port 9224: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>
+[INFO ] 10:05:53 - core.profiles_controller - [ProfilesController] Chrome PID=43532, port=9224 (new)
+[INFO ] 10:05:53 - core.profiles_controller - [ProfilesController] 0 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[INFO ] 10:05:53 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: levanlinh.kma@gmail.com
+[INFO ] 10:05:53 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 10:05:53 - core.app_controller - [AutoLaunch] Extension status: 0 emails registered: []
+[ERROR] 10:05:54 - core.profiles_controller - [DEBUG] Step 1: CDP connect attempt 1/3 failed, retrying in 5s...
+[ERROR] 10:05:59 - core.profiles_controller - [DEBUG] Step 1: CDP connect attempt 2/3 failed, retrying in 5s...
+[ERROR] 10:06:04 - core.profiles_controller - [ProfilesController] Debug browser error: BrowserType.connect_over_cdp: connect ECONNREFUSED 127.0.0.1:9224
+Call log:
+  - <ws preparing> retrieving websocket url from http://127.0.0.1:9224
+
+[ERROR] 10:06:04 - stderr - Traceback (most recent call last):
+[ERROR] 10:06:04 - stderr -   File "D:\Music\Ruby\Produce for Customer\##Tools\VEO Tool\#NEW VEO API\02 - CLIENT - VEO PRO MAX\core\profiles_controller.py", line 1398, in _run_debug_browser
+[ERROR] 10:06:04 - stderr -     raise cdp_err
+[ERROR] 10:06:04 - stderr -   File "D:\Music\Ruby\Produce for Customer\##Tools\VEO Tool\#NEW VEO API\02 - CLIENT - VEO PRO MAX\core\profiles_controller.py", line 1388, in _run_debug_browser
+[ERROR] 10:06:04 - stderr -     browser = pw.chromium.connect_over_cdp(
+[ERROR] 10:06:04 - stderr -         f"http://127.0.0.1:{cdp_port}"
+[ERROR] 10:06:04 - stderr -     )
+[ERROR] 10:06:04 - stderr -   File "C:\Users\Linh\AppData\Roaming\Python\Python313\site-packages\playwright\sync_api\_generated.py", line 14975, in connect_over_cdp
+[ERROR] 10:06:04 - stderr -     self._sync(
+[ERROR] 10:06:04 - stderr -     ~~~~~~~~~~^
+[ERROR] 10:06:04 - stderr -         self._impl_obj.connect_over_cdp(
+[ERROR] 10:06:04 - stderr -         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[ERROR] 10:06:04 - stderr -     ...<4 lines>...
+[ERROR] 10:06:04 - stderr -         )
+[ERROR] 10:06:04 - stderr -         ^
+[ERROR] 10:06:04 - stderr -     )
+[ERROR] 10:06:04 - stderr -     ^
+[ERROR] 10:06:04 - stderr -   File "C:\Users\Linh\AppData\Roaming\Python\Python313\site-packages\playwright\_impl\_sync_base.py", line 115, in _sync
+[ERROR] 10:06:04 - stderr -     return task.result()
+[ERROR] 10:06:04 - stderr -            ~~~~~~~~~~~^^
+[ERROR] 10:06:04 - stderr -   File "C:\Users\Linh\AppData\Roaming\Python\Python313\site-packages\playwright\_impl\_browser_type.py", line 207, in connect_over_cdp
+[ERROR] 10:06:04 - stderr -     response = await self._channel.send_return_as_dict(
+[ERROR] 10:06:04 - stderr -                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[ERROR] 10:06:04 - stderr -         "connectOverCDP", TimeoutSettings.launch_timeout, params
+[ERROR] 10:06:04 - stderr -         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[ERROR] 10:06:04 - stderr -     )
+[ERROR] 10:06:04 - stderr -     ^
+[ERROR] 10:06:04 - stderr -   File "C:\Users\Linh\AppData\Roaming\Python\Python313\site-packages\playwright\_impl\_connection.py", line 83, in send_return_as_dict
+[ERROR] 10:06:04 - stderr -     return await self._connection.wrap_api_call(
+[ERROR] 10:06:04 - stderr -            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[ERROR] 10:06:04 - stderr -     ...<3 lines>...
+[ERROR] 10:06:04 - stderr -     )
+[ERROR] 10:06:04 - stderr -     ^
+[ERROR] 10:06:04 - stderr -   File "C:\Users\Linh\AppData\Roaming\Python\Python313\site-packages\playwright\_impl\_connection.py", line 559, in wrap_api_call
+[ERROR] 10:06:04 - stderr -     raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+[ERROR] 10:06:04 - stderr - playwright._impl._errors.Error: BrowserType.connect_over_cdp: connect ECONNREFUSED 127.0.0.1:9224
+[ERROR] 10:06:04 - stderr - Call log:
+[ERROR] 10:06:04 - stderr -   - <ws preparing> retrieving websocket url from http://127.0.0.1:9224
+[INFO ] 10:06:04 - core.app_controller - [AppController] Browser disconnected for levanlinh.kma@gmail.com — no auto-restart (by design)
+[INFO ] 10:06:07 - core.extension_manager - [ExtMgr] Extension not loaded after retries — reinstalling (will remove stale if any)...
+[INFO ] 10:06:07 - core.extension_manager - [ExtMgr] 🔄 Reinstalling extension...
+[ERROR] 10:06:13 - core.extension_manager - [ExtMgr] Failed to open chrome://extensions (PUT): <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>
+[INFO ] 10:06:13 - core.extension_manager - [ExtMgr] No existing extension found — fresh install
+[INFO ] 10:06:13 - core.extension_manager - [ExtMgr] 🔧 Installing extension: D:\Music\Ruby\Produce for Customer\##Tools\VEO Tool\#NEW VEO API\02 - CLIENT - VEO PRO MAX\extension
+[ERROR] 10:06:19 - core.extension_manager - [ExtMgr] Failed to open chrome://extensions (PUT): <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>
+[WARNING] 10:06:19 - core.app_controller - [AutoLaunch] Extension batch check failed: dictionary changed size during iteration
+[INFO ] 10:06:19 - core.app_controller - [TierCheck] ✅ levanlinh.kma@gmail.com: Ultra
+[INFO ] 10:06:19 - core.app_controller - [TierCheck] ✅ All accounts are Pro or Ultra
+[INFO ] 10:06:19 - core.app_controller - [AutoLaunch] ✅ Account tier enforcement complete
+[INFO ] 10:06:19 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 10:06:19 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 10:06:19 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 10:07:19 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 10:08:19 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 10:09:19 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 10:09:51 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

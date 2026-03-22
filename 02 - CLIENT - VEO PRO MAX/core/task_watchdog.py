@@ -114,6 +114,15 @@ class TaskWatchdog:
                     # (if any are truly inline, they'd be caught by RUNNING timeout above)
                     multi_acc.audit_upscale_counters(running_task_ids=set())
                 
+                # Task pruning: every 20 scans (~10 min) clear old completed tasks
+                if self._scans % 20 == 0:
+                    try:
+                        pruned = self._dispatcher.prune_completed_tasks()
+                        if pruned:
+                            log.info(f"[Watchdog] Pruned {pruned} old tasks from memory")
+                    except Exception as e:
+                        log.debug(f"[Watchdog] Prune error: {e}")
+                
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -146,19 +155,20 @@ class TaskWatchdog:
             f"Re-queuing."
         )
         
-        # Reset task state for re-processing
-        prev_state = task.state
-        task.state = TaskState.READY
+        # ★ BUG-1 FIX: Do NOT set task.state=READY here!
+        # requeue_task() checks prev_state to decrement _running_count.
+        # If we set READY first, requeue sees prev_state=READY → skip decrement
+        # → _running_count drifts permanently.
+        # Save assigned_account BEFORE requeue clears it (for worker release below).
         assigned_account = task.assigned_account
-        task.assigned_account = None
-        task.operation_name = None
         
         # Clear partial results so UI doesn't show stale thumbnails on READY
         task.output_uris = []
         task.thumbnail_paths = []
         task.video_outputs = []
+        task.operation_name = None
         
-        # Re-queue in dispatcher
+        # Re-queue in dispatcher — handles state transition + counter decrement
         self._dispatcher.requeue_task(task)
         
         # Try to release the orphaned workers
@@ -179,7 +189,7 @@ class TaskWatchdog:
             "task_id": task.id,
             "reason": reason,
             "elapsed_sec": round(elapsed),
-            "prev_state": prev_state,
+            "prev_state": reason,
             "account": assigned_account,
         }, source="watchdog")
         

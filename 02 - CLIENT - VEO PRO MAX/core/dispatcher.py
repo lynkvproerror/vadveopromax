@@ -725,6 +725,195 @@ class Dispatcher:
             )
         
         return result
+    
+    # ── Task Pruning ──────────────────────────────────────────
+    
+    def prune_completed_tasks(self, max_age_minutes: int = 30) -> int:
+        """Remove old completed/failed/cancelled tasks from memory.
+        
+        Prevents unbounded growth of _all_tasks and _task_groups.
+        Called periodically (e.g., every 10 minutes) by app_controller.
+        
+        Safety rules — NEVER prune a task if:
+        - It has children that are still active (dependency tracking)
+        - Its TaskGroup still has active tasks (UI needs group data)
+        - It is referenced by _replace_target_map (result slotting)
+        
+        Returns:
+            Number of tasks pruned.
+        """
+        if not self._all_tasks:
+            return 0
+        
+        terminal_states = {TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED}
+        active_states = {
+            TaskState.PENDING, TaskState.WAITING, TaskState.READY,
+            TaskState.RUNNING, TaskState.WAITING_POLL,
+        }
+        cutoff = datetime.now()
+        from datetime import timedelta
+        cutoff_time = cutoff - timedelta(minutes=max_age_minutes)
+        
+        # Build set of task IDs still referenced by replace_target_map
+        referenced_by_replace = set()
+        for rep_id, (orig_id, _vidx) in self._replace_target_map.items():
+            referenced_by_replace.add(orig_id)
+            referenced_by_replace.add(rep_id)
+        
+        # Build set of parent IDs with active children
+        parents_with_active_children = set()
+        for parent_id, child_ids in self._parent_to_children.items():
+            for cid in child_ids:
+                child = self._all_tasks.get(cid)
+                if child and child.state in active_states:
+                    parents_with_active_children.add(parent_id)
+                    break
+        
+        # Identify groups that still have active tasks
+        active_group_ids = set()
+        for gid, group in self._task_groups.items():
+            if any(t.state in active_states for t in group.tasks):
+                active_group_ids.add(gid)
+        
+        # Identify pruneable tasks
+        to_prune = []
+        for task_id, task in self._all_tasks.items():
+            if task.state not in terminal_states:
+                continue
+            
+            # Age check
+            completed_at = task.completed_at or task.created_at
+            if completed_at > cutoff_time:
+                continue  # Too recent
+            
+            # Safety: still a parent of active children?
+            if task_id in parents_with_active_children:
+                continue
+            
+            # Safety: referenced by replacement slotting?
+            if task_id in referenced_by_replace:
+                continue
+            
+            to_prune.append(task_id)
+        
+        if not to_prune:
+            return 0
+        
+        # Prune tasks
+        for task_id in to_prune:
+            del self._all_tasks[task_id]
+            self._waiting_tasks.pop(task_id, None)
+            self._parent_to_children.pop(task_id, None)
+        
+        # Clean up child references
+        for parent_id in list(self._parent_to_children.keys()):
+            children = self._parent_to_children[parent_id]
+            self._parent_to_children[parent_id] = [
+                cid for cid in children if cid in self._all_tasks
+            ]
+            if not self._parent_to_children[parent_id]:
+                del self._parent_to_children[parent_id]
+        
+        # Prune empty groups (all tasks removed)
+        groups_to_remove = []
+        for gid, group in self._task_groups.items():
+            if gid in active_group_ids:
+                continue  # Keep groups with active tasks
+            # Remove pruned tasks from group.tasks list
+            group.tasks = [t for t in group.tasks if t.id in self._all_tasks]
+            if not group.tasks:
+                groups_to_remove.append(gid)
+        for gid in groups_to_remove:
+            del self._task_groups[gid]
+        
+        log.info(
+            f"[Dispatcher] 🗑️ Pruned {len(to_prune)} completed tasks "
+            f"(>{max_age_minutes}min), {len(groups_to_remove)} empty groups. "
+            f"Remaining: {len(self._all_tasks)} tasks, "
+            f"{len(self._task_groups)} groups"
+        )
+        
+        return len(to_prune)
+
+    def enforce_task_cap(self, cap: int) -> int:
+        """Enforce a hard cap on completed tasks — oldest removed first.
+        
+        Called by _do_prune when auto_clear_tasks_max > 0.
+        Uses the same safety rules as prune_completed_tasks.
+        
+        Returns:
+            Number of tasks pruned to enforce the cap.
+        """
+        if cap <= 0:
+            return 0
+        
+        terminal_states = {TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED}
+        active_states = {
+            TaskState.PENDING, TaskState.WAITING, TaskState.READY,
+            TaskState.RUNNING, TaskState.WAITING_POLL,
+        }
+        
+        # Count terminal tasks
+        terminal_tasks = [
+            (tid, t) for tid, t in self._all_tasks.items()
+            if t.state in terminal_states
+        ]
+        
+        overflow = len(terminal_tasks) - cap
+        if overflow <= 0:
+            return 0
+        
+        # Build safety sets (same as prune_completed_tasks)
+        referenced_by_replace = set()
+        for rep_id, (orig_id, _vidx) in self._replace_target_map.items():
+            referenced_by_replace.add(orig_id)
+            referenced_by_replace.add(rep_id)
+        
+        parents_with_active_children = set()
+        for parent_id, child_ids in self._parent_to_children.items():
+            for cid in child_ids:
+                child = self._all_tasks.get(cid)
+                if child and child.state in active_states:
+                    parents_with_active_children.add(parent_id)
+                    break
+        
+        active_group_ids = set()
+        for gid, group in self._task_groups.items():
+            if any(t.state in active_states for t in group.tasks):
+                active_group_ids.add(gid)
+        
+        # Sort by completed_at (oldest first)
+        terminal_tasks.sort(key=lambda x: x[1].completed_at or x[1].created_at)
+        
+        pruned = 0
+        for task_id, task in terminal_tasks:
+            if pruned >= overflow:
+                break
+            if task_id in parents_with_active_children:
+                continue
+            if task_id in referenced_by_replace:
+                continue
+            
+            del self._all_tasks[task_id]
+            self._waiting_tasks.pop(task_id, None)
+            self._parent_to_children.pop(task_id, None)
+            pruned += 1
+        
+        if pruned > 0:
+            # Clean up groups
+            for gid, group in list(self._task_groups.items()):
+                if gid in active_group_ids:
+                    continue
+                group.tasks = [t for t in group.tasks if t.id in self._all_tasks]
+                if not group.tasks:
+                    del self._task_groups[gid]
+            
+            log.info(
+                f"[Dispatcher] 🗑️ Cap enforced: removed {pruned} oldest tasks "
+                f"(cap={cap}). Remaining: {len(self._all_tasks)} tasks"
+            )
+        
+        return pruned
 
     def complete_task(
         self,
@@ -1445,7 +1634,7 @@ class Dispatcher:
         task.required_account = None
         # Stage preserved — foreman will resume from checkpoint
         self._queued_task_ids.discard(task.id)  # Allow re-enqueue
-        self._enqueue_task(task, priority=1)  # Normal priority: runs in FIFO ordery
+        self._enqueue_task(task, priority=0)  # High priority: retry runs before normal tasks
         # Wake up scheduler waiting for tasks
         if self._on_task_ready:
             self._on_task_ready(task)
@@ -1562,7 +1751,7 @@ class Dispatcher:
             for d in descendants
         )
     
-    def requeue_task(self, task) -> bool:
+    def requeue_task(self, task, notify=True) -> bool:
         """Re-queue a running task without incrementing retry count.
         
         Used by network error handler / cooldown requeue: task goes back to queue
@@ -1570,6 +1759,12 @@ class Dispatcher:
         
         Important: Decrements running counters and clears assigned_account
         so the task is eligible for any account's foreman to pick up.
+        
+        Args:
+            task: Task to requeue
+            notify: If True, wake sleeping foremen via _on_task_ready callback.
+                    Set to False for capacity requeue to prevent thundering herd
+                    (all idle foremen grabbing the same task simultaneously).
         """
         if not task:
             return False
@@ -1613,7 +1808,10 @@ class Dispatcher:
         # ★ Fix 3: Wake sleeping foremen so they pick up the requeued task.
         # Without this, foremen blocked on _task_available.wait() never
         # learn that a requeued READY task exists → system stalls.
-        if self._on_task_ready:
+        # ★ BUG-B19 fix: Skip notification on capacity requeue (notify=False)
+        # to prevent thundering herd — 12+ foremen simultaneously grabbing
+        # the same task, failing capacity, requeueing → infinite loop.
+        if notify and self._on_task_ready:
             self._on_task_ready(task)
         return True
     
@@ -2015,7 +2213,7 @@ class Dispatcher:
         # Re-queue or register dependency
         if task.state == TaskState.READY:
             self._queued_task_ids.discard(task.id)  # Allow re-enqueue
-            self._enqueue_task(task, priority=1)  # Normal priority: runs in FIFO order from Start All
+            self._enqueue_task(task, priority=0)  # High priority: force retry runs before normal tasks
             if self._on_task_ready:
                 self._on_task_ready(task)
             log.info(f"[ForceRetry] Task {task_id} fully purged and re-queued"
@@ -2048,9 +2246,15 @@ class Dispatcher:
         - Same prompt, aspect_ratio, model, workflow_type
         - Stores _replace_target = (original_task_id, video_index) for linking
         
+        BUG-FIX: Retry depth capped at MAX_VIDEO_RETRY_DEPTH to prevent
+        infinite retry chains and prompt_index overflow.
+        
         Returns True if retry was initiated, False if invalid index/task.
         """
         import os
+        import re
+        MAX_VIDEO_RETRY_DEPTH = 3  # Max re-retry levels before giving up
+        
         task = self._all_tasks.get(task_id)
         if not task:
             log.warning(f"[ForceRetryVideo] Task {task_id} not found")
@@ -2059,6 +2263,17 @@ class Dispatcher:
         if video_index < 0 or video_index >= len(task.video_outputs):
             log.warning(f"[ForceRetryVideo] Invalid video_index {video_index} "
                         f"(task has {len(task.video_outputs)} videos)")
+            return False
+        
+        # ── BUG-FIX: Compute retry depth to prevent infinite chains ──
+        # Count how many _retry_v segments are in the task ID
+        retry_depth = len(re.findall(r'_retry_v\d+_', task_id))
+        if retry_depth >= MAX_VIDEO_RETRY_DEPTH:
+            log.warning(
+                f"[ForceRetryVideo] Task {task_id}: retry depth {retry_depth} "
+                f">= max {MAX_VIDEO_RETRY_DEPTH} — refusing to create another retry "
+                f"(infinite chain prevention)"
+            )
             return False
         
         vo = task.video_outputs[video_index]
@@ -2123,13 +2338,18 @@ class Dispatcher:
         
         # ── 3. Create replacement 1-video task ──
         from datetime import datetime
-        # Microsecond-precision ID prevents collision when retrying rapidly
-        replacement_id = f"{task_id}_retry_v{video_index}_{datetime.now().strftime('%H%M%S%f')}"
         
-        # Use unique prompt_index (9000+) to avoid overwriting original files
-        # Original task might be prompt_index=0 → files: 001a_*.mp4
-        # Replacement uses 9000+idx → files: 9001_*.mp4 (no collision)
-        retry_prompt_index = 9000 + (task.prompt_index or 0) * 10 + video_index
+        # BUG-FIX: Strip existing _retry_v* suffixes before appending new one
+        # to prevent ever-growing IDs like task_retry_v0_..._retry_v0_..._retry_v0
+        base_task_id = re.sub(r'(_retry_v\d+_\d+)+$', '', task_id)
+        replacement_id = f"{base_task_id}_retry_v{video_index}_{datetime.now().strftime('%H%M%S%f')}"
+        
+        # BUG-FIX: Use FLAT prompt_index offset to avoid compounding
+        # Old formula: 9000 + (task.prompt_index or 0) * 10 + video_index
+        #   → On retry of retry: 9000 + 9000*10 + idx = 99000+ (overflow!)
+        # New formula: 9000 + video_index (always bounded 9000..9003)
+        # Base task's original prompt_index is NOT factored in.
+        retry_prompt_index = 9000 + video_index
         
         replacement = Task(
             id=replacement_id,
@@ -2173,7 +2393,7 @@ class Dispatcher:
         self._all_tasks[replacement_id] = replacement
         replacement.state = TaskState.READY
         self._queued_task_ids.discard(replacement_id)
-        self._enqueue_task(replacement, priority=1)  # Normal priority: FIFO order
+        self._enqueue_task(replacement, priority=0)  # High priority: retry runs before normal tasks
         if self._on_task_ready:
             self._on_task_ready(replacement)
         

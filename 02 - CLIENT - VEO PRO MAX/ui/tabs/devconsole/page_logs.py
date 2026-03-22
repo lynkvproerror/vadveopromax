@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QFrame, QSplitter, QPushButton, QLineEdit, QComboBox,
     QFileDialog,
 )
-from PySide6.QtCore import Qt, Signal, Slot, QEvent
+from PySide6.QtCore import Qt, Signal, Slot, QEvent, QTimer
 from PySide6.QtGui import QFont, QTextCursor, QKeySequence, QGuiApplication
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -40,7 +40,8 @@ LEVEL_COLORS = {
 }
 
 # Cap log buffer to prevent unbounded memory growth
-MAX_BUFFER = 50000
+# Default fallback — actual value read from settings in __init__()
+MAX_BUFFER_DEFAULT = 20_000
 # Batch flush interval (ms)
 FLUSH_INTERVAL_MS = 200
 
@@ -108,7 +109,13 @@ class LogsPage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._log_buffer = deque(maxlen=MAX_BUFFER)  # Capped buffer: (level, msg, source_category)
+        # Read buffer cap from settings (connected to Settings tab combo)
+        try:
+            from config.settings import get_settings
+            _buf_max = get_settings().log_buffer_max or MAX_BUFFER_DEFAULT
+        except Exception:
+            _buf_max = MAX_BUFFER_DEFAULT
+        self._log_buffer = deque(maxlen=_buf_max)  # Capped buffer: (level, msg, source_category)
         self._pending_logs: list = []
         self._auto_scroll = True
         self._api_debug = True
@@ -117,6 +124,7 @@ class LogsPage(QWidget):
         self._source_filter = "All"  # Layer/source filter
         self._line_count_limit = 5000  # Default: show last 5K lines
         self._flush_paused = False  # Pause flush during copy
+        self._rerender_scheduled = False  # Coalesce rapid filter changes
         self._setup_ui()
         self._setup_flush_timer()
 
@@ -151,6 +159,11 @@ class LogsPage(QWidget):
         self._search_input = QLineEdit()
         self._search_input.setPlaceholderText("Filter logs...")
         self._search_input.setFixedWidth(160)
+        # Debounce: 150ms delay so rapid typing doesn't trigger 50K iterations
+        self._search_debounce = QTimer(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(150)
+        self._search_debounce.timeout.connect(self._apply_search_filter)
         self._search_input.textChanged.connect(self._on_search_changed)
         tb_layout.addWidget(self._search_input)
 
@@ -417,11 +430,16 @@ class LogsPage(QWidget):
 
     def _on_search_changed(self, text: str):
         self._search_filter = text
-        self._rerender_logs()
+        # Debounce: restart 150ms timer (rapid typing won't spam rerender)
+        self._search_debounce.start()
+
+    def _apply_search_filter(self):
+        """Called after debounce timer fires."""
+        self._schedule_rerender()
 
     def _on_level_changed(self, level: str):
         self._level_filter = level
-        self._rerender_logs()
+        self._schedule_rerender()
 
     def _on_lines_changed(self, label: str):
         self._line_count_limit = LINE_COUNT_OPTIONS.get(label, 5000)
@@ -430,10 +448,22 @@ class LogsPage(QWidget):
             self._log_text.document().setMaximumBlockCount(self._line_count_limit)
         else:
             self._log_text.document().setMaximumBlockCount(0)  # 0 = unlimited
-        self._rerender_logs()
+        self._schedule_rerender()
 
     def _on_source_changed(self, source: str):
         self._source_filter = source
+        self._schedule_rerender()
+
+    def _schedule_rerender(self):
+        """Coalesce rapid filter changes via singleShot(0)."""
+        if not self._rerender_scheduled:
+            self._rerender_scheduled = True
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self._do_rerender)
+
+    def _do_rerender(self):
+        """Execute the actual rerender (called by singleShot)."""
+        self._rerender_scheduled = False
         self._rerender_logs()
 
     def _on_toggle_auto_scroll(self):

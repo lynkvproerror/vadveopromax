@@ -1,0 +1,102 @@
+{
+  "group_id": "group_20260320_063000",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260320_063000_task_0",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_1",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_2",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_3",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_4",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_5",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_6",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_7",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_8",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_063000_task_9",
+      "prompt": "Small round shallot respiratory and anti-inflammatory wellness supporter, small round layered bulb body 8cm, #8B008B dark magenta small round layered bulb body with thin papery dark magenta skin and pale pink interior layers visible, large teary warm eyes #1A1A1A deep jet black with #8B008B dark magenta highlights, small teary warm #C71585 medium violet red lips, tiny #228B22 forest green small pointed shallot green shoot on top as green shoot crown, natural #8B008B dark magenta small round layered bulb body with papery skin and pale pink interior layers, smaller individual layered bulb extensions as arms, small round layered papery texture with dark magenta color and pale pink interior layers",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

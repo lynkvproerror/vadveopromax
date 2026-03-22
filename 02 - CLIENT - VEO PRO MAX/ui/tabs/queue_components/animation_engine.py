@@ -7,6 +7,7 @@ Mixin class for TabQueue. All methods operate on `self` (the TabQueue instance).
 from PySide6.QtWidgets import QWidget, QLabel, QGraphicsOpacityEffect
 from PySide6.QtCore import QPropertyAnimation, QEasingCurve, QRect, Qt
 from PySide6.QtGui import QPixmap, QPainter, QColor, QFont, QPen, QBrush
+import time as _time_mod  # ★ P3: Module-level import (was inside hot path)
 
 import sys
 from pathlib import Path
@@ -46,10 +47,17 @@ class QueueAnimationMixin:
         Combines progress fill (bottom→top) with shimmer highlight sweep.
         Uses per-slot stored progress and border color for independent rendering.
         """
+        # ★ Fix L: Skip animation when Queue tab is hidden
+        if not self.isVisible():
+            return
         self._shimmer_offset = (self._shimmer_offset + 0.08) % 2.0
         alive = []
         for slot in self._shimmer_active_slots:
             try:
+                # ★ Fix L2: Skip hidden slots (collapsed group)
+                if not slot.isVisible():
+                    alive.append(slot)
+                    continue
                 # BUG-A4: Don't skip slots with pixmaps if they're in retrying state
                 has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
                 is_retrying = getattr(slot, '_border_color_name', '') == 'purple'
@@ -130,6 +138,18 @@ class QueueAnimationMixin:
         self._shimmer_active_slots = alive
         if not alive:
             self._shimmer_timer.stop()
+        else:
+            # ★ Fix O2: Adaptive shimmer rate — slow down when many slots active
+            # >12 slots → 200ms (5fps), >24 → 300ms (~3fps), ≤12 → 100ms (10fps)
+            count = len(alive)
+            if count > 24:
+                target_interval = 300
+            elif count > 12:
+                target_interval = 200
+            else:
+                target_interval = 100
+            if self._shimmer_timer.interval() != target_interval:
+                self._shimmer_timer.setInterval(target_interval)
     
     def _register_shimmer_slot(self, slot: QLabel):
         """Register a thumbnail slot for shimmer animation."""
@@ -139,7 +159,10 @@ class QueueAnimationMixin:
             self._shimmer_timer.start()
     
     def _unregister_shimmer_slot(self, slot: QLabel):
-        """Remove a thumbnail slot from shimmer animation."""
+        """Remove a thumbnail slot from shimmer animation.
+        
+        ★ R7: Use try/except instead of 'in' check + remove (saves one O(N) scan).
+        """
         try:
             self._shimmer_active_slots.remove(slot)
         except ValueError:
@@ -155,6 +178,9 @@ class QueueAnimationMixin:
         in upscale phase (submitting/polling), paints a dark overlay with status icon
         instead of returning early.
         
+        ★ Fix O4: Per-slot 200ms setStyleSheet throttle to prevent redundant
+        style updates when progress fires rapidly.
+        
         Args:
             slot: The QLabel thumbnail slot
             progress: 0-100 progress percentage
@@ -166,6 +192,23 @@ class QueueAnimationMixin:
         vi = getattr(slot, '_video_info', None)
         upscale_status = vi.get('upscale_status', '') if vi else ''
         is_upscaling = upscale_status in ('submitting', 'polling')
+        
+        # ★ Fix O4: Per-slot 200ms throttle — skip setStyleSheet if too recent.
+        # Exceptions: pixmap transitions, completion, and upscale overlay require immediate update.
+        is_state_change = (
+            has_pixmap != getattr(slot, '_last_had_pixmap', False)
+            or progress >= 100
+            or task_status in ('completed', 'failed', 'cancelled')
+            or is_upscaling
+        )
+        if not is_state_change:
+            now = _time_mod.time()  # ★ P3: Use module-level import
+            if now - getattr(slot, '_last_style_ts', 0) < 0.2:
+                return  # Skip — styled too recently
+            slot._last_style_ts = now
+        else:
+            slot._last_style_ts = _time_mod.time()  # ★ P3: Use module-level import
+        slot._last_had_pixmap = has_pixmap
         
         if has_pixmap and is_upscaling:
             # Upscale overlay: dark tint + task-level progress % on existing thumbnail
@@ -334,10 +377,13 @@ class QueueAnimationMixin:
     def _apply_upscale_overlay(self, slot: QLabel, upscale_status: str, progress: int = 0):
         """Paint dark overlay + progress % on an existing 720p thumbnail.
         
-        Called during upscale phase when the slot already has a 720p thumbnail.
-        Shows the thumbnail underneath with a semi-transparent dark tint,
-        and paints a rounded progress badge (e.g. '88%') centered on top.
+        ★ P4: Cached — only regenerates when progress % changes.
         """
+        # ★ P4: Skip if overlay already matches current progress
+        if getattr(slot, '_overlay_progress', -1) == progress:
+            return
+        slot._overlay_progress = progress
+        
         # Get the original thumbnail pixmap (before any overlay)
         original_key = '_original_pixmap'
         if not hasattr(slot, original_key) or getattr(slot, original_key) is None:
@@ -398,10 +444,33 @@ class QueueAnimationMixin:
         """)
     
     def _trigger_completion_glow(self, task_id: str):
-        """Start 3x glow pulse on all thumbnail slots of a completed task."""
+        """Start 3x glow pulse on all thumbnail slots of a completed task.
+        
+        ★ Fix O3: Cap at 3 simultaneous glowing tasks. Excess completions
+        get final border applied directly (no animated pulse) to prevent
+        40+ slot setStyleSheet calls every 400ms during burst completions.
+        """
         widget = self._task_widgets.get(task_id)
         if not widget or not hasattr(widget, 'thumb_slots'):
             return
+        
+        # ★ Fix O3: Cap glow at 3 — apply final border for excess
+        if len(self._glow_slots) >= 3:
+            for slot in widget.thumb_slots:
+                try:
+                    bc = self._slot_border(slot, Theme.GREEN)
+                    slot.setStyleSheet(f"""
+                        QLabel {{
+                            border: 2px solid {bc};
+                            border-radius: 4px;
+                            background-color: {Theme.BASE};
+                            padding: 1px;
+                        }}
+                    """)
+                except RuntimeError:
+                    continue
+            return
+        
         self._glow_slots[task_id] = {
             'slots': list(widget.thumb_slots),
             'count': 0,    # flash count (0-5 = 3 on/off cycles)
@@ -415,12 +484,18 @@ class QueueAnimationMixin:
         
         Uses per-slot _border_color_name for final border (per-video independence).
         """
+        # ★ Fix L: Skip animation when Queue tab is hidden
+        if not self.isVisible():
+            return
         done_tasks = []
         for tid, info in self._glow_slots.items():
             info['count'] += 1
             info['phase'] = not info['phase']
             for slot in info['slots']:
                 try:
+                    # ★ Fix L2: Skip hidden slots (collapsed group)
+                    if not slot.isVisible():
+                        continue
                     if info['phase']:
                         # BUG-A6 fix: Glow ON = bright green border
                         glow_color = Theme.GREEN
@@ -429,6 +504,11 @@ class QueueAnimationMixin:
                         # BUG-A6 fix: Glow OFF = per-slot final color (dim), not SURFACE0
                         glow_color = self._slot_border(slot, Theme.GREEN)
                         border_w = "1px"
+                    # ★ Fix L: Cache key — skip redundant setStyleSheet
+                    glow_key = (info['phase'], glow_color)
+                    if getattr(slot, '_last_glow_key', None) == glow_key:
+                        continue
+                    slot._last_glow_key = glow_key
                     slot.setStyleSheet(f"""
                         QLabel {{
                             border: {border_w} solid {glow_color};
@@ -497,6 +577,9 @@ class QueueAnimationMixin:
         Slots that are queued (waiting for upscale to start) show a
         static solid purple border — no animation.
         """
+        # ★ Fix L: Skip animation when Queue tab is hidden
+        if not self.isVisible():
+            return
         self._upscale_spinner_phase += 1
         is_bright = (self._upscale_spinner_phase % 2) == 0
         bright_color = Theme.PURPLE       # #cba6f7
@@ -506,6 +589,10 @@ class QueueAnimationMixin:
         alive = []
         for slot in self._upscale_spinner_slots:
             try:
+                # ★ Fix L2: Skip hidden slots (collapsed group)
+                if not slot.isVisible():
+                    alive.append(slot)
+                    continue
                 # Only pulse slots still in upscale phase
                 bc_name = getattr(slot, '_border_color_name', '')
                 if bc_name != 'purple':

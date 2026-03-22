@@ -1,0 +1,102 @@
+{
+  "group_id": "group_20260320_033220",
+  "workflow": "T2I",
+  "model_display": "NARWHAL",
+  "model_api_key": "NARWHAL",
+  "aspect_ratio_raw": "PORTRAIT",
+  "aspect_ratio_api": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "dual_frame": false,
+  "output_count": 4,
+  "tasks": [
+    {
+      "id": "group_20260320_033220_task_0",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_1",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_2",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_3",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_4",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_5",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_6",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_7",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_8",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260320_033220_task_9",
+      "prompt": "Graceful delicate passionflower sleep wellness and relaxation supporter, curling vine body 22cm, #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, large calm serene eyes #1A1A1A deep jet black with #9370DB medium purple highlights, small gentle peaceful #8FBC8F dark sea green lips, tiny #9370DB medium purple and #FFFFFF white intricate passionflower bloom on top as exotic flower crown, natural #228B22 forest green curling vine body with #90EE90 light green delicate tendrils, smaller tendril extensions as arms, curling vine graceful texture with forest green color and light green delicate tendrils",
+      "model": "NARWHAL",
+      "aspect_ratio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

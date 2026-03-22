@@ -323,6 +323,16 @@ class VEOApiClient:
                             dump["clientContext"]["recaptchaContext"]["token"] = f"<{len(t)}chars>"
                         _log.warning(f"[403 DEBUG] Body: {json.dumps(dump, indent=2, default=str, ensure_ascii=False)}")
                 
+                # On 401: log auth diagnosis info
+                if response_code == 401:
+                    has_auth = 'Authorization' in headers
+                    auth_prefix = headers.get('Authorization', '')[:20] if has_auth else 'MISSING'
+                    # /v1/credits intentionally sends NO auth (HAR: API key only, no Bearer)
+                    # → DEBUG to avoid log spam. All other 401s remain WARNING.
+                    is_expected_no_auth = '/v1/credits' in endpoint
+                    log_fn = _log.debug if (is_expected_no_auth and not has_auth) else _log.warning
+                    log_fn(f"[401 DEBUG] {method} {url} — auth_header={auth_prefix}...")
+                
                 if response_code == 200:
                     try:
                         response_data = json.loads(response_text)

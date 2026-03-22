@@ -414,6 +414,15 @@ class TabProject(QWidget):
         from PySide6.QtCore import QTimer
         QTimer.singleShot(500, self._auto_restore_pipeline)
 
+    def get_searchable_widgets(self):
+        """Return editable text widgets for global Search/Replace."""
+        widgets = []
+        if hasattr(self, '_topic_input'):
+            widgets.append(self._topic_input)
+        if hasattr(self, '_stage_viewer'):
+            widgets.append(self._stage_viewer)
+        return widgets
+
     def _init_builder(self):
         """Initialize builder components (lazy)."""
         try:
@@ -671,6 +680,13 @@ class TabProject(QWidget):
         clear_btn.setProperty("btnSize", "sm")
         clear_btn.clicked.connect(self._on_clear)
         btn_row.addWidget(clear_btn)
+
+        find_btn = QPushButton("🔍 Find")
+        find_btn.setProperty("variant", "secondary")
+        find_btn.setProperty("btnSize", "sm")
+        find_btn.setToolTip("Find & Replace (Ctrl+H)")
+        find_btn.clicked.connect(self._on_open_find_replace)
+        btn_row.addWidget(find_btn)
 
         self._auto_add_cb = QCheckBox(t("project_builder.auto_add_queue"))
         self._auto_add_cb.setStyleSheet(f"""
@@ -939,7 +955,10 @@ class TabProject(QWidget):
         self._thumb_scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         panel_layout.addWidget(self._thumb_scroll, stretch=3)
 
-        # Action buttons — UI-1: ordered as [Start] [✅Confirm] [⏭Skip] [📂Output] [🗑Reset] [📥Load]
+        # ★ Centralized button state tracking
+        self._viewing_mode = "idle"  # idle | running | done | error | review | complete
+
+        # Action buttons — [Start] [✅Confirm] [📂Output] [🗑Reset] [📥Load]
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
 
@@ -947,10 +966,8 @@ class TabProject(QWidget):
         self._stage_run_btn.setProperty("variant", "success")
         self._stage_run_btn.setProperty("btnSize", "sm")
         self._stage_run_btn.setFixedHeight(30)
-        self._stage_run_btn.clicked.connect(self._run_pipeline_stage)
+        self._stage_run_btn.clicked.connect(self._on_stage_run_clicked)
         btn_row.addWidget(self._stage_run_btn)
-
-        # Back/Next removed — stage dots are now clickable for direct navigation
 
         self._stage_confirm_btn = QPushButton("✅ Confirm & Next")
         self._stage_confirm_btn.setProperty("variant", "success")
@@ -959,13 +976,6 @@ class TabProject(QWidget):
         self._stage_confirm_btn.setEnabled(False)
         self._stage_confirm_btn.clicked.connect(self._on_stage_confirm)
         btn_row.addWidget(self._stage_confirm_btn)
-
-        self._stage_skip_btn = QPushButton("⏭️​ Skip")
-        self._stage_skip_btn.setProperty("variant", "warning")
-        self._stage_skip_btn.setProperty("btnSize", "sm")
-        self._stage_skip_btn.setFixedHeight(30)
-        self._stage_skip_btn.clicked.connect(self._on_stage_skip)
-        btn_row.addWidget(self._stage_skip_btn)
 
         self._stage_output_btn = QPushButton("\U0001f4c2 Output")
         self._stage_output_btn.setProperty("variant", "secondary")
@@ -1183,12 +1193,18 @@ class TabProject(QWidget):
         Eliminates ~200ms FFmpeg subprocess per video on repeated navigation.
         """
         import os
+        _MAX_FRAME_CACHE = 100
         if not hasattr(self, '_frame_cache'):
             self._frame_cache = {}
         if video_path in self._frame_cache:
             cached = self._frame_cache[video_path]
             if cached and os.path.isfile(cached):
                 return cached
+        # Evict oldest entries when cache is full
+        if len(self._frame_cache) >= _MAX_FRAME_CACHE:
+            keys_to_remove = list(self._frame_cache.keys())[:20]
+            for k in keys_to_remove:
+                del self._frame_cache[k]
         # Extract and cache
         try:
             if not hasattr(self, '_frame_extractor'):
@@ -1741,6 +1757,15 @@ class TabProject(QWidget):
             # Collect final videos based on project type
             final_videos = []  # [(index, label, video_path)]
 
+            # ★ Diagnostic: log which branch will be taken
+            log.info(
+                f"[Pipeline] Stage 7 display: multi_ver={state.is_multi_version()} "
+                f"(video_count={state.video_count}, versions={len(state.versions)}), "
+                f"multi_ep={state.is_multi_episode()} "
+                f"(ep_enabled={state.episode_enabled}, ep_count={state.episode_count}), "
+                f"final_video_path='{state.final_video_path}'"
+            )
+
             if state.is_multi_version() and state.versions:
                 # Multi-version: each version has its own final video
                 for v in state.versions:
@@ -1760,6 +1785,22 @@ class TabProject(QWidget):
                 vp = state.final_video_path
                 if vp and os.path.isfile(vp):
                     final_videos.append((1, project_name, vp))
+
+            # ★ Universal fallback: if no videos found from any branch,
+            # try stage.data['final_output'] as last resort
+            if not final_videos:
+                concat_stage = state.get_stage("concat")
+                fallback_vp = (concat_stage.data or {}).get("final_output", "")
+                if fallback_vp and os.path.isfile(fallback_vp):
+                    state.final_video_path = fallback_vp
+                    final_videos.append((1, project_name, fallback_vp))
+                    log.info(f"[Pipeline] Stage 7 display: ✅ recovered from stage.data → {fallback_vp}")
+                else:
+                    log.warning(
+                        f"[Pipeline] Stage 7 display: ❌ no final video found. "
+                        f"fallback_vp='{fallback_vp}', "
+                        f"exists={os.path.isfile(fallback_vp) if fallback_vp else False}"
+                    )
 
             if not final_videos:
                 lbl = QLabel("⏳ Video thành phẩm sẽ hiển thị sau khi Stage 7 hoàn tất")
@@ -1866,6 +1907,71 @@ class TabProject(QWidget):
         self._pipeline_mode = mode
         log.info(f"[TabProject] Pipeline mode: {mode}")
 
+    # ── Centralized Button State ──────────────────────────────────
+
+    def _sync_buttons(self, mode: str, stage_name: str = ""):
+        """Single source of truth for all button states.
+        
+        Modes: idle, running, done, error, review, complete
+        """
+        self._viewing_mode = mode
+        if mode == "idle":
+            self._stage_run_btn.setText("▶️ Start")
+            self._stage_run_btn.setEnabled(True)
+            self._stage_confirm_btn.setEnabled(False)
+        elif mode == "running":
+            self._stage_run_btn.setText(f"⏳ Running: {stage_name}...")
+            self._stage_run_btn.setEnabled(False)
+            self._stage_confirm_btn.setEnabled(False)
+        elif mode == "done":
+            self._stage_run_btn.setText("▶️ Start")
+            self._stage_run_btn.setEnabled(True)
+            self._stage_confirm_btn.setEnabled(True)
+        elif mode == "error":
+            self._stage_run_btn.setText("🔄 Retry")
+            self._stage_run_btn.setEnabled(True)
+            self._stage_confirm_btn.setEnabled(False)
+        elif mode == "review":
+            self._stage_run_btn.setText("🔄 Re-run")
+            self._stage_run_btn.setEnabled(True)
+            has_data = bool(
+                self._pipeline.state.get_stage(stage_name).data
+            ) if self._pipeline and stage_name else False
+            self._stage_confirm_btn.setEnabled(has_data)
+        elif mode == "complete":
+            self._stage_run_btn.setText("🔄 Re-run")
+            self._stage_run_btn.setEnabled(True)
+            self._stage_confirm_btn.setEnabled(False)
+
+    # ── Run / Re-run / Retry ─────────────────────────────────────
+
+    def _on_stage_run_clicked(self):
+        """Handle run button click — uses _viewing_mode to detect re-run."""
+        from core.production_pipeline import StageStatus
+        current = self._pipeline_current_stage or ""
+        
+        # ★ Re-run / Retry mode (detected via _viewing_mode, NOT button text)
+        if self._viewing_mode in ("review", "complete", "error") and current and self._pipeline:
+            stage_result = self._pipeline.state.get_stage(current)
+            if stage_result.status in (StageStatus.CONFIRMED, StageStatus.WAITING_CONFIRM,
+                                       StageStatus.ERROR, StageStatus.SKIPPED):
+                stage_result.status = StageStatus.PENDING
+                stage_result.error = ""
+                # Reset ALL downstream stages
+                from core.production_pipeline import STAGE_ORDER
+                idx = STAGE_ORDER.index(current) if current in STAGE_ORDER else -1
+                if idx >= 0 and idx < len(STAGE_ORDER) - 1:
+                    next_downstream = STAGE_ORDER[idx + 1]
+                    self._pipeline.reset_from_stage(next_downstream)
+                    log.info(f"[Pipeline] Re-run: reset '{current}' + downstream from '{next_downstream}' → all PENDING")
+                else:
+                    log.info(f"[Pipeline] Re-run: reset '{current}' → PENDING, forcing re-run")
+                self._run_pipeline_stage(force_stage=current)
+                return
+        
+        # Normal mode: run next stage in pipeline order
+        self._run_pipeline_stage()
+
     def _run_pipeline_stage(self, force_stage: str = ""):
         """Run the next (or specified) pipeline stage."""
         import asyncio
@@ -1931,6 +2037,8 @@ class TabProject(QWidget):
         next_stage = force_stage or self._pipeline.get_next_stage()
         if not next_stage:
             self._set_viewer_text("✅ Pipeline complete! All stages done.")
+            # ★ FIX: Re-enable buttons so user can navigate back and re-run stages
+            self._sync_buttons("complete")
             return
 
         self._pipeline_current_stage = next_stage
@@ -1942,9 +2050,7 @@ class TabProject(QWidget):
             f"font-size: 10px; font-weight: bold; padding: 2px 6px; }}"
         )
 
-        self._stage_run_btn.setEnabled(False)
-        self._stage_run_btn.setText(f"⏳ Running: {next_stage}...")
-        self._stage_confirm_btn.setEnabled(False)
+        self._sync_buttons("running", next_stage)
         
         # ★ Set pipeline mode active — defers AutoStop during stage transitions
         if self.controller and hasattr(self.controller, 'set_pipeline_mode_active'):
@@ -1953,6 +2059,8 @@ class TabProject(QWidget):
         # Get config from sidebar — sidebar values always take priority
         config = self._setup_matrix.get_config() if self._setup_matrix else {}
         config["topic"] = self._pipeline.state.topic
+        # ★ Pass cached project_name so _stage_concat can find the right folder
+        config["project_name"] = self._get_sanitized_project_name(config)
 
         # Run async stage in background thread
         # ★ SAFE cleanup: Never call terminate() — it kills the process!
@@ -2037,27 +2145,21 @@ class TabProject(QWidget):
     def _on_stage_done(self, stage_name: str, result_text: str, error: str):
         """Handle stage completion — show result for user review."""
         from core.production_pipeline import STAGE_ORDER
-        self._stage_run_btn.setEnabled(True)
-
         if error:
-            # Fix 2: Retry label on error
-            self._stage_run_btn.setText("🔄 Retry")
-            # Fix 12: Ensure viewer is visible for error messages (card stages hide it)
+            self._sync_buttons("error")
+            # Ensure viewer is visible for error messages (card stages hide it)
             self._stage_viewer.setMinimumHeight(120)
             self._stage_viewer.setMaximumHeight(16777215)
             self._stage_viewer.setVisible(True)
-            # UI-4: Hide stale thumbnail gallery on error
             self._thumb_scroll.setVisible(False)
             self._set_viewer_text(f"❌ Stage '{stage_name}' error:\n\n{error}")
             self._stage_dots[stage_name].setStyleSheet(
                 f"QPushButton {{ background-color: {Theme.RED}; color: black; "
                 f"border-radius: 3px; font-size: 10px; padding: 2px 6px; }}"
             )
-            self._update_nav_buttons(stage_name)
-            # R5-3 Fix: Reset queue awaiting flag on error so future auto-advance isn't blocked
             self._queue_awaiting_completion = False
         else:
-            self._stage_run_btn.setText("▶️ Start")
+            self._sync_buttons("done")
             
             # Stages 4-7: hide text viewer, show only vertical list/cards
             card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
@@ -2070,7 +2172,7 @@ class TabProject(QWidget):
                 self._stage_viewer.setVisible(True)
                 self._set_viewer_text(result_text)
             
-            self._stage_confirm_btn.setEnabled(True)
+            # confirm btn already enabled by _sync_buttons("done")
             # AN-4: Flash dot 2x on completion instead of instant color change
             self._stage_dots[stage_name].setStyleSheet(
                 f"QPushButton {{ background-color: {Theme.GREEN}; color: black; "
@@ -2304,6 +2406,13 @@ class TabProject(QWidget):
         if not self._pipeline or not self._pipeline_current_stage:
             return
         
+        # ★ Guard: block re-confirm of already-confirmed stages
+        from core.production_pipeline import StageStatus
+        stage_obj = self._pipeline.state.get_stage(self._pipeline_current_stage)
+        if stage_obj.status == StageStatus.CONFIRMED:
+            log.info(f"[Pipeline] Stage '{self._pipeline_current_stage}' already confirmed, skipping")
+            return
+        
         # ★ Defensive: ensure state.scenes is linked to active version/episode
         self._ensure_pipeline_scenes_linked()
         
@@ -2311,6 +2420,9 @@ class TabProject(QWidget):
         # Without this, stale _queue_awaiting_completion=True from prior stages
         # blocks auto-advance (e.g. Stage 6 → Stage 7 concat never runs).
         self._queue_awaiting_completion = False
+        # ★ Track whether queue was actually submitted for this stage.
+        # Used at advance gate to prevent bypass for queue-dependent stages.
+        self._queue_submitted_for_stage = False
         
         # Fix 1: Parse edited JSON correctly
         edited_data = self._parse_edited_stage_data()
@@ -2346,6 +2458,7 @@ class TabProject(QWidget):
                     f"Skipping queue → advancing to next stage."
                 )
                 # Don't set _queue_awaiting_completion — let auto-advance proceed below
+                self._queue_submitted_for_stage = True  # Legitimate skip — all files exist
             else:
                 if chars_with_images:
                     log.info(
@@ -2412,6 +2525,7 @@ class TabProject(QWidget):
                 
                 if all_have_images:
                     log.info(f"[Pipeline] Stage 5: All {len(state.versions)} versions have scene images → skipping queue")
+                    self._queue_submitted_for_stage = True  # Legitimate skip — all files exist
                 else:
                     group_version_map = {}  # {group_id: version_idx}
                     saved_vi = state.current_version_idx  # Save active version
@@ -2479,6 +2593,7 @@ class TabProject(QWidget):
                         f"[Pipeline] Stage 5: All {len(scenes)} scenes have images. "
                         f"Skipping queue → advancing to next stage."
                     )
+                    self._queue_submitted_for_stage = True  # Legitimate skip — all files exist
                 else:
                     if scenes_with_images:
                         log.info(
@@ -2556,6 +2671,7 @@ class TabProject(QWidget):
                 
                 if all_have_videos:
                     log.info(f"[Pipeline] Stage 6: All {len(state.versions)} versions have videos → skipping queue")
+                    self._queue_submitted_for_stage = True  # Legitimate skip — all files exist
                 else:
                     from config.constants import WorkflowType
                     group_version_map = {}  # {group_id: version_idx}
@@ -2565,7 +2681,7 @@ class TabProject(QWidget):
                     base_settings = {
                         "model": config.get("video_model", "Veo 3.1 - Fast"),
                         "aspect_ratio": config.get("video_aspect", "LANDSCAPE"),
-                        "download_quality": config.get("video_quality", "1080p"),
+                        "download_quality": config.get("video_quality", "720p"),
                         "duration": config.get("clip_duration", 8),
                         "outputs_per_prompt": config.get("video_outputs", 1),
                         "output_folder": config.get("output_folder", ""),
@@ -2665,6 +2781,7 @@ class TabProject(QWidget):
                         f"[Pipeline] Stage 6: All {len(scenes)} scenes have video files. "
                         f"Skipping queue → advancing to concat."
                     )
+                    self._queue_submitted_for_stage = True  # Legitimate skip — all files exist
                 else:
                     if videos_exist:
                         log.info(
@@ -2691,7 +2808,7 @@ class TabProject(QWidget):
                         settings = {
                             "model": config.get("video_model", "Veo 3.1 - Fast"),
                             "aspect_ratio": config.get("video_aspect", "LANDSCAPE"),
-                            "download_quality": config.get("video_quality", "1080p"),
+                            "download_quality": config.get("video_quality", "720p"),
                             "duration": config.get("clip_duration", 8),
                             "outputs_per_prompt": config.get("video_outputs", 1),
                             "output_folder": config.get("output_folder", ""),
@@ -2757,6 +2874,24 @@ class TabProject(QWidget):
         # BUT: if we just started queue polling, defer advance to _on_queue_group_complete
         if getattr(self, '_queue_awaiting_completion', False):
             log.info(f"[Pipeline] Auto-advance deferred — waiting for queue group to complete")
+            return
+        
+        # ★ BYPASS GUARD: For queue-dependent stages, block advance if queue
+        # was NOT submitted. This prevents cascading empty data (e.g. Stage 4
+        # advances without images → Stage 5/6/7 all lack data).
+        QUEUE_STAGES = {"character_gen", "scene_image_gen", "video_gen"}
+        if cur in QUEUE_STAGES and not getattr(self, '_queue_submitted_for_stage', False):
+            log.warning(
+                f"[Pipeline] ⚠️ Stage '{cur}' is queue-dependent but no tasks were "
+                f"submitted to queue. Blocking auto-advance to prevent data loss. "
+                f"Click 'Confirm & Next' manually after reviewing."
+            )
+            self._set_viewer_text(
+                f"⚠️ Stage '{cur}' completed but no tasks were sent to queue.\n\n"
+                f"This usually means prompts are missing or all files already exist.\n"
+                f"Check the stage output and click 'Confirm & Next' to proceed manually."
+            )
+            self._sync_buttons("done")
             return
         
         next_stage = self._pipeline.get_next_stage()
@@ -3093,6 +3228,7 @@ class TabProject(QWidget):
         self._queue_poll_stage = stage_name
         self._queue_poll_multi_groups = None  # Single-group mode
         self._queue_awaiting_completion = True  # Block auto-advance until queue finishes
+        self._queue_submitted_for_stage = True  # Mark that queue WAS submitted
         self._populated_tasks = set()  # Dedup: skip already-processed tasks on subsequent polls
         # Notify controller to defer auto-stop during pipeline queue processing
         if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
@@ -3137,6 +3273,7 @@ class TabProject(QWidget):
             for gid, vi in group_version_map.items()
         }
         self._queue_awaiting_completion = True
+        self._queue_submitted_for_stage = True  # Mark that queue WAS submitted
         self._populated_tasks = set()  # Dedup: skip already-processed tasks on subsequent polls
         if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
             self.controller.set_pipeline_queue_active(True)
@@ -3405,19 +3542,31 @@ class TabProject(QWidget):
                     log.info(f"[Pipeline] ← character[{idx}].image_path = {final_path}")
                     
                     # Register in ImageLibrary for [tag] auto-resolution
+                    # Build tag list with aliases: "Mèo Em (Milo)" → ["mèo em (milo)", "milo", "mèo em"]
                     if char_name:
                         try:
+                            import re as _tag_re
                             from services.image_library import get_image_library
                             lib = get_image_library()
-                            tag_name = char_name.lower().strip()
+                            tag_list = [char_name.lower().strip()]
+                            # Extract parenthesized aliases
+                            parens = _tag_re.findall(r'\(([^)]+)\)', char_name)
+                            for p in parens:
+                                alias = p.strip().lower()
+                                if alias and alias not in tag_list:
+                                    tag_list.append(alias)
+                            # Base name without parentheses
+                            base = _tag_re.sub(r'\s*\([^)]*\)\s*', '', char_name).strip().lower()
+                            if base and base not in tag_list:
+                                tag_list.append(base)
                             img, was_updated = lib.update_or_add_image(
-                                final_path, tags=[tag_name],
+                                final_path, tags=tag_list,
                                 category="Characters", copy_to_library=False
                             )
                             if was_updated:
-                                log.info(f"[Pipeline] ♻️ [{tag_name}] UPDATED in ImageLibrary → {final_path} (old mediaIds cleared)")
+                                log.info(f"[Pipeline] ♻️ {tag_list} UPDATED in ImageLibrary → {final_path} (old mediaIds cleared)")
                             else:
-                                log.info(f"[Pipeline] ✅ [{tag_name}] registered in ImageLibrary → {final_path}")
+                                log.info(f"[Pipeline] ✅ {tag_list} registered in ImageLibrary → {final_path}")
                         except Exception as e:
                             log.warning(f"[Pipeline] ImageLibrary registration failed: {e}")
         elif stage_name == "scene_image_gen":
@@ -3663,7 +3812,7 @@ class TabProject(QWidget):
         from core.production_pipeline import StageStatus
         stage_result = self._pipeline.state.get_stage(stage_name)
         if stage_result.status != StageStatus.CONFIRMED:
-            self._stage_confirm_btn.setEnabled(True)
+            self._sync_buttons("done")
         
         # Auto-advance if enabled AND no failures
         # NOTE: Stage was already confirmed BEFORE queue polling started.
@@ -3711,7 +3860,7 @@ class TabProject(QWidget):
                         # Don't auto-advance — let user decide
                         if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
                             self.controller.set_pipeline_queue_active(False)
-                        self._stage_confirm_btn.setEnabled(True)
+                        self._sync_buttons("done")
                         return
                 
                 log.info(f"[Pipeline] Auto-advancing to '{next_stage}' after queue completion (stage '{stage_name}' already confirmed)")
@@ -3900,9 +4049,8 @@ class TabProject(QWidget):
             f"border: 1px solid {Theme.BORDER}; border-radius: 3px; "
             f"font-size: 10px; padding: 2px 6px; }}"
         )
-        self._stage_confirm_btn.setEnabled(False)
-        # Fix 8: Update nav buttons after skip
-        self._update_nav_buttons(self._pipeline_current_stage)
+        self._sync_buttons("running", self._pipeline_current_stage)
+        # _update_nav_buttons is no-op (stage dots handle nav)
         next_stage = self._pipeline.get_next_stage()
         if next_stage:
             self._set_viewer_text(f"Stage skipped.\n\n⏳ Auto-running: {next_stage}...")
@@ -3942,18 +4090,7 @@ class TabProject(QWidget):
         # Show saved result for review/editing
         self._show_stage_review(prev_stage)
         
-        self._stage_run_btn.setText("▶️ Start")
-        self._stage_run_btn.setEnabled(True)
-        stage_result = self._pipeline.state.get_stage(prev_stage)
-        # Fix 11: For card stages, only enable confirm after thumbnails render
-        card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
-        if prev_stage in card_stages:
-            self._stage_confirm_btn.setEnabled(False)
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(200, lambda: self._stage_confirm_btn.setEnabled(bool(stage_result.data)))
-        else:
-            self._stage_confirm_btn.setEnabled(bool(stage_result.data))
-        self._update_nav_buttons(prev_stage)
+        self._sync_buttons("review", prev_stage)
     
     def _on_stage_next(self):
         """Navigate forward to the next confirmed/completed stage.
@@ -3989,10 +4126,7 @@ class TabProject(QWidget):
         self._pipeline_current_stage = next_stage
         self._show_stage_review(next_stage)
         
-        self._stage_run_btn.setText("▶️ Start")
-        self._stage_run_btn.setEnabled(True)
-        self._stage_confirm_btn.setEnabled(bool(next_result.data))
-        self._update_nav_buttons(next_stage)
+        self._sync_buttons("review", next_stage)
     
     def _show_stage_review(self, stage_name: str):
         """Show saved stage data in viewer for review/editing.
@@ -4100,15 +4234,7 @@ class TabProject(QWidget):
             _sr_data = stage_result.data  # capture for lambda
             def _deferred_review(_sn=stage_name, _data=_sr_data):
                 self._show_stage_review(_sn)
-                self._stage_run_btn.setText("🔄 Re-run")
-                self._stage_run_btn.setEnabled(True)
-                # Fix 11: For card stages, only enable confirm after thumbnails render
-                card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
-                if _sn in card_stages:
-                    self._stage_confirm_btn.setEnabled(False)
-                    QTimer.singleShot(200, lambda: self._stage_confirm_btn.setEnabled(bool(_data)))
-                else:
-                    self._stage_confirm_btn.setEnabled(bool(_data))
+                self._sync_buttons("review", _sn)
             QTimer.singleShot(0, _deferred_review)
         finally:
             # Fix 4: Release guard after 800ms (was 200ms) to cover full thumbnail rebuild time
@@ -4148,10 +4274,9 @@ class TabProject(QWidget):
         self._set_viewer_text("", reset_scroll=True)
         self._stage_viewer.setPlaceholderText("Stage results will appear here for review...")
         
-        # Reset buttons
-        self._stage_run_btn.setText("▶️ Start")
-        self._stage_run_btn.setEnabled(True)
-        self._stage_confirm_btn.setEnabled(False)
+        # Reset buttons + invalidate any running thread
+        self._generation_id = getattr(self, '_generation_id', 0) + 1
+        self._sync_buttons("idle")
         
         # Clear thumbnails
         while self._thumb_layout.count() > 1:
@@ -4426,13 +4551,7 @@ class TabProject(QWidget):
             self._update_thumbnails(current_stage)
             
             # Enable buttons
-            self._stage_run_btn.setText("▶️ Continue Pipeline")
-            self._stage_run_btn.setEnabled(True)
-            sr = restored_state.stages.get(current_stage)
-            self._stage_confirm_btn.setEnabled(
-                bool(sr and sr.data and sr.status == StageStatus.WAITING_CONFIRM)
-            )
-            self._update_nav_buttons(current_stage)
+            self._sync_buttons("review", current_stage)
             
             # Restore topic
             topic = restored_state.topic
@@ -4672,13 +4791,7 @@ class TabProject(QWidget):
         self._update_thumbnails(current_stage)
         
         # Enable/disable buttons
-        self._stage_run_btn.setText("▶️ Continue Pipeline")
-        self._stage_run_btn.setEnabled(True)
-        sr = restored_state.stages.get(current_stage)
-        self._stage_confirm_btn.setEnabled(
-            bool(sr and sr.data and sr.status == StageStatus.WAITING_CONFIRM)
-        )
-        self._update_nav_buttons(current_stage)
+        self._sync_buttons("review", current_stage)
         
         # Update topic in sidebar if available
         topic = restored_state.topic
@@ -4942,6 +5055,12 @@ class TabProject(QWidget):
         self._topics_body.setVisible(True)
         # Also reset pipeline viewer
         self._reset_pipeline_viewer()
+
+    def _on_open_find_replace(self):
+        """Open Find & Replace dialog via MainWindow."""
+        win = self.window()
+        if hasattr(win, '_toggle_search'):
+            win._toggle_search(replace=True)
 
     def _on_generate(self):
         """Start full auto generation (Fix 1: runs in background thread)."""
@@ -5412,7 +5531,7 @@ class TabProject(QWidget):
                 # Video settings
                 settings["model"] = config.get("video_model", "Veo 3.1 - Fast")
                 settings["aspect_ratio"] = config.get("video_aspect", "LANDSCAPE")
-                settings["download_quality"] = config.get("video_quality", "1080p")
+                settings["download_quality"] = config.get("video_quality", "720p")
                 settings["outputs_per_prompt"] = config.get("video_outputs", 4)
         elif hasattr(self, '_aspect_combo'):
             settings["aspect_ratio"] = "LANDSCAPE" if "Landscape" in self._aspect_combo.currentText() else "PORTRAIT"

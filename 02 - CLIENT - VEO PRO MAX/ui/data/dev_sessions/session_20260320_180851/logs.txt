@@ -1,0 +1,123 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260320_180851
+Total: 116 entries
+============================================================
+
+[INFO ] 18:04:09 - core.session_manager - [Session] Loaded from 2026-03-20T18:03:58.587336
+[INFO ] 18:04:17 - veo.tab_project - [TabProject] Pipeline mode: full_production
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103219 name='58_La_Trau_Khong' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103245 name='60_Rau_Ngo' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103256 name='61_Cay_He' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103312 name='62_La_Dua' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103326 name='63_Gung' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103336 name='64_Nghe' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103345 name='65_Toi' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_103356 name='66_Hanh_Tim' LAZY (deferred) expanded=False
+[INFO ] 18:04:17 - veo.tab_queue - [GroupCreate] gid=group_20260320_110806 name='38_Cay_Xau_Ho' LAZY (deferred) expanded=False
+[INFO ] 18:04:18 - veo.tab_project - [Pipeline] Found full session file: _pipeline_session.json
+[INFO ] 18:04:18 - veo.pipeline - [Pipeline] Activated version 1/1: Version 1
+[INFO ] 18:04:18 - veo.tab_project - [Pipeline] Full restore: 38 scenes, 2 characters, topic='## 1. PROJECT INFO
+
+**Topic:** Kịch Bản Phim Ngắn:'
+[INFO ] 18:04:18 - veo.tab_project - [Pipeline] ♻️ Auto-restored from Hành Trình Đến Vùng Đất Ánh Sáng: 7 completed stage(s), current=concat, FULL session
+[INFO ] 18:04:21 - core.app_controller - Profile sync complete: 0 accounts, 0 ready
+[INFO ] 18:04:21 - core.app_controller - [AutoLaunch] Profiles synced to runtime
+[INFO ] 18:04:21 - core.app_controller - [AutoLaunch] ProfilesController + ExtensionBridge injected into 0 accounts
+[INFO ] 18:04:21 - core.token_manager - [TokenManager] No tokens found for levanlinh.kma@gmail.com
+[INFO ] 18:04:21 - core.app_controller - [AutoLaunch] 🔇 Starting hidden browser 1/1: levanlinh.kma@gmail.com...
+[INFO ] 18:04:21 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[INFO ] 18:04:21 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] ✅ Developer Mode pre-set for browser_session_fed78075
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] No existing Chrome found — launching new instance
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] Branded Chrome — extension via auto-install (no --load-extension)
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] Launching Chrome: port=9223, profile=browser_session_fed78075
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] Chrome args: C:\Program Files\Google\Chrome\Application\chrome.exe --remote-debugging-port=9223 --user-data-dir=C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075 --remote-allow-origins=* --enable-extensions --no-first-run --no-default-browser-check --disable-features=TabDiscarding,MemorySaver,UseEcoQoSForBackgroundProcess...
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] Chrome launched: PID=23352, port=9223
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] ⚡ Disabled Efficiency Mode for PID 23352
+[INFO ] 18:04:21 - core.chrome_manager - [ChromeManager] PID file saved: C:\Users\Linh\.veoauto\browser_profiles\browser_session_fed78075\.chrome_pid.json
+[WARNING] 18:04:21 - core.chrome_manager - [ChromeManager] Waiting for CDP on port 9223 (timeout=30s)...
+[INFO ] 18:04:21 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 58687)
+[INFO ] 18:04:22 - core.chrome_manager - [ChromeManager] CDP ready on port 9223
+[INFO ] 18:04:22 - core.chrome_manager - [ChromeManager] Branded Chrome — installing extension NOW...
+[INFO ] 18:04:22 - core.extension_manager - [ExtMgr] Installed extension version (fast): 2.3.8
+[INFO ] 18:04:22 - core.extension_manager - [ExtMgr] Extension v2.3.8 up-to-date — skipping
+[INFO ] 18:04:22 - core.profiles_controller - [ProfilesController] Chrome PID=23352, port=9223 (new)
+[INFO ] 18:04:22 - core.profiles_controller - [ProfilesController] 2 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[INFO ] 18:04:22 - core.app_controller - [AutoLaunch] ✅ levanlinh.kma@gmail.com browser visible (smart-hide disabled)
+[INFO ] 18:04:22 - core.app_controller - [AutoLaunch] Connecting 1 accounts to debug browsers...
+[INFO ] 18:04:22 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 18:04:22 - core.account_manager - [levanlinh.kma@gmail.com] ⏳ Debug browser starting, waiting...
+[WARNING] 18:04:22 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[INFO ] 18:04:22 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 18:04:22 - core.account_manager - [levanlinh.kma@gmail.com] 🔗 Attaching to debug browser (page access only)
+[INFO ] 18:04:22 - core.multi_account - All account browsers initialized
+[INFO ] 18:04:22 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 18:04:22 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 18:04:25 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: levanlinh.kma@gmail.com
+[INFO ] 18:04:25 - core.extension_bridge - [ExtensionBridge] 📧 Assigned email to extension: levanlinh.kma@gmail.com
+[INFO ] 18:04:25 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 18:04:25 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 18:04:25 - core.app_controller - [AutoLaunch] 📧 Assigning email to unregistered extension: veofidelia169@tunxelamorintesa.sbs
+[INFO ] 18:04:25 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['levanlinh.kma@gmail.com']
+[INFO ] 18:04:25 - core.extension_manager - [ExtMgr] Extension ID: edhhmoglabcdhmolgekcdnnfknalphjh
+[INFO ] 18:04:26 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9223/devtools/page/098604E819077978D712F2A216...
+[INFO ] 18:04:27 - core.extension_manager - [ExtMgr] Closed extensions tab 098604E8... (PUT)
+[INFO ] 18:04:27 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 18:04:27 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.8
+[INFO ] 18:04:27 - core.app_controller - [AppController] Extension v2.3.8 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 18:04:27 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 18:04:27 - core.app_controller - [AutoLaunch] Extension check complete: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 18:04:27 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 18:04:27 - core.app_controller - [TierCheck] ✅ levanlinh.kma@gmail.com: Ultra
+[INFO ] 18:04:27 - core.app_controller - [TierCheck] ✅ All accounts are Pro or Ultra
+[INFO ] 18:04:27 - core.app_controller - [AutoLaunch] ✅ Account tier enforcement complete
+[INFO ] 18:04:27 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 18:04:27 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 18:04:27 - core.app_controller - [AutoLaunch] 📸 Image Library: 1 images, all already uploaded
+[INFO ] 18:04:27 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 18:04:27 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 18:04:28 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 18:04:28 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 18:04:28 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 18:04:34 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:04:36 - veo.tab_project - [TabProject] Pipeline mode: text_only
+[INFO ] 18:04:43 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[WARNING] 18:04:57 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[WARNING] 18:04:57 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for levanlinh.kma@gmail.com took 20.0s (requestId=53ca8a64)
+[WARNING] 18:04:57 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 18:04:57 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[INFO ] 18:05:07 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:05:21 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=⚠️(hb=35s,cap=✅) | conns=1, pending=1
+[WARNING] 18:05:27 - core.extension_bridge - [ExtensionBridge] check_recaptcha_ready TIMEOUT (20.0s) for levanlinh.kma@gmail.com — extension did not respond (tab may be frozen/suspended)
+[WARNING] 18:05:27 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for levanlinh.kma@gmail.com took 20.0s (requestId=f74c3e8a)
+[WARNING] 18:05:27 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ❌ still not ready → escalating to full reload
+[INFO ] 18:05:27 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [full] for levanlinh.kma@gmail.com — ProactiveWarmup escalation
+[INFO ] 18:05:27 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: recaptcha-check-timeout)
+[INFO ] 18:05:27 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 0 tab(s) reloaded
+[INFO ] 18:05:37 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:06:05 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:06:08 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[WARNING] 18:06:08 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: check_recaptcha_ready for levanlinh.kma@gmail.com took 16.0s (requestId=daf10669)
+[WARNING] 18:06:08 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: 🔄 reload failed → hard navigation
+[WARNING] 18:06:08 - core.extension_bridge - [ExtensionBridge] 🔄 Hard navigation for levanlinh.kma@gmail.com → https://labs.google/fx/vi/tools/flow (reCAPTCHA recovery)
+[INFO ] 18:06:08 - core.extension_bridge - [ExtensionBridge] 📍 Navigating levanlinh.kma@gmail.com to: https://labs.google/fx/vi/tools/flow
+[INFO ] 18:06:17 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:06:19 - core.profiles_controller - [ProfilesController] ⏳ JS eval paused for levanlinh.kma@gmail.com (page navigating — soft recovery)
+[INFO ] 18:06:21 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=13s,cap=✅) | conns=1, pending=1
+[WARNING] 18:06:35 - core.extension_bridge - [ExtensionBridge] ❌ Navigation failed for levanlinh.kma@gmail.com: unknown
+[WARNING] 18:06:35 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: navigate_tab for levanlinh.kma@gmail.com took 26.6s (requestId=7a2a8669)
+[ERROR] 18:06:35 - core.extension_bridge - [ExtensionBridge] ❌ Hard navigation failed for levanlinh.kma@gmail.com: no response
+[INFO ] 18:06:46 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:06:55 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=True enterprise=True execute=True page=True tokenLen=569
+[ERROR] 18:06:55 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ❌ reCAPTCHA dead after all recovery attempts — engine will handle on Start All
+[INFO ] 18:07:21 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=12s,cap=✅) | conns=1, pending=0
+[INFO ] 18:07:28 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:07:36 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:08:21 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=12s,cap=✅) | conns=1, pending=0
+[INFO ] 18:08:35 - core.profiles_controller - [ProfilesController] ✅ JS eval recovered for levanlinh.kma@gmail.com (was paused for 1 calls)
+[INFO ] 18:08:35 - core.engine - [TabKeepalive] levanlinh.kma@gmail.com: API heartbeat OK (auth=200, ack=200, credits=401)
+[INFO ] 18:08:36 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:08:42 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data']
+[INFO ] 18:08:51 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json
