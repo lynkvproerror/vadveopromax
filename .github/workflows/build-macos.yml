@@ -54,6 +54,11 @@ jobs:
   build:
     runs-on: macos-14  # Apple Silicon (M1) runner — FREE tier
     timeout-minutes: 60
+    env:
+      # Opt into Node.js 24 early (Node 20 deprecated June 2026)
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # Fix Homebrew git 'exit 128' in post-checkout cleanup on macOS runners
+      GIT_CONFIG_GLOBAL: /dev/null
 
     steps:
       # ── Step 1: Checkout code ──
