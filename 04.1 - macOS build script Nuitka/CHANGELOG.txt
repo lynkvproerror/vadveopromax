@@ -1,3 +1,16 @@
+🔧 macOS Build v2.3.9 (2026-03-23)
+- FIX: machdep.cpu.brand_string ARM64 fallback → hw.model (license_client.py)
+- FIX: HardwareFingerprint.generate() → get_machine_id() (native_bridge.py)
+- FIX: _HardwareBinder machine key ARM64 fallback (firebase_rest_client.py)
+- ADD: config/debug_flags.py — VEO_DEBUG_* environment variable system (10 areas)
+- ADD: VEO_DEBUG_CHROME / VEO_DEBUG_LICENSE verbose log helpers in key modules
+- ADD: M-chip crash prevention env vars (OBJC_DISABLE_INITIALIZE_FORK_SAFETY, QT_MAC_WANTS_LAYER, EVENT_NOKQUEUE)
+- ADD: Boot trace → ~/.veoauto/boot_trace.txt (per-import step logging)
+- ADD: Session rotating log → ~/.veoauto/veo_session_YYYYMMDD_HHMMSS.log
+- ADD: opencv-python vs PySide6 conflict auto-detect + auto-fix on startup
+- ADD: faulthandler crash report → ~/.veoauto/crash_report.txt (SIGSEGV catch)
+- FIX: 429 cooldown logic softened (commit 5233042)
+
 🔧 macOS Build v1.0.0
 - Porting từ Windows version
 - Nuitka .app bundle compilation

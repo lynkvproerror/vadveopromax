@@ -108,12 +108,21 @@ class _HardwareBinder:
         if platform.system() == "Darwin":  # macOS
             try:
                 # CPU identifier
+                # machdep.cpu.brand_string is Intel-only;
+                # on ARM64 (Apple Silicon) use hw.model instead.
                 result = subprocess.run(
                     ['sysctl', '-n', 'machdep.cpu.brand_string'],
                     capture_output=True, text=True, timeout=5,
                 )
                 cpu_id = result.stdout.strip()
-                components.append(cpu_id)
+                if not cpu_id:  # Empty on ARM64 — try hw.model
+                    result = subprocess.run(
+                        ['sysctl', '-n', 'hw.model'],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    cpu_id = result.stdout.strip()
+                if cpu_id:
+                    components.append(cpu_id)
             except:
                 pass
             

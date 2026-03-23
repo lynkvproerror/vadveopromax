@@ -74,9 +74,14 @@ class NativeSecurity:
             buf = ctypes.create_string_buffer(buf_size.value)
             libc.sysctl(mib, 4, buf, ctypes.byref(buf_size), None, 0)
             
-            # P_TRACED flag is at offset 32 in kinfo_proc.kp_proc.p_flag (macOS)
-            # Check if P_TRACED (0x00000800) is set
-            p_flag = struct.unpack_from("i", buf.raw, 32)[0]
+            # P_TRACED flag offset in kinfo_proc.kp_proc.p_flag:
+            #   x86_64 (Intel Mac): offset 32
+            #   arm64  (M-chip)   : offset 24
+            import platform
+            _p_flag_offset = 24 if platform.machine() == "arm64" else 32
+            if buf_size.value <= _p_flag_offset + 4:
+                return False  # Buffer too small — safe fallback
+            p_flag = struct.unpack_from("i", buf.raw, _p_flag_offset)[0]
             return bool(p_flag & 0x00000800)
         except Exception:
             return False
@@ -135,8 +140,8 @@ class NativeSecurity:
         # Python fallback: use existing HardwareFingerprint
         try:
             from security.license_client import HardwareFingerprint
-            return HardwareFingerprint.generate()
-        except ImportError:
+            return HardwareFingerprint.get_machine_id()  # Fixed: generate() doesn't exist
+        except Exception:
             return "fallback_no_hwid"
 
     # ── Frida Detection ───────────────────────────────────────

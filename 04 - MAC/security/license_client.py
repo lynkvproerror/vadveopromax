@@ -127,6 +127,21 @@ class UsageStats:
     total_downloads: int = 0
     last_generation_at: Optional[datetime] = None
     last_reset_date: Optional[str] = None  # YYYY-MM-DD
+
+# ── Debug flag ─────────────────────────────────────────────────────────────
+import logging as _logging
+_lic_log = _logging.getLogger(__name__)
+try:
+    from config.debug_flags import DEBUG_LICENSE as _DEBUG_LICENSE
+except ImportError:
+    _DEBUG_LICENSE = False
+
+def _ldbg(msg: str):
+    """Verbose debug log — only emitted when VEO_DEBUG_LICENSE=1."""
+    if _DEBUG_LICENSE:
+        _lic_log.debug(f"[LicenseDBG] {msg}")
+
+
 class HardwareFingerprint:
     """
     Generate unique machine identifier from STABLE hardware sources.
@@ -152,13 +167,24 @@ class HardwareFingerprint:
             return {"error": "Only macOS supported in this build"}
         
         # 1. CPU identifier
+        # machdep.cpu.brand_string is Intel-only — on ARM64 (M-chip) it doesn't exist.
+        # Fall back to hw.model which works on all Macs (e.g. 'MacBookPro18,3').
         try:
             output = subprocess.check_output(
                 ['sysctl', '-n', 'machdep.cpu.brand_string'], stderr=subprocess.DEVNULL
-            ).decode()
-            components['cpu_id'] = output.strip()
+            ).decode().strip()
+            if not output:  # Empty on ARM64
+                raise ValueError("Empty — likely ARM64")
+            components['cpu_id'] = output
         except:
-            components['cpu_id'] = 'unknown'
+            try:
+                # ARM64 / Apple Silicon fallback: hw.model identifies the SoC family
+                output = subprocess.check_output(
+                    ['sysctl', '-n', 'hw.model'], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                components['cpu_id'] = output or 'unknown'
+            except:
+                components['cpu_id'] = 'unknown'
         
         # 2. Platform Serial Number (equivalent to motherboard serial)
         try:
@@ -205,6 +231,10 @@ class HardwareFingerprint:
         except:
             components['disk_serial'] = 'unknown'
         
+        _ldbg(f"HW components: cpu_id={components.get('cpu_id','?')!r} "
+              f"mb_serial={components.get('mb_serial','?')!r} "
+              f"mb_uuid={components.get('mb_uuid','?')!r} "
+              f"disk_serial={components.get('disk_serial','?')!r}")
         return components
     
     @staticmethod
@@ -221,7 +251,9 @@ class HardwareFingerprint:
             components.get('disk_serial', ''),
         ])
         
-        return hashlib.sha256(combined.encode()).hexdigest()
+        machine_hash = hashlib.sha256(combined.encode()).hexdigest()
+        _ldbg(f"Machine ID hash: {machine_hash[:16]}... (full: {machine_hash})")
+        return machine_hash
     
     @staticmethod
     def get_display_id() -> str:

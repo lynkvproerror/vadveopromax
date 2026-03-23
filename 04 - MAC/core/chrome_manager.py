@@ -22,6 +22,17 @@ from typing import Optional, Dict, List, Any
 
 log = logging.getLogger(__name__)
 
+# ── Debug flag ──────────────────────────────────────────────────────────
+try:
+    from config.debug_flags import DEBUG_CHROME as _DEBUG_CHROME
+except ImportError:
+    _DEBUG_CHROME = False
+
+def _cdbg(msg: str):
+    """Verbose debug log — only emitted when VEO_DEBUG_CHROME=1."""
+    if _DEBUG_CHROME:
+        log.debug(f"[ChromeDBG] {msg}")
+
 # ── Constants ──────────────────────────────────────────────────────────
 
 CDP_PORT_BASE = 9222
@@ -169,10 +180,19 @@ def _do_cft_download(progress_callback=None) -> Optional[str]:
         size_mb = len(zip_data) / (1024 * 1024)
         _progress(f"📦 Downloaded {size_mb:.1f} MB, extracting...")
         
-        # Step 3: Extract
+        # Step 3: Extract — restore Unix file permissions (zipfile.extractall() doesn't)
         cft_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-            zf.extractall(str(cft_dir))
+            for entry in zf.infolist():
+                extracted_path = cft_dir / entry.filename
+                zf.extract(entry, str(cft_dir))
+                # Restore Unix permissions stored in external_attr (high 16 bits)
+                unix_perms = (entry.external_attr >> 16) & 0xFFFF
+                if unix_perms and not entry.is_dir():
+                    try:
+                        os.chmod(str(extracted_path), unix_perms)
+                    except Exception:
+                        pass
         
         # Step 4: Verify
         exe_path = _find_cft_exe()
@@ -573,7 +593,7 @@ def _disable_efficiency_mode(pid: int):
         import ctypes
         from ctypes import wintypes
         
-        libc = None  # macOS: no Win32 kernel32
+        kernel32 = None  # macOS: no Win32 kernel32 — unreachable (os.name != 'nt' guard above)
         
         PROCESS_SET_INFORMATION = 0x0200
         ProcessPowerThrottling = 4  # PROCESS_INFORMATION_CLASS
@@ -652,7 +672,7 @@ def launch_chrome(
     _copy_variations_seed(profile_path)
 
     # Resolve Extension path (inside client app directory)
-    _client_dir = Path(__file__).resolve().parent.parent  # 02 - CLIENT - VEO PRO MAX/
+    _client_dir = Path(__file__).resolve().parent.parent  # 04 - MAC/
     _extension_dir = _client_dir / "extension"
     _has_extension = _extension_dir.exists() and (_extension_dir / "manifest.json").exists()
 
@@ -691,6 +711,10 @@ def launch_chrome(
 
     log.info(f"[ChromeManager] Launching Chrome: port={port}, profile={Path(profile_path).name}")
     log.info(f"[ChromeManager] Chrome args: {' '.join(args[:8])}...")
+    _cdbg(f"Full Chrome args: {' '.join(args)}")
+    _cdbg(f"Profile full path: {profile_path}")
+    _cdbg(f"Chrome exe: {chrome_exe}")
+    _cdbg(f"Branded: {_is_branded}, Has extension: {_has_extension}")
 
     # macOS: start_new_session=True = fully independent (POSIX setsid)
     proc = subprocess.Popen(
