@@ -395,6 +395,75 @@ def organize_app_bundle():
     print(f"  [OK] App bundle organized: {app_bundle}")
 
 
+def fix_python_dylib():
+    """Fix DYLD crash: copy Python framework dylib → .app/Contents/MacOS/Python.
+
+    Nuitka links the compiled binary against @executable_path/Python (the Python
+    framework dylib). On macOS, DYLD looks for it at:
+        <.app>/Contents/MacOS/Python
+
+    If that file is missing, the app crashes immediately on launch with:
+        Termination Reason: DYLD, Code 1, Library not loaded: @executable_path/Python
+
+    This function locates the active Python's shared library and copies it there.
+    """
+    import sysconfig
+
+    app_bundle = OUTPUT_DIR / "VEO_Pro_Max.app"
+    macos_dir = app_bundle / "Contents" / "MacOS"
+
+    if not macos_dir.exists():
+        print("  [SKIP] .app/Contents/MacOS not found")
+        return
+
+    dest = macos_dir / "Python"
+    if dest.exists():
+        print(f"  [OK] @executable_path/Python already present ({dest.stat().st_size // 1024} KB)")
+        return
+
+    # Strategy 1: sys.prefix/Python  (framework builds — most common on macOS)
+    candidate = Path(sys.prefix) / "Python"
+    if candidate.is_file():
+        shutil.copy2(candidate, dest)
+        dest.chmod(0o755)
+        print(f"  [OK] Copied Python dylib (framework): {candidate}")
+        return
+
+    # Strategy 2: LIBDIR / LDLIBRARY
+    libdir = sysconfig.get_config_var("LIBDIR") or ""
+    ldlib = sysconfig.get_config_var("LDLIBRARY") or ""
+    candidate = Path(libdir) / ldlib
+    if candidate.is_file():
+        shutil.copy2(candidate, dest)
+        dest.chmod(0o755)
+        print(f"  [OK] Copied Python dylib (LDLIBRARY): {candidate}")
+        return
+
+    # Strategy 3: libpython{ver}.dylib / .so
+    pyver = sysconfig.get_config_var("LDVERSION") or sysconfig.get_config_var("py_version_short")
+    for ext in ("dylib", "so"):
+        candidate = Path(libdir) / f"libpython{pyver}.{ext}"
+        if candidate.is_file():
+            shutil.copy2(candidate, dest)
+            dest.chmod(0o755)
+            print(f"  [OK] Copied Python dylib (libpython): {candidate}")
+            return
+
+    # Strategy 4: Walk sys.prefix looking for any Python/libpython*.dylib
+    for root, dirs, files in os.walk(sys.prefix):
+        for fname in files:
+            if fname == "Python" or (fname.startswith("libpython") and fname.endswith("dylib")):
+                candidate = Path(root) / fname
+                shutil.copy2(candidate, dest)
+                dest.chmod(0o755)
+                print(f"  [OK] Copied Python dylib (walk): {candidate}")
+                return
+
+    print("  [WARN] Could not find Python dylib — app may crash with DYLD error on launch!")
+    print(f"         sys.prefix={sys.prefix}")
+    print(f"         LIBDIR={libdir}, LDLIBRARY={ldlib}")
+
+
 def encrypt_workflow_data():
     """Encrypt workflow .md files in the dist output."""
     try:
@@ -728,6 +797,10 @@ def main():
     # ── Step 5: Organize .app bundle ──
     print("\n[5] Organizing .app bundle...")
     organize_app_bundle()
+
+    # ── Step 5.1: Fix @executable_path/Python (DYLD crash prevention) ──
+    print("\n[5.1] Fixing @executable_path/Python...")
+    fix_python_dylib()
 
     # ── Step 5.5: Obfuscate extension ──
     print("\n[5.5] Obfuscating extension...")

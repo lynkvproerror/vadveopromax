@@ -123,6 +123,72 @@ jobs:
           python build_release_macos.py $BUILD_ARGS
         timeout-minutes: 45
 
+      # ── Step 5.5: Fix @executable_path/Python ──
+      # DYLD crash prevention: Nuitka links the binary against
+      # @executable_path/Python (Python framework dylib), but does NOT
+      # automatically copy it into .app/Contents/MacOS/.
+      # Without this step the app crashes on launch with:
+      #   Termination Reason: DYLD, Code 1, Library not loaded: @executable_path/Python
+      - name: 🐍 Fix @executable_path/Python (DYLD crash prevention)
+        run: |
+          APP_MACOS="04.2 - macOS final build/VEO_Pro_Max.app/Contents/MacOS"
+
+          if [ ! -d "$APP_MACOS" ]; then
+            echo "⚠️ .app/Contents/MacOS not found — skipping Python fix"
+            exit 0
+          fi
+
+          # Already present? Nothing to do.
+          if [ -f "$APP_MACOS/Python" ]; then
+            echo "✅ @executable_path/Python already present"
+            exit 0
+          fi
+
+          # Locate the Python framework dylib (works for both Homebrew + setup-python)
+          PYTHON_FW_DYLIB=$(python3 -c "
+          import sysconfig, os, sys
+          # 1. Framework path (macOS native Python install)
+          prefix = sys.prefix
+          fw = os.path.join(prefix, 'Python')
+          if os.path.isfile(fw):
+              print(fw); exit()
+          # 2. LDLIBRARY in LIBDIR
+          libdir = sysconfig.get_config_var('LIBDIR') or ''
+          ldlib  = sysconfig.get_config_var('LDLIBRARY') or ''
+          candidate = os.path.join(libdir, ldlib)
+          if os.path.isfile(candidate):
+              print(candidate); exit()
+          # 3. Shared library variant
+          pyver = sysconfig.get_config_var('LDVERSION') or sysconfig.get_config_var('py_version_short')
+          for ext in ['dylib', 'so']:
+              c2 = os.path.join(libdir, f'libpython{pyver}.{ext}')
+              if os.path.isfile(c2):
+                  print(c2); exit()
+          # 4. Walk sys.prefix for anything named Python or libpython*.dylib
+          for root, dirs, files in os.walk(prefix):
+              for f in files:
+                  if f == 'Python' or (f.startswith('libpython') and f.endswith('dylib')):
+                      print(os.path.join(root, f)); exit()
+          print('')
+          ")
+
+          if [ -n "$PYTHON_FW_DYLIB" ] && [ -f "$PYTHON_FW_DYLIB" ]; then
+            cp "$PYTHON_FW_DYLIB" "$APP_MACOS/Python"
+            chmod 755 "$APP_MACOS/Python"
+            echo "✅ Copied: $PYTHON_FW_DYLIB → $APP_MACOS/Python"
+            SIZE_KB=$(du -k "$APP_MACOS/Python" | cut -f1)
+            echo "   Size: ${SIZE_KB} KB"
+          else
+            echo "❌ Could not locate Python framework dylib!"
+            echo "   Searched: $PYTHON_FW_DYLIB"
+            echo "   Python: $(python3 --version)"
+            echo "   prefix: $(python3 -c 'import sys; print(sys.prefix)')"
+            echo "   LIBDIR: $(python3 -c 'import sysconfig; print(sysconfig.get_config_var(\"LIBDIR\"))')"
+            echo "   LDLIBRARY: $(python3 -c 'import sysconfig; print(sysconfig.get_config_var(\"LDLIBRARY\"))')"
+            # Non-fatal: build continues, but app will crash on launch
+            echo "::warning::@executable_path/Python not found — app may crash on launch!"
+          fi
+
       # ── Step 6: Post-build ad-hoc sign ──
       - name: 🔏 Code Sign (ad-hoc)
         if: github.event.inputs.skip_sign != 'true'
