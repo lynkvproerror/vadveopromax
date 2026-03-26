@@ -76,8 +76,8 @@ class SettingsProfilesMixin:
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status
-        self.profiles_table.setColumnWidth(7, 70)   # Workers - SpinBox 0-20
-        self.profiles_table.setColumnWidth(8, 70)   # LP - SpinBox 0-8
+        self.profiles_table.setColumnWidth(7, 75)   # Workers - SpinBox 0-20
+        self.profiles_table.setColumnWidth(8, 75)   # LP - SpinBox 0-8
         self.profiles_table.setColumnWidth(9, 50)   # Ext - emoji status
         self.profiles_table.setColumnWidth(10, 290) # Actions - 6 buttons
 
@@ -305,7 +305,7 @@ class SettingsProfilesMixin:
                 f"• 1 output/prompt = 1 video một lúc\n"
                 f"• {_max_wk} output/prompt = tối đa song song"
             )
-            slots_spin.setFixedWidth(62)
+            slots_spin.setFixedWidth(65)
             # Explicit style: ensure number is visible on dark table background
             slots_spin.setStyleSheet(f"""
                 QSpinBox {{
@@ -344,7 +344,7 @@ class SettingsProfilesMixin:
 
             # LP Workers SpinBox (col 8) — per-account LP concurrent worker limit
             lp_spin = QSpinBox()
-            _max_lp = 8  # LP soft cap
+            _max_lp = 20  # LP max (same as total workers)
             lp_spin.setRange(0, _max_lp)
             lp_spin.setValue(min(acc.get('max_workers_lp', 8), _max_lp))
             lp_spin.setToolTip(
@@ -353,7 +353,7 @@ class SettingsProfilesMixin:
                 f"• 0 = TẮT LP\n"
                 f"• {_max_lp} = tối đa LP song song"
             )
-            lp_spin.setFixedWidth(62)
+            lp_spin.setFixedWidth(65)
             lp_spin.setStyleSheet(f"""
                 QSpinBox {{
                     background-color: {Theme.SURFACE1};
