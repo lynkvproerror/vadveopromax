@@ -587,6 +587,7 @@ class Engine:
             self._task_available.set()
         dispatcher.set_on_task_ready(_wake_foremen_on_ready)
         self._workers_available: Dict[str, asyncio.Event] = {}  # T2: wake foremen when workers released
+        self._lp_workers_available: Dict[str, asyncio.Event] = {}  # LP: wake foremen when LP workers released
         self._browser_recovery_locks: Dict[str, asyncio.Lock] = {}   # Per-account browser recovery dedup
         self._browser_recovery_epoch: Dict[str, int] = {}             # Tracks recovery generation
         self._account_rate_locks: Dict[str, asyncio.Semaphore] = {}  # RC4: Semaphore(1) — serialize submit pipeline per account
@@ -3106,6 +3107,13 @@ class Engine:
         self._supervisors[account.email] = supervisor
         tg.create_task(supervisor.run())
         
+        # Wire LP worker release callback → wakes foremen waiting for LP slots
+        def _lp_released_cb(email: str):
+            evt = self._lp_workers_available.get(email)
+            if evt:
+                evt.set()
+        account._on_lp_released = _lp_released_cb
+        
         # RC4: Calculate foreman count from max_workers / typical_output.
         # Multiple foremen allow parallel polling (20/20 workers active).
         # 429 prevention relies on _GLOBAL_MIN_SUBMIT_GAP (45s) + SubmitGate,
@@ -3660,15 +3668,23 @@ class Engine:
                         # Swap: release Fast worker → acquire LP worker
                         account.release_workers(worker_count)
                         if not account.acquire_workers_lp(1):
-                            # LP pool full — requeue task
+                            # LP pool full — requeue task and wait for LP event
                             worker_count = 0
                             log.debug(
                                 f"[{fid}] LP pool full "
                                 f"({account.session.active_workers_lp}/{account.session.max_workers_lp}) "
-                                f"— requeueing task {task.id}"
+                                f"— requeueing task {task.id}, waiting for LP slot"
                             )
                             self._dispatcher.requeue_task(task, notify=False)
-                            await asyncio.sleep(2.0)
+                            # Event-driven LP wait — prevents busy-loop churn
+                            _lp_evt = self._lp_workers_available.setdefault(
+                                account.email, asyncio.Event()
+                            )
+                            _lp_evt.clear()
+                            try:
+                                await asyncio.wait_for(_lp_evt.wait(), timeout=15.0)
+                            except asyncio.TimeoutError:
+                                pass
                             continue
                         worker_count = 1  # Now held from LP pool
                     

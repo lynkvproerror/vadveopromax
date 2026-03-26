@@ -242,6 +242,10 @@ class AccountManager:
         """Release n LP workers (thread-safe)."""
         with self._lock:
             self._session.release_workers_lp(n)
+        # Signal engine to wake foremen waiting for LP slots
+        cb = getattr(self, '_on_lp_released', None)
+        if cb:
+            cb(self.email)
     
     def acquire_upscale_worker(self) -> bool:
         """Acquire 1 upscale worker slot (thread-safe).
