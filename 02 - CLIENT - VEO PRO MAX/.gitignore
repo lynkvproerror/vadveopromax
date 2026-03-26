@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Dev sessions (runtime data)
+ui/data/dev_sessions/
+
+# Build artifacts
+core/embedded_rules.py
+core/embedded_templates.py
+*.spec
+build/
+dist/
+
+# Debug/patch scripts
+debug_*.py
+patch_*.py
+_*.py
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
