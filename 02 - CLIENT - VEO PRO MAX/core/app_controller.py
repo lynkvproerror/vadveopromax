@@ -3306,6 +3306,18 @@ class AppController:
     # Backward compat alias
     set_account_max_slots = set_account_max_workers
     
+    def set_account_max_workers_lp(self, email: str, value: int):
+        """Set max LP concurrent workers for an account.
+        
+        Called from Settings UI when user changes the LP workers spinner.
+        """
+        acc = self._multi_account.get_account(email)
+        if acc:
+            acc._session.max_workers_lp = max(0, value)
+            logging.getLogger(__name__).info(
+                f"Runtime max_workers_lp for {email} → {value}"
+            )
+    
     # Safe concurrency limit: max concurrent API calls per account
     # e.g. 2 workers × 4 outputs = 8 API calls — safe ceiling
     SAFE_CONCURRENT_API_CALLS = 8
