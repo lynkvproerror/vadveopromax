@@ -29,7 +29,7 @@ from .media_handler import MediaHandler, ImageFormat
 from .frame_extractor import FrameExtractor
 
 # Error Handling
-from .error_handler import ErrorHandler, ErrorCategory, VEOError, retry_on_error
+from .error_handler import ErrorHandler, ErrorCategory, VEOError
 
 # Downloads & Upscale
 from .download_manager import DownloadManager, DownloadProgress, DownloadResult
@@ -114,7 +114,6 @@ __all__ = [
     "ErrorHandler",
     "ErrorCategory",
     "VEOError",
-    "retry_on_error",
     
     # Downloads
     "DownloadManager",

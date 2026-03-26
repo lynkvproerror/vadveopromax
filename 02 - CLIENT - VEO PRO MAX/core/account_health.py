@@ -92,12 +92,13 @@ class CreditWindow:
                     f"(credits={h.credits})"
                 )
     
-    def record_error(self, email: str, credit_cost: int) -> bool:
+    def record_error(self, email: str, credit_cost: int, error_type: str = "403") -> bool:
         """Record error — deduct credits. Returns True if account got suspended.
         
         Args:
             email: Account email.
             credit_cost: Credits to deduct (from ERROR_CREDIT_COST).
+            error_type: Error type for diagnostics ("403", "timeout", etc.)
         
         Returns:
             True if this error caused the account to become suspended.
@@ -109,11 +110,12 @@ class CreditWindow:
         
         h.credits = max(h.credits - credit_cost, -5)  # Floor at -5
         h.total_errors += 1
+        h.last_error_type = error_type
         h.last_error_time = time.time()
         
         log.info(
             f"[CreditWindow] {email}: credits {h.credits + credit_cost}→{h.credits} "
-            f"(cost={credit_cost})"
+            f"(cost={credit_cost}, type={error_type})"
         )
         
         if h.credits <= SUSPEND_THRESHOLD:
@@ -129,6 +131,30 @@ class CreditWindow:
             return True
         
         return False
+    
+    def record_429(self, email: str) -> bool:
+        """Record 429 rate-limit — deduct 2 credits (floor=1, NEVER suspend).
+        
+        Unlike 403 (suspend → probe → reactivate), 429 uses soft penalty:
+        credits floor at 1, so account always accepts tasks but pipeline
+        slows down via adaptive gap increase.
+        
+        Returns:
+            True if credits are low (≤3) — caller should increase gap.
+        """
+        h = self._ensure(email)
+        old = h.credits
+        h.credits = max(h.credits - 2, 1)  # Floor=1 — never suspend
+        h.total_errors += 1
+        h.last_error_type = "429"
+        h.last_error_time = time.time()
+        
+        log.info(
+            f"[CreditWindow] {email}: 429 credits {old}→{h.credits} "
+            f"(floor=1, no suspend)"
+        )
+        
+        return h.credits <= 3  # Low health — increase gap
     
     # ── Query ─────────────────────────────────────────────────
     
@@ -189,17 +215,6 @@ class CreditWindow:
             
             suspended_secs = int(now - h.suspended_at)
             
-            # Flag for browser restart if suspended > 3 minutes
-            # This breaks the abc14-style loop where account is excluded
-            # permanently because the underlying issue is never fixed
-            if (suspended_secs > 180 and 
-                    not getattr(h, 'restart_requested', False)):
-                h.restart_requested = True
-                log.warning(
-                    f"[CreditWindow] {email}: suspended >{suspended_secs}s — "
-                    f"flagging for browser restart recovery"
-                )
-            
             elapsed = now - h.last_passive_tick
             if elapsed < self._passive_interval:
                 continue
@@ -224,22 +239,7 @@ class CreditWindow:
         
         return probe_ready
     
-    def get_restart_needed(self) -> list:
-        """Get list of suspended accounts that need browser restart.
-        
-        Returns emails where restart_requested=True.
-        Caller should restart browser and call clear_restart_flag().
-        """
-        return [
-            email for email, h in self._accounts.items()
-            if h.suspended and getattr(h, 'restart_requested', False)
-        ]
-    
-    def clear_restart_flag(self, email: str) -> None:
-        """Clear restart flag after browser has been restarted."""
-        h = self._accounts.get(email)
-        if h:
-            h.restart_requested = False
+
     
     # ── Reactivation ──────────────────────────────────────────
     

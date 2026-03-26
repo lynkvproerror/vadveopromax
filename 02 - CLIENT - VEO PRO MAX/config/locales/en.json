@@ -212,7 +212,14 @@
         "empty_prompts": "Empty prompts at row(s):",
         "image_not_found": "Image file not found —",
         "added_to_queue": "✅ Added {count} prompt(s) to queue",
-        "prompt_count": "{count} prompts"
+        "prompt_count": "{count} prompts",
+        "credit_warning": {
+            "title": "⚠️ CREDIT WARNING",
+            "message": "Model: {model}\n\nEstimated credit usage:\n  {prompts} prompt × {outputs} video × 10 = 💰 {total} credits\n\nContinue with Fast model?\nSelect 'No' to switch to Fast [LP] (free).",
+            "confirm": "Yes, use Fast",
+            "cancel": "No → Fast [LP]",
+            "switched": "🔄 Switched to {model}"
+        }
     },
     "sidebar": {
         "project_name": "📁 Project Name",
@@ -439,6 +446,7 @@
         "status_completed": "Completed",
         "status_failed": "Failed",
         "status_cancelled": "Cancelled",
+        "status_partial_failed": "⚠️ Partial Failed",
         "all_modes": "All Modes",
         "do_nothing": "🔌 Do Nothing",
         "shutdown": "⚡ Shutdown",

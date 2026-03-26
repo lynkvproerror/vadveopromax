@@ -11,6 +11,12 @@ from typing import List, Dict, Optional, Tuple
 
 log = logging.getLogger("veo.rules")
 
+try:
+    from core.embedded_rules import EMBEDDED_RULES, EMBEDDED_RESEARCH
+except ImportError:
+    EMBEDDED_RULES: dict = {}
+    EMBEDDED_RESEARCH: dict = {}
+
 # Approximate token ratio: 1 token ≈ 4 chars (for English/Vietnamese mixed)
 CHARS_PER_TOKEN = 4
 MAX_CONTEXT_TOKENS = 900_000  # Gemini 2.0 Flash = 1M, leave 100k headroom
@@ -110,6 +116,8 @@ class RulesLoader:
         - Trending_Keywords.txt
         - Sensitive_Words.txt
 
+        Falls back to EMBEDDED_RESEARCH if directory not found.
+
         Args:
             research_dir: Path to research data directory.
 
@@ -119,6 +127,9 @@ class RulesLoader:
         result = {}
         p = Path(research_dir)
         if not p.exists():
+            if EMBEDDED_RESEARCH:
+                log.info(f"[Rules] Research dir not found, using {len(EMBEDDED_RESEARCH)} embedded research items")
+                return dict(EMBEDDED_RESEARCH)
             return result
 
         for f in p.iterdir():
@@ -128,6 +139,12 @@ class RulesLoader:
                 except Exception as e:
                     log.warning(f"[Rules] Failed to read {f}: {e}")
 
+        # Supplement with embedded research for any missing files
+        for name, content in EMBEDDED_RESEARCH.items():
+            if name not in result:
+                result[name] = content
+                log.debug(f"[Rules] Supplemented with embedded research: {name}")
+
         return result
 
     def get_available_rules(self) -> List[str]:
@@ -135,14 +152,21 @@ class RulesLoader:
         return sorted(self._index.keys())
 
     def _load_file(self, name: str) -> Optional[str]:
-        """Load a single rule file by name."""
+        """Load a single rule file by name.
+
+        Falls back to EMBEDDED_RULES if file not found on disk.
+        """
         # Check cache first
         if name in self._cache:
             return self._cache[name]
 
         path = self._index.get(name)
         if not path or not path.exists():
-            log.debug(f"[Rules] Not found: {name}")
+            # Fallback: embedded rules (covers removed/missing data/workflows/)
+            if name in EMBEDDED_RULES:
+                log.debug(f"[Rules] Using embedded fallback: {name}")
+                return EMBEDDED_RULES[name]
+            log.debug(f"[Rules] Not found (no embedded fallback): {name}")
             return None
 
         try:
@@ -151,4 +175,8 @@ class RulesLoader:
             return content
         except Exception as e:
             log.warning(f"[Rules] Failed to read {name}: {e}")
+            # Fallback on read error
+            if name in EMBEDDED_RULES:
+                log.info(f"[Rules] Using embedded fallback after read error: {name}")
+                return EMBEDDED_RULES[name]
             return None

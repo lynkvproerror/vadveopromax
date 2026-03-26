@@ -86,6 +86,7 @@ class ImageLibrary:
         self._images: List[LibraryImage] = []
         self._categories: List[str] = self.DEFAULT_CATEGORIES.copy()
         self._on_change_callbacks: List[Callable] = []
+        self._on_upload_needed_callbacks: List[Callable] = []  # (images: List[LibraryImage]) -> None
         
         self._load_index()
     
@@ -105,6 +106,27 @@ class ImageLibrary:
                 cb()
             except Exception:
                 pass
+    
+    def on_upload_needed(self, callback: Callable):
+        """Register callback fired when NEW images need pre-upload.
+        
+        Callback signature: callback(images: List[LibraryImage])
+        Called after add_image() or update_or_add_image() with the
+        newly added/updated images so AppController can trigger
+        pre-upload to all active accounts.
+        """
+        if callback not in self._on_upload_needed_callbacks:
+            self._on_upload_needed_callbacks.append(callback)
+    
+    def _notify_upload_needed(self, images: List["LibraryImage"]):
+        """Notify subscribers that these images need pre-upload."""
+        if not images:
+            return
+        for cb in self._on_upload_needed_callbacks:
+            try:
+                cb(images)
+            except Exception as e:
+                log.debug(f"[ImageLibrary] upload_needed callback error: {e}")
     
     def _load_index(self):
         """Load library index from JSON."""
@@ -198,6 +220,7 @@ class ImageLibrary:
         self._images.append(image)
         self._save_index()
         self._notify_change()
+        self._notify_upload_needed([image])
         
         return image
     
@@ -256,6 +279,7 @@ class ImageLibrary:
                 
                 self._save_index()
                 self._notify_change()
+                self._notify_upload_needed([existing])
                 return (existing, True)
         
         # No collision — normal add

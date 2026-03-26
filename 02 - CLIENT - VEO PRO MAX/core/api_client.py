@@ -405,6 +405,11 @@ class VEOApiClient:
             endpoint_key: 'T2V', 'I2V_SINGLE', 'I2V_DUAL', 'R2V', 'T2I'
         """
         import uuid as _uuid
+        import json as _json
+        import logging as _logging
+        
+        # ★ VEO accepts full JSON as prompt text (verified on website).
+        # Do NOT unwrap — send the complete JSON object as-is.
         
         # Build clientContext WITHOUT recaptchaContext
         client_ctx = self._build_client_context(
@@ -684,9 +689,7 @@ class VEOApiClient:
         Reference: SEED_MANAGEMENT.md - seed is required, range 0-32767
         """
         import uuid
-        
-        # Each output requires its own request item with unique seed + sceneId
-        # (same pattern as I2V, R2V)
+        # ★ VEO accepts full JSON as prompt — no unwrapping needed
         requests_list = []
         for idx in range(min(output_count, 4)):
             if seed is not None:
@@ -740,6 +743,7 @@ class VEOApiClient:
         HAR verified: uses startImage.mediaId (nested object)
         """
         import uuid
+        # ★ VEO accepts full JSON as prompt — no unwrapping needed
         
         requests_list = []
         for idx in range(min(output_count, 4)):
@@ -798,6 +802,7 @@ class VEOApiClient:
         Note: _fl_ = First+Last frame support
         """
         import uuid
+        # ★ VEO accepts full JSON as prompt — no unwrapping needed
         
         requests_list = []
         for idx in range(min(output_count, 4)):
@@ -854,6 +859,7 @@ class VEOApiClient:
         HAR verified: uses referenceImages[] array of objects with imageUsageType + mediaId
         """
         import uuid
+        # ★ VEO accepts full JSON as prompt — no unwrapping needed
         
         # Build referenceImages as array of objects (HAR verified)
         ref_images = [

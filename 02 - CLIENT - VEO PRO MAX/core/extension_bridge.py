@@ -173,7 +173,26 @@ class ExtensionBridge:
         self._browser_close_cooldown: Dict[str, float] = {}  # email → timestamp
         self.BROWSER_CLOSE_COOLDOWN_SECONDS = 300  # 5 minutes
 
-    # ── Browser Cooldown API ────────────────────────────────────────────
+        # ★ Tab-dead tracking: set when extension declares tab truly dead.
+        # Cleared on reconnect (_on_extension_connect) so single-source-of-truth.
+        # Foreman checks this to abort recovery loops instead of spinning forever.
+        self._dead_tabs: set = set()  # emails whose tab is confirmed dead
+
+    # ── Tab-Dead API ─────────────────────────────────────────────────────
+
+    def is_tab_dead(self, email: str) -> bool:
+        """Return True if tab was declared dead by extension and not yet recovered."""
+        return email in self._dead_tabs
+
+    def mark_tab_dead(self, email: str):
+        """Mark tab as dead (called from tab_dead message handler)."""
+        self._dead_tabs.add(email)
+
+    def clear_tab_dead(self, email: str):
+        """Clear dead-tab flag when extension reconnects for this account."""
+        self._dead_tabs.discard(email)
+
+    # ── Browser Cooldown API ─────────────────────────────────────────────
 
     def is_browser_on_cooldown(self, email: str) -> bool:
         """Check if browser restart is on cooldown for this account."""
@@ -403,6 +422,8 @@ class ExtensionBridge:
                     })
                     conn.registered_emails.append(email)
                     log.info(f"[ExtensionBridge] 📧 Assigned email to extension: {email}")
+                    # ★ Clear dead-tab flag — browser reconnected, account alive again
+                    self.clear_tab_dead(email)
                     if self.on_extension_connect:
                         try:
                             self.on_extension_connect(email)
@@ -2127,6 +2148,10 @@ class ExtensionBridge:
                 f"[ExtensionBridge] 💀 Tab DEAD for {email} — "
                 f"{attempts} reload attempts failed. Browser restart recommended."
             )
+            # ★ Mark tab dead — Foreman recovery loops will see this and exit immediately
+            if email:
+                self.mark_tab_dead(email)
+                log.warning(f"[ExtensionBridge] 🚩 Tab-dead flag SET for {email}")
             # Reset frozen counters so escalation doesn't double-fire
             self._frozen_tab_counts.pop(email, None)
             self._frozen_tab_first_at.pop(email, None)
@@ -2183,15 +2208,26 @@ class ExtensionBridge:
                 pass
 
     def _find_connection(self, email: str) -> Optional[ExtensionConnection]:
-        """Find the Extension connection handling this email."""
+        """Find the Extension connection handling this email.
+        
+        Only returns connections that have registered this email.
+        Prefers the most recently active connection (freshest heartbeat).
+        Does NOT fall back to unregistered connections — those may be
+        background/popup contexts that cannot route reCAPTCHA checks.
+        """
+        best_conn = None
+        best_time = 0.0
+        now = time.time()
         for conn in self._connections:
             if email in conn.registered_emails and self._is_ws_open(conn.ws):
-                return conn
-        # Fallback: any open connection
-        for conn in self._connections:
-            if self._is_ws_open(conn.ws):
-                return conn
-        return None
+                # Prefer most recently active connection (skip stale > 120s)
+                age = now - conn.last_activity
+                if age > 120:
+                    continue
+                if conn.last_activity > best_time:
+                    best_conn = conn
+                    best_time = conn.last_activity
+        return best_conn
 
     async def _ws_send(self, conn: ExtensionConnection, data: dict):
         """Send a JSON message via WebSocket."""

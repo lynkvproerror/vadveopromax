@@ -115,11 +115,27 @@ class TaskWatchdog:
                     multi_acc.audit_upscale_counters(running_task_ids=set())
                 
                 # Task pruning: every 20 scans (~10 min) clear old completed tasks
+                # ★ FIX: Respect settings — only prune if user enabled it
                 if self._scans % 20 == 0:
                     try:
-                        pruned = self._dispatcher.prune_completed_tasks()
-                        if pruned:
-                            log.info(f"[Watchdog] Pruned {pruned} old tasks from memory")
+                        from config.settings import get_settings
+                        _settings = get_settings()
+                        
+                        # Time-based prune: only if prune_age_minutes > 0 (0 = disabled)
+                        _prune_age = getattr(_settings, 'prune_age_minutes', 0)
+                        if _prune_age > 0:
+                            pruned = self._dispatcher.prune_completed_tasks(
+                                max_age_minutes=_prune_age
+                            )
+                            if pruned:
+                                log.info(f"[Watchdog] Pruned {pruned} old tasks from memory (>{_prune_age}min)")
+                        
+                        # Count-based cap: only if auto_clear_tasks_max > 0 (0 = disabled)
+                        _cap = getattr(_settings, 'auto_clear_tasks_max', 0)
+                        if _cap > 0:
+                            capped = self._dispatcher.enforce_task_cap(_cap)
+                            if capped:
+                                log.info(f"[Watchdog] Enforced task cap: removed {capped} tasks (cap={_cap})")
                     except Exception as e:
                         log.debug(f"[Watchdog] Prune error: {e}")
                 

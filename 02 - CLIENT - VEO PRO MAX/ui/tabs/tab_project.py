@@ -302,26 +302,75 @@ def _format_stage_result(stage_name: str, result, state=None) -> str:
                     lines.append("(No scenes generated yet)")
             lines.append(f"\n{'═' * 55}")
         elif raw:
-            lines.append(f"🎬 VEO PROMPTS ({result.data.get('prompt_count', 0)} scenes)\n")
+            scene_cfgs = result.data.get("scene_configs", []) if result.data else []
+            count = result.data.get('prompt_count', 0)
+            lines.append(f"🎬 VEO PROMPTS ({count} scenes)\n")
             lines.append("(Bạn có thể chỉnh sửa prompts bên dưới trước khi Confirm)")
             lines.append("=" * 40)
-            lines.append(raw)
-        else:
-            lines.append(f"Generated {len(result.scenes)} scenes:")
-            for s in result.scenes:
-                lines.append(f"\n  Scene {s.index}: {s.prompt}")
+            if scene_cfgs:
+                for sc in scene_cfgs:
+                    idx = sc.get('scene_index', '?')
+                    stype = sc.get('scene_type', '')
+                    sc_type = sc.get('type', '')
+                    shot = sc.get('shot_type', '')
+                    cam = sc.get('camera_movement', '')
+                    setting = sc.get('setting', '')
+                    chars = sc.get('characters', [])
+                    audio = sc.get('audio_cue', '')
+                    overlay = sc.get('has_text_overlay', False)
+                    lines.append(f"\n--- Scene {idx} [{stype}] [{sc_type}] ---")
+                    lines.append(f"  📷 {shot} | 🎥 {cam}")
+                    if setting:
+                        lines.append(f"  📍 Setting: {setting}")
+                    if chars:
+                        lines.append(f"  👤 Characters: {', '.join(chars)}")
+                        actions = sc.get('character_actions', {})
+                        for ch, act in actions.items():
+                            lines.append(f"     • {ch}: {act}")
+                    if audio:
+                        lines.append(f"  🔊 Audio: {audio}")
+                    if overlay:
+                        lines.append(f"  📝 Text Overlay: {sc.get('text_overlay_content', 'N/A')}")
+                    lines.append(f"  ⏱️ Duration: {sc.get('duration_s', 8)}s")
+                    lines.append(f"  Prompt: {sc.get('prompt_text', '')[:200]}...")
+            else:
+                lines.append(raw)
     elif stage_name == "character_gen":
         d = result.data or {}
+        char_cfgs = d.get("character_configs", [])
         names = d.get("character_names", [])
         prompts = d.get("character_prompts", [])
         lines.append(f"👤 CHARACTER T2I PROMPTS ({len(prompts)} characters)\n")
         lines.append("(Bạn có thể chỉnh sửa prompts bên dưới trước khi Confirm)")
         lines.append("Mode: T2I (Text → Image)")
         lines.append("=" * 40)
-        for i, p in enumerate(prompts):
-            name = names[i] if i < len(names) else f"Character {i+1}"
-            lines.append(f"\n[{name}]")
-            lines.append(p)
+        if char_cfgs:
+            for cc in char_cfgs:
+                name = cc.get('character_name', '?')
+                ctype = cc.get('type', 'main')
+                role = cc.get('role', '')
+                age = cc.get('age', '')
+                layout = cc.get('layout', '4-view turnaround')
+                app = cc.get('appearance', {})
+                type_icon = '⭐' if ctype == 'main' else ('👥' if ctype == 'group' else '🔹')
+                lines.append(f"\n{type_icon} [{name}] ({ctype}) — {layout}")
+                if role:
+                    lines.append(f"  Role: {role}")
+                if age:
+                    lines.append(f"  Age: {age}")
+                if app:
+                    for field in ['height', 'skin', 'face', 'hair', 'clothing_top', 'clothing_bottom', 'accessories']:
+                        val = app.get(field, '')
+                        if val:
+                            lines.append(f"  {field}: {val}")
+                prompt = cc.get('prompt_text', '')
+                if prompt:
+                    lines.append(f"  Prompt: {prompt[:200]}...")
+        else:
+            for i, p in enumerate(prompts):
+                name = names[i] if i < len(names) else f"Character {i+1}"
+                lines.append(f"\n[{name}]")
+                lines.append(p)
     elif stage_name == "scene_image_gen":
         d = result.data or {}
         configs = d.get("scene_configs", [])
@@ -337,10 +386,21 @@ def _format_stage_result(stage_name: str, result, state=None) -> str:
         lines.append("(Bạn có thể chỉnh sửa prompts bên dưới trước khi Confirm)")
         lines.append("=" * 40)
         for c in configs:
+            idx = c.get('scene_index', c.get('index', '?'))
             ref_count = len(c.get("reference_images", []))
-            ref_info = f" [+{ref_count} char refs]" if ref_count > 0 else ""
-            lines.append(f"\n--- Scene {c['index']} [{c['mode']}]{ref_info} ---")
-            lines.append(c["prompt"])
+            ref_info = f" [+{ref_count} refs]" if ref_count > 0 else ""
+            sc_type = c.get('type', '')
+            setting = c.get('setting', '')
+            chars = c.get('characters_in_scene', [])
+            overlay = c.get('has_text_overlay', False)
+            lines.append(f"\n--- Scene {idx} [{c['mode']}] [{sc_type}]{ref_info} ---")
+            if setting:
+                lines.append(f"  📍 {setting}")
+            if chars:
+                lines.append(f"  👤 {', '.join(chars)}")
+            if overlay:
+                lines.append(f"  📝 Text Overlay: {c.get('text_overlay_content', 'N/A')}")
+            lines.append(f"  Prompt: {c.get('prompt_text', c.get('prompt', ''))[:200]}...")
     elif stage_name == "video_gen":
         d = result.data or {}
         configs = d.get("video_configs", [])
@@ -350,9 +410,24 @@ def _format_stage_result(stage_name: str, result, state=None) -> str:
         lines.append("=" * 40)
         for c in configs:
             mode_icon = "🎬" if c["mode"] == "I2V" else ("🔗" if c["mode"] == "R2V" else "📹")
-            img = f" | Image: {c['image_path']}" if c.get("image_path") else (" | Refs: char images" if c["mode"] == "R2V" else "")
-            lines.append(f"\n{mode_icon} Scene {c['index']} [{c['mode']}] ({c['duration_s']}s){img}")
-            lines.append(f"  Prompt: {c['prompt'][:150]}...")
+            idx = c.get('scene_index', c.get('index', '?'))
+            img = f" | Image: {c.get('image_path', '')}" if c.get("image_path") else (" | Refs: char images" if c["mode"] == "R2V" else "")
+            sc_type = c.get('type', '')
+            cam = c.get('camera_movement', '')
+            tone = c.get('tone', '')
+            audio = c.get('audio_cue', '')
+            chars = c.get('characters_in_scene', [])
+            lines.append(f"\n{mode_icon} Scene {idx} [{c['mode']}] [{sc_type}] ({c.get('duration_s', 8)}s){img}")
+            if cam and cam != 'static':
+                lines.append(f"  🎥 Camera: {cam}")
+            if chars:
+                lines.append(f"  👤 {', '.join(chars)}")
+            if tone:
+                lines.append(f"  🎭 Tone: {tone}")
+            if audio:
+                lines.append(f"  🔊 Audio: {audio}")
+            prompt_text = c.get('prompt_text', c.get('prompt', ''))
+            lines.append(f"  Prompt: {prompt_text[:150]}...")
     elif stage_name == "concat":
         d = result.data or {}
         clips = d.get("clips", [])
@@ -468,6 +543,11 @@ class TabProject(QWidget):
             tmpl_count = 0
             if self._scanner and template_dirs:
                 tmpl_count = self._scanner.scan_sources(template_dirs)
+            # Fallback: if no templates found from filesystem, use embedded
+            if self._scanner and tmpl_count == 0:
+                tmpl_count = self._scanner.load_embedded()
+                if tmpl_count:
+                    log.info(f"[TabProject] Using {tmpl_count} embedded templates (data/workflows/ not found)")
 
             # ── Scan rules ──
             if self._rules_loader and rules_dirs:
@@ -512,6 +592,7 @@ class TabProject(QWidget):
         # ── SETUP MATRIX (fixed width sidebar — matches GenerationTabBase) ──
         if SetupMatrixPanel:
             self._setup_matrix = SetupMatrixPanel()
+            self._setup_matrix.image_library_clicked.connect(self._on_open_image_library)
             main_layout.addWidget(self._setup_matrix)
         else:
             # Fallback: old sidebar if component not available
@@ -1504,6 +1585,28 @@ class TabProject(QWidget):
                     )
                     self._thumb_layout.addWidget(grp)
 
+            # ── Stage 4b: Background prompts (if any) ──
+            backgrounds = getattr(state, 'backgrounds', []) or []
+            if backgrounds:
+                bg_items = []
+                for bi, bg in enumerate(backgrounds):
+                    bg_name = getattr(bg, 'name', None) or getattr(bg, 'tag', None) or f"Background {bi+1}"
+                    bg_prompt = getattr(bg, 'prompt', '') or ''
+                    bg_img = getattr(bg, 'image_path', '') or ''
+                    bg_thumb = bg_img if (bg_img and os.path.isfile(bg_img)) else ""
+                    bg_items.append(PipelinePromptItem(
+                        index=bi + 1, name=f"🏞️ {bg_name}", prompt=bg_prompt,
+                        thumbnail_path=bg_thumb, accent_color=Theme.GREEN,
+                    ))
+                if bg_items:
+                    bg_tbl = PipelinePromptTable(accent_color=Theme.GREEN, thumb_size=thumb_sz)
+                    bg_tbl.set_items(bg_items)
+                    bg_grp = self._create_pipeline_group(
+                        "s4_bgs", "Background Prompts", "🏞️",
+                        len(bg_items), Theme.GREEN, bg_tbl,
+                    )
+                    self._thumb_layout.addWidget(bg_grp)
+
             # AN-1: Fade-in scroll
             self._fade_in_thumb_scroll()
             return
@@ -1626,10 +1729,17 @@ class TabProject(QWidget):
 
             def _build_video_items(scenes):
                 items = []
-                for s in scenes:
+                for idx, s in enumerate(scenes):
                     has_video = s.video_path and os.path.isfile(s.video_path)
-                    # Image preview from scene image
+                    # Start frame: scene own image
                     thumb_path = s.image_path if (s.image_path and os.path.isfile(s.image_path)) else ""
+                    # End frame: next scene image (for First+Last frame dual-I2V)
+                    next_s = scenes[idx + 1] if idx + 1 < len(scenes) else None
+                    end_frame = (
+                        next_s.image_path
+                        if next_s and next_s.image_path and os.path.isfile(next_s.image_path)
+                        else ""
+                    )
                     # Video preview from generated video
                     vid_thumb_path = ""
                     actual_video_path = ""
@@ -1639,12 +1749,14 @@ class TabProject(QWidget):
                         if not vid_thumb_path:
                             vid_thumb_path = s.video_path
                     status_icon = "✅" if has_video else "⏳"
+                    end_label = f" → S{next_s.index}" if next_s else " (last)"
                     items.append(PipelinePromptItem(
                         index=s.index,
-                        name=f"{status_icon} Scene {s.index}",
+                        name=f"{status_icon} Scene {s.index}{end_label}",
                         prompt=s.prompt or s.description or "(empty)",
                         thumbnail_path=thumb_path,
                         video_thumbnail_path=vid_thumb_path,
+                        end_frame_path=end_frame,
                         accent_color=Theme.PEACH,
                         metadata={"video_path": actual_video_path},
                     ))
@@ -2078,11 +2190,20 @@ class TabProject(QWidget):
                     old_thread.started.disconnect()
                 except (RuntimeError, TypeError):
                     pass
-                # Let the old thread finish naturally — deleteLater cleans up
-                old_thread.finished.connect(
-                    lambda: log.info("[Pipeline] 🧵 Detached old thread finished (result discarded)")
-                )
-                old_thread.finished.connect(old_thread.deleteLater)
+                # ★ FIX: Keep strong reference so GC doesn't destroy running thread
+                if not hasattr(self, '_detached_threads'):
+                    self._detached_threads = []
+                self._detached_threads.append(old_thread)
+                # Auto-cleanup: remove from list + deleteLater when finished
+                def _on_detached_done(thread_ref=old_thread):
+                    log.info("[Pipeline] 🧵 Detached old thread finished (result discarded)")
+                    try:
+                        if hasattr(self, '_detached_threads') and thread_ref in self._detached_threads:
+                            self._detached_threads.remove(thread_ref)
+                    except (ValueError, RuntimeError):
+                        pass
+                    thread_ref.deleteLater()
+                old_thread.finished.connect(_on_detached_done)
             else:
                 log.debug(f"[Pipeline] Previous thread already finished (state: {old_thread.isFinished()})")
         
@@ -2272,23 +2393,55 @@ class TabProject(QWidget):
                 except Exception:
                     pass
             
-            # 3. Fallback: raw topic (but check if it's conversational junk)
+            # 3. Fallback: raw topic (extract meaningful part even from conversational junk)
             if not name:
                 raw_topic = getattr(self._pipeline.state, 'topic', '') or ''
                 if raw_topic:
-                    # Detect conversational junk: starts with interjections, contains em dash, >40 chars
+                    # Multi-line topics: take first non-empty line as candidate
+                    first_line = raw_topic.strip()
+                    for line in raw_topic.split('\n'):
+                        line = line.strip()
+                        if line and len(line) >= 3:
+                            first_line = line
+                            break
+                    
+                    # Detect conversational junk on first line only
                     junk_prefixes = ('tuyệt', 'ok', 'được', 'vâng', 'hay', 'tốt', 'ừ', 'ờ')
                     is_junk = (
-                        len(raw_topic) > 40
-                        or '—' in raw_topic
-                        or raw_topic.lower().startswith(junk_prefixes)
-                        or raw_topic.count(' ') > 8
+                        len(first_line) > 50
+                        or '—' in first_line
+                        or first_line.lower().startswith(junk_prefixes)
+                        or first_line.count(' ') > 8
                     )
                     if not is_junk:
-                        name = raw_topic
+                        name = first_line
                         ai_source = "raw_topic"
                     else:
-                        log.info(f"[Pipeline] Rejected junk topic: '{raw_topic[:60]}...'")
+                        # Extract meaningful words from first line
+                        clean = first_line
+                        # Remove interjection prefix
+                        for prefix in junk_prefixes:
+                            if clean.lower().startswith(prefix):
+                                clean = clean[len(prefix):].lstrip(' ,!.—-–')
+                                break
+                        # Remove em dash and everything before it
+                        if '—' in clean:
+                            clean = clean.split('—')[-1].strip()
+                        if '–' in clean:
+                            clean = clean.split('–')[-1].strip()
+                        # Take first 5 words
+                        words = clean.split()[:5]
+                        if words:
+                            name = ' '.join(words)
+                            ai_source = "raw_topic_cleaned"
+                            log.info(f"[Pipeline] Cleaned junk topic: '{first_line[:60]}' → '{name}'")
+            
+            # 3b. Fallback: first character name from pipeline state
+            if not name:
+                chars = getattr(self._pipeline.state, 'characters', []) or []
+                if chars and chars[0].name:
+                    name = chars[0].name
+                    ai_source = "character_name"
             
             # 4. Fallback: find existing VEO_Production folder matching character names
             if not name:
@@ -2311,13 +2464,16 @@ class TabProject(QWidget):
             batch_idx = getattr(self, '_batch_topic_idx', 0)
             name = f"{name}_{batch_idx + 1}" if name else f"Topic_{batch_idx + 1}"
         
-        result = name if name else config.get("project_name", "Production")
+        # Final fallback: timestamped name (never use generic "Production")
+        if not name:
+            from datetime import datetime as _dt
+            name = config.get("project_name", "") or f"Project_{_dt.now().strftime('%Y%m%d_%H%M')}"
         
         # Cache for subsequent stages in this pipeline run
-        self._pipeline_project_name = result
-        log.info(f"[Pipeline] Project name: '{result}' (source={ai_source or 'config'})")
+        self._pipeline_project_name = name
+        log.info(f"[Pipeline] Project name: '{name}' (source={ai_source or 'config'})")
         
-        return result
+        return name
 
     def _find_existing_project_folder(self, config: dict) -> str:
         """Find existing project folder in output dir matching current character names."""
@@ -2451,10 +2607,17 @@ class TabProject(QWidget):
             # ── Smart routing: check if character images already exist ──
             characters = self._pipeline.state.characters or []
             chars_with_images = [c for c in characters if c.image_path and os.path.isfile(c.image_path)]
-            if characters and len(chars_with_images) == len(characters):
-                # All characters have image files → skip queue, advance
+            backgrounds = getattr(self._pipeline.state, 'backgrounds', []) or []
+            bgs_with_images = [bg for bg in backgrounds if bg.image_path and os.path.isfile(bg.image_path)]
+            
+            all_chars_done = characters and len(chars_with_images) == len(characters)
+            all_bgs_done = (not backgrounds) or (len(bgs_with_images) == len(backgrounds))
+            
+            if all_chars_done and all_bgs_done:
+                # All characters AND backgrounds have image files → skip queue, advance
                 log.info(
-                    f"[Pipeline] Stage 4: All {len(characters)} characters have images. "
+                    f"[Pipeline] Stage 4: All {len(characters)} characters + "
+                    f"{len(backgrounds)} backgrounds have images. "
                     f"Skipping queue → advancing to next stage."
                 )
                 # Don't set _queue_awaiting_completion — let auto-advance proceed below
@@ -2503,6 +2666,29 @@ class TabProject(QWidget):
                             self._trigger_queue_auto_start()
                         else:
                             log.warning("[Pipeline] Stage 4: add_t2i_batch returned empty group_id!")
+                        
+                        # ── Stage 4b: Background T2I prompts ──
+                        bg_prompts = stage_obj.data.get("background_prompts", [])
+                        if bg_prompts:
+                            bg_settings = {
+                                "model": config.get("image_model", "GEM_PIX_2"),
+                                "aspect_ratio": "LANDSCAPE",
+                                "download_quality": config.get("image_quality", "2k"),
+                                "outputs_per_prompt": 1,
+                                "output_folder": config.get("output_folder", ""),
+                                "project_name": f"{project_name}/backgrounds",
+                            }
+                            bg_group_id = self.controller.add_t2i_batch(
+                                prompts=bg_prompts, settings=bg_settings
+                            )
+                            log.info(
+                                f"[Pipeline] Stage 4b: Sent {len(bg_prompts)} BG prompts "
+                                f"to queue (group={bg_group_id})"
+                            )
+                            if bg_group_id:
+                                self._start_queue_polling(bg_group_id, "character_gen")
+                        else:
+                            log.info("[Pipeline] Stage 4b: No background prompts to dispatch")
                     else:
                         log.warning("[Pipeline] Stage 4: controller has no add_t2i_batch method!")
                 else:
@@ -2545,6 +2731,7 @@ class TabProject(QWidget):
                         
                         # Build prompts from stage data for this version
                         prompts = [s.prompt or s.description or f"Scene {s.index}" for s in v_scenes if s.prompt or s.description]
+                        # ★ VEO accepts full JSON as prompt — no unwrapping needed
                         if not prompts:
                             continue
                         
@@ -2579,7 +2766,13 @@ class TabProject(QWidget):
                     
                     if group_version_map:
                         self._start_multi_group_polling(group_version_map, "scene_image_gen")
-                        self._trigger_queue_auto_start()
+                        # ★ Wait for library pre-upload before engine starts
+                        if hasattr(self.controller, 'flush_pending_pre_upload'):
+                            self.controller.flush_pending_pre_upload(
+                                on_done=self._trigger_queue_auto_start
+                            )
+                        else:
+                            self._trigger_queue_auto_start()
                         log.info(
                             f"[Pipeline] Stage 5: Created {len(group_version_map)} version groups "
                             f"for parallel scene image generation"
@@ -2617,7 +2810,8 @@ class TabProject(QWidget):
                                 log.info(f"[Pipeline] Stage 5: Updated {len(edited_prompts)} prompts from table UI edits")
                     
                     prompts = [c["prompt"] for c in configs if c.get("prompt")]
-                    log.info(f"[Pipeline] Stage 5 prompts: {len(prompts)} from scene_configs")
+                    # ★ VEO accepts full JSON as prompt — no unwrapping needed
+                    log.info(f"[Pipeline] Stage 5 prompts: {len(prompts)} from scene_configs (sanitized)")
                     if prompts:
                         settings = {
                             "model": config.get("image_model", "GEM_PIX_2"),
@@ -2652,7 +2846,13 @@ class TabProject(QWidget):
                             log.info(f"[Pipeline] Stage 5: Sent {len(prompts)} scene prompts to queue (group={group_id})")
                             if group_id:
                                 self._start_queue_polling(group_id, "scene_image_gen")
-                                self._trigger_queue_auto_start()
+                                # ★ Wait for library pre-upload before engine starts
+                                if hasattr(self.controller, 'flush_pending_pre_upload'):
+                                    self.controller.flush_pending_pre_upload(
+                                        on_done=self._trigger_queue_auto_start
+                                    )
+                                else:
+                                    self._trigger_queue_auto_start()
         elif cur == "video_gen" and self.controller:
             state = self._pipeline.state
             config = self._setup_matrix.get_config() if self._setup_matrix else {}
@@ -2710,8 +2910,7 @@ class TabProject(QWidget):
                             log.info(f"[Pipeline] Stage 6: {version.label} — all {len(v_scenes)} scenes have videos → skip")
                             continue
                         
-                        # Build prompts from scenes
-                        prompts = [s.prompt or s.description or f"Scene {s.index}" for s in v_scenes if s.prompt or s.description]
+                        # ★ VEO accepts full JSON as prompt — no unwrapping needed
                         if not prompts:
                             continue
                         
@@ -2726,7 +2925,12 @@ class TabProject(QWidget):
                             if i >= len(prompts):
                                 break
                             if s.image_path and os.path.isfile(s.image_path):
-                                per_prompt_images[i] = [s.image_path]
+                                # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
+                                next_s = v_scenes[i + 1] if i + 1 < len(v_scenes) else None
+                                if next_s and next_s.image_path and os.path.isfile(next_s.image_path):
+                                    per_prompt_images[i] = [s.image_path, next_s.image_path]
+                                else:
+                                    per_prompt_images[i] = [s.image_path]  # last scene: single-frame
                                 per_prompt_workflows[i] = "I2V"
                                 i2v_count += 1
                             elif char_images:
@@ -2736,6 +2940,8 @@ class TabProject(QWidget):
                             else:
                                 per_prompt_workflows[i] = "T2V"
                                 t2v_count += 1
+                        # Enable _fl_ model when pairs are available
+                        v_settings["frame_mode"] = "both"
                         
                         log.info(
                             f"[Pipeline] Stage 6 {version.label}: "
@@ -2767,7 +2973,13 @@ class TabProject(QWidget):
                     
                     if group_version_map:
                         self._start_multi_group_polling(group_version_map, "video_gen")
-                        self._trigger_queue_auto_start()
+                        # ★ Wait for library pre-upload before engine starts
+                        if hasattr(self.controller, 'flush_pending_pre_upload'):
+                            self.controller.flush_pending_pre_upload(
+                                on_done=self._trigger_queue_auto_start
+                            )
+                        else:
+                            self._trigger_queue_auto_start()
                         log.info(
                             f"[Pipeline] Stage 6: Created {len(group_version_map)} version groups "
                             f"for parallel video generation"
@@ -2803,7 +3015,10 @@ class TabProject(QWidget):
                             log.info(f"[Pipeline] Stage 6: Updated prompts from table UI edits")
                     
                     prompts = [c["prompt"] for c in configs if c.get("prompt")]
-                    log.info(f"[Pipeline] Stage 6 prompts: {len(prompts)} from video_configs")
+                    # ★ VEO accepts full JSON as prompt — no unwrapping needed
+                    for i, p in enumerate(prompts):
+                        log.info(f"[Pipeline] Stage 6 prompt[{i}]: {p[:80]}...")
+                    log.info(f"[Pipeline] Stage 6 prompts: {len(prompts)} from video_configs (sanitized)")
                     if prompts:
                         settings = {
                             "model": config.get("video_model", "Veo 3.1 - Fast"),
@@ -2813,6 +3028,7 @@ class TabProject(QWidget):
                             "outputs_per_prompt": config.get("video_outputs", 1),
                             "output_folder": config.get("output_folder", ""),
                             "project_name": f"{project_name}/video",
+                            "frame_mode": config.get("video_frame_mode", "both"),
                         }
                         # R4-2 Fix: Pass voice_enabled from pipeline stage data to engine
                         stage_data = state.get_stage("video_gen").data if self._pipeline else {}
@@ -2834,7 +3050,14 @@ class TabProject(QWidget):
                             if i >= len(prompts):
                                 break
                             if s.image_path and os.path.isfile(s.image_path):
-                                per_prompt_images[i] = [s.image_path]
+                                # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
+                                # This drives the _fl_ (First+Last) model for smooth transitions.
+                                # Last scene has no next scene → falls back to single-frame I2V.
+                                next_scene = scenes[i + 1] if i + 1 < len(scenes) else None
+                                if next_scene and next_scene.image_path and os.path.isfile(next_scene.image_path):
+                                    per_prompt_images[i] = [s.image_path, next_scene.image_path]
+                                else:
+                                    per_prompt_images[i] = [s.image_path]  # last scene: single-frame
                                 per_prompt_workflows[i] = "I2V"
                                 i2v_count += 1
                             elif char_images:
@@ -2844,6 +3067,8 @@ class TabProject(QWidget):
                             else:
                                 per_prompt_workflows[i] = "T2V"
                                 t2v_count += 1
+                        # Enable _fl_ model when pairs are available
+                        settings["frame_mode"] = "both"
                         
                         log.info(
                             f"[Pipeline] Stage 6 routing: {i2v_count} I2V, "
@@ -2868,7 +3093,13 @@ class TabProject(QWidget):
                             log.warning("[Pipeline] Stage 6: No suitable controller method available")
                         if group_id:
                             self._start_queue_polling(group_id, "video_gen")
-                            self._trigger_queue_auto_start()
+                            # ★ Wait for library pre-upload before engine starts
+                            if hasattr(self.controller, 'flush_pending_pre_upload'):
+                                self.controller.flush_pending_pre_upload(
+                                    on_done=self._trigger_queue_auto_start
+                                )
+                            else:
+                                self._trigger_queue_auto_start()
 
         # Auto-advance AND auto-run next stage
         # BUT: if we just started queue polling, defer advance to _on_queue_group_complete
@@ -3508,6 +3739,59 @@ class TabProject(QWidget):
         
         if stage_name == "character_gen":
             chars = self._pipeline.state.characters
+            
+            # ── Detect Background images (Stage 4b) ──
+            # BG tasks output to /backgrounds/ subfolder (from Stage 4b dispatch)
+            is_bg_task = 'backgrounds' in best_file.replace('\\', '/').lower()
+            
+            if is_bg_task:
+                # Background image completion
+                bgs = getattr(self._pipeline.state, 'backgrounds', []) or []
+                if idx < len(bgs):
+                    bg = bgs[idx]
+                    final_path = best_file
+                    
+                    # Rename to BG name for readability
+                    if bg.name:
+                        import re as _re
+                        from pathlib import Path as _Path
+                        src = _Path(best_file)
+                        safe_name = _re.sub(r'[<>:"/\\|?*]', '_', bg.name.strip())
+                        dest = src.parent / f"{safe_name}{src.suffix}"
+                        try:
+                            if dest.exists() and dest != src:
+                                dest = src.parent / f"{safe_name}_{idx}{src.suffix}"
+                            if not src.exists() and dest.exists():
+                                final_path = str(dest)
+                            else:
+                                src.rename(dest)
+                                final_path = str(dest)
+                                log.info(f"[Pipeline] Renamed BG image: {src.name} → {dest.name}")
+                        except Exception as e:
+                            log.warning(f"[Pipeline] Could not rename BG image: {e}")
+                    
+                    bg.image_path = final_path
+                    log.info(f"[Pipeline] ← background[{idx}].image_path = {final_path} ({bg.name})")
+                    
+                    # Register in ImageLibrary with BG: prefix
+                    if bg.name:
+                        try:
+                            from services.image_library import get_image_library
+                            lib = get_image_library()
+                            tag_list = [f"bg:{bg.name.lower().strip()}"]
+                            if bg.tag and bg.tag not in tag_list:
+                                tag_list.append(f"bg:{bg.tag}")
+                            lib.update_or_add_image(
+                                final_path, tags=tag_list,
+                                category="Backgrounds", copy_to_library=False
+                            )
+                            log.info(f"[Pipeline] ✅ BG {tag_list} registered in ImageLibrary → {final_path}")
+                        except Exception as e:
+                            log.warning(f"[Pipeline] BG ImageLibrary registration failed: {e}")
+                else:
+                    log.warning(f"[Pipeline] BG image idx={idx} out of range (only {len(bgs)} backgrounds)")
+                return  # Done — don't fall through to character handling
+            
             if idx < len(chars):
                 old_path = chars[idx].image_path
                 if old_path and old_path != best_file:
@@ -5055,6 +5339,56 @@ class TabProject(QWidget):
         self._topics_body.setVisible(True)
         # Also reset pipeline viewer
         self._reset_pipeline_viewer()
+    def _on_open_image_library(self):
+        """Open image library manager (non-modal, singleton)."""
+        if hasattr(self, '_library_popup') and self._library_popup and self._library_popup.isVisible():
+            self._library_popup.raise_()
+            self._library_popup.activateWindow()
+            return
+        from ui.popups.complex_popups import ImageManagerPopup
+        self._library_popup = ImageManagerPopup(
+            self,
+            on_select=self._handle_library_select,
+            on_use_for_all=self._handle_library_use_for_all,
+        )
+        self._library_popup.show()
+
+    def _handle_library_select(self, tag: str):
+        """Insert [tag] into topic input or stage viewer."""
+        target = None
+        if hasattr(self, '_stage_viewer') and self._stage_viewer and self._stage_viewer.isVisible():
+            target = self._stage_viewer
+        elif hasattr(self, '_topic_input') and self._topic_input:
+            target = self._topic_input
+        if target:
+            cursor = target.textCursor()
+            cursor.insertText(f"[{tag}] ")
+            target.setTextCursor(cursor)
+
+    def _handle_library_use_for_all(self, tag: str):
+        """Prepend [tag] to every line in the active text widget."""
+        target = None
+        if hasattr(self, '_stage_viewer') and self._stage_viewer and self._stage_viewer.isVisible():
+            target = self._stage_viewer
+        elif hasattr(self, '_topic_input') and self._topic_input:
+            target = self._topic_input
+        if not target:
+            return
+        text = target.toPlainText()
+        if not text.strip():
+            return
+        tag_ref = f"[{tag}]"
+        lines = text.split("\n")
+        new_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                new_lines.append(line)
+            elif tag_ref in line:
+                new_lines.append(line)
+            else:
+                new_lines.append(f"{tag_ref} {line}")
+        target.setPlainText("\n".join(new_lines))
 
     def _on_open_find_replace(self):
         """Open Find & Replace dialog via MainWindow."""
@@ -5298,6 +5632,18 @@ class TabProject(QWidget):
         template = self._get_selected_template()
         output_base = self._setup_matrix.output_folder.text() if self._setup_matrix else ""
 
+        # Cleanup previous retry thread if still alive
+        if hasattr(self, '_retry_thread') and self._retry_thread is not None:
+            try:
+                if self._retry_thread.isRunning():
+                    self._retry_thread.quit()
+                    self._retry_thread.wait(2000)
+                self._retry_thread.deleteLater()
+            except RuntimeError:
+                pass
+            self._retry_thread = None
+            self._retry_worker = None
+
         # Run single-topic in background thread
         self._retry_thread = QThread()
         self._retry_worker = _GenerationWorker(
@@ -5538,6 +5884,61 @@ class TabProject(QWidget):
 
         # Route to correct controller method
         method_name = "add_t2i_batch" if output_type == "T2I" else "add_t2v_batch"
+
+        # ★ Credit cost warning gate
+        # Scenarios:  Fast+4K → 60/video | Fast+non4K → 10/video | LP+4K → 50/video
+        if output_type != "T2I":
+            _model = settings.get("model", "")
+            _quality = str(settings.get("download_quality", "720p")).lower()
+            _is_fast_paid = (
+                "Fast" in _model
+                and "[LP]" not in _model
+                and "Quality" not in _model
+            )
+            _has_upscale = "4k" in _quality
+            _needs_warning = _is_fast_paid or _has_upscale
+
+            if _needs_warning:
+                n_prompts = len(prompts)
+                n_outputs = settings.get("outputs_per_prompt", 4)
+                from config.i18n import t as _t
+                from ui.popups.popups import show_credit_warning
+
+                if _is_fast_paid and _has_upscale:
+                    cost_per_video = 60
+                elif _is_fast_paid:
+                    cost_per_video = 10
+                else:  # LP + 4K
+                    cost_per_video = 50
+
+                total_credits = n_prompts * n_outputs * cost_per_video
+                confirmed = show_credit_warning(
+                    self, _model, n_prompts, n_outputs, total_credits,
+                    cost_per_video=cost_per_video, has_upscale=_has_upscale,
+                    confirm_text=_t("generation.credit_warning.confirm"),
+                    cancel_text=_t("generation.credit_warning.cancel"),
+                )
+                if not confirmed:
+                    _switched_parts = []
+                    # Downgrade model: Fast → LP
+                    if _is_fast_paid:
+                        lp_name = _model.replace(" - Fast", " - Fast [LP]")
+                        settings["model"] = lp_name
+                        if self._setup_matrix:
+                            idx = self._setup_matrix.video_model.findText(lp_name)
+                            if idx >= 0:
+                                self._setup_matrix.video_model.setCurrentIndex(idx)
+                        _switched_parts.append(f"Model → {lp_name}")
+                    # Downgrade quality: 4K → 1080p
+                    if _has_upscale:
+                        settings["download_quality"] = "1080p"
+                        if self._setup_matrix:
+                            self._setup_matrix.video_quality.setCurrentText("1080p")
+                        _switched_parts.append("Quality → 1080p")
+                    main_win = self.window()
+                    if hasattr(main_win, 'show_toast') and _switched_parts:
+                        main_win.show_toast(f"⬇️ {' | '.join(_switched_parts)}", "info")
+
         log.info(f"[TabProject] Calling controller.{method_name}() with {len(prompts)} prompts, controller={self.controller is not None}")
         if self.controller and hasattr(self.controller, method_name):
             group_id = getattr(self.controller, method_name)(

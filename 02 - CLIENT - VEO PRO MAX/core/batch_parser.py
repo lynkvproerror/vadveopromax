@@ -225,8 +225,8 @@ class BatchParser:
                 result = self.parse_json_text(stripped)
                 if result:
                     return result
-            except Exception:
-                pass  # Fall through to embedded JSON detection
+            except Exception as e:
+                log.debug(f"[BatchParser] JSON parse attempt 1 failed: {e}")
         
         # Embedded JSON detection: look for real JSON starts in the text
         # Skip non-JSON [tag] patterns like [tấm], [CONT] — look for [{ or {" 
@@ -241,8 +241,32 @@ class BatchParser:
                 result = self.parse_json_text(json_candidate)
                 if result:
                     return result
-            except Exception:
-                pass  # Fall through to line-by-line parsing
+            except Exception as e:
+                log.debug(f"[BatchParser] JSON parse attempt 2 (embedded) failed: {e}")
+        
+        # ── Fallback safety: detect multi-line JSON that may have been
+        # split into lines but still looks like a JSON array ──
+        # Heuristic: if many lines start with JSON structural chars and
+        # the text has balanced braces, re-join and try JSON one more time.
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if len(lines) >= 3:
+            json_structural = sum(
+                1 for ln in lines
+                if ln and ln[0] in '{[}]"' or ln.startswith('"')
+            )
+            # If >60% of lines look like JSON fragments, try re-joining
+            if json_structural / len(lines) > 0.6:
+                rejoined = '\n'.join(lines)
+                try:
+                    result = self.parse_json_text(rejoined)
+                    if result:
+                        log.info(
+                            f"[BatchParser] JSON recovered via re-join: "
+                            f"{len(result)} scenes from {len(lines)} lines"
+                        )
+                        return result
+                except Exception as e:
+                    log.debug(f"[BatchParser] JSON re-join attempt failed: {e}")
         
         # Default: line-by-line plain text
         prompts = []
@@ -274,6 +298,58 @@ class BatchParser:
             text = re.sub(r'^```(?:json)?\s*', '', text)
             text = re.sub(r'```\s*$', '', text)
             text = text.strip()
+        
+        # ── Case 0.3: Auto-repair unclosed JSON string values ──
+        # Common AI copy-paste defect: closing " missing at end of value.
+        # Pattern: `: "some text<NEWLINE>    },` → `: "some text"<NEWLINE>    },`
+        # Matches a line that has `: "...` (key-value pair), ends with a non-"
+        # character, and is followed by a line that starts with }, or }]
+        text = re.sub(
+            r'(:\s*"[^"\n]{10,})(\n\s*\}[,\]\s])',
+            r'\1"\2',
+            text,
+        )
+
+        
+        # ── Case 0.5: Auto-close truncated JSON ──
+        # Common with AI copy-paste: missing ] or } at end.
+        # Count unbalanced brackets OUTSIDE of strings, then append closers.
+        _in_str = False
+        _esc = False
+        _brk = 0   # [ / ] balance
+        _brc = 0   # { / } balance
+        for _ch in text:
+            if _esc:
+                _esc = False
+                continue
+            if _ch == '\\' and _in_str:
+                _esc = True
+                continue
+            if _ch == '"':
+                _in_str = not _in_str
+                continue
+            if _in_str:
+                continue
+            if _ch == '[':
+                _brk += 1
+            elif _ch == ']':
+                _brk -= 1
+            elif _ch == '{':
+                _brc += 1
+            elif _ch == '}':
+                _brc -= 1
+        
+        if _brc > 0 or _brk > 0:
+            # Remove trailing comma before auto-closing (common: }, ← missing next obj)
+            text = text.rstrip()
+            if text.endswith(','):
+                text = text[:-1]
+            text += '}' * _brc + ']' * _brk
+            log.debug(
+                f"[BatchParser] Auto-closed truncated JSON: "
+                f"+{_brc}x'}}' +{_brk}x']'"
+            )
+
         
         # ── Case 1: Strip non-JSON prefix (e.g. "[tấm] ", "Tình huống 2:\n")
         # Find the first real JSON start: [{ or {" 

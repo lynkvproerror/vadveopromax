@@ -224,6 +224,18 @@ class RecaptchaPool:
             return 0
         
         pool = self._pools.setdefault(email, deque(maxlen=self.POOL_SIZE))
+        
+        # ★ Skip if pool already has fresh tokens (prevents overflow waste)
+        # Without this, 5 foremen × prefetch(2) = 10 tokens generated,
+        # but pool maxlen=2 → 8 tokens dropped via popleft(). Now the
+        # first foreman fills pool, remaining foremen skip and share it.
+        fresh = sum(1 for t in pool if t.is_fresh(self.TOKEN_TTL))
+        if fresh >= self.POOL_SIZE:
+            log.debug(
+                f"[RecaptchaPool] Skip prefetch for {email} — "
+                f"pool already full ({fresh}/{self.POOL_SIZE} fresh)"
+            )
+            return 0
         fetched = 0
         
         for _ in range(count):

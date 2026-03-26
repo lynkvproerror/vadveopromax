@@ -76,6 +76,13 @@ class QueueContextMenuMixin:
         total_videos = len(video_outputs)
         
         if task_status != 'running':
+            # DEBUG: trace why retry menu may be missing
+            import logging as _log
+            _log.getLogger('veo.context_menu').debug(
+                f"[ContextMenu] task={task_id} status='{task_status}' "
+                f"failed_count={failed_count} total_videos={total_videos} "
+                f"task_data_found={task_data is not None}"
+            )
             if 0 < failed_count < total_videos:
                 # Partial failure: show BOTH options
                 menu.addAction(f"♻️ Retry {failed_count} Failed Video(s)").triggered.connect(
@@ -163,6 +170,8 @@ class QueueContextMenuMixin:
                     mw = self.window()
                     if mw and hasattr(mw, 'show_toast'):
                         mw.show_toast(f"♻️ {retried} failed video(s) queued for retry", "info")
+                    # ★ BUG FIX: Auto-start engine for partial retry too
+                    self._auto_start_if_idle(force=True)
                     return
         
         if self.controller and hasattr(self.controller, 'force_retry_task'):
@@ -173,6 +182,9 @@ class QueueContextMenuMixin:
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
                 mw.show_toast(msg, "info" if success else "warning")
+            # ★ BUG FIX: Auto-start engine if idle (was missing → retried tasks never picked up)
+            if success:
+                self._auto_start_if_idle(force=True)
 
     
     def _on_force_retry_full(self, item_id):
@@ -186,6 +198,9 @@ class QueueContextMenuMixin:
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
                 mw.show_toast(msg, "info" if success else "warning")
+            # ★ BUG FIX: Auto-start engine if idle (was missing → retried tasks never picked up)
+            if success:
+                self._auto_start_if_idle(force=True)
 
     
     def _on_delete_item(self, item_id):
@@ -387,6 +402,9 @@ class QueueContextMenuMixin:
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"♻️ Retrying video {video_index+1}" if success else f"Cannot retry video {video_index+1}"
                 mw.show_toast(msg, "info" if success else "warning")
+            # ★ BUG FIX: Auto-start engine for single video retry
+            if success:
+                self._auto_start_if_idle(force=True)
     
     def _on_redownload_single_720p(self, task_id, video_index, slot=None):
         """Re-download a single 720p video."""

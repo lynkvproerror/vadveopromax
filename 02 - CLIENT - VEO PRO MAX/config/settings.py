@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 16
+SETTINGS_VERSION = 17
 
 
 @dataclass
@@ -127,7 +127,7 @@ class AppSettings:
     # === MEMORY MANAGEMENT ===
     log_buffer_max: int = 20_000         # Max log entries in DevConsole buffer (0 = unlimited)
     session_errors_max: int = 2_000      # Max session error entries to keep
-    auto_clear_tasks_max: int = 2_000    # Auto-clear completed tasks when count exceeds (0 = disabled)
+    auto_clear_tasks_max: int = 0          # Auto-clear completed tasks when count exceeds (0 = disabled)
     prune_age_minutes: int = 0           # Remove completed tasks older than N minutes (0 = disabled)
     
     # === LOG FILE MANAGEMENT ===
@@ -273,9 +273,9 @@ class AppSettings:
                 'log_buffer_max': 20_000,
                 'session_errors_max': 2_000,
             },
-            # 13 → 14: Add auto-clear completed tasks cap
+            # 13 → 14: Add auto-clear completed tasks cap (default OFF)
             13: lambda d: {**d,
-                'auto_clear_tasks_max': 2_000,
+                'auto_clear_tasks_max': 0,
             },
             # 14 → 15: Add log file management settings
             14: lambda d: {**d,
@@ -286,6 +286,11 @@ class AppSettings:
             # 15 → 16: Add prune_age_minutes setting (default OFF)
             15: lambda d: {**d,
                 'prune_age_minutes': 0,
+            },
+            # 16 → 17: Disable auto_clear_tasks_max by default
+            # Old default (2000) silently deleted completed tasks — users expect manual control.
+            16: lambda d: {**d,
+                'auto_clear_tasks_max': 0 if d.get('auto_clear_tasks_max', 2000) == 2000 else d.get('auto_clear_tasks_max', 0),
             },
         }
         

@@ -16,6 +16,11 @@ from typing import List, Tuple, Optional, Dict
 
 from core.data_loader import load_text, scan_data_files
 
+try:
+    from core.embedded_templates import EMBEDDED_TEMPLATES
+except ImportError:
+    EMBEDDED_TEMPLATES = []
+
 log = logging.getLogger("veo.workflow")
 
 
@@ -113,6 +118,43 @@ class WorkflowScanner:
 
         log.info(f"[Scan] Found {len(self._templates)} templates from {len(dirs)} sources")
         return len(self._templates)
+
+    def load_embedded(self) -> int:
+        """Load embedded templates as fallback.
+
+        Called automatically when scan_sources() finds 0 templates.
+        Safe to call manually if you want to pre-populate from embedded data.
+
+        Returns:
+            Number of embedded templates loaded.
+        """
+        if not EMBEDDED_TEMPLATES:
+            log.warning("[Scan] No embedded templates available")
+            return 0
+
+        loaded = 0
+        for t_dict in EMBEDDED_TEMPLATES:
+            try:
+                tmpl = WorkflowTemplate(
+                    template_id=t_dict.get("template_id", ""),
+                    display_name=t_dict.get("display_name", ""),
+                    group=t_dict.get("group", "untagged"),
+                    keywords=t_dict.get("keywords", []),
+                    visual_style=t_dict.get("visual_style", ""),
+                    structure=t_dict.get("structure", ""),
+                    scene_count_range=tuple(t_dict.get("scene_count_range", [8, 12])),
+                    output_files=t_dict.get("output_files", []),
+                    shared_rules=t_dict.get("shared_rules", []),
+                    advanced_rules=t_dict.get("advanced_rules", []),
+                    body=t_dict.get("body", ""),
+                )
+                self._templates.append(tmpl)
+                loaded += 1
+            except Exception as e:
+                log.warning(f"[Scan] Failed to load embedded template '{t_dict.get('template_id')}': {e}")
+
+        log.info(f"[Scan] Loaded {loaded} embedded templates (fallback mode)")
+        return loaded
 
     def get_by_id(self, template_id: str) -> Optional[WorkflowTemplate]:
         """Get template by ID."""

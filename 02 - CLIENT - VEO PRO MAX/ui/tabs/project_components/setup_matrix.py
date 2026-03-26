@@ -371,6 +371,7 @@ class SetupMatrixPanel(QFrame):
 
     config_changed = Signal(dict)
     pipeline_mode_changed = Signal(str)  # "text_only" or "full_production"
+    image_library_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -917,6 +918,13 @@ class SetupMatrixPanel(QFrame):
         self.video_quality.setMinimumHeight(34)
         self.video_quality.setStyleSheet(combo_style)
         prod_layout.addWidget(self.video_quality)
+
+        # ── 📂 Image Library ──
+        self.image_library_btn = QPushButton(t("sidebar.image_library"))
+        self.image_library_btn.setFixedHeight(34)
+        self.image_library_btn.setProperty("variant", "secondary")
+        self.image_library_btn.clicked.connect(lambda: self.image_library_clicked.emit())
+        prod_layout.addWidget(self.image_library_btn)
 
         # Hidden compat fields
         self.image_outputs = QSpinBox()

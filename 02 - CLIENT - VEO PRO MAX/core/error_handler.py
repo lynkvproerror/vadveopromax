@@ -6,12 +6,10 @@ Role: Error classification, retry logic, error logging
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Any, Callable, TypeVar
+from typing import Optional, Any
 from enum import Enum
 from datetime import datetime
 from pathlib import Path
-import functools
-import asyncio
 import logging
 import sys
 
@@ -178,71 +176,3 @@ class ErrorHandler:
         except Exception:
             return []
 
-
-# === RETRY DECORATORS ===
-
-T = TypeVar('T')
-
-def retry_on_error(
-    max_retries: int = 3,
-    delay: float = 1.0,
-    backoff: float = 2.0,
-    retryable_categories: tuple = (ErrorCategory.NETWORK, ErrorCategory.RATE_LIMIT, ErrorCategory.API),
-):
-    """Decorator for retry with exponential backoff.
-    
-    Args:
-        max_retries: Maximum retry attempts
-        delay: Initial delay between retries (seconds)
-        backoff: Backoff multiplier
-        retryable_categories: Error categories to retry
-    """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs) -> T:
-            handler = ErrorHandler()
-            last_error = None
-            
-            for attempt in range(max_retries + 1):
-                try:
-                    return await func(*args, **kwargs)
-                except Exception as e:
-                    last_error = e
-                    veo_error = handler.classify(e)
-                    
-                    if attempt < max_retries and veo_error.category in retryable_categories:
-                        wait_time = delay * (backoff ** attempt)
-                        await asyncio.sleep(wait_time)
-                    else:
-                        handler.log_error(veo_error, {"function": func.__name__})
-                        raise
-            
-            raise last_error
-        
-        @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs) -> T:
-            handler = ErrorHandler()
-            last_error = None
-            
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_error = e
-                    veo_error = handler.classify(e)
-                    
-                    if attempt < max_retries and veo_error.category in retryable_categories:
-                        import time
-                        wait_time = delay * (backoff ** attempt)
-                        time.sleep(wait_time)
-                    else:
-                        handler.log_error(veo_error, {"function": func.__name__})
-                        raise
-            
-            raise last_error
-        
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
-    
-    return decorator

@@ -625,6 +625,57 @@ class GenerationTabBase(QWidget):
             )
             return
         
+        # ★ Credit cost warning gate
+        # Scenarios:  Fast+4K → 60/video | Fast+non4K → 10/video | LP+4K → 50/video
+        model_name = settings.get("model", "")
+        _quality = str(settings.get("download_quality", "720p")).lower()
+        _is_fast_paid = (
+            "Fast" in model_name
+            and "[LP]" not in model_name
+            and "Quality" not in model_name
+        )
+        _has_upscale = "4k" in _quality
+        _needs_warning = _is_fast_paid or _has_upscale
+
+        if _needs_warning:
+            n_prompts = len(prompts)
+            n_outputs = settings.get("outputs_per_prompt", 4)
+            from config.i18n import t
+            from ui.popups.popups import show_credit_warning
+
+            if _is_fast_paid and _has_upscale:
+                cost_per_video = 60
+            elif _is_fast_paid:
+                cost_per_video = 10
+            else:  # LP + 4K
+                cost_per_video = 50
+
+            total_credits = n_prompts * n_outputs * cost_per_video
+            confirmed = show_credit_warning(
+                self, model_name, n_prompts, n_outputs, total_credits,
+                cost_per_video=cost_per_video, has_upscale=_has_upscale,
+                confirm_text=t("generation.credit_warning.confirm"),
+                cancel_text=t("generation.credit_warning.cancel"),
+            )
+            if not confirmed:
+                _switched_parts = []
+                # Downgrade model: Fast → LP
+                if _is_fast_paid:
+                    lp_name = model_name.replace(" - Fast", " - Fast [LP]")
+                    idx = self.sidebar.model.findText(lp_name)
+                    if idx >= 0:
+                        self.sidebar.model.setCurrentIndex(idx)
+                    settings["model"] = lp_name
+                    _switched_parts.append(f"Model → {lp_name}")
+                # Downgrade quality: 4K → 1080p
+                if _has_upscale:
+                    self.sidebar.download_quality.setCurrentText("1080p")
+                    settings["download_quality"] = "1080p"
+                    _switched_parts.append("Quality → 1080p")
+                main_win = self.window()
+                if hasattr(main_win, 'show_toast') and _switched_parts:
+                    main_win.show_toast(f"⬇️ {' | '.join(_switched_parts)}", "info")
+        
         if self.controller:
             method = getattr(self.controller, self.CONTROLLER_METHOD)
             method(prompts, settings)

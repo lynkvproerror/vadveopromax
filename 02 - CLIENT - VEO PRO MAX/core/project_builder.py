@@ -372,22 +372,39 @@ class ContextManager:
             "Prompts_json": (
                 f"Generate VEO video prompts for topic: \"{topic}\"\n\n"
                 "OUTPUT FORMAT: JSON ARRAY\n"
-                "Output ONLY a valid JSON array. Each element must have:\n"
-                '{"scene_number": N, "duration": "8s", '
-                '"prompt_en": "full VEO prompt in English", '
-                '"description_vi": "mô tả tiếng Việt", '
-                '"narration_vi": "lời thuyết minh tiếng Việt"}\n\n'
+                "Output ONLY a valid JSON array. Each element MUST have ALL these fields:\n"
+                '{\n'
+                '  "scene_index": 1,\n'
+                '  "scene_type": "establishing|dialogue|action|transition|montage|text_overlay|closing",\n'
+                '  "type": "solo|duo|group|landscape|text_overlay",\n'
+                '  "shot_type": "wide shot|medium shot|close-up|extreme close-up|establishing shot|aerial shot",\n'
+                '  "camera_movement": "static|slow dolly in|dolly out|pan left|pan right|tilt up|tilt down|zoom in|tracking shot|orbit",\n'
+                '  "setting": "description of location/environment",\n'
+                '  "characters": ["CharName1", "CharName2"],\n'
+                '  "character_actions": {"CharName1": "action description", "CharName2": "action description"},\n'
+                '  "character_emotions": {"CharName1": "emotion", "CharName2": "emotion"},\n'
+                '  "props": ["important objects in scene"],\n'
+                '  "audio_cue": "ambient sound or music description",\n'
+                '  "tone": "emotional tone of the scene",\n'
+                '  "has_text_overlay": false,\n'
+                '  "text_overlay_content": null,\n'
+                + (f'  "duration_s": {clip_duration},\n' if clip_duration else '  "duration_s": 8,\n') +
+                '  "negative_prompt": "no text, no subtitles, no labels, no watermarks, no deformed limbs, no mutated faces, no extra fingers",\n'
+                '  "prompt_text": "Full VEO video prompt in English with [CharName] tags, camera direction, style, and negative suffix"\n'
+                '}\n\n'
                 "RULES:\n"
-                "- 10-12 scenes preferred\n"
-                "- prompt_en must be the FULL VEO video prompt\n"
-                "- description_vi: brief scene description in Vietnamese\n"
-                "- narration_vi: voiceover narration in Vietnamese\n"
-                "- duration: '5s' or '8s'\n"
-                "- Output ONLY the JSON array, no markdown fences, no explanation\n\n"
-                "NEGATIVE PROMPTS — append to EVERY prompt_en:\n"
-                "no deformed limbs, no mutated faces, no extra fingers, "
-                "no melting geometry, no color shifts, no texture distortion\n"
-                "SUFFIX: no text, no subtitles, no labels, no watermarks"
+                + (f"- EXACTLY {scene_count} scenes required (1 scene = 1 VEO clip of {clip_duration}s, total {scene_count * clip_duration}s)\n"
+                   if scene_count > 0
+                   else "- 10-12 scenes preferred\n"
+                ) +
+                "- prompt_text must be the FULL detailed VEO video prompt in English\n"
+                "- prompt_text MUST include [CharName] tags for all characters in scene\n"
+                "- prompt_text MUST include CHARACTER PROFILE LOCK (8 fields) for EVERY character in EVERY scene\n"
+                "- prompt_text MUST end with negative suffix: no text, no subtitles, no labels, no watermarks\n"
+                "- characters[] must list character names present in the scene\n"
+                "- type is auto-determined: solo (1 char), duo (2), group (3+), landscape (0), text_overlay\n"
+                "- scene_type describes narrative function: establishing, dialogue, action, etc.\n"
+                "- Output ONLY the JSON array, no markdown fences, no explanation"
             ),
             "Fix": (
                 "The following prompts were BLOCKED by safety filters.\n"
@@ -670,7 +687,7 @@ class ProjectBuilder:
                         scene = json.loads(p.prompt)
                         json_prompts.append(scene)
                     except (json.JSONDecodeError, ValueError):
-                        json_prompts.append({"scene_number": p.index, "prompt_en": p.prompt})
+                        json_prompts.append({"scene_index": p.index, "prompt_text": p.prompt})
                 result.files["Prompts"] = json.dumps(json_prompts, ensure_ascii=False, indent=2)
             else:
                 result.files["Prompts"] = "\n".join(
@@ -843,7 +860,11 @@ class ProjectBuilder:
         return prompts
 
     def _try_parse_json_prompts(self, raw: str, template) -> Optional[List[PromptRow]]:
-        """Try parsing AI output as JSON array into PromptRow list."""
+        """Try parsing AI output as JSON array into PromptRow list.
+        
+        Supports both old format (scene_number, prompt_en) and 
+        new format (scene_index, prompt_text, + 15 metadata fields).
+        """
         try:
             # Strip markdown fences if AI wrapped in ```json ... ```
             text = raw.strip()
@@ -864,17 +885,47 @@ class ProjectBuilder:
             for i, item in enumerate(data):
                 if not isinstance(item, dict):
                     continue
+                
+                # Support both old and new field names
+                scene_idx = item.get('scene_index', item.get('scene_number', i + 1))
+                prompt_text = item.get('prompt_text', item.get('prompt_en', ''))
+                
+                # Build a normalized JSON object with all schema fields
+                normalized = {
+                    "scene_index": scene_idx,
+                    "scene_type": item.get('scene_type', 'action'),
+                    "type": item.get('type', 'landscape'),
+                    "shot_type": item.get('shot_type', 'medium shot'),
+                    "camera_movement": item.get('camera_movement', 'static'),
+                    "setting": item.get('setting', ''),
+                    "characters": item.get('characters', []),
+                    "character_actions": item.get('character_actions', {}),
+                    "character_emotions": item.get('character_emotions', {}),
+                    "props": item.get('props', []),
+                    "audio_cue": item.get('audio_cue', ''),
+                    "tone": item.get('tone', ''),
+                    "has_text_overlay": item.get('has_text_overlay', False),
+                    "text_overlay_content": item.get('text_overlay_content', None),
+                    "duration_s": item.get('duration_s', 8),
+                    "negative_prompt": item.get('negative_prompt', ''),
+                    "prompt_text": prompt_text,
+                }
+                
+                # Auto-detect type from characters count if not provided
+                if 'type' not in item and normalized['characters']:
+                    n = len(normalized['characters'])
+                    normalized['type'] = 'solo' if n == 1 else ('duo' if n == 2 else 'group')
+                
                 # Store the full JSON object as the prompt text
-                prompt_text = json.dumps(item, ensure_ascii=False)
                 row = PromptRow(
-                    index=item.get('scene_number', i + 1),
-                    prompt=prompt_text,
-                    scene_description=item.get('description_vi', ''),
+                    index=scene_idx,
+                    prompt=json.dumps(normalized, ensure_ascii=False),
+                    scene_description=item.get('description_vi', normalized.get('setting', '')),
                 )
                 prompts.append(row)
 
             if prompts:
-                log.info(f"[Builder] Parsed {len(prompts)} JSON prompts")
+                log.info(f"[Builder] Parsed {len(prompts)} JSON prompts (schema v2)")
                 return prompts
         except (json.JSONDecodeError, ValueError) as e:
             log.debug(f"[Builder] JSON parse error: {e}")

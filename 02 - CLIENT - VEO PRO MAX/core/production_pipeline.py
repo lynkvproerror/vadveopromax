@@ -15,6 +15,7 @@ Stages 4-7 reuse existing engine tabs and Queue tab.
 """
 
 import json
+import re
 import math
 import logging
 from dataclasses import dataclass, field
@@ -143,6 +144,20 @@ class CharacterData:
 
 
 @dataclass
+class BackgroundData:
+    """Background/setting definition for the project.
+    
+    Parsed from Bible §3 SETTINGS. Each background gets a T2I prompt
+    for image generation, and a tag for [BG:tag] matching in prompts.
+    """
+    name: str                     # e.g. "Bờm's Village Hut"
+    description: str = ""         # Full Bible description
+    prompt: str = ""              # T2I prompt for image generation
+    image_path: str = ""          # Generated background image path
+    tag: str = ""                 # Normalized tag for matching
+
+
+@dataclass
 class StageResult:
     """Result of a single pipeline stage."""
     stage: str
@@ -204,6 +219,7 @@ class PipelineState:
     script_json: Dict = field(default_factory=dict)
     scenes: List[SceneData] = field(default_factory=list)
     characters: List[CharacterData] = field(default_factory=list)
+    backgrounds: List['BackgroundData'] = field(default_factory=list)  # BG images from Bible §3
     final_video_path: str = ""
     
     # ── Multi-Version (Feature A/C) ──
@@ -1168,15 +1184,30 @@ Nội dung:
             "dialogue_analysis": dialogue_analysis,
         }
         
-        # ── R2-4 Fix: Populate state.characters from Bible if still empty ──
-        # Short input (<200 chars) skips AI detection, so characters list is []
-        # Parse CHARACTER PROFILE LOCK to create CharacterData entries
-        if not self.state.characters:
-            char_profiles = self._extract_char_profiles_from_bible(bible)
-            if char_profiles:
-                for name, desc in char_profiles.items():
+        # ── R5-1 Fix: Always merge Bible characters (not just when empty) ──
+        # Bible may introduce new characters (e.g. Phú Bà) not found by Stage 1 AI detection.
+        # Merge ALL Bible chars into state.characters using diacritic-insensitive dedup.
+        char_profiles = self._extract_char_profiles_from_bible(bible)
+        if char_profiles:
+            existing_names = {self._strip_diacritics(c.name) for c in self.state.characters}
+            merged_count = 0
+            for name, desc in char_profiles.items():
+                if self._strip_diacritics(name) not in existing_names:
                     self.state.characters.append(CharacterData(name=name, description=desc))
-                log.info(f"[Pipeline] R2-4: Populated {len(char_profiles)} characters from Bible (was empty)")
+                    existing_names.add(self._strip_diacritics(name))
+                    merged_count += 1
+                    log.info(f"[Pipeline] R5-1: Merged Bible character '{name}' into state")
+                else:
+                    # Update description if existing one is sparse
+                    for c in self.state.characters:
+                        if self._strip_diacritics(c.name) == self._strip_diacritics(name):
+                            if not c.description or len(c.description) < len(desc):
+                                c.description = desc
+                            break
+            if merged_count:
+                log.info(f"[Pipeline] R5-1: Merged {merged_count} new characters from Bible")
+            else:
+                log.info(f"[Pipeline] R5-1: All {len(char_profiles)} Bible characters already exist")
         
         # ── Multi-Idea: Generate N different Bibles (Feature C) ──
         version_bibles = [bible]  # First Bible is always the main one
@@ -1365,15 +1396,33 @@ Nội dung:
         for c in (self.state.characters or []):
             existing_names[self._strip_diacritics(c.name)] = c.name
         
-        # Find missing characters
+        # R5-2: Blacklist non-character tags that AI may generate
+        _NON_CHAR_TAGS = {
+            'narrator', 'voiceover', 'voice over', 'camera', 'bgm', 'sfx',
+            'music', 'text', 'text overlay', 'title', 'title card',
+            'sound', 'audio', 'fade', 'transition', 'cut',
+        }
+        
+        # Find missing characters (with blacklist filter)
         extended_chars = []
         for tag in sorted(all_tags):
+            # Skip blacklisted non-character tags
+            if tag.strip().lower() in _NON_CHAR_TAGS:
+                log.info(f"[Pipeline] Phase B2: Skipped blacklisted tag: '{tag}'")
+                continue
             tag_stripped = self._strip_diacritics(tag)
             if tag_stripped not in existing_names:
-                # New character — add to state
+                # New character — add to state with enriched description from Bible
+                desc = f"Supporting character: {tag}"
+                # R5-4: Try to get richer description from Bible char_profiles
+                for prof_name, prof_desc in char_profiles.items():
+                    if self._strip_diacritics(prof_name) == tag_stripped:
+                        desc = prof_desc
+                        log.info(f"[Pipeline] R5-4: Enriched '{tag}' desc from Bible profile")
+                        break
                 new_char = CharacterData(
                     name=tag,
-                    description=f"Supporting character: {tag}",
+                    description=desc,
                 )
                 self.state.characters.append(new_char)
                 existing_names[tag_stripped] = tag
@@ -1393,6 +1442,13 @@ Nội dung:
         # Parse prompts into scenes
         scenes = self._parse_text_prompts(raw_prompts)
         self.state.scenes = scenes
+        
+        # R5-6: Warn if AI generated fewer scenes than requested
+        if len(scenes) < scene_count:
+            log.warning(
+                f"[Pipeline] ⚠️ Scene count mismatch: requested {scene_count}, "
+                f"got {len(scenes)}. AI may have merged scenes."
+            )
         
         # ══ PHASE C: Generate CHARACTER T2I prompts (for Stage 4) ══
         char_prompts = []
@@ -1465,21 +1521,315 @@ Bible:
                 ))
             log.info(f"[Pipeline] R2-1: Created {len(char_prompts) - len(characters)} extra CharacterData from Phase C")
         
-        # Update character data with generated prompts
-        for i, c in enumerate(self.state.characters):
-            if i < len(char_prompts):
-                c.prompt = char_prompts[i]
+        # R5-3: Name-based prompt mapping (not blind index)
+        _used_prompts = set()  # Track which prompts have been matched
+        for c in self.state.characters:
+            c_stripped = self._strip_diacritics(c.name)
+            matched = False
+            for pi, p in enumerate(char_prompts):
+                if pi in _used_prompts:
+                    continue
+                p_stripped = self._strip_diacritics(p)
+                if c_stripped in p_stripped or c.name.lower() in p.lower():
+                    c.prompt = p
+                    _used_prompts.add(pi)
+                    matched = True
+                    log.info(f"[Pipeline] R5-3: Name-matched prompt for '{c.name}'")
+                    break
+            if not matched:
+                # Fallback: take first unmatched prompt by index
+                for pi, p in enumerate(char_prompts):
+                    if pi not in _used_prompts:
+                        c.prompt = p
+                        _used_prompts.add(pi)
+                        log.warning(f"[Pipeline] R5-3: Fallback index-match for '{c.name}' (idx={pi})")
+                        break
+        
+        # ══ PHASE C2: Fallback prompts for extended characters ══
+        # Phase B2 detected secondary characters (e.g. [Official]) and added them
+        # to state.characters, but Phase C only generates prompts for Bible-defined
+        # characters. Generate fallback T2I prompts for any character without one.
+        visual_style = self._extract_bible_section(bible, "PROJECT INFO") or ""
+        style_match = re.search(r'Visual Style[:\s]*(.+)', visual_style, re.IGNORECASE)
+        style_desc = style_match.group(1).strip() if style_match else "detailed illustration"
+        
+        c2_count = 0
+        # Group keywords: these should generate multi-character scenes, not turnaround sheets
+        _GROUP_KW = {'villagers', 'crowd', 'soldiers', 'guards', 'children', 'people',
+                     'monks', 'servants', 'workers', 'merchants', 'elders', 'townspeople',
+                     'dân làng', 'đám đông', 'lính', 'trẻ em', 'nhóm', 'người dân',
+                     'quân lính', 'đầy tớ', 'thương nhân', 'bô lão'}
+        for c in self.state.characters:
+            if not c.prompt:
+                name_lower = c.name.lower()
+                is_group = any(kw in name_lower for kw in _GROUP_KW)
+                desc = c.description or f'supporting character: {c.name}'
+                
+                if is_group:
+                    # Group scene: multiple varied characters, not a turnaround sheet
+                    c.prompt = (
+                        f"Group illustration of {c.name}, 3-5 diverse characters with varied ages, "
+                        f"heights, poses and expressions, {desc}, {style_desc}, "
+                        f"plain white background, full body view facing camera, "
+                        f"concept art quality, character lineup, ultra detailed, 16:9 horizontal layout"
+                    )
+                    c2_count += 1
+                    log.info(f"[Pipeline] Phase C2: Generated GROUP prompt for '{c.name}'")
+                else:
+                    # Individual character turnaround sheet
+                    c.prompt = (
+                        f"Character turnaround model sheet, 4-view panel layout, "
+                        f"FRONT VIEW (full body facing camera), LEFT ¾ VIEW, RIGHT ¾ VIEW, BACK VIEW, "
+                        f"{c.name}, {desc}, "
+                        f"{style_desc}, "
+                        f"plain white background, professional studio lighting, "
+                        f"concept art quality, ultra detailed, 16:9 horizontal layout"
+                    )
+                    c2_count += 1
+                    log.info(f"[Pipeline] Phase C2: Generated fallback prompt for '{c.name}'")
+        if c2_count:
+            log.info(f"[Pipeline] Phase C2: {c2_count} extended characters got fallback T2I prompts")
+            char_prompts = [c.prompt for c in self.state.characters if c.prompt]
+        
+        # ══ PHASE D: Background image prompts from Bible §3 SETTINGS ══
+        settings_section = self._extract_bible_section(bible, "SETTINGS")
+        bg_entries = self._parse_settings_to_backgrounds(settings_section, style_desc)
+        self.state.backgrounds = bg_entries
+        bg_prompts = [bg.prompt for bg in bg_entries if bg.prompt]
+        log.info(f"[Pipeline] Phase D: {len(bg_entries)} backgrounds parsed, {len(bg_prompts)} T2I prompts generated")
+        
+        # ══ PHASE E: Inject [BG:Location] tags into scene prompts ══
+        if bg_entries:
+            raw_prompts = self._inject_background_tags(raw_prompts, bg_entries)
+            # Re-parse with BG tags
+            scenes = self._parse_text_prompts(raw_prompts)
+            self.state.scenes = scenes
+            log.info(f"[Pipeline] Phase E: Injected [BG:] tags into {len(scenes)} scene prompts")
         
         stage.scenes = scenes
         stage.characters = self.state.characters
         stage.prompts = [s.prompt for s in scenes]
+        
+        # ══ Build JSON scene_configs (rich structured data) ══
+        import re as _re_sc
+        _bible_dialogues = self._extract_bible_section(bible, "DIALOGUE GUIDE") or ""
+        _bible_settings = self._extract_bible_section(bible, "SETTINGS") or ""
+        _settings_names = [bg.name for bg in (self.state.backgrounds or [])] if hasattr(self.state, 'backgrounds') and self.state.backgrounds else []
+        
+        scene_configs = []
+        for s in scenes:
+            prompt = s.prompt or ""
+            
+            # --- Extract characters from [Tag] ---
+            chars_in_scene = [t.strip() for t in _re_sc.findall(r'\[([^\]]+)\]', prompt)
+                              if t.strip().lower() not in _NON_CHAR_TAGS
+                              and not t.strip().startswith('BG:')]
+            
+            # --- Determine type ---
+            n_chars = len(chars_in_scene)
+            if n_chars == 0:
+                sc_type = "landscape"
+            elif n_chars == 1:
+                sc_type = "solo"
+            elif n_chars == 2:
+                sc_type = "duo"
+            else:
+                sc_type = "group"
+            
+            # --- Detect text overlay ---
+            has_overlay = bool(_re_sc.search(r'(?i)text\s+overlay|stylized\s+text', prompt))
+            overlay_content = None
+            if has_overlay:
+                sc_type = "text_overlay"
+                overlay_match = _re_sc.search(r'["\u201c](.+?)["\u201d]', prompt)
+                overlay_content = overlay_match.group(1) if overlay_match else None
+            
+            # --- Extract shot type ---
+            shot_type = "medium shot"
+            for st in ['extreme close-up', 'close-up', 'medium close-up', 'medium shot',
+                        'wide shot', 'establishing shot', 'aerial shot', 'pov shot']:
+                if st.lower() in prompt.lower():
+                    shot_type = st
+                    break
+            
+            # --- Extract camera movement ---
+            camera_movement = "static"
+            for cm in ['slow dolly in', 'dolly in', 'dolly out', 'pan left', 'pan right',
+                        'tilt up', 'tilt down', 'zoom in', 'zoom out', 'tracking shot',
+                        'crane shot', 'orbit', 'push in', 'pull back', 'jib shot']:
+                if cm.lower() in prompt.lower():
+                    camera_movement = cm
+                    break
+            
+            # --- Extract scene type ---
+            scene_type = "action"
+            if s.index == 1:
+                scene_type = "establishing"
+            elif s.index == len(scenes):
+                scene_type = "closing"
+            elif has_overlay:
+                scene_type = "text_overlay"
+            elif 'montage' in prompt.lower() or 'split screen' in prompt.lower():
+                scene_type = "montage"
+            elif any(kw in prompt.lower() for kw in ['speaking', 'mouth open', 'dialogue', 'whispering', 'consulting']):
+                scene_type = "dialogue"
+            elif any(kw in prompt.lower() for kw in ['transition', 'fade']):
+                scene_type = "transition"
+            
+            # --- Extract setting ---
+            setting = ""
+            # Try to match Bible §3 settings
+            for sname in _settings_names:
+                if self._strip_diacritics(sname).lower() in self._strip_diacritics(prompt).lower():
+                    setting = sname
+                    break
+            if not setting:
+                # Extract from prompt context
+                setting_patterns = [
+                    r'(?:interior|exterior)[.,]?\s*([A-Z][^.]+)',
+                    r"([A-Z][\w\s']+(?:mansion|hut|village|path|field|pond|courtyard|interior))",
+                ]
+                for sp in setting_patterns:
+                    m = _re_sc.search(sp, prompt)
+                    if m:
+                        setting = m.group(1).strip().rstrip(',')
+                        break
+            
+            # --- Extract character actions & emotions ---
+            char_actions = {}
+            char_emotions = {}
+            for ch in chars_in_scene:
+                # Find text after [CharName] until next [CharName] or period
+                pattern = r'\[' + re.escape(ch) + r'\]\s*([^\[]+?)(?=\[|Audio|no text|$)'
+                m = _re_sc.search(pattern, prompt)
+                if m:
+                    action_text = m.group(1).strip().rstrip(',. ')
+                    char_actions[ch] = action_text
+                    # Extract emotion keywords
+                    emotion_kw = []
+                    for emo in ['content', 'happy', 'sad', 'angry', 'worried', 'smug',
+                                'desperate', 'frustrated', 'calm', 'joyful', 'serene',
+                                'scheming', 'greedy', 'avaricious', 'exasperated',
+                                'knowing', 'disapproving', 'triumphant', 'mocking',
+                                'amused', 'troubled', 'doubtful']:
+                        if emo in action_text.lower():
+                            emotion_kw.append(emo)
+                    if emotion_kw:
+                        char_emotions[ch] = ', '.join(emotion_kw)
+            
+            # --- Extract props ---
+            props = []
+            for prop in ['fan', 'gold coins', 'sticky rice', 'xôi', 'quạt mo',
+                         'cage', 'bird', 'raft', 'lim wood', 'pond', 'bowl',
+                         'firewood', 'cattle', 'buffaloes', 'cows']:
+                if prop.lower() in prompt.lower():
+                    props.append(prop)
+            
+            # --- Extract audio cue ---
+            audio_cue = ""
+            audio_match = _re_sc.search(r'Audio of ([^,]+(?:,[^,]+)*?)(?:,\s*no text|$)', prompt)
+            if audio_match:
+                audio_cue = audio_match.group(1).strip()
+            
+            # --- Extract dialogue from Bible §6 ---
+            dialogue = None
+            if _bible_dialogues:
+                scene_dlg_match = _re_sc.search(
+                    rf'\*\*Scene {s.index}[^*]*\*\*[\s\S]*?\*\*([^*]+)\s*\(([^)]+)\)\*\*\s*[:"]\s*["\u201c]?(.+?)["\u201d]?\s*$',
+                    _bible_dialogues, _re_sc.MULTILINE
+                )
+                if scene_dlg_match:
+                    dialogue = {
+                        "speaker": scene_dlg_match.group(1).strip(),
+                        "tone": scene_dlg_match.group(2).strip(),
+                        "line": scene_dlg_match.group(3).strip().strip('"\u201c\u201d'),
+                    }
+            
+            # --- Extract tone from Bible §5 ---
+            tone = ""
+            tone_match = _re_sc.search(
+                rf'\*\*Scene {s.index}\b[^*]*\*\*[\s\S]*?\*\*Tone:\*\*\s*(.+)',
+                bible, _re_sc.MULTILINE
+            )
+            if tone_match:
+                tone = tone_match.group(1).strip()
+            
+            # --- Extract negative prompt ---
+            neg_prompt = ""
+            neg_match = _re_sc.search(r'(no text,\s*no subtitles[^\n]+)', prompt)
+            if neg_match:
+                neg_prompt = neg_match.group(1).strip()
+            
+            # --- Extract visual style (first line portion) ---
+            vs = style_desc if style_desc else ""
+            vs_match = _re_sc.match(r'^([^.]+\.\s*[^.]+\.\s*[^.]+\.)', prompt)
+            if vs_match:
+                vs = vs_match.group(1).strip()
+            
+            scene_configs.append({
+                "scene_index": s.index,
+                "scene_type": scene_type,
+                "type": sc_type,
+                "shot_type": shot_type,
+                "camera_movement": camera_movement,
+                "visual_style": vs,
+                "setting": setting,
+                "setting_location": setting,
+                "characters": chars_in_scene,
+                "character_actions": char_actions,
+                "character_emotions": char_emotions,
+                "props": props,
+                "audio_cue": audio_cue,
+                "dialogue": dialogue,
+                "tone": tone,
+                "has_text_overlay": has_overlay,
+                "text_overlay_content": overlay_content,
+                "duration_s": s.duration_s,
+                "negative_prompt": neg_prompt,
+                "prompt_text": prompt,
+            })
+        
+        # ══ Build JSON character_configs (for Stage 4) ══
+        character_configs = []
+        for c in self.state.characters:
+            # Parse structured appearance from Bible §2
+            appearance = self._parse_character_appearance(c.name, bible)
+            is_group = any(kw in c.name.lower() for kw in _GROUP_KW)
+            char_type = "group" if is_group else (
+                "main" if any(self._strip_diacritics(c.name) == self._strip_diacritics(pn)
+                              for pn in (char_profiles or {}).keys()) else "supporting"
+            )
+            character_configs.append({
+                "character_name": c.name,
+                "role": appearance.get("role", ""),
+                "type": char_type,
+                "age": appearance.get("age", ""),
+                "appearance": {
+                    "height": appearance.get("height", ""),
+                    "skin": appearance.get("skin", ""),
+                    "face": appearance.get("face", ""),
+                    "hair": appearance.get("hair", ""),
+                    "clothing_top": appearance.get("clothing_top", ""),
+                    "clothing_bottom": appearance.get("clothing_bottom", ""),
+                    "accessories": appearance.get("accessories", ""),
+                },
+                "visual_style": style_desc,
+                "layout": "group lineup" if is_group else "4-view turnaround",
+                "prompt_text": c.prompt or "",
+            })
+        
         stage.data = {
             "raw_prompts": raw_prompts,
             "raw_scenes": raw_scenes,
             "prompt_count": len(scenes),
+            "scene_configs": scene_configs,
+            "character_configs": character_configs,
             "character_prompts": char_prompts,
             "character_prompt_count": len(char_prompts),
             "extended_chars": getattr(self, '_extended_chars_detected', []),
+            "background_prompts": bg_prompts,
+            "background_names": [bg.name for bg in bg_entries],
+            "background_count": len(bg_entries),
         }
         
         # ── Multi-Version Prompt Generation ──
@@ -1703,6 +2053,55 @@ Bible:
         nfkd = unicodedata.normalize('NFKD', text)
         return ''.join(c for c in nfkd if not unicodedata.combining(c)).lower()
     
+    def _parse_character_appearance(self, char_name: str, bible: str) -> dict:
+        """Parse structured appearance data from Bible §2 CHARACTER PROFILE LOCK.
+        
+        Returns dict with keys: role, age, height, skin, face, hair,
+        clothing_top, clothing_bottom, accessories.
+        """
+        import re
+        result = {}
+        
+        # Find the character section in Bible
+        char_stripped = self._strip_diacritics(char_name)
+        # Pattern: ### CharName (Role)\n\n* fields...
+        pattern = rf'###\s*{re.escape(char_name)}.*?\n([\s\S]*?)(?=###|## \d|$)'
+        match = re.search(pattern, bible, re.IGNORECASE)
+        if not match:
+            # Try diacritic-insensitive
+            for section in re.findall(r'###\s*(.+?)\n([\s\S]*?)(?=###|## \d|$)', bible):
+                if char_stripped in self._strip_diacritics(section[0]):
+                    match_text = section[1]
+                    break
+            else:
+                return result
+        else:
+            match_text = match.group(1)
+        
+        # Extract role from header: ### CharName (The Role)
+        role_match = re.search(rf'###\s*{re.escape(char_name)}\s*\((.+?)\)', bible, re.IGNORECASE)
+        if role_match:
+            result['role'] = role_match.group(1).strip()
+        
+        # Parse key-value fields
+        field_map = {
+            'age': r'Age \+ Role[:\s]*(.+)',
+            'height': r'Height[:\s]*(.+)',
+            'skin': r'Skin \+ Modifier[:\s]*(.+)',
+            'face': r'Face features?[:\s]*(.+)',
+            'hair': r'Hair[:\s]*(.+)',
+            'clothing_top': r'Clothing top[:\s]*(.+)',
+            'clothing_bottom': r'Clothing bottom[:\s]*(.+)',
+            'accessories': r'Accessories?[:\s]*(.+)',
+        }
+        
+        for key, pat in field_map.items():
+            m = re.search(pat, match_text, re.IGNORECASE)
+            if m:
+                result[key] = m.group(1).strip()
+        
+        return result
+    
     @staticmethod
     def _extract_dialogues_from_script(text: str) -> list:
         """Extract existing dialogues from input script text (LOCAL, no API).
@@ -1912,6 +2311,132 @@ YÊU CẦU:
         
         return '\n'.join(result_lines)
     
+    def _parse_settings_to_backgrounds(
+        self, settings_text: str, visual_style: str
+    ) -> list:
+        """Parse Bible §3 SETTINGS into BackgroundData with T2I prompts.
+        
+        Handles formats:
+          * **Name:** Description
+          **Name:** Description
+          - **Name:** Description
+        
+        Returns List[BackgroundData].
+        """
+        if not settings_text:
+            return []
+        
+        backgrounds = []
+        # Match: optional bullet + **Name:** Description
+        pattern = re.compile(
+            r'(?:^|\n)\s*(?:[*\-•]\s*)?'    # optional bullet
+            r'\*\*([^*]+)\*\*\s*[:：]\s*'      # **Name**:
+            r'(.+?)(?=\n\s*(?:[*\-•]\s*)?\*\*|\Z)',  # Description until next entry or end
+            re.DOTALL
+        )
+        
+        for match in pattern.finditer(settings_text):
+            name = match.group(1).strip()
+            desc = match.group(2).strip()
+            
+            # Clean description (remove newlines within a single entry)
+            desc = re.sub(r'\s+', ' ', desc).strip()
+            
+            # Build a normalized tag for matching in prompts
+            # "Bờm's Village Hut" → "bờm's village hut"
+            tag = name.lower().strip()
+            
+            # Generate T2I prompt for this background
+            prompt = (
+                f"Establishing shot, wide angle landscape, {desc}, "
+                f"{visual_style}, "
+                f"cinematic composition, detailed background art, "
+                f"no characters, empty scene, atmospheric lighting, "
+                f"concept art quality, 16:9 horizontal layout, "
+                f"no text, no watermarks"
+            )
+            
+            backgrounds.append(BackgroundData(
+                name=name,
+                description=desc,
+                prompt=prompt,
+                tag=tag,
+            ))
+            log.info(f"[Pipeline] Phase D: Background '{name}' → tag='{tag}'")
+        
+        return backgrounds
+    
+    def _inject_background_tags(
+        self, raw_prompts: str, backgrounds: list
+    ) -> str:
+        """Inject [BG:LocationName] tags into scene prompts.
+        
+        For each line, check if any background name/keyword appears
+        (diacritic-insensitive, fuzzy substring match). If found, insert
+        [BG:LocationName] tag at the beginning of the setting mention.
+        """
+        if not backgrounds:
+            return raw_prompts
+        
+        # Build match patterns: each background → list of possible keyword forms
+        bg_patterns = []
+        for bg in backgrounds:
+            # Primary: full name
+            keywords = [bg.name.lower()]
+            # Also add short forms: "Bờm's Village Hut" → "bờm's hut", "village hut"
+            words = bg.name.split()
+            if len(words) >= 2:
+                # Possessive shortcut: "Bờm's Village Hut" → "bờm's hut"
+                if words[0].lower().endswith(("'s", "'s")):
+                    keywords.append(f"{words[0].lower()} {words[-1].lower()}")
+                # Last two words: "Village Hut" → "village hut"
+                keywords.append(' '.join(words[-2:]).lower())
+            bg_patterns.append((bg, keywords))
+        
+        lines = raw_prompts.split('\n')
+        result_lines = []
+        inject_count = 0
+        
+        for line in lines:
+            if not line.strip():
+                result_lines.append(line)
+                continue
+            
+            modified = line
+            line_lower = self._strip_diacritics(line.lower())
+            
+            for bg, keywords in bg_patterns:
+                # Check if any keyword matches in this line
+                matched = False
+                for kw in keywords:
+                    kw_stripped = self._strip_diacritics(kw)
+                    if kw_stripped in line_lower:
+                        matched = True
+                        break
+                
+                if matched:
+                    # Check if [BG:...] already present for this bg
+                    bg_tag = f"[BG:{bg.name}]"
+                    if bg_tag not in modified:
+                        # Insert after the first setting mention (after "." or ", " near the match)
+                        # Simple approach: prepend the BG tag before the setting text
+                        # Find the keyword position and insert tag before it
+                        for kw in keywords:
+                            kw_stripped = self._strip_diacritics(kw)
+                            idx = line_lower.find(kw_stripped)
+                            if idx >= 0:
+                                # Insert [BG:Name] right before the keyword in the original line
+                                modified = modified[:idx] + bg_tag + " " + modified[idx:]
+                                inject_count += 1
+                                break
+            
+            result_lines.append(modified)
+        
+        if inject_count:
+            log.info(f"[Pipeline] Phase E: Injected {inject_count} [BG:] tags across scene prompts")
+        
+        return '\n'.join(result_lines)
+    
     def _parse_text_prompts(self, raw_text: str) -> list:
         """Parse plain text prompts (blank-line separated) into SceneData list."""
         # Keep blank lines for separator detection
@@ -1979,11 +2504,23 @@ YÊU CẦU:
         
         stage.characters = characters
         stage.prompts = char_prompts
+        # Also include background prompts for Stage 4 dispatch
+        bg_prompts = [bg.prompt for bg in (self.state.backgrounds or []) if bg.prompt]
+        bg_names = [bg.name for bg in (self.state.backgrounds or [])]
+        
+        # Read character_configs from Stage 3 (pre-built)
+        s3 = self.state.get_stage("scene_breakdown")
+        character_configs = s3.data.get("character_configs", []) if s3.data else []
+        
         stage.data = {
+            "character_configs": character_configs,
             "character_prompts": char_prompts,
             "character_names": [c.name for c in characters],
             "prompt_count": len(char_prompts),
             "mode": "T2I",
+            "background_prompts": bg_prompts,
+            "background_names": bg_names,
+            "background_count": len(bg_prompts),
         }
     
     async def _stage_scene_image_gen(self, stage: StageResult, config: Dict):
@@ -2016,11 +2553,32 @@ YÊU CẦU:
         has_char_images = len(char_refs) > 0
         
         scene_configs = []
+        
+        # Read Stage 3 scene_configs for metadata enrichment
+        s3 = self.state.get_stage("scene_breakdown")
+        s3_scene_configs = s3.data.get("scene_configs", []) if s3.data else []
+        s3_lookup = {sc["scene_index"]: sc for sc in s3_scene_configs}
+        
         for s in scenes:
             # Stage 3 prompts already contain full character profiles (Phase B)
             # Only add T2I style suffix — do NOT re-inject character descriptions
             base = s.prompt or s.description or f"Scene {s.index}"
             base = base.replace(">>", "—")
+            
+            # R5-5: Strip text overlay instructions (AI can't render text accurately)
+            import re as _re_text
+            has_overlay = bool(_re_text.search(r'(?i)text\s+overlay|stylized\s+text', base))
+            overlay_content = None
+            if has_overlay:
+                overlay_match = _re_text.search(r'["\u201c](.+?)["\u201d]', base)
+                overlay_content = overlay_match.group(1) if overlay_match else None
+                # Strip text overlay from prompt
+                base = _re_text.sub(
+                    r'(?i)(?:stylized\s+)?text(?:\s+overlay)?[\s:.]*["\u201c].*?["\u201d]\.?\s*',
+                    '', base
+                )
+                base = _re_text.sub(r'(?i)\btext\s+overlay\b', '', base)
+                log.info(f"[Pipeline] R5-5: Stripped text overlay from Scene {s.index}")
             
             # R2-2 Fix: Use config-aware style suffix instead of hardcoded
             # R4-1 Fix: Normalize style to list (may be string from single-select)
@@ -2049,6 +2607,7 @@ YÊU CẦU:
             import re as _re
             prompt_tags = {t.strip().lower() for t in _re.findall(r'\[([^\]]+)\]', base)}
             scene_char_images = []
+            chars_in_scene = []
             for cr in char_refs:
                 cr_name_stripped = self._strip_diacritics(cr["name"])
                 # Build alias set: full name + parenthesized parts + base name
@@ -2062,18 +2621,47 @@ YÊU CẦU:
                     cr_aliases.add(self._strip_diacritics(base_name))
                 if any(self._strip_diacritics(tag) in cr_aliases for tag in prompt_tags):
                     scene_char_images.append(cr["image_path"])
+                    chars_in_scene.append(cr["name"])
             
-            mode = "I2I" if scene_char_images else "T2I"
+            # ★ Match [BG:Location] tags to background images
+            scene_bg_images = []
+            bg_tags = {t.strip().lower() for t in _re.findall(r'\[BG:([^\]]+)\]', base)}
+            for bg in (self.state.backgrounds or []):
+                if bg.image_path and bg.tag:
+                    bg_tag_stripped = self._strip_diacritics(bg.tag)
+                    if any(self._strip_diacritics(bt) == bg_tag_stripped for bt in bg_tags):
+                        scene_bg_images.append(bg.image_path)
+            # Combine: char images first, then BG images
+            all_ref_images = scene_char_images + scene_bg_images
+            
+            mode = "I2I" if all_ref_images else "T2I"
+            
+            # Enrich from Stage 3 scene_config
+            s3_sc = s3_lookup.get(s.index, {})
             
             scene_configs.append({
+                "scene_index": s.index,
+                "mode": mode,
+                "type": s3_sc.get("type", "landscape"),
+                "scene_type": s3_sc.get("scene_type", "action"),
+                "shot_type": s3_sc.get("shot_type", "medium shot"),
+                "setting": s3_sc.get("setting", ""),
+                "characters_in_scene": chars_in_scene,
+                "character_actions": s3_sc.get("character_actions", {}),
+                "reference_images": all_ref_images,
+                "background_image": scene_bg_images[0] if scene_bg_images else None,
+                "style_suffix": style_suffix,
+                "has_text_overlay": has_overlay,
+                "text_overlay_content": overlay_content,
+                "negative_prompt": s3_sc.get("negative_prompt", ""),
+                "prompt_text": t2i_prompt,
+                # Legacy compat fields
                 "index": s.index,
                 "prompt": t2i_prompt,
-                "mode": mode,
-                "reference_images": scene_char_images,
             })
         
         stage.scenes = scenes
-        stage.prompts = [c["prompt"] for c in scene_configs]
+        stage.prompts = [c["prompt_text"] for c in scene_configs]
         stage.data = {
             "scene_configs": scene_configs,
             "prompt_count": len(scene_configs),
@@ -2101,6 +2689,12 @@ YÊU CẦU:
         char_images = [c.image_path for c in (self.state.characters or []) if c.image_path]
         
         video_configs = []
+        
+        # Read Stage 3 scene_configs for metadata enrichment
+        s3 = self.state.get_stage("scene_breakdown")
+        s3_scene_configs = s3.data.get("scene_configs", []) if s3.data else []
+        s3_lookup = {sc["scene_index"]: sc for sc in s3_scene_configs}
+        
         for s in scenes:
             img_path = s.image_path or ""
             if img_path:
@@ -2116,18 +2710,35 @@ YÊU CẦU:
             # Prepend [Scene_Tag] to prompt for tag auto-resolution in engine
             tagged_prompt = f"[{scene_tag}] {s.prompt}" if s.prompt else s.prompt
             
+            # Enrich from Stage 3 scene_config
+            s3_sc = s3_lookup.get(s.index, {})
+            
             video_configs.append({
-                "index": s.index,
+                "scene_index": s.index,
                 "mode": mode,
-                "prompt": tagged_prompt,
+                "type": s3_sc.get("type", "landscape"),
+                "scene_type": s3_sc.get("scene_type", "action"),
                 "scene_tag": scene_tag,
                 "image_path": img_path,
                 "duration_s": s.duration_s,
+                "characters_in_scene": s3_sc.get("characters", []),
+                "character_actions": s3_sc.get("character_actions", {}),
+                "setting": s3_sc.get("setting", ""),
+                "shot_type": s3_sc.get("shot_type", "medium shot"),
+                "camera_movement": s3_sc.get("camera_movement", "static"),
+                "audio_cue": s3_sc.get("audio_cue", ""),
+                "tone": s3_sc.get("tone", ""),
+                "has_text_overlay": s3_sc.get("has_text_overlay", False),
+                "text_overlay_content": s3_sc.get("text_overlay_content", None),
                 "output_folder": output_folder,
+                "prompt_text": tagged_prompt,
+                # Legacy compat fields
+                "index": s.index,
+                "prompt": tagged_prompt,
             })
         
         stage.scenes = scenes
-        stage.prompts = [c["prompt"] for c in video_configs]
+        stage.prompts = [c["prompt_text"] for c in video_configs]
         # R2-5 Fix: Include voice_enabled in stage data for queue routing
         voice_enabled = config.get("voice_enabled", True)
         stage.data = {
@@ -2383,7 +2994,12 @@ YÊU CẦU:
         3. On 400: safety block → try next model
         4. Raises on complete exhaustion
         """
-        from services.gemini_client import RateLimitError, GeminiAPIError
+        from services.gemini_client import RateLimitError, GeminiAPIError, GeminiClient
+        
+        # Auto-create client if None (pipeline may be initialized without one)
+        if not self.client:
+            self.client = GeminiClient()
+            log.info("[Pipeline] Auto-created GeminiClient (was None)")
         
         api_key = self.api_key
         
@@ -2428,6 +3044,16 @@ YÊU CẦU:
                     rotation.reset_exhausted("pipeline")
                 except Exception:
                     pass
+                # Also reset key quota blocks so keys are re-available
+                try:
+                    from services.key_quota_manager import get_quota_manager
+                    qm = get_quota_manager()
+                    qm.reset_rpm_blocks()
+                    log.info(f"[Pipeline] Round {round_num + 1}: reset model exhaustion + key RPM blocks")
+                except Exception:
+                    pass
+                # Reset api_key to original so rotation starts fresh
+                api_key = self.api_key or api_key
             
             for model in models_to_try:
                 try:
@@ -2481,7 +3107,11 @@ YÊU CẦU:
                     if e.status == 400:
                         log.warning(f"[Pipeline] {model} blocked (400), trying next model...")
                         continue
-                    raise  # Other errors: propagate immediately
+                    if e.status >= 500:
+                        # 503 = server overload, 500 = internal error — retryable
+                        log.warning(f"[Pipeline] {model} server error ({e.status}), trying next model...")
+                        continue
+                    raise  # 401/403 and other client errors: propagate immediately
                     
                 except Exception as e:
                     last_error = e

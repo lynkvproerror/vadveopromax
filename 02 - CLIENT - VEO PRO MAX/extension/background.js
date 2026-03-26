@@ -347,8 +347,12 @@ async function handleAppMessage(msg) {
 
   switch (msg.action) {
     case 'request_recaptcha': {
-      // Find tab for this email
-      const tabId = findTabForEmail(msg.email);
+      // Find tab for this email (with stale tab recovery fallback)
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        // ★ Stale Tab Recovery: try to discover orphaned VEO tab
+        tabId = await recoverStaleTab(msg.email);
+      }
       if (!tabId) {
         wsSend({
           action: 'recaptcha_token',
@@ -673,7 +677,11 @@ async function handleAppMessage(msg) {
       // 330-538 char garbage tokens. Instead, we actually call execute() and
       // check that the returned token is ≥ 1500 chars (HAR: valid = 1742-2169).
       // The valid token is sent back for caching (not wasted).
-      const tabId = findTabForEmail(msg.email);
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        // ★ Stale Tab Recovery
+        tabId = await recoverStaleTab(msg.email);
+      }
       if (!tabId) {
         wsSend({
           action: 'recaptcha_ready',
@@ -836,7 +844,11 @@ async function handleAppMessage(msg) {
     // during long reCAPTCHA + fetch operations.
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     case 'submit_prompt': {
-      const tabId = findTabForEmail(msg.email);
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        // ★ Stale Tab Recovery
+        tabId = await recoverStaleTab(msg.email);
+      }
       if (!tabId) {
         wsSend({
           action: 'submit_prompt_result',
@@ -2482,6 +2494,145 @@ function findTabForEmail(email) {
   // Callers must handle null explicitly.
   return null;
 }
+
+
+/**
+ * ★ Stale Tab Recovery: when findTabForEmail() returns null but a Chrome tab
+ * with the VEO URL still exists, re-inject content.js and re-register it.
+ *
+ * Root cause: Chrome can discard tabs (memory saving) or the MV3 service worker
+ * can restart, losing tabState entries. The tab is still open in Chrome but
+ * invisible to the extension → "No tab found" → engine stalls permanently.
+ *
+ * Recovery strategy:
+ * 1. Query Chrome for all labs.google tabs
+ * 2. Find an orphaned tab (not in tabState with an email)
+ * 3. If tab was discarded by Chrome, reload it
+ * 4. Re-inject content.js to revive the content script
+ * 5. Assign the email and re-register with Python
+ *
+ * Cooldown: 30s between recovery attempts per email to prevent spam.
+ *
+ * @param {string} email - Account email to recover tab for
+ * @returns {number|null} - Recovered tabId or null if recovery failed
+ */
+const _recoveryCooldown = {};  // email → Date.now() of last attempt
+const RECOVERY_COOLDOWN_MS = 30000;  // 30s between attempts
+
+async function recoverStaleTab(email) {
+  // Cooldown check
+  const now = Date.now();
+  const lastAttempt = _recoveryCooldown[email] || 0;
+  if (now - lastAttempt < RECOVERY_COOLDOWN_MS) {
+    return null;  // Cooldown active
+  }
+  _recoveryCooldown[email] = now;
+
+  try {
+    // 1. Query Chrome for all VEO tabs
+    const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    if (veoTabs.length === 0) {
+      console.debug(`[VEO Bridge] 🔍 No VEO tabs found in Chrome for recovery (${email})`);
+      return null;
+    }
+
+    // 2. Find orphaned tab: exists in Chrome but not in tabState with an email,
+    //    OR has a different/null email in tabState
+    let targetTab = null;
+
+    // Priority 1: Tab that has this email but lost its tabState
+    for (const tab of veoTabs) {
+      if (!tabState[tab.id] || !tabState[tab.id].email) {
+        targetTab = tab;
+        break;
+      }
+    }
+
+    // Priority 2: ANY VEO tab where tabState.email doesn't match any connected email
+    if (!targetTab) {
+      const connectedEmails = new Set(
+        Object.values(tabState).map(s => s.email).filter(Boolean)
+      );
+      for (const tab of veoTabs) {
+        // If this tab's email is not the one we're looking for,
+        // but there's only one VEO tab and it has wrong email → might be ours
+        if (veoTabs.length === 1 && !connectedEmails.has(email)) {
+          targetTab = tab;
+          break;
+        }
+      }
+    }
+
+    if (!targetTab) {
+      console.debug(`[VEO Bridge] 🔍 All ${veoTabs.length} VEO tabs already assigned — no orphan for ${email}`);
+      return null;
+    }
+
+    console.warn(
+      `[VEO Bridge] 🔄 Recovering stale tab ${targetTab.id} for ${email} ` +
+      `(discarded=${targetTab.discarded || false}, url=${targetTab.url})`
+    );
+
+    // 3. If tab was discarded by Chrome, reload it
+    if (targetTab.discarded) {
+      try {
+        await chrome.tabs.reload(targetTab.id);
+        console.log(`[VEO Bridge] 🔄 Reloaded discarded tab ${targetTab.id}`);
+        await new Promise(r => setTimeout(r, 5000));  // Wait for page load
+      } catch (e) {
+        console.warn(`[VEO Bridge] Failed to reload discarded tab: ${e.message}`);
+        return null;
+      }
+    }
+
+    // 4. Re-inject content.js to revive the content script
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: targetTab.id },
+        files: ['content.js'],
+      });
+      console.log(`[VEO Bridge] 💉 Re-injected content.js into tab ${targetTab.id}`);
+      await new Promise(r => setTimeout(r, 3000));  // Wait for content.js init
+    } catch (e) {
+      console.warn(`[VEO Bridge] Content.js injection failed for tab ${targetTab.id}: ${e.message}`);
+      // Don't return null — tab might still be usable for executeScript in MAIN world
+    }
+
+    // 5. Register in tabState
+    if (!tabState[targetTab.id]) {
+      tabState[targetTab.id] = {
+        email: null, headers: {}, accessToken: null,
+        lastHeartbeat: 0, recaptchaReady: false,
+      };
+    }
+    tabState[targetTab.id].email = email;
+    tabState[targetTab.id].lastHeartbeat = Date.now();
+    persistTabState();
+
+    // 6. Prevent Chrome from auto-discarding this tab again
+    try {
+      await chrome.tabs.update(targetTab.id, { autoDiscardable: false });
+    } catch (_) { }
+
+    // 7. Notify Python
+    wsSend({
+      action: 'register',
+      email,
+      tabId: targetTab.id,
+      version: EXT_VERSION,
+    });
+
+    console.warn(
+      `[VEO Bridge] ✅ Recovered stale tab ${targetTab.id} for ${email} — re-registered with app`
+    );
+    return targetTab.id;
+
+  } catch (e) {
+    console.error(`[VEO Bridge] Stale tab recovery failed for ${email}: ${e.message}`);
+    return null;
+  }
+}
+
 
 
 // ── Extract and Push Token Helper ──────────────────────────────────────

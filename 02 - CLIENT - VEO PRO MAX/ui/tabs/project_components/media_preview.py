@@ -326,7 +326,7 @@ class VideoPreviewDialog(QDialog):
                 border: none; border-radius: 6px;
                 font-size: 16px; font-weight: bold;
             }}
-            QPushButton:hover {{ background-color: {Theme.TEAL}; }}
+            QPushButton:hover {{ background-color: {Theme.BLUE}; }}
         """)
         self._play_btn.clicked.connect(self._toggle_play)
         ctrl_layout.addWidget(self._play_btn)

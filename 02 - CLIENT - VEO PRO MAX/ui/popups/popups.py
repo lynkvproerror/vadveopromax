@@ -13,8 +13,8 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QWidget
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import Qt, Signal, QRectF
+from PySide6.QtGui import QKeySequence, QShortcut, QPainter, QColor, QPainterPath, QPen
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
@@ -43,21 +43,25 @@ class BasePopup(QDialog):
         super().__init__(parent)
         
         self._result = None
+        self._drag_pos = None          # ★ For drag-to-move
+        
+        # ── Popup visual constants ──
+        self._popup_bg = QColor(Theme.MANTLE)      # #181825 — darkest, distinct
+        self._popup_border = QColor(Theme.OVERLAY0) # #6C7086 — visible border
+        self._popup_radius = Theme.RADIUS_POPUP     # 12px
         
         # Window setup
         self.setWindowTitle(title)
         self.setFixedSize(width, height)
         self.setModal(True)
         
-        # Remove native title bar for custom header
+        # Remove native title bar + enable true transparency for rounded corners
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         
-        # Style
-        self.setStyleSheet(f"background-color: {Theme.BASE};")
-        
-        # Layout
+        # Layout (2px margin for painted border)
         self._main_layout = QVBoxLayout(self)
-        self._main_layout.setContentsMargins(0, 0, 0, 0)
+        self._main_layout.setContentsMargins(2, 2, 2, 2)
         self._main_layout.setSpacing(0)
         
         # Create layout
@@ -72,12 +76,64 @@ class BasePopup(QDialog):
         # Center on parent
         self._center_on_parent()
     
+    def paintEvent(self, event):
+        """Draw rounded rectangle background with border — enables true corner clipping."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Rounded rect path
+        path = QPainterPath()
+        rect = QRectF(1, 1, self.width() - 2, self.height() - 2)
+        path.addRoundedRect(rect, self._popup_radius, self._popup_radius)
+        
+        # Clip all painting to the rounded rect
+        painter.setClipPath(path)
+        
+        # Fill background
+        painter.fillPath(path, self._popup_bg)
+        
+        # Draw border
+        painter.setPen(QPen(self._popup_border, 2))
+        painter.drawPath(path)
+        
+        painter.end()
+    
+    # ── Drag-to-move (header acts as drag handle) ──────────────
+    def mousePressEvent(self, event):
+        """Start drag if mouse is on the header region."""
+        if event.button() == Qt.LeftButton and event.position().y() <= (self.header.height() if hasattr(self, 'header') else 40):
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Move dialog while dragging."""
+        if self._drag_pos is not None and event.buttons() & Qt.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        """Stop drag."""
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
+    
     def _center_on_parent(self):
-        """Center dialog on parent window."""
-        if self.parent():
-            parent_geo = self.parent().geometry()
-            x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
-            y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
+        """Center dialog on top-level parent window.
+        
+        Uses window().frameGeometry() to get the actual screen position
+        of the main window, not the local geometry of the parent widget
+        (which may be an embedded tab with local-only coordinates).
+        """
+        parent = self.parent()
+        if parent:
+            # Always center on the TOP-LEVEL window, not the passed widget
+            top = parent.window() if parent.window() else parent
+            geo = top.frameGeometry()
+            x = geo.x() + (geo.width() - self.width()) // 2
+            y = geo.y() + (geo.height() - self.height()) // 2
             self.move(x, y)
     
     def _create_header(self, title: str):
@@ -387,6 +443,194 @@ class RenameDialog(BasePopup):
             self._on_close()
 
 
+class CreditWarningDialog(BasePopup):
+    """Visually prominent credit cost warning dialog.
+    
+    Features:
+    - Orange warning header bar
+    - Large credit amount badge with cost breakdown
+    - Color-coded buttons: Green (safe LP) vs Red (danger Fast)
+    """
+    
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        model_name: str = "",
+        n_prompts: int = 0,
+        n_outputs: int = 4,
+        total_credits: int = 0,
+        cost_per_video: int = 10,
+        has_upscale: bool = False,
+        confirm_text: str = "Yes, use Fast",
+        cancel_text: str = "No → Fast [LP]",
+    ):
+        self._model_name = model_name
+        self._n_prompts = n_prompts
+        self._n_outputs = n_outputs
+        self._total_credits = total_credits
+        self._cost_per_video = cost_per_video
+        self._has_upscale = has_upscale
+        self._confirm_text = confirm_text
+        self._cancel_text = cancel_text
+        
+        super().__init__(parent, title="⚠️ CREDIT WARNING", width=460, height=330)
+    
+    def _create_header(self, title: str):
+        """Orange warning header bar."""
+        self.header = QFrame()
+        self.header.setFixedHeight(40)
+        self.header.setStyleSheet(
+            f"background-color: {Theme.PEACH}; "
+            f"border-top-left-radius: {Theme.RADIUS_POPUP}px; "
+            f"border-top-right-radius: {Theme.RADIUS_POPUP}px;"
+        )
+        
+        header_layout = QHBoxLayout(self.header)
+        header_layout.setContentsMargins(16, 4, 4, 4)
+        
+        self.title_label = QLabel("⚠️  CREDIT WARNING")
+        self.title_label.setStyleSheet(
+            f"color: {Theme.CRUST}; font-weight: bold; font-size: 15px;"
+        )
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+        
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setMinimumSize(32, 28)
+        self.close_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {Theme.CRUST}; "
+            f"font-size: 16px; font-weight: bold; border: none; }}"
+            f"QPushButton:hover {{ background: rgba(0,0,0,0.15); border-radius: 4px; }}"
+        )
+        self.close_btn.clicked.connect(self._on_close)
+        header_layout.addWidget(self.close_btn)
+        
+        self._main_layout.addWidget(self.header)
+    
+    def _create_content(self):
+        """Create rich warning content with credit badge."""
+        self.content = QWidget()
+        self.content.setStyleSheet("background-color: transparent;")
+        self.content_layout = QVBoxLayout(self.content)
+        self.content_layout.setContentsMargins(24, 12, 24, 6)
+        self.content_layout.setSpacing(8)
+        
+        # Model name
+        model_lbl = QLabel(f"Model:  {self._model_name}")
+        model_lbl.setStyleSheet(
+            f"color: {Theme.PEACH}; font-size: 14px; font-weight: bold;"
+        )
+        model_lbl.setAlignment(Qt.AlignCenter)
+        self.content_layout.addWidget(model_lbl)
+        
+        # Credit badge — large, highlighted
+        badge = QFrame()
+        badge.setStyleSheet(
+            f"background-color: {Theme.YELLOW_BG}; "
+            f"border: 2px solid {Theme.YELLOW}; "
+            f"border-radius: 8px; "
+            f"padding: 8px;"
+        )
+        badge_layout = QVBoxLayout(badge)
+        badge_layout.setContentsMargins(12, 6, 12, 6)
+        badge_layout.setSpacing(4)
+        
+        # Per-video cost breakdown
+        if self._has_upscale:
+            if self._cost_per_video >= 60:
+                detail_text = "10 (generation) + 50 (4K upscale) = 60 / video"
+            else:
+                detail_text = "50 (4K upscale) / video"
+            cost_detail = QLabel(detail_text)
+            cost_detail.setStyleSheet(
+                f"color: {Theme.PEACH}; font-size: 11px; font-weight: bold;"
+            )
+            cost_detail.setAlignment(Qt.AlignCenter)
+            badge_layout.addWidget(cost_detail)
+        
+        # Formula
+        formula_lbl = QLabel(
+            f"{self._n_prompts} prompt  ×  {self._n_outputs} video  ×  {self._cost_per_video}"
+        )
+        formula_lbl.setStyleSheet(
+            f"color: {Theme.SUBTEXT1}; font-size: 12px;"
+        )
+        formula_lbl.setAlignment(Qt.AlignCenter)
+        badge_layout.addWidget(formula_lbl)
+        
+        total_lbl = QLabel(f"💰  {self._total_credits} credits")
+        total_lbl.setStyleSheet(
+            f"color: {Theme.YELLOW}; font-size: 22px; font-weight: bold;"
+        )
+        total_lbl.setAlignment(Qt.AlignCenter)
+        badge_layout.addWidget(total_lbl)
+        
+        self.content_layout.addWidget(badge)
+        
+        # Hint text
+        hint_lbl = QLabel(
+            f"Chọn '{self._cancel_text}' để tiết kiệm credit"
+        )
+        hint_lbl.setStyleSheet(
+            f"color: {Theme.SUBTEXT0}; font-size: 11px; font-style: italic;"
+        )
+        hint_lbl.setAlignment(Qt.AlignCenter)
+        hint_lbl.setWordWrap(True)
+        self.content_layout.addWidget(hint_lbl)
+        
+        self._main_layout.addWidget(self.content, stretch=1)
+    
+    def _create_footer(self):
+        """Color-coded buttons: Green (LP safe) vs Red (Fast danger)."""
+        self.footer = QFrame()
+        self.footer.setFixedHeight(56)
+        self.footer.setStyleSheet(f"background-color: {Theme.SURFACE0};")
+        self.footer_layout = QHBoxLayout(self.footer)
+        self.footer_layout.setContentsMargins(16, 8, 16, 8)
+        
+        self.footer_layout.addStretch()
+        
+        _btn_base = (
+            f"border: none; border-radius: {Theme.RADIUS_BTN}px; "
+            f"padding: 10px 20px; font-weight: bold; font-size: 13px;"
+        )
+        
+        # Safe button (LP) — GREEN
+        self.cancel_btn = QPushButton(self._cancel_text)
+        self.cancel_btn.setMinimumWidth(140)
+        self.cancel_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.GREEN}; color: {Theme.CRUST}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: #B8F0B2; }}"
+        )
+        self.cancel_btn.clicked.connect(self._on_close)
+        self.footer_layout.addWidget(self.cancel_btn)
+        
+        self.footer_layout.addSpacing(8)
+        
+        # Danger button (Fast) — RED
+        self.confirm_btn = QPushButton(self._confirm_text)
+        self.confirm_btn.setMinimumWidth(140)
+        self.confirm_btn.setStyleSheet(
+            f"QPushButton {{ background-color: {Theme.RED}; color: {Theme.CRUST}; {_btn_base} }}"
+            f"QPushButton:hover {{ background-color: #EBA0AC; }}"
+        )
+        self.confirm_btn.clicked.connect(self._on_confirm)
+        self.footer_layout.addWidget(self.confirm_btn)
+        
+        self._main_layout.addWidget(self.footer)
+    
+    def accept(self):
+        self._result = True
+        super().accept()
+    
+    def _on_confirm(self):
+        self.accept()
+    
+    def _on_close(self):
+        self._result = False
+        self.reject()
+
+
 # Convenience functions
 def confirm(parent, title="⚠️ CONFIRM", message="Are you sure?", 
             confirm_text="Yes", cancel_text="No", danger=False) -> bool:
@@ -395,8 +639,20 @@ def confirm(parent, title="⚠️ CONFIRM", message="Are you sure?",
     return dialog.wait_for_close() or False
 
 
+def show_credit_warning(parent, model_name, n_prompts, n_outputs, total_credits,
+                        cost_per_video=10, has_upscale=False,
+                        confirm_text="Yes, use Fast", cancel_text="No → Fast [LP]") -> bool:
+    """Show credit warning dialog. Returns True if user confirms Fast model."""
+    dialog = CreditWarningDialog(
+        parent, model_name, n_prompts, n_outputs, total_credits,
+        cost_per_video, has_upscale, confirm_text, cancel_text
+    )
+    return dialog.wait_for_close() or False
+
+
 def show_error(parent, title="❌ ERROR", message="An error occurred", 
                details: Optional[str] = None):
     """Show error dialog."""
     dialog = ErrorDialog(parent, title, message, details)
     dialog.wait_for_close()
+

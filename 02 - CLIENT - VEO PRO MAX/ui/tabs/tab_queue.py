@@ -597,8 +597,16 @@ class TabQueue(
         
         # Status dropdown
         self.status_filter = QComboBox()
-        self.status_filter.setMinimumWidth(130)
-        self.status_filter.addItems([t("queue_extra.all_status"), t("queue_extra.status_pending"), t("queue_extra.status_processing"), t("queue_extra.status_completed"), t("queue_extra.status_failed"), t("queue_extra.status_cancelled")])
+        self.status_filter.setMinimumWidth(160)
+        self.status_filter.addItems([
+            t("queue_extra.all_status"),
+            t("queue_extra.status_pending"),
+            t("queue_extra.status_processing"),
+            t("queue_extra.status_completed"),
+            t("queue_extra.status_failed"),
+            t("queue_extra.status_cancelled"),
+            t("queue_extra.status_partial_failed"),
+        ])
         self.status_filter.currentTextChanged.connect(self._on_filter_changed)
         layout.addWidget(self.status_filter)
         
@@ -664,18 +672,35 @@ class TabQueue(
         # Index 0 = "All" option for each filter, works regardless of language
         project_idx = self.project_filter.currentIndex()
         project = self.project_filter.currentText()
-        status = self.status_filter.currentText().lower()
+        status_idx = self.status_filter.currentIndex()
         search = self.search_input.text().lower()
         
-        # Map UI status labels to internal task states
-        status_groups = {
-            "pending": {"pending", "waiting"},
-            "processing": {"running", "waiting_poll", "ready"},
-            "completed": {"completed"},
-            "failed": {"failed"},
-            "cancelled": {"cancelled"},
+        # ★ Index-based status mapping (locale-safe)
+        # 0=All, 1=Pending, 2=Processing, 3=Completed, 4=Failed, 5=Cancelled, 6=PartialFailed
+        _STATUS_INDEX_MAP = {
+            1: {"pending", "waiting"},
+            2: {"running", "waiting_poll", "ready"},
+            3: {"completed"},
+            4: {"failed"},
+            5: {"cancelled"},
+            # 6 = partial_failed → special logic below
         }
-        allowed_statuses = status_groups.get(status)  # None = all status
+        is_partial_failed_filter = (status_idx == 6)
+        allowed_statuses = _STATUS_INDEX_MAP.get(status_idx)  # None for 0 and 6
+        
+        # ★ For partial_failed filter: pre-build set of task IDs with failed videos
+        partial_failed_ids = set()
+        if is_partial_failed_filter:
+            task_data_idx = getattr(self, '_task_data_index', {})
+            for tid, td in task_data_idx.items():
+                if td.get('status') == 'completed':
+                    video_outputs = td.get('video_outputs', [])
+                    if video_outputs and any(
+                        vo.get('quality', '') in ('failed', 'pending', '')
+                        or vo.get('upscale_status') == 'failed'
+                        for vo in video_outputs
+                    ):
+                        partial_failed_ids.add(tid)
         
         # Show/hide widgets based on filters
         for item in self._queue_items:
@@ -691,9 +716,12 @@ class TabQueue(
             if project_idx != 0 and getattr(item, 'project', '') != project:
                 show = False
             
-            # Status filter (using status groups for correct matching)
-            # index 0 = All Statuses → allowed_statuses will be None → show all
-            if allowed_statuses is not None and item.status not in allowed_statuses:
+            # Status filter
+            if is_partial_failed_filter:
+                # ★ Partial Failed: show only COMPLETED tasks with bad video slots
+                if str(item.id) not in partial_failed_ids:
+                    show = False
+            elif allowed_statuses is not None and item.status not in allowed_statuses:
                 show = False
             
             # Mode filter: use itemData for matching (display shows full description)
@@ -766,6 +794,16 @@ class TabQueue(
         self.reset_btn.setToolTip(t("queue_extra.reset_tooltip"))
         self.reset_btn.clicked.connect(self._on_reset_all)
         layout.addWidget(self.reset_btn)
+
+        # Clean Completed — remove fully-completed tasks (no failed videos)
+        self.clean_completed_btn = QPushButton("Clean ✓")
+        self.clean_completed_btn.setProperty("variant", "secondary")
+        self.clean_completed_btn.setToolTip(
+            "Remove fully completed tasks (all videos OK).\n"
+            "Tasks with failed/retrying videos are preserved."
+        )
+        self.clean_completed_btn.clicked.connect(self._on_clean_completed)
+        layout.addWidget(self.clean_completed_btn)
         
         # Delete All
         self.delete_all_btn = QPushButton(t("queue.delete_all"))
@@ -1980,6 +2018,9 @@ class TabQueue(
             self._queue_updated_signal.emit()
 
         threading.Thread(target=_bg_force_retry, daemon=True).start()
+        # ★ FIX: Auto-start engine after force retry completes
+        # Delayed 2s to let background thread finish resetting tasks
+        QTimer.singleShot(2000, lambda: self._auto_start_if_idle(force=True))
     
     def _retry_next(self):
         """Retry next item in the staggered queue."""
@@ -2019,6 +2060,9 @@ class TabQueue(
         else:
             self._refresh_queue_from_controller()
             self._update_stats()
+            # ★ FIX: Auto-start engine to process retried tasks
+            # Without this, tasks sit in READY state until user clicks Start All
+            self._auto_start_if_idle(force=True)
     
     def _sync_processing_state(self):
         """BUG-B5 fix: Sync _is_processing from controller after async stop."""
@@ -2026,6 +2070,84 @@ class TabQueue(
             self._is_processing = self.controller.state.is_processing
         self._update_button_states()
     
+    def _on_clean_completed(self):
+        """Remove fully-completed tasks — all video outputs OK, no fails.
+        
+        Preserves:
+        - Tasks with any failed/retrying/pending video slots
+        - Tasks still running/pending/ready
+        - Replacement tasks that are still active
+        """
+        if not self.controller or not hasattr(self.controller, '_dispatcher'):
+            return
+        
+        dispatcher = self.controller._dispatcher
+        task_data_idx = getattr(self, '_task_data_index', {})
+        
+        # Phase 1: Identify fully-completed task IDs
+        clean_ids = []
+        for tid, td in task_data_idx.items():
+            if td.get('status') != 'completed':
+                continue
+            video_outputs = td.get('video_outputs', [])
+            if not video_outputs:
+                continue
+            # Check ALL videos are OK (not failed, not retrying, not pending)
+            all_ok = all(
+                vo.get('quality') not in ('failed', 'retrying', 'pending', '')
+                and vo.get('upscale_status') != 'failed'
+                for vo in video_outputs
+            )
+            if all_ok:
+                clean_ids.append(tid)
+        
+        if not clean_ids:
+            mw = self.window()
+            if mw and hasattr(mw, 'show_toast'):
+                mw.show_toast("No fully-completed tasks to clean", "info")
+            return
+        
+        # Phase 2: Confirm
+        if not show_confirm(
+            self,
+            "Clean Completed Tasks",
+            f"Remove {len(clean_ids)} fully-completed task(s)?\n"
+            f"Tasks with failed videos will be preserved.",
+        ):
+            return
+        
+        # Phase 3: Remove from dispatcher
+        removed = 0
+        for tid in clean_ids:
+            if dispatcher.remove_task(tid):
+                removed += 1
+        
+        # Phase 4: Clean up UI widgets
+        for tid in clean_ids:
+            widget = self._task_widgets.pop(str(tid), None)
+            if widget and _is_widget_alive(widget):
+                widget.deleteLater()
+            # Remove from _queue_items list
+            self._queue_items = [qi for qi in self._queue_items if str(qi.id) != str(tid)]
+            self._item_widgets.pop(tid, None)
+        
+        # Phase 5: Clean up empty groups
+        groups = getattr(dispatcher, '_task_groups', {})
+        for gid, gw in list(self._group_widgets.items()):
+            group = groups.get(gid)
+            remaining = len(group.tasks) if group else 0
+            if remaining == 0:
+                gw['container'].deleteLater()
+                self._group_widgets.pop(gid, None)
+                self._group_expanded.pop(gid, None)
+        
+        self._update_stats()
+        self._refresh_queue_from_controller()
+        
+        mw = self.window()
+        if mw and hasattr(mw, 'show_toast'):
+            mw.show_toast(f"🧹 Cleaned {removed} completed task(s)", "info")
+
     def _on_delete_all(self):
         """Delete ALL groups and tasks from the queue."""
         group_count = len(self._group_widgets)
@@ -2091,6 +2213,8 @@ class TabQueue(
                 main_window = self.window()
                 if main_window and hasattr(main_window, 'show_toast'):
                     main_window.show_toast(f"Retrying prompt #{item_id}", "info")
+                # ★ BUG FIX: Auto-start engine if idle (was missing)
+                self._auto_start_if_idle(force=True)
             else:
                 main_window = self.window()
                 if main_window and hasattr(main_window, 'show_toast'):

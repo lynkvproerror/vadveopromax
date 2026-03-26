@@ -32,8 +32,9 @@ class PipelinePromptItem:
     index: int
     name: str               # e.g. "👤 Character 1", "Scene 3 • I2V • 8s"
     prompt: str
-    thumbnail_path: str = ""  # file path for preview image
+    thumbnail_path: str = ""  # file path for start frame / preview image
     video_thumbnail_path: str = ""  # file path for video preview (frame/video)
+    end_frame_path: str = ""  # file path for end frame (Stage 6 First+Last I2V)
     accent_color: str = ""    # stage-specific accent (fallback: Theme.BLUE)
     metadata: dict = None     # optional extra metadata
 
@@ -46,7 +47,7 @@ class PipelinePromptTable(QWidget):
     """Table widget for pipeline stage prompts — styled like PromptTable.
 
     Columns (default):       # | Preview | Info | Prompt | Actions (Edit)
-    Columns (video mode):    # | Image Preview | Video Preview | Info | Prompt | Actions
+    Columns (video mode):    # | Start Frame | End Frame | Video | Info | Prompt | Actions
     """
 
     ROW_HEIGHT = 80
@@ -76,7 +77,7 @@ class PipelinePromptTable(QWidget):
 
         self.table = QTableWidget()
         if self._show_video_preview:
-            columns = ["#", "Image Preview", "Video Preview", "Info", "Prompt", ""]
+            columns = ["#", "Start Frame", "End Frame", "Video", "Info", "Prompt", ""]
         else:
             columns = ["#", "Preview", "Info", "Prompt", ""]
         self.table.setColumnCount(len(columns))
@@ -107,7 +108,7 @@ class PipelinePromptTable(QWidget):
 
         header = self.table.horizontalHeader()
         if self._show_video_preview:
-            # 6-column mode: # | Image Preview | Video Preview | Info | Prompt | Actions
+            # 7-column mode: # | Start Frame | End Frame | Video | Info | Prompt | Actions
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(0, 36)
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
@@ -115,10 +116,12 @@ class PipelinePromptTable(QWidget):
             header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(2, self._thumb_w + 20)
             header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-            self.table.setColumnWidth(3, 140)
-            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-            self.table.setColumnWidth(5, 70)
+            self.table.setColumnWidth(3, self._thumb_w + 20)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(4, 140)
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(6, 70)
         else:
             # 5-column mode: # | Preview | Info | Prompt | Actions
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -169,9 +172,10 @@ class PipelinePromptTable(QWidget):
 
         # Determine column offsets based on mode
         if self._show_video_preview:
-            col_idx, col_img, col_vid, col_info, col_prompt, col_action = 0, 1, 2, 3, 4, 5
+            # 7-col: # | Start Frame | End Frame | Video | Info | Prompt | Actions
+            col_idx, col_img, col_end, col_video, col_info, col_prompt, col_action = 0, 1, 2, 3, 4, 5, 6
         else:
-            col_idx, col_img, col_vid, col_info, col_prompt, col_action = 0, 1, -1, 2, 3, 4
+            col_idx, col_img, col_end, col_video, col_info, col_prompt, col_action = 0, 1, -1, -1, 2, 3, 4
 
         # Col: Index
         idx_item = QTableWidgetItem(str(item.index))
@@ -179,7 +183,7 @@ class PipelinePromptTable(QWidget):
         idx_item.setForeground(QColor(Theme.SUBTEXT0))
         self.table.setItem(row_idx, col_idx, idx_item)
 
-        # Col: Image Preview thumbnail
+        # Col: Start Frame thumbnail
         thumb_btn = QPushButton()
         thumb_btn.setFixedSize(self._thumb_w, self._thumb_h)
         has_thumb = item.thumbnail_path and os.path.isfile(item.thumbnail_path)
@@ -191,7 +195,7 @@ class PipelinePromptTable(QWidget):
             )
             thumb_btn.setIcon(pix)
             thumb_btn.setIconSize(QSize(self._thumb_w - 4, self._thumb_h - 4))
-            thumb_btn.setToolTip(f"Click to preview: {item.thumbnail_path}")
+            thumb_btn.setToolTip(f"Start frame: {item.thumbnail_path}")
             thumb_btn.clicked.connect(
                 lambda checked=False, idx=row_idx: self._open_image_preview(idx)
             )
@@ -215,8 +219,44 @@ class PipelinePromptTable(QWidget):
         thumb_lay.addWidget(thumb_btn)
         self.table.setCellWidget(row_idx, col_img, thumb_container)
 
-        # Col: Video Preview thumbnail (only in video mode)
+        # Col: End Frame (next scene image — only in video mode)
         if self._show_video_preview:
+            end_btn = QPushButton()
+            end_btn.setFixedSize(self._thumb_w, self._thumb_h)
+            has_end_frame = item.end_frame_path and os.path.isfile(item.end_frame_path)
+            if has_end_frame:
+                pix = QPixmap(item.end_frame_path).scaled(
+                    self._thumb_w - 4, self._thumb_h - 4,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                end_btn.setIcon(pix)
+                end_btn.setIconSize(QSize(self._thumb_w - 4, self._thumb_h - 4))
+                end_btn.setToolTip(f"End frame: {item.end_frame_path}")
+                end_btn.clicked.connect(
+                    lambda checked=False, p=item.end_frame_path: self._open_path(p)
+                )
+            else:
+                end_btn.setText("(last)")
+                end_btn.setToolTip("Last scene — no end frame")
+            end_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {Theme.MANTLE};
+                    border: 1px dashed {Theme.OVERLAY0};
+                    border-radius: 4px;
+                    font-size: 10px; color: {Theme.SUBTEXT0};
+                }}
+                QPushButton:hover {{ border-color: {Theme.PEACH}; }}
+            """)
+            end_container = QWidget()
+            end_container.setStyleSheet("background: transparent; border: none;")
+            end_lay = QHBoxLayout(end_container)
+            end_lay.setContentsMargins(4, 4, 4, 4)
+            end_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            end_lay.addWidget(end_btn)
+            self.table.setCellWidget(row_idx, col_end, end_container)
+
+            # Col: Video (generated video thumbnail)
             vid_btn = QPushButton()
             vid_btn.setFixedSize(self._thumb_w, self._thumb_h)
             has_vid = item.video_thumbnail_path and os.path.isfile(item.video_thumbnail_path)
@@ -228,8 +268,7 @@ class PipelinePromptTable(QWidget):
                 )
                 vid_btn.setIcon(pix)
                 vid_btn.setIconSize(QSize(self._thumb_w - 4, self._thumb_h - 4))
-                # Try to find actual video file for click-to-open
-                vid_btn.setToolTip(f"Click to play video")
+                vid_btn.setToolTip("Click to play video")
                 vid_btn.clicked.connect(
                     lambda checked=False, idx=row_idx: self._open_video_preview(idx)
                 )
@@ -243,7 +282,7 @@ class PipelinePromptTable(QWidget):
                     border-radius: 4px;
                     font-size: 14px; color: {Theme.SUBTEXT0};
                 }}
-                QPushButton:hover {{ border-color: {Theme.PEACH}; }}
+                QPushButton:hover {{ border-color: {Theme.GREEN}; }}
             """)
             vid_container = QWidget()
             vid_container.setStyleSheet("background: transparent; border: none;")
@@ -251,7 +290,7 @@ class PipelinePromptTable(QWidget):
             vid_lay.setContentsMargins(4, 4, 4, 4)
             vid_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
             vid_lay.addWidget(vid_btn)
-            self.table.setCellWidget(row_idx, col_vid, vid_container)
+            self.table.setCellWidget(row_idx, col_video, vid_container)
 
         # Col: Info (name + metadata)
         info_lbl = QLabel(item.name)
@@ -327,6 +366,13 @@ class PipelinePromptTable(QWidget):
         target = (item.metadata or {}).get("video_path", item.video_thumbnail_path) if item else ""
         start = paths.index(target) if target in paths else 0
         VideoPreviewDialog.show_preview(self, paths, start, labels)
+
+    def _open_path(self, path: str):
+        """Open a single image path in the ImagePreviewDialog."""
+        if not path or not os.path.isfile(path):
+            return
+        from ui.tabs.project_components.media_preview import ImagePreviewDialog
+        ImagePreviewDialog.show_preview(self, [path], 0, [os.path.basename(path)])
 
     def _on_edit(self, row_idx: int):
         """Open modal edit dialog — same styling as PromptTable._on_edit."""

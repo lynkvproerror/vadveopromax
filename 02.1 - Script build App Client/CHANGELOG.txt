@@ -7,6 +7,11 @@ v2.3.10 — Nâng cấp Cảnh báo Chi phí, Tối ưu Giao diện & Pipeline
 🎨 Giao diện (UI/UX)
 • Nâng cấp toàn bộ hệ thống Popup: viền bo góc mượt mà, nền tối hiện đại, dễ nhận biết.
 • Bổ sung tiện ích "Image Library" vào sidebar của tab Project Builder giúp chọn ảnh trực tiếp.
+• Cài đặt Worker và LP riêng biệt cho từng tài khoản trong Chrome Profile.
+• Status bar hiển thị chi tiết: ⚡ Fast | 🐢 LP | ⬆️ Upscale.
 
 🚀 Hiệu năng & Ổn định
 • Cải thiện luồng xử lý riêng biệt cho model Fast, tăng tốc độ gửi yêu cầu tạo video.
+• LP Worker Pool độc lập: mỗi tài khoản có pool LP riêng, không ảnh hưởng Fast workers.
+• Tối ưu ưu tiên CPU: Chrome & Extension được ưu tiên CPU cao, FFmpeg chạy ở mức thấp hơn.
+• Ứng dụng ổn định hơn khi CPU tải cao (100%).

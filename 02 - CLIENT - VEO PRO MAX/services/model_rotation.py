@@ -96,6 +96,23 @@ class ModelRotation:
             log.info(f"[Rotation] {key}: {model} reached RPD limit ({rpd})")
         self._save()
 
+    def reset_exhausted(self, profile_email: str):
+        """Clear exhausted flags for all models of this profile.
+        
+        Called after cooldown wait to allow retry rounds to re-attempt models.
+        Preserves usage counters — only clears exhausted_at flags.
+        """
+        key = profile_email or "_default"
+        profile_data = self._data.get(key, {})
+        cleared = 0
+        for model_id in list(profile_data.keys()):
+            if isinstance(profile_data[model_id], dict) and profile_data[model_id].get("exhausted_at"):
+                profile_data[model_id].pop("exhausted_at", None)
+                cleared += 1
+        if cleared:
+            log.info(f"[Rotation] {key}: reset {cleared} exhausted model(s) for retry")
+            self._save()
+
     def get_all_models(self) -> List[str]:
         """Get all available model IDs."""
         return list(_MODEL_IDS)

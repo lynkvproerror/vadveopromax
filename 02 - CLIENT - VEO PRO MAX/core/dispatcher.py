@@ -644,6 +644,30 @@ class Dispatcher:
                     )
                 return None
     
+    # ── Orphan Rescue ─────────────────────────────────────────
+    
+    def rescue_orphaned_tasks(self) -> int:
+        """Rescue READY tasks that somehow left _ready_queue without transitioning.
+        
+        Safety net for the PriorityQueue drain issue: stale entries consumed
+        during get_next_task() reduce the queue without corresponding task state
+        transitions, eventually starving foremen.
+        
+        Returns number of rescued tasks.
+        """
+        rescued = 0
+        for task_id, task in self._all_tasks.items():
+            if task.state == TaskState.READY and task_id not in self._queued_task_ids:
+                self._enqueue_task(task, priority=0)
+                rescued += 1
+        
+        if rescued > 0:
+            log.warning(
+                f"[Dispatcher] 🚑 Rescued {rescued} orphaned READY task(s) "
+                f"back into queue (queue_size={self._ready_queue.qsize()})"
+            )
+        return rescued
+    
     # ── Counter Audit ──────────────────────────────────────────
     
     def audit_counters(self) -> dict:
@@ -1521,6 +1545,18 @@ class Dispatcher:
             if t.state == TaskState.COMPLETED
         ]
     
+    def get_running_tasks_for_account(self, email: str) -> List[Task]:
+        """RC4: Get running/polling tasks assigned to a specific account.
+        
+        Used by cooldown countdown to update Queue Status column
+        for all tasks affected by an account's cooldown.
+        """
+        return [
+            t for t in self._all_tasks.values()
+            if t.state in (TaskState.RUNNING, TaskState.WAITING_POLL)
+            and t.assigned_account == email
+        ]
+    
     def retry_task(self, task_id: str, force: bool = False) -> bool:
         """Retry a task by resetting state and re-queuing.
         
@@ -1852,6 +1888,39 @@ class Dispatcher:
             )
         
         return migrated
+    
+    def clear_exclusion_for_account(self, account_email: str) -> int:
+        """Clear exclusion for a reactivated account.
+        
+        Inverse of migrate_tasks(). Called when CreditWindow reactivates
+        an account so its foreman can pick up previously-excluded tasks.
+        
+        Without this, single-account setups deadlock permanently:
+        migrate_tasks() adds the account to excluded_accounts on all READY tasks,
+        but reactivate() never clears them → foreman skips all tasks → engine idle.
+        
+        Returns:
+            Number of tasks un-excluded.
+        """
+        cleared = 0
+        for task in self._all_tasks.values():
+            if task.state != TaskState.READY:
+                continue
+            excluded = getattr(task, 'excluded_accounts', set())
+            if account_email in excluded:
+                excluded.discard(account_email)
+                cleared += 1
+        
+        if cleared > 0:
+            log.info(
+                f"[Dispatcher] 🔄 clear_exclusion: un-excluded {cleared} task(s) "
+                f"for {account_email}"
+            )
+            # Wake foremen so they can pick up the un-excluded tasks
+            if self._on_task_ready:
+                self._on_task_ready(None)
+        
+        return cleared
     
     def retry_all_failed(self) -> int:
         """Retry all failed tasks. Returns count retried."""
