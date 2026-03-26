@@ -187,6 +187,21 @@ def resolve_model_key(
     return VideoModel.T2V_LANDSCAPE.value
 
 
+def is_relaxed_model(model_key: str) -> bool:
+    """Check if model key is a Low Priority (relaxed) tier.
+    
+    LP models use suffix '_relaxed' and have stricter server-side rate limits.
+    Non-LP (Fast) models tolerate higher concurrency without 429 errors.
+    
+    Args:
+        model_key: API model key string, e.g. "veo_3_1_t2v_fast_ultra_relaxed"
+    
+    Returns:
+        True if the model is Low Priority (requires conservative throttling).
+    """
+    return bool(model_key) and model_key.endswith("_relaxed")
+
+
 # === VIDEO RESOLUTION API VALUES ===
 class VideoResolution(str, Enum):
     """Video resolution for upscale requests."""
@@ -307,7 +322,7 @@ XCD_VARIATIONS_WAIT_TIMEOUT = 20  # seconds
 TIMEOUT_TIERS = [
     # Attempt 0 (first try) — normal network
     {'xcd_poll': 20.0, 'rc_wait': 25.0, 'bridge_timeout': 35.0,
-     'rc_execute_ms': 15000, 'fetch_ms': 20000,
+     'rc_execute_ms': 15000, 'fetch_ms': 30000,
      't2i_bridge_timeout': 105.0, 't2i_fetch_ms': 90000},
     # Attempt 1 (retry) — slow network tolerance
     {'xcd_poll': 30.0, 'rc_wait': 35.0, 'bridge_timeout': 45.0,
@@ -335,7 +350,7 @@ def get_timeout_tier(attempt: int = 0) -> dict:
 class AppConstants:
     """Application-wide constants."""
     APP_NAME = "VEO Pro Max"
-    APP_VERSION = "2.3.9"
+    APP_VERSION = "2.3.10"
     
     # Auto-update (GitHub public repo)
     GITHUB_REPO = "lynkvproerror/vadveopromax"

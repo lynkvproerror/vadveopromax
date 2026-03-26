@@ -1,10 +1,12 @@
-v2.3.9 — Cải thiện xử lý lỗi Rate Limit
+v2.3.10 — Nâng cấp Cảnh báo Chi phí, Tối ưu Giao diện & Pipeline
 
-🔧 Ổn định
-• Xử lý 429 (quota exhausted) thông minh hơn — lần đầu chỉ chờ 10s cho prompt đó, prompt khác vẫn gửi được
-• Account cooldown chỉ kích hoạt khi bị 429 liên tiếp 2 lần, tránh block không cần thiết
-• Reset 429 counter khi submit thành công, giúp hệ thống recovery nhanh hơn
+💳 Quản lý Chi phí
+• Thêm cảnh báo chi phí Credit chi tiết (hỗ trợ tính toán cho model Fast và Upscale 4K).
+• Tự động hạ cấp model/chất lượng video xuống LP/1080p khi hủy chạy Fast/4K để tiết kiệm credit.
 
-🚀 Hiệu năng
-• Giảm thời gian chờ khi gặp lỗi rate limit tạm thời
-• Tối ưu throughput — các prompt khác không bị block khi 1 prompt gặp lỗi
+🎨 Giao diện (UI/UX)
+• Nâng cấp toàn bộ hệ thống Popup: viền bo góc mượt mà, nền tối hiện đại, dễ nhận biết.
+• Bổ sung tiện ích "Image Library" vào sidebar của tab Project Builder giúp chọn ảnh trực tiếp.
+
+🚀 Hiệu năng & Ổn định
+• Cải thiện luồng xử lý riêng biệt cho model Fast, tăng tốc độ gửi yêu cầu tạo video.

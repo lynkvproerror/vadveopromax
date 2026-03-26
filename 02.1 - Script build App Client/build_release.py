@@ -40,6 +40,7 @@ import hashlib
 import shutil
 import subprocess
 import argparse
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -803,11 +804,12 @@ def github_create_release(version: str, zip_files: list):
         try:
             cmd = [
                 "gh", "release", "create", tag,
+                "--repo", GITHUB_REPO,
                 "--title", f"VEO Pro Max {tag}",
                 "--notes", changelog or f"VEO Pro Max {tag}",
-            ] + [str(p) for p in zip_files]
+            ] + [p.name for p in zip_files]
             result = subprocess.run(
-                cmd, cwd=str(BASE_DIR),
+                cmd, cwd=str(OUTPUT_DIR),
                 capture_output=True, text=True, timeout=300
             )
             if result.returncode == 0:
