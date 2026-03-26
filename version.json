@@ -1,14 +1,14 @@
 {
-    "version": "2.3.7",
-    "ext_version": "2.3.6",
-    "release_date": "2026-03-17",
-    "changelog": "v2.3.7 — Cải thiện Pipeline & Ổn định\n\n🎬 Pipeline AI Production\n• Sửa lỗi Stage 6 tạo lại video đã có khi load session\n• Auto Confirm hoạt động liên tục qua tất cả 7 stages\n• Cải thiện độ ổn định khi chuyển stage tự động\n\n🔧 Ổn định\n• Sửa lỗi dữ liệu scene bị mất khi khôi phục session\n• Tối ưu quản lý bộ nhớ pipeline\n• Cải thiện xử lý đa version trong production pipeline",
-    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.7/VEO_Pro_Max_v2.3.7.zip",
-    "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.7/VEO_Extension_v2.3.6.zip",
-    "sha256": "56c835bc95ec9ea6eded314a5dab8e9bd902f2a0ceff5a8fa5434447fba01ab8",
-    "ext_sha256": "80fbd772ba811bb6f0ef3bf47279d7a7f7c304aa4d5357b21980d4a74534ee3f",
+    "version": "2.3.10",
+    "ext_version": "2.3.10",
+    "release_date": "2026-03-26",
+    "changelog": "v2.3.10 — Nâng cấp Cảnh báo Chi phí, Tối ưu Giao diện & Pipeline\n\n💳 Quản lý Chi phí\n• Thêm cảnh báo chi phí Credit chi tiết (hỗ trợ tính toán cho model Fast và Upscale 4K).\n• Tự động hạ cấp model/chất lượng video xuống LP/1080p khi hủy chạy Fast/4K để tiết kiệm credit.\n\n🎨 Giao diện (UI/UX)\n• Nâng cấp toàn bộ hệ thống Popup: viền bo góc mượt mà, nền tối hiện đại, dễ nhận biết.\n• Bổ sung tiện ích \"Image Library\" vào sidebar của tab Project Builder giúp chọn ảnh trực tiếp.\n\n🚀 Hiệu năng & Ổn định\n• Cải thiện luồng xử lý riêng biệt cho model Fast, tăng tốc độ gửi yêu cầu tạo video.",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.10/VEO_Pro_Max_v2.3.10.zip",
+    "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.10/VEO_Extension_v2.3.10.zip",
+    "sha256": "9b74a2c328dd9ecf8dbcc3091dbe809c8254e5ce36512e01ff11010074729d3a",
+    "ext_sha256": "02bfd78ad538376997885e9ad7e303fb05ac6b63080cfb929404e1ddd303dc13",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1773749027,
-    "build_time": "2026-03-17T19:03:47.534590"
+    "build_number": 1774509246,
+    "build_time": "2026-03-26T14:14:06.274599"
 }
