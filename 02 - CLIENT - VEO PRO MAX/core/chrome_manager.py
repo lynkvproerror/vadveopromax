@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 CDP_PORT_BASE = 9222
 CDP_PORT_MAX = 9250
 PID_FILE_NAME = ".chrome_pid.json"
-CHROME_STARTUP_TIMEOUT = 30  # seconds to wait for CDP port to respond (30s for cold boot)
+CHROME_STARTUP_TIMEOUT = 60  # seconds to wait for CDP port to respond (60s for high-CPU cold boot)
 
 
 # ── Chrome for Testing (CfT) ───────────────────────────────────────────
@@ -786,7 +786,46 @@ def launch_chrome(
 
     if not cdp_ready:
         log.warning(f"[ChromeManager] CDP NOT responding after {CHROME_STARTUP_TIMEOUT}s on port {port}")
-        log.warning(f"[ChromeManager] CDP not responding after {CHROME_STARTUP_TIMEOUT}s")
+        # ── Auto-retry: kill stale Chrome and relaunch on new port ──
+        # Under high CPU, Chrome may fail to initialize CDP. Kill and try fresh.
+        log.warning(f"[ChromeManager] 🔄 Auto-retry: killing PID {pid} and relaunching...")
+        try:
+            import signal
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        time.sleep(2)  # Wait for process to die
+        _remove_pid_file(profile_path)
+
+        # Allocate a DIFFERENT port to avoid socket linger issues
+        retry_port = allocate_port()
+        log.info(f"[ChromeManager] Retry launch on port {retry_port}...")
+        retry_args = [a.replace(f"--remote-debugging-port={port}", f"--remote-debugging-port={retry_port}") for a in args]
+        proc2 = subprocess.Popen(
+            retry_args,
+            creationflags=creation_flags,
+            close_fds=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        pid = proc2.pid
+        port = retry_port
+        log.info(f"[ChromeManager] Retry Chrome launched: PID={pid}, port={port}")
+        _disable_efficiency_mode(pid)
+        _save_pid_file(profile_path, pid, port, email, chrome_exe)
+
+        # Wait for CDP again (same timeout)
+        deadline2 = time.time() + CHROME_STARTUP_TIMEOUT
+        log.warning(f"[ChromeManager] Waiting for CDP on retry port {port} (timeout={CHROME_STARTUP_TIMEOUT}s)...")
+        while time.time() < deadline2:
+            if _is_cdp_alive(port):
+                log.info(f"[ChromeManager] ✅ CDP ready on retry port {port}")
+                cdp_ready = True
+                break
+            time.sleep(0.5)
+
+        if not cdp_ready:
+            log.error(f"[ChromeManager] ❌ CDP STILL not responding after retry — Chrome may be broken")
 
     # Extension installation strategy depends on Chrome type:
     # - CfT: loaded via --load-extension flag at launch time
