@@ -2,13 +2,13 @@
     "version": "2.3.10",
     "ext_version": "2.3.10",
     "release_date": "2026-03-26",
-    "changelog": "v2.3.10 — Nâng cấp Cảnh báo Chi phí, Tối ưu Giao diện & Pipeline\n\n💳 Quản lý Chi phí\n• Thêm cảnh báo chi phí Credit chi tiết (hỗ trợ tính toán cho model Fast và Upscale 4K).\n• Tự động hạ cấp model/chất lượng video xuống LP/1080p khi hủy chạy Fast/4K để tiết kiệm credit.\n\n🎨 Giao diện (UI/UX)\n• Nâng cấp toàn bộ hệ thống Popup: viền bo góc mượt mà, nền tối hiện đại, dễ nhận biết.\n• Bổ sung tiện ích \"Image Library\" vào sidebar của tab Project Builder giúp chọn ảnh trực tiếp.\n\n🚀 Hiệu năng & Ổn định\n• Cải thiện luồng xử lý riêng biệt cho model Fast, tăng tốc độ gửi yêu cầu tạo video.",
+    "changelog": "v2.3.10 — Nâng cấp Cảnh báo Chi phí, Tối ưu Giao diện & Pipeline\n\n💳 Quản lý Chi phí\n• Thêm cảnh báo chi phí Credit chi tiết (hỗ trợ tính toán cho model Fast và Upscale 4K).\n• Tự động hạ cấp model/chất lượng video xuống LP/1080p khi hủy chạy Fast/4K để tiết kiệm credit.\n\n🎨 Giao diện (UI/UX)\n• Nâng cấp toàn bộ hệ thống Popup: viền bo góc mượt mà, nền tối hiện đại, dễ nhận biết.\n• Bổ sung tiện ích \"Image Library\" vào sidebar của tab Project Builder giúp chọn ảnh trực tiếp.\n• Cài đặt Worker và LP riêng biệt cho từng tài khoản trong Chrome Profile.\n• Status bar hiển thị chi tiết: ⚡ Fast | 🐢 LP | ⬆️ Upscale.\n\n🚀 Hiệu năng & Ổn định\n• Cải thiện luồng xử lý riêng biệt cho model Fast, tăng tốc độ gửi yêu cầu tạo video.\n• LP Worker Pool độc lập: mỗi tài khoản có pool LP riêng, không ảnh hưởng Fast workers.\n• Tối ưu ưu tiên CPU: Chrome & Extension được ưu tiên CPU cao, FFmpeg chạy ở mức thấp hơn.\n• Ứng dụng ổn định hơn khi CPU tải cao (100%).",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.10/VEO_Pro_Max_v2.3.10.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.10/VEO_Extension_v2.3.10.zip",
-    "sha256": "9b74a2c328dd9ecf8dbcc3091dbe809c8254e5ce36512e01ff11010074729d3a",
-    "ext_sha256": "02bfd78ad538376997885e9ad7e303fb05ac6b63080cfb929404e1ddd303dc13",
+    "sha256": "3d1f98cb9944d6d169835c254df5a53263fe985e71c08927cac42597339af902",
+    "ext_sha256": "ba11ea7d7ea3ff67fa1892bfdb04a5093d95751ebff2e0f47b4b3e0bd66a62fc",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1774509246,
-    "build_time": "2026-03-26T14:14:06.274599"
+    "build_number": 1774516267,
+    "build_time": "2026-03-26T16:11:07.577716"
 }
