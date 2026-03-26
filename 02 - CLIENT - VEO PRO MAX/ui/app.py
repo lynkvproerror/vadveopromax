@@ -812,9 +812,8 @@ class MainWindow(QMainWindow):
                 max_lp = acc.get("max_workers_lp", 8)
                 # Fast workers = total active ops minus LP workers
                 active_fast = max(0, active_workers - active_lp)
-                fast_capacity = max(0, total_capacity - max_lp)
                 self._status_widgets["workers"].setText(
-                    f"⚡ {active_fast}/{fast_capacity} "
+                    f"⚡ {active_fast}/{total_capacity} "
                     f"| 🐢 {active_lp}/{max_lp} "
                     f"| ⬆️ {active_upscale}/{max_upscale} "
                 )
