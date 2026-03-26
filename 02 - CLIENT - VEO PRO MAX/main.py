@@ -259,6 +259,14 @@ def main():
         splash.set_status("Starting services...")
         controller.start()
         
+        # Boost app process priority to ABOVE_NORMAL
+        # Ensures engine loop, WebSocket server stay responsive under CPU load
+        try:
+            from core.chrome_manager import boost_app_priority
+            boost_app_priority()
+        except Exception:
+            pass
+        
         # Create main window
         splash.set_status("Building interface...")
         window = MainWindow(controller=controller, settings=settings)
@@ -269,11 +277,50 @@ def main():
         # Run event loop
         exit_code = app.exec()
         
-        # Cleanup
-        controller.stop()
-        event_manager.stop_processor()
+        print(f"[App] 🔴 Qt event loop exited with code={exit_code}")
         
-        sys.exit(exit_code)
+        # ── Force-kill safety net ──
+        # If cleanup hangs, force-kill after 3s.
+        import threading as _th
+        import time as _time
+        
+        def _force_exit():
+            _time.sleep(3)
+            # Debug: list threads blocking exit
+            alive = [t for t in _th.enumerate() if t.is_alive() and not t.daemon]
+            if alive:
+                print(f"[App] ⚠️ {len(alive)} non-daemon thread(s) blocking exit:")
+                for t in alive:
+                    print(f"  - {t.name} (ident={t.ident})")
+            print("[App] ⚠️ Cleanup timeout (3s) — force killing process")
+            os._exit(exit_code)
+        _th.Thread(target=_force_exit, daemon=True, name="force-exit").start()
+        
+        # Cleanup with debug timing
+        print("[App] 🔴 Step 1: controller.stop()...")
+        _t0 = _time.time()
+        try:
+            controller.stop()
+        except Exception as e:
+            print(f"[App] controller.stop() error: {e}")
+        print(f"[App] 🔴 Step 1 done ({_time.time()-_t0:.1f}s)")
+        
+        print("[App] 🔴 Step 2: event_manager.stop_processor()...")
+        _t1 = _time.time()
+        try:
+            event_manager.stop_processor()
+        except Exception as e:
+            print(f"[App] event_manager.stop() error: {e}")
+        print(f"[App] 🔴 Step 2 done ({_time.time()-_t1:.1f}s)")
+        
+        # Debug: list remaining threads
+        alive = [t for t in _th.enumerate() if t.is_alive() and not t.daemon]
+        print(f"[App] 🔴 Remaining non-daemon threads: {len(alive)}")
+        for t in alive:
+            print(f"  - {t.name} (ident={t.ident})")
+        
+        print("[App] 🔴 Calling os._exit()...")
+        os._exit(exit_code)  # Hard exit — skip Python cleanup that may hang
         
     except ImportError as e:
         print(f"Error: Missing dependency - {e}")

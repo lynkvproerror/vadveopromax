@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import sys
 import logging as _logging
+import os
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -26,6 +27,13 @@ _TOOL_FFPROBE_EXE = _TOOL_FFMPEG_DIR / "ffprobe.exe"
 
 # ── Module-level cache ──
 _cached_ffmpeg_path: Optional[str] = None
+
+# FFmpeg should run at BELOW_NORMAL priority to yield CPU to Chrome/app
+_FFMPEG_CREATION_FLAGS = (
+    (subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS)
+    if os.name == 'nt' and hasattr(subprocess, 'CREATE_NO_WINDOW')
+    else 0
+)
 
 
 def get_ffmpeg_path() -> Optional[str]:
@@ -299,7 +307,7 @@ class FrameExtractor:
                 capture_output=True,
                 text=True,
                 timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                creationflags=_FFMPEG_CREATION_FLAGS,
             )
             if result.returncode == 0 and "ffmpeg version" in result.stdout:
                 # Extract version line
@@ -349,7 +357,7 @@ class FrameExtractor:
                 capture_output=True,
                 text=True,
                 timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                creationflags=_FFMPEG_CREATION_FLAGS,
             )
             
             if result.returncode == 0:
@@ -415,7 +423,7 @@ class FrameExtractor:
                 ],
                 capture_output=True,
                 timeout=30,
-                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                creationflags=_FFMPEG_CREATION_FLAGS,
             )
             
             if result.returncode == 0 and Path(output_path).exists():

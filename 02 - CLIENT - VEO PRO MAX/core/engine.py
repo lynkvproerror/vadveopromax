@@ -10229,7 +10229,7 @@ class Engine:
                                                          '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
                                                          str(thumb_path)],
                                                         capture_output=True, timeout=10,
-                                                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                                                        creationflags=(subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS) if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
                                                     )
                                                 result = await loop.run_in_executor(None, _run_ffmpeg)
                                                 if thumb_path.exists() and thumb_path.stat().st_size > 100:

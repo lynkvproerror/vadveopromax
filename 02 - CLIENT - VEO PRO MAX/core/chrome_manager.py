@@ -609,6 +609,67 @@ def _disable_efficiency_mode(pid: int):
             kernel32.CloseHandle(handle)
     except Exception as e:
         log.debug(f"[ChromeManager] Could not disable Efficiency Mode: {e}")
+    
+    # Also boost priority for Chrome process tree
+    _boost_chrome_priority(pid)
+
+
+def _boost_chrome_priority(pid: int):
+    """Set ABOVE_NORMAL priority for Chrome process + ALL children.
+    
+    Ensures Chrome browser, GPU, network service, renderers (extension JS),
+    and utility processes all get CPU time under high load.
+    Called after launch and periodically (every 5min via account_manager).
+    """
+    try:
+        import psutil
+        parent = psutil.Process(pid)
+        if not parent.is_running():
+            return
+        
+        # ABOVE_NORMAL_PRIORITY_CLASS = 0x8000 (Windows)
+        target_nice = psutil.ABOVE_NORMAL_PRIORITY_CLASS if os.name == 'nt' else -5
+        
+        # Set parent
+        try:
+            parent.nice(target_nice)
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            pass
+        
+        # Set all children (renderer, GPU, network, utility)
+        boosted = 1
+        for child in parent.children(recursive=True):
+            try:
+                child.nice(target_nice)
+                boosted += 1
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                pass
+        
+        log.debug(f"[ChromeManager] 🚀 Boosted {boosted} Chrome processes to ABOVE_NORMAL (PID {pid})")
+    except ImportError:
+        pass  # psutil not available
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    except Exception as e:
+        log.debug(f"[ChromeManager] Could not boost Chrome priority: {e}")
+
+
+def boost_app_priority():
+    """Set the Python app process to ABOVE_NORMAL priority.
+    
+    Ensures the async event loop, WebSocket server, and engine loop
+    get CPU time under high load (e.g. heavy FFmpeg encoding).
+    Call once at app startup.
+    """
+    if os.name != 'nt':
+        return
+    try:
+        import psutil
+        proc = psutil.Process()
+        proc.nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS)
+        log.info(f"[ChromeManager] 🚀 App process set to ABOVE_NORMAL (PID {proc.pid})")
+    except Exception as e:
+        log.debug(f"[ChromeManager] Could not boost app priority: {e}")
 
 
 # ── Launch Chrome ────────────────────────────────────────────────────────
