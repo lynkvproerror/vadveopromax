@@ -4080,46 +4080,30 @@ class Engine:
                             result = None
                             break
                         
-                        # ═══ PHASE 1: Gap reservation + sleep (OUTSIDE rate lock) ═══
-                        # Foremen sleep in PARALLEL — only timestamp reservation is serialized.
-                        # This allows N foremen to overlap their wait times instead of
-                        # serializing on Semaphore(1) for 45s each.
-                        _acct_lock = self._per_account_submit_locks.setdefault(
-                            account.email, asyncio.Lock()
-                        )
-                        _gap_wait_time = 0.0
-                        _gap_cooldown_break = False
-                        async with _acct_lock:
-                            # ── Model-tier-aware gap selection ──
-                            from config.constants import is_relaxed_model
-                            _task_model = getattr(task, 'model', '') or ''
-                            _is_lp = is_relaxed_model(_task_model)
-                            if _is_lp:
-                                gap = self._GLOBAL_MIN_SUBMIT_GAP        # 45s for LP
-                                _ts_dict = self._per_account_last_submit_ts_lp
-                            else:
-                                gap = self._GLOBAL_MIN_SUBMIT_GAP_FAST   # 3s for Fast
-                                _ts_dict = self._per_account_last_submit_ts
-                            
-                            now = time.time()
-                            elapsed = now - _ts_dict.get(account.email, 0)
-                            if elapsed < gap:
-                                _gap_wait_time = gap - elapsed
-                            
-                            # ── Reserve timestamp NOW (inside lock) ──
-                            # This "claims" the next slot so the NEXT foreman entering
-                            # this lock will see the correct future timestamp and calculate
-                            # its own gap relative to our reserved time.
-                            _ts_dict[account.email] = now + _gap_wait_time
-                        # Lock released — other foremen can now reserve their own slots
+                        # ═══ PHASE 1: Gap sleep OUTSIDE rate lock (parallel) ═══
+                        # All foremen check the LAST ACTUAL submit timestamp and sleep
+                        # until the gap expires. Multiple foremen sleep simultaneously
+                        # to the SAME deadline, then race for Semaphore(1).
+                        # Max gate time = gap (45s for LP, 3s for Fast), never stacks.
+                        from config.constants import is_relaxed_model
+                        _task_model = getattr(task, 'model', '') or ''
+                        _is_lp = is_relaxed_model(_task_model)
+                        if _is_lp:
+                            gap = self._GLOBAL_MIN_SUBMIT_GAP        # 45s for LP
+                            _ts_dict = self._per_account_last_submit_ts_lp
+                        else:
+                            gap = self._GLOBAL_MIN_SUBMIT_GAP_FAST   # 3s for Fast
+                            _ts_dict = self._per_account_last_submit_ts
                         
-                        # ── Sleep the gap OUTSIDE all locks (parallel) ──
-                        if _gap_wait_time > 0:
+                        now = time.time()
+                        elapsed = now - _ts_dict.get(account.email, 0)
+                        if elapsed < gap:
+                            _gap_wait_time = gap - elapsed
                             _tier_label = "LP" if _is_lp else "Fast"
                             log.info(
                                 f"[SubmitGate:{account.email}] Task {task.id}: "
                                 f"waiting {_gap_wait_time:.1f}s "
-                                f"(parallel gap sleep, model={_tier_label})"
+                                f"(model={_tier_label})"
                             )
                             for _w in range(int(_gap_wait_time), 0, -1):
                                 self._dispatcher.update_progress(
@@ -4165,6 +4149,17 @@ class Engine:
                                         if await self._interruptible_sleep(1):
                                             break
                                 continue  # Re-enter retry loop → re-acquire rate lock
+                            
+                            # ── Gap re-verification inside rate lock ──
+                            # Multiple foremen slept to the same deadline and raced here.
+                            # Only the first one should proceed; losers re-loop.
+                            _elapsed2 = time.time() - _ts_dict.get(account.email, 0)
+                            if _elapsed2 < gap:
+                                log.debug(
+                                    f"[SubmitGate:{account.email}] Task {task.id}: "
+                                    f"gap not met inside lock ({_elapsed2:.1f}s < {gap}s) — re-loop"
+                                )
+                                continue  # Re-enter retry loop → sleep again
                             
                             # Anti-Detect burst delay (short, inside rate lock)
                             if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else getattr(self, '_anti_detect_enabled', True):
