@@ -482,21 +482,30 @@ class MainWindow(QMainWindow):
             self.show_toast(f"❌ [{project}] #{idx}: {error_short}", "error")
     
     def _on_group_completed(self, group):
-        """Handle group completion — toast + sound notification."""
+        """Handle group completion — toast + sound notification.
+        
+        Thread-safe: may be called from async engine thread.
+        show_toast is already thread-safe (uses signal/slot).
+        _notification_manager.play() creates QMediaPlayer/QTimer so must run on GUI thread.
+        """
         name = getattr(group, 'name', 'Unknown')
         task_count = len(group.tasks) if hasattr(group, 'tasks') else 0
         
-        # In-app toast
+        # In-app toast (already thread-safe via signal)
         if self.settings and getattr(self.settings, 'notify_toast_enabled', True):
             self.show_toast(
                 f"🎉 Group '{name}' completed ({task_count} tasks)",
                 "success", 4000
             )
         
-        # Sound notification
+        # Sound notification — must run on GUI thread (QMediaPlayer has timers)
         if self.settings and getattr(self.settings, 'notify_sound_enabled', True):
             sound = getattr(self.settings, 'notify_sound_file', 'default')
-            self._notification_manager.play(sound, duration_ms=4000)
+            from PySide6.QtCore import QThread, QTimer
+            if QThread.currentThread() != self.thread():
+                QTimer.singleShot(0, lambda: self._notification_manager.play(sound, duration_ms=4000))
+            else:
+                self._notification_manager.play(sound, duration_ms=4000)
     
     def _on_engine_status(self, status: str):
         """Handle status changes from AppController (16+ events).
@@ -552,7 +561,16 @@ class MainWindow(QMainWindow):
     
     @Slot(dict)
     def _update_queue_status(self, status: dict):
-        """Update status bar with queue info."""
+        """Update status bar with queue info.
+        
+        Thread-safe: may be called from async engine thread via _notify_queue_updated.
+        Defers QLabel.setText() to GUI thread when needed.
+        """
+        from PySide6.QtCore import QThread, QTimer
+        if QThread.currentThread() != self.thread():
+            # Marshal to GUI thread — QLabel can only be updated from its thread
+            QTimer.singleShot(0, lambda s=status: self._update_queue_status(s))
+            return
         if "queue" in self._status_widgets:
             completed = status.get("completed", 0)
             total = status.get("total", 0)
@@ -787,11 +805,17 @@ class MainWindow(QMainWindow):
                 pass
             
             if "workers" in self._status_widgets:
-                # ★ Pool Separation: always show ops + upscale counts
+                # ★ Pool Separation: show Fast ops + LP ops + upscale counts
                 active_upscale = acc.get("active_upscale", 0)
                 max_upscale = acc.get("max_upscale", 4)
+                active_lp = acc.get("active_workers_lp", 0)
+                max_lp = acc.get("max_workers_lp", 8)
+                # Fast workers = total active ops minus LP workers
+                active_fast = max(0, active_workers - active_lp)
+                fast_capacity = max(0, total_capacity - max_lp)
                 self._status_widgets["workers"].setText(
-                    f"👷 {active_workers}/{total_capacity} ops "
+                    f"⚡ {active_fast}/{fast_capacity} "
+                    f"| 🐢 {active_lp}/{max_lp} "
                     f"| ⬆️ {active_upscale}/{max_upscale} "
                 )
                 color = Theme.GREEN if active_workers > 0 else Theme.SUBTEXT0

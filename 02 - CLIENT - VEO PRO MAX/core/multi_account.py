@@ -69,6 +69,22 @@ class MultiAccountManager:
         )
     
     @property
+    def total_active_lp(self) -> int:
+        """Sum of active LP workers from all accounts."""
+        return sum(
+            getattr(acc.session, 'active_workers_lp', 0)
+            for acc in self._accounts
+        )
+    
+    @property
+    def total_capacity_lp(self) -> int:
+        """Sum of LP worker caps from all accounts."""
+        return sum(
+            getattr(acc.session, 'max_workers_lp', 8)
+            for acc in self._accounts
+        )
+    
+    @property
     def total_max_upscale(self) -> int:
         """Sum of max upscale workers from all accounts."""
         return sum(
