@@ -201,6 +201,10 @@ class AppController:
         self._splash_progress_cb = None   # fn(int, str) → update progress
         self._splash_finish_cb = None     # fn() → close splash
         
+        # ★ Auto pre-upload debounce state
+        self._preupload_pending: list = []  # LibraryImage objects waiting for debounce
+        self._preupload_debounce_handle = None  # asyncio.TimerHandle
+        
         # Setup callbacks
         self._setup_callbacks()
     
@@ -227,6 +231,309 @@ class AppController:
         
         # Session monitor
         self._session_monitor.set_expired_callback(self._handle_session_expired)
+        
+        # ★ Image Library: auto pre-upload when images added
+        try:
+            from services.image_library import get_image_library
+            _lib = get_image_library()
+            _lib.on_upload_needed(self._on_library_upload_needed)
+        except Exception:
+            pass
+    
+    # ── Auto Pre-Upload on Library Change ──
+    
+    def _on_library_upload_needed(self, images: list):
+        """Callback from ImageLibrary when new images need pre-upload.
+        
+        Debounces 2s to batch multiple rapid add_image() calls,
+        then triggers parallel pre-upload to all active accounts.
+        """
+        self._preupload_pending.extend(images)
+        
+        # Cancel previous debounce timer
+        if self._preupload_debounce_handle is not None:
+            try:
+                self._preupload_debounce_handle.cancel()
+            except Exception:
+                pass
+        
+        # Schedule debounced execution on async loop
+        if self._loop and self._loop.is_running():
+            self._preupload_debounce_handle = self._loop.call_later(
+                2.0, self._fire_library_pre_upload
+            )
+    
+    def _fire_library_pre_upload(self):
+        """Fire the debounced pre-upload (runs on async loop thread)."""
+        images = list(self._preupload_pending)
+        self._preupload_pending.clear()
+        self._preupload_debounce_handle = None
+        
+        if not images:
+            return
+        
+        # Collect enabled accounts with active connections
+        enabled = [
+            acc for acc in self._multi_account._accounts
+            if acc.is_enabled
+        ]
+        if not enabled:
+            log.debug(
+                f"[LibPreUpload] {len(images)} image(s) queued but no "
+                f"active accounts — will upload on next connect"
+            )
+            return
+        
+        log.info(
+            f"[LibPreUpload] 📸 Auto pre-uploading {len(images)} new image(s) "
+            f"→ {len(enabled)} account(s) (debounced)"
+        )
+        asyncio.ensure_future(self._do_library_pre_upload(images, enabled))
+    
+    async def _do_library_pre_upload(self, images: list, accounts: list):
+        """Upload new library images to all accounts.
+        
+        Rate limiting: Semaphore(10) per account — max 10 concurrent uploads.
+        Accounts upload in parallel via asyncio.gather().
+        """
+        import time as _time
+        from core.media_handler import MediaHandler
+        
+        t0 = _time.monotonic()
+        total_uploaded = 0
+        
+        async def _upload_for_account(account):
+            """Upload pending images for one account with Semaphore(10).
+            
+            Uses asyncio.gather() to run up to 10 uploads concurrently.
+            """
+            nonlocal total_uploaded
+            email = account.email
+            sem = asyncio.Semaphore(10)
+            uploaded = 0
+            _stop = False  # Shared flag to stop all tasks on auth failure
+            
+            async def _upload_one(img):
+                """Upload a single image, gated by semaphore."""
+                nonlocal uploaded, _stop
+                if _stop:
+                    return
+                
+                async with sem:
+                    if _stop or not Path(img.path).exists():
+                        return
+                    
+                    try:
+                        # Encode image in thread
+                        result = await asyncio.to_thread(
+                            MediaHandler.image_to_base64, img.path
+                        )
+                        if not result:
+                            log.warning(
+                                f"[LibPreUpload] Failed to encode: {img.filename}"
+                            )
+                            return
+                        img_b64, mime_type = result
+                        
+                        # Fresh token
+                        token = await account.ensure_valid_token()
+                        if not token:
+                            log.warning(
+                                f"[LibPreUpload] No token for {email}, "
+                                f"stopping pre-upload"
+                            )
+                            _stop = True
+                            return
+                        
+                        # Upload with retry (429 + 401)
+                        for _attempt in range(3):
+                            resp = await self._api_client.upload_image(
+                                access_token=token,
+                                recaptcha_token="",
+                                image_base64=img_b64,
+                                mime_type=mime_type,
+                                file_name=img.filename,
+                                account_headers=account.get_api_headers(),
+                            )
+                            
+                            if resp.success:
+                                # Extract mediaId (multi-format)
+                                media_id = ""
+                                mgid = resp.data.get("mediaGenerationId")
+                                if mgid:
+                                    media_id = (
+                                        mgid.get("mediaGenerationId", "")
+                                        if isinstance(mgid, dict) else mgid
+                                    )
+                                if not media_id:
+                                    media = resp.data.get("media")
+                                    if isinstance(media, dict):
+                                        media_id = (
+                                            media.get("name", "") or
+                                            media.get("mediaGenerationId", "") or
+                                            media.get("mediaId", "")
+                                        )
+                                    elif isinstance(media, list) and media:
+                                        first = media[0]
+                                        if isinstance(first, dict):
+                                            media_id = (
+                                                first.get("name", "") or
+                                                first.get("mediaGenerationId", "") or
+                                                first.get("mediaId", "")
+                                            )
+                                
+                                if media_id:
+                                    # Store in library (persistent)
+                                    from services.image_library import get_image_library
+                                    get_image_library().set_media_id(
+                                        img.path, email, media_id
+                                    )
+                                    # Also populate engine in-memory cache
+                                    if hasattr(self._engine, '_upload_cache'):
+                                        cache_key = f"{img.path}:{email}"
+                                        self._engine._upload_cache[cache_key] = media_id
+                                        if img.content_hash:
+                                            hash_key = f"hash:{img.content_hash}:{email}"
+                                            self._engine._upload_cache[hash_key] = media_id
+                                    uploaded += 1
+                                    log.info(
+                                        f"[LibPreUpload] ✅ {img.filename} → "
+                                        f"{media_id[:30]}... ({email})"
+                                    )
+                                return  # Success
+                            else:
+                                err_str = str(resp.error)
+                                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                                    wait = (2 ** _attempt) * 5
+                                    log.warning(
+                                        f"[LibPreUpload] 429 on {img.filename} → "
+                                        f"retry {_attempt+1}/3 in {wait}s"
+                                    )
+                                    await asyncio.sleep(wait)
+                                    continue
+                                elif getattr(resp, 'response_code', 0) == 401:
+                                    log.warning(
+                                        f"[LibPreUpload] 401 → refreshing "
+                                        f"token for {email}"
+                                    )
+                                    account._session.token_expires = None
+                                    token = await account.ensure_valid_token()
+                                    if not token:
+                                        _stop = True
+                                        return
+                                    continue
+                                else:
+                                    log.warning(
+                                        f"[LibPreUpload] Upload failed: "
+                                        f"{img.filename} ({email}): {resp.error}"
+                                    )
+                                    return
+                        
+                    except Exception as e:
+                        log.warning(
+                            f"[LibPreUpload] Error: {img.filename} "
+                            f"({email}): {e}"
+                        )
+            
+            # Filter images that need upload, then gather with concurrency limit
+            pending = [img for img in images if email not in img.media_ids]
+            if pending:
+                await asyncio.gather(
+                    *[_upload_one(img) for img in pending],
+                    return_exceptions=True,
+                )
+            
+            total_uploaded += uploaded
+            if uploaded:
+                log.info(
+                    f"[LibPreUpload] {email}: {uploaded}/{len(images)} uploaded"
+                )
+        
+        # All accounts in parallel
+        await asyncio.gather(
+            *[_upload_for_account(acc) for acc in accounts],
+            return_exceptions=True,
+        )
+        
+        elapsed = _time.monotonic() - t0
+        if total_uploaded:
+            # Persist library index
+            try:
+                from services.image_library import get_image_library
+                get_image_library()._save_index()
+            except Exception:
+                pass
+            log.info(
+                f"[LibPreUpload] ✅ Done: {total_uploaded} upload(s) across "
+                f"{len(accounts)} account(s) in {elapsed:.1f}s"
+            )
+    
+    def flush_pending_pre_upload(self, on_done: Callable = None):
+        """Flush debounce and run immediate pre-upload. Calls on_done when complete.
+        
+        Used by Pipeline to ensure all library images are pre-uploaded
+        to all accounts BEFORE dispatching the next stage's tasks.
+        
+        Args:
+            on_done: Optional callback invoked (on main thread) after pre-upload finishes.
+        """
+        # Cancel debounce timer
+        if self._preupload_debounce_handle is not None:
+            try:
+                self._preupload_debounce_handle.cancel()
+            except Exception:
+                pass
+            self._preupload_debounce_handle = None
+        
+        # Collect ALL library images that need upload (not just pending debounce batch)
+        try:
+            from services.image_library import get_image_library
+            lib = get_image_library()
+            all_images = lib.get_images()
+        except Exception:
+            all_images = list(self._preupload_pending) if self._preupload_pending else []
+        
+        self._preupload_pending.clear()
+        
+        # Filter images that need upload for at least one account
+        enabled = [
+            acc for acc in self._multi_account._accounts
+            if acc.is_enabled
+        ]
+        if not enabled or not all_images:
+            log.debug("[LibPreUpload:Flush] No accounts or no images → skip")
+            if on_done:
+                on_done()
+            return
+        
+        # Filter to only images missing mediaIds for any enabled account
+        needs_upload = []
+        for img in all_images:
+            for acc in enabled:
+                if acc.email not in img.media_ids:
+                    needs_upload.append(img)
+                    break
+        
+        if not needs_upload:
+            log.info("[LibPreUpload:Flush] All library images already uploaded → skip")
+            if on_done:
+                on_done()
+            return
+        
+        log.info(
+            f"[LibPreUpload:Flush] ⚡ Immediate pre-upload: {len(needs_upload)} image(s) "
+            f"→ {len(enabled)} account(s)"
+        )
+        
+        async def _flush_and_callback():
+            await self._do_library_pre_upload(needs_upload, enabled)
+            if on_done:
+                # Call on_done on main thread (UI-safe)
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, on_done)
+        
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(_flush_and_callback(), self._loop)
     
     # === LIFECYCLE ===
     
@@ -849,6 +1156,8 @@ class AppController:
         """Callback from ExtensionBridge when all connections are lost for >60s.
         
         Auto-reinstall extension if user accidentally removed it from Chrome.
+        ★ After reinstall, also ensures a VEO tab exists so the extension's
+        offscreen document creates its WebSocket connection.
         Runs in background thread to avoid blocking the async event loop.
         """
         log.warning("[AppController] 🚨 Extension lost — auto-reinstalling...")
@@ -860,6 +1169,77 @@ class AppController:
                     log.info(f"[AppController] Extension auto-reinstall results: {results}")
                 else:
                     log.warning("[AppController] No browsers available for extension reinstall")
+                    return
+                
+                # ★ Post-reinstall: ensure VEO tab exists for each browser
+                # Extension offscreen document only creates WebSocket when a
+                # VEO tab triggers the content script → register → offscreen WS connect.
+                # Without a VEO tab, extension sits idle at conns=0 forever.
+                import time as _time
+                _time.sleep(3)  # Brief delay for extension to initialize
+                
+                pc = self._profiles_controller if hasattr(self, '_profiles_controller') else None
+                if pc and hasattr(pc, '_debug_browsers'):
+                    for email in list(pc._debug_browsers.keys()):
+                        try:
+                            db = pc._debug_browsers.get(email)
+                            cdp_port = getattr(db, 'cdp_port', None) if db else None
+                            if not cdp_port:
+                                continue
+                            
+                            # Check if extension connected after reinstall
+                            if self._extension_bridge.is_connected(email):
+                                log.debug(f"[ExtRecovery] {email}: already connected, skipping tab creation")
+                                continue
+                            
+                            # Navigate to VEO via CDP to trigger extension content script
+                            import urllib.request
+                            import json as _json
+                            
+                            VEO_URL = "https://labs.google/fx/vi/tools/flow"
+                            
+                            # First check if a VEO tab already exists
+                            try:
+                                _tabs_req = urllib.request.urlopen(
+                                    f"http://127.0.0.1:{cdp_port}/json",
+                                    timeout=5
+                                )
+                                _tabs = _json.loads(_tabs_req.read().decode())
+                                veo_tab = next(
+                                    (t for t in _tabs if 'labs.google' in (t.get('url', ''))),
+                                    None
+                                )
+                                
+                                if veo_tab:
+                                    # VEO tab exists — reload it to re-inject content script
+                                    ws_url = veo_tab.get('webSocketDebuggerUrl')
+                                    if ws_url:
+                                        log.info(f"[ExtRecovery] {email}: VEO tab exists — reloading to re-inject content script")
+                                        import websocket
+                                        _ws = websocket.create_connection(ws_url, timeout=5)
+                                        _ws.send(_json.dumps({
+                                            "id": 1, "method": "Page.reload",
+                                            "params": {"ignoreCache": True}
+                                        }))
+                                        _ws.recv()
+                                        _ws.close()
+                                    continue
+                                
+                                # No VEO tab — create one via CDP
+                                log.info(f"[ExtRecovery] {email}: no VEO tab — creating via CDP")
+                                _new_tab_url = f"http://127.0.0.1:{cdp_port}/json/new?{VEO_URL}"
+                                _new_req = urllib.request.urlopen(_new_tab_url, timeout=10)
+                                _new_tab = _json.loads(_new_req.read().decode())
+                                log.info(
+                                    f"[ExtRecovery] ✅ Created VEO tab for {email}: "
+                                    f"tabId={_new_tab.get('id', '?')}"
+                                )
+                            except Exception as tab_err:
+                                log.warning(f"[ExtRecovery] VEO tab recovery failed for {email}: {tab_err}")
+                                
+                        except Exception as e:
+                            log.debug(f"[ExtRecovery] Tab recovery error for {email}: {e}")
+                
             except Exception as e:
                 log.error(f"[AppController] Extension auto-reinstall error: {e}")
         threading.Thread(target=_reinstall, name="extension-lost-reinstall", daemon=True).start()
@@ -1355,7 +1735,24 @@ class AppController:
         
         Round 4 Fix C: Prevents triple-push storms when extension connect /
         browser state change fires all three pushes simultaneously.
+        
+        Thread-safe: if called from non-GUI thread, uses QTimer.singleShot(0)
+        to marshal to GUI thread, preventing QObject::startTimer crash.
         """
+        from PySide6.QtCore import QThread, QTimer
+        try:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app and QThread.currentThread() != app.thread():
+                # Non-GUI thread: schedule on GUI thread
+                QTimer.singleShot(0, self._push_all_status_debounced_impl)
+                return
+        except Exception:
+            pass
+        self._push_all_status_debounced_impl()
+    
+    def _push_all_status_debounced_impl(self):
+        """Internal: create/start QTimer — MUST run on GUI thread."""
         if not hasattr(self, '_status_push_timer') or self._status_push_timer is None:
             from PySide6.QtCore import QTimer
             self._status_push_timer = QTimer()
@@ -2065,6 +2462,17 @@ class AppController:
     # Backward compat alias
     set_account_max_slots = set_account_max_workers
     
+    def set_account_max_workers_lp(self, email: str, value: int):
+        """Set max LP concurrent workers for an account.
+        
+        Called from Settings UI when user changes the LP workers spinner.
+        """
+        acc = self._multi_account.get_account(email)
+        if acc:
+            acc.session.max_workers_lp = value
+        
+        log.info(f"[AppController] Account {email} max_workers_lp → {value}")
+    
     def get_session_data(self) -> list:
         """Get session data (tokens, cookies, profile info) for all accounts.
         
@@ -2763,6 +3171,7 @@ class AppController:
                     
                     session.credits = profile_obj.credits
                     session.max_workers = getattr(profile_obj, 'max_workers', 20)
+                    session.max_workers_lp = getattr(profile_obj, 'max_workers_lp', 8)
                     
                     # Add to runtime via async
                     future = self._run_async(
@@ -3106,6 +3515,7 @@ class AppController:
             # Per-task: adjust workflow_type + model based on actual conditions
             has_images = bool(task.image_uris or task.image_paths)
             has_continuation = task.parent_task_id is not None
+            img_count = len(task.image_uris or []) + len(task.image_paths or [])
             
             # Downgrade: image workflow → text workflow (no images available)
             if not has_images and not has_continuation and task.workflow_type in ("I2V", "F2V"):
@@ -3131,6 +3541,20 @@ class AppController:
                 task.model = resolve_model_key(model_display, WorkflowType.I2V, raw_ar, False)
                 log.info(f"  [AUTO] {old_wf} → I2V (continuation, task {i})")
             # === End auto-switch ===
+            
+            # ★ CRITICAL: Dual-frame (_fl_) model guard.
+            # frame_mode='both' selects _fl_ model (needs 2 images: start+end).
+            # If only 1 image provided → endImage=null → VEO3 crash:
+            #   visual_description.is_object() VISUAL_DESCRIPTION is not a JSON object
+            if (has_images and img_count < 2
+                    and task.workflow_type in ("I2V", "F2V")
+                    and "_fl_" in (task.model or "")):
+                task.workflow_type = "I2V"
+                task.model = resolve_model_key(model_display, WorkflowType.I2V, raw_ar, False)
+                log.warning(
+                    f"  [AUTO] _fl_ → single-frame I2V (only {img_count} image, task {i}) — "
+                    f"dual-frame requires start+end images"
+                )
             
             # === Image workflow output_count ===
             # T2I/I2I: generate_image() handles 1-request-per-image loop internally.
@@ -3754,6 +4178,8 @@ class AppController:
         self._engine._on_progress = self._handle_progress
         self._engine._on_task_completed = lambda task: self._handle_task_completed(task)
         self._engine._on_task_failed = lambda task, err: self._handle_task_failed(task, err)
+        # RC4: Account error callback → status bar (429/403 notifications)
+        self._engine._on_account_error = lambda email, msg: self._notify_status(f"{email}: {msg}")
         
         # Wire dispatcher progress callback → UI
         # Engine calls dispatcher.update_progress() during poll loop,
@@ -3928,9 +4354,20 @@ class AppController:
                     if getattr(s, 'auto_start_queue', False):
                         pending = self._dispatcher.ready_count
                         log.info(f"[AutoStop→Restart] {pending} new tasks found after shutdown — scheduling restart")
-                        from PySide6.QtCore import QTimer
-                        # Schedule restart on main thread with 2s delay for clean state
-                        QTimer.singleShot(2000, self.start_processing)
+                        from PySide6.QtCore import QTimer, QThread
+                        # ★ Thread-safe: _shutdown_engine_bg runs on daemon thread
+                        # QTimer.singleShot from non-Qt thread is unsafe.
+                        # Use a lambda that safely schedules on GUI thread.
+                        try:
+                            from PySide6.QtWidgets import QApplication
+                            app = QApplication.instance()
+                            if app and QThread.currentThread() != app.thread():
+                                # Marshal to GUI thread first, then schedule with delay
+                                QTimer.singleShot(0, lambda: QTimer.singleShot(2000, self.start_processing))
+                            else:
+                                QTimer.singleShot(2000, self.start_processing)
+                        except Exception:
+                            QTimer.singleShot(2000, self.start_processing)
                     else:
                         log.info(f"[AutoStop] {self._dispatcher.ready_count} new tasks found but auto_start_queue=False — skipping restart")
             except Exception as e:

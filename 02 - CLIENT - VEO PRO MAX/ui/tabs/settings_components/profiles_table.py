@@ -34,7 +34,7 @@ class SettingsProfilesMixin:
     def _create_profiles_section(self) -> QWidget:
         """Create Chrome Profiles section.
 
-        10 columns: ✓, #, Email, API Key, Plan, Credits, Status, Total Output, Ext, Actions
+        12 columns: ✓, #, Email, API Key, Plan, Credits, Status, Workers, LP, Ext, Actions
         """
         from ui.tabs.tab_settings import ToggleSwitch
 
@@ -44,15 +44,15 @@ class SettingsProfilesMixin:
         from config.settings import get_settings
         self._emails_hidden = get_settings().hide_emails
 
-        # Create QTableWidget with 10 columns (API Key added between Email and Plan)
+        # Create QTableWidget with 11 columns
         self.profiles_table = QTableWidget()
-        self.profiles_table.setColumnCount(10)
+        self.profiles_table.setColumnCount(11)
         self.profiles_table.setHorizontalHeaderLabels([
             t("profiles.columns.toggle"), t("profiles.columns.num"),
             t("profiles.columns.email"), t("profiles.columns.api_key"),
             t("profiles.columns.plan"),
             t("profiles.columns.credits"), t("profiles.columns.status"),
-            t("profiles.columns.output"), t("profiles.columns.ext"),
+            "Workers", "LP", t("profiles.columns.ext"),
             t("profiles.columns.actions")
         ])
 
@@ -65,19 +65,21 @@ class SettingsProfilesMixin:
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Plan
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Credits
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Status
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Total Output
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Ext
-        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Actions
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)    # Workers
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # LP
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)    # Ext
+        header.setSectionResizeMode(10, QHeaderView.ResizeMode.Fixed)   # Actions
 
         self.profiles_table.setColumnWidth(0, 80)   # ✓
         self.profiles_table.setColumnWidth(1, 40)   # #
-        self.profiles_table.setColumnWidth(3, 50)  # API Key
+        self.profiles_table.setColumnWidth(3, 50)   # API Key
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status
-        self.profiles_table.setColumnWidth(7, 95)   # Total Output - SpinBox 0-20
-        self.profiles_table.setColumnWidth(8, 50)   # Ext - emoji status
-        self.profiles_table.setColumnWidth(9, 290)  # Actions - 6 buttons
+        self.profiles_table.setColumnWidth(7, 80)   # Workers - SpinBox 0-20
+        self.profiles_table.setColumnWidth(8, 60)   # LP - SpinBox 0-8
+        self.profiles_table.setColumnWidth(9, 50)   # Ext - emoji status
+        self.profiles_table.setColumnWidth(10, 290) # Actions - 6 buttons
 
         self.profiles_table.setMinimumHeight(120)
         self.profiles_table.setStyleSheet(f"""
@@ -198,7 +200,7 @@ class SettingsProfilesMixin:
         if not accounts:
             placeholder = QTableWidgetItem(t("profiles.empty_state"))
             self.profiles_table.insertRow(0)
-            self.profiles_table.setSpan(0, 0, 1, 10)  # 10 columns (updated)
+            self.profiles_table.setSpan(0, 0, 1, 11)  # 11 columns
             self.profiles_table.setItem(0, 0, placeholder)
             self._adjust_table_height()
             return
@@ -340,7 +342,54 @@ class SettingsProfilesMixin:
             )
             self.profiles_table.setCellWidget(actual_row, 7, slots_spin)
 
-            # Extension status (col 8) — 3-state: 🟢 has headers, 🟡 connecting, 🔴 disconnected
+            # LP Workers SpinBox (col 8) — per-account LP concurrent worker limit
+            lp_spin = QSpinBox()
+            _max_lp = 8  # LP soft cap
+            lp_spin.setRange(0, _max_lp)
+            lp_spin.setValue(min(acc.get('max_workers_lp', 8), _max_lp))
+            lp_spin.setToolTip(
+                f"Số LP worker tối đa cho tài khoản này\n"
+                f"• LP = Low Priority (Fast Low Priority model)\n"
+                f"• 0 = TẮT LP\n"
+                f"• {_max_lp} = tối đa LP song song"
+            )
+            lp_spin.setFixedWidth(52)
+            lp_spin.setStyleSheet(f"""
+                QSpinBox {{
+                    background-color: {Theme.SURFACE1};
+                    color: {Theme.TEXT};
+                    border: none;
+                    border-radius: 4px;
+                    padding: 2px 4px;
+                    padding-right: 18px;
+                    font-size: 12px;
+                    font-weight: bold;
+                }}
+                QSpinBox:focus {{
+                    border: 1px solid {Theme.LAVENDER};
+                }}
+                QSpinBox::up-button {{
+                    width: 20px;
+                    border: none;
+                    background-color: {Theme.SURFACE2};
+                    border-top-right-radius: 3px;
+                }}
+                QSpinBox::down-button {{
+                    width: 20px;
+                    border: none;
+                    background-color: {Theme.SURFACE2};
+                    border-bottom-right-radius: 3px;
+                }}
+                QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+                    background-color: {Theme.LAVENDER};
+                }}
+            """)
+            lp_spin.valueChanged.connect(
+                lambda value, e=email: self._on_lp_slots_changed(e, value)
+            )
+            self.profiles_table.setCellWidget(actual_row, 8, lp_spin)
+
+            # Extension status (col 9) — 3-state: 🟢 has headers, 🟡 connecting, 🔴 disconnected
             ext_connected = False
             ext_has_headers = False
             try:
@@ -365,9 +414,9 @@ class SettingsProfilesMixin:
             ext_item.setFlags(ext_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             ext_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             ext_item.setToolTip(ext_tip)
-            self.profiles_table.setItem(actual_row, 8, ext_item)
+            self.profiles_table.setItem(actual_row, 9, ext_item)
 
-            # Actions buttons (col 9)
+            # Actions buttons (col 10)
             actions_widget = QWidget()
             actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
@@ -448,7 +497,7 @@ class SettingsProfilesMixin:
             delete_btn.clicked.connect(lambda checked, e=email: self._on_delete_profile(e))
             actions_layout.addWidget(delete_btn)
 
-            self.profiles_table.setCellWidget(actual_row, 9, actions_widget)
+            self.profiles_table.setCellWidget(actual_row, 10, actions_widget)
 
             actual_row += 1
 
@@ -587,7 +636,7 @@ class SettingsProfilesMixin:
             except Exception:
                 pass
 
-            ext_item = self.profiles_table.item(row, 8)
+            ext_item = self.profiles_table.item(row, 9)
             if ext_item:
                 if ext_has_headers:
                     new_icon = "🟢"

@@ -890,6 +890,25 @@ class SettingsBrowserControlsMixin:
 
         print(f"[Settings] Account {email} max_workers → {value}")
 
+    def _on_lp_slots_changed(self, email: str, value: int):
+        """Handle LP Workers SpinBox change — per-account LP concurrent worker limit.
+
+        Args:
+            email: Account email
+            value: New max_workers_lp value (0-8)
+        """
+        # Persist to ChromeProfile
+        if self.profiles_controller:
+            self.profiles_controller.update_profile(email, max_workers_lp=value)
+
+        # Propagate to runtime AccountManager._session.max_workers_lp
+        if self.controller:
+            setter = getattr(self.controller, 'set_account_max_workers_lp', None)
+            if setter:
+                setter(email, value)
+
+        print(f"[Settings] Account {email} max_workers_lp → {value}")
+
     def _on_delete_profile(self, email: str):
         """Delete the specified profile after confirmation.
 

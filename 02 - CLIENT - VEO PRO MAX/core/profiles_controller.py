@@ -169,6 +169,7 @@ class ChromeProfile:
     token_expires_at: Optional[str] = None  # ISO datetime when token expires (for status display)
     is_enabled: bool = True  # Account participates in rotation when generating
     max_workers: int = 20  # Per-account concurrent worker limit (0-20, 1 worker = 1 video)
+    max_workers_lp: int = 8  # Per-account LP worker soft cap (0-8)
     
     def __post_init__(self):
         if not self.created_at:
@@ -354,6 +355,7 @@ class ProfilesController:
                 "profile_path": p.profile_path,
                 "login_method": p.login_method,
                 "max_workers": p.max_workers,
+                "max_workers_lp": p.max_workers_lp,
                 "max_slots": p.max_workers,  # backward compat for old UI readers
             }
             results.append(d)
