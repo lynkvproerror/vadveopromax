@@ -589,14 +589,16 @@ class Engine:
         self._workers_available: Dict[str, asyncio.Event] = {}  # T2: wake foremen when workers released
         self._browser_recovery_locks: Dict[str, asyncio.Lock] = {}   # Per-account browser recovery dedup
         self._browser_recovery_epoch: Dict[str, int] = {}             # Tracks recovery generation
-        self._account_rate_locks: Dict[str, asyncio.Lock] = {}  # Bug 13: per-account rate limiter
+        self._account_rate_locks: Dict[str, asyncio.Semaphore] = {}  # RC4: Semaphore(1) — serialize submit pipeline per account
         # ── RC2 fix: Per-account submit throttle ──
         # Anti-detect: minimum gap between submits on the SAME account.
         # Different accounts submit independently (no cross-account gate).
         # Google's rate limiting is per-account/per-cookie, not per-IP.
         self._per_account_submit_locks: Dict[str, asyncio.Lock] = {}
-        self._per_account_last_submit_ts: Dict[str, float] = {}
-        self._GLOBAL_MIN_SUBMIT_GAP: float = 10.0  # seconds between submits (same account, video)
+        self._per_account_last_submit_ts: Dict[str, float] = {}      # Fast models: timestamp tracking
+        self._per_account_last_submit_ts_lp: Dict[str, float] = {}   # LP models: separate timestamp tracking
+        self._GLOBAL_MIN_SUBMIT_GAP: float = 45.0  # LP models: 45s between submits (prevents 429 storms)
+        self._GLOBAL_MIN_SUBMIT_GAP_FAST: float = 3.0  # Fast models: 3s gap (no 429 observed at high concurrency)
         self._GLOBAL_MIN_SUBMIT_GAP_T2I: float = 3.0  # T2I images are lighter — smaller gap OK
         # (Removed: _submitted_tasks queue — scheduler now owns full lifecycle directly)
         # Risk 7 fix: Max 2 concurrent API calls per account (any type: submit, poll, upload, upscale)
@@ -654,6 +656,7 @@ class Engine:
         self._on_task_failed: Optional[Callable] = None
         self._on_progress: Optional[Callable] = None
         self._on_connectivity_changed: Optional[Callable] = None  # (online: bool, latency_ms: int)
+        self._on_account_error: Optional[Callable] = None  # RC4: (email, message) for UI status
         
         # Bug 2 fix: Upload cache to prevent redundant image uploads
         # Key: (file_path, account_email) → mediaId
@@ -1093,6 +1096,10 @@ class Engine:
             f"[Cooldown] {email}: {reason} → cooldown {delay}s "
             f"(consecutive #{count})"
         )
+        # RC4: Notify UI status bar
+        if self._on_account_error:
+            icon = "⏳" if "429" in reason else "⛔"
+            self._on_account_error(email, f"{icon} {reason} ({delay}s)")
     
     def _auto_clear_cooldown(self, email: str):
         """Auto-clear cooldown and wake all waiters when timer expires."""
@@ -1173,6 +1180,20 @@ class Engine:
             
             # ★ Tab keepalive: prevent Chrome from freezing the VEO tab
             if self.is_account_on_cooldown(email) and not self._stop_event.is_set():
+                # RC4: Update Queue Status with countdown for PRE-SUBMIT tasks only.
+                # Tasks with operation_name are already submitted and polling/downloading
+                # — they aren't blocked by cooldown and shouldn't show "⏳ Wait".
+                cd_left = 0
+                u = self._account_cooldowns.get(email)
+                if u:
+                    cd_left = max(0, (u - datetime.now()).total_seconds())
+                if hasattr(self, '_dispatcher') and self._dispatcher:
+                    for t in self._dispatcher.get_running_tasks_for_account(email):
+                        if not t.operation_name and not t.operation_names:
+                            self._dispatcher.update_progress(
+                                t.id, t.progress,
+                                f"⏳ Wait {int(cd_left)}s"
+                            )
                 account = next(
                     (a for a in self._account_manager._accounts if a.email == email),
                     None
@@ -1199,9 +1220,16 @@ class Engine:
         """Clear cooldown on successful API call (reset backoff counter)."""
         self._account_cooldowns.pop(email, None)
         self._account_cooldown_backoff.pop(email, None)
-        # Also reset 429 counter on success
-        if hasattr(self, '_account_429_count'):
-            self._account_429_count.pop(email, None)
+        # ★ Slow reset: decay 1 oldest 429 entry per success (gradual recovery)
+        # Instead of clearing all 429 history on first success, we remove only
+        # the oldest entry. This means 3 recent 429s need 3 successes to clear,
+        # preventing the "success → reset → immediate 429" cycle.
+        if hasattr(self, '_account_429_window'):
+            window = self._account_429_window.get(email, [])
+            if window:
+                window.pop(0)  # Remove oldest entry
+                if not window:
+                    self._account_429_window.pop(email, None)
         # Cancel timer and wake waiters
         old_timer = self._cooldown_timers.pop(email, None)
         if old_timer:
@@ -1766,6 +1794,20 @@ class Engine:
         self._account_phase_403_count[email] = 0
         self._account_403_last_epoch[email] = -1
         
+        # ★ Bug #2 fix: Immediate CreditWindow reactivation after CB close
+        # Without this, CB closes → foremen resume → but can_accept_task()
+        # returns False (still suspended) → foremen idle-poll for ~10 min
+        # waiting for passive credit recovery. Since soft recovery already
+        # proved the account is healthy, reactivate immediately.
+        if self._credit_window and self._credit_window.is_suspended(email):
+            self._credit_window.reactivate(email)
+            cleared = self._dispatcher.clear_exclusion_for_account(email)
+            log.info(
+                f"✅ [CircuitBreaker] {email}: CreditWindow reactivated "
+                f"immediately (bypassed passive recovery)"
+                f"{f', un-excluded {cleared} task(s)' if cleared else ''}"
+            )
+        
         # DD4: Clear abort signal → foreman can resume
         supervisor = self._supervisors.get(email)
         if supervisor:
@@ -2149,6 +2191,8 @@ class Engine:
                     
                     if health.healthy:
                         self._credit_window.reactivate(email)
+                        # Clear task exclusions so foreman can pick them up again
+                        cleared = self._dispatcher.clear_exclusion_for_account(email)
                         # Reset circuit breaker state
                         self.record_circuit_success(email)
                         self.clear_account_cooldown(email)
@@ -2157,6 +2201,7 @@ class Engine:
                         log.info(
                             f"[CreditWindow] {email}: ✅ probe OK — "
                             f"reactivated with slow start"
+                            f"{f', un-excluded {cleared} task(s)' if cleared else ''}"
                         )
                         # Wake foremen so they can pick up tasks
                         self._task_available.set()
@@ -2693,6 +2738,16 @@ class Engine:
         # Pipelines (poll/download/upscale) may still be running.
         # start()'s finally block handles requeue + cleanup AFTER
         # the TaskGroup completes (all pipelines finished/cancelled).
+        
+        # RC4: Shutdown ProcessPoolExecutor — prevents SpawnProcess-1 hang
+        # on call_queue.get() that blocks clean exit
+        if hasattr(self, '_process_pool') and self._process_pool:
+            try:
+                self._process_pool.shutdown(wait=False, cancel_futures=True)
+                log.info("ProcessPoolExecutor shut down")
+            except Exception as e:
+                log.warning(f"ProcessPoolExecutor shutdown error: {e}")
+        
         log.info("Engine stop signal sent — waiting for pipelines to finish")
     
     def stop_account_workers(self, email: str):
@@ -2777,6 +2832,14 @@ class Engine:
         self._running = True
         self._stop_event.clear()
         self._task_available.clear()
+        
+        # RC4: Re-create ProcessPoolExecutor if it was shut down by stop()
+        try:
+            self._process_pool.submit(lambda: None)  # probe: is pool still alive?
+        except (RuntimeError, BrokenPipeError):
+            self._process_pool = ProcessPoolExecutor(
+                max_workers=os.cpu_count() or 4
+            )
         
         # Bug 14: Wire dispatcher's on_task_ready to wake up waiting workers
         # + Dynamic scaling: signal _scale_foremen_loop when new tasks arrive
@@ -3043,15 +3106,13 @@ class Engine:
         self._supervisors[account.email] = supervisor
         tg.create_task(supervisor.run())
         
-        # Foreman count: ceil(max_workers / output_count)
-        # Fix C: I2I/T2I capped at 12 (image gen limit), I2V/R2V/T2V uncapped
+        # RC4: Calculate foreman count from max_workers / typical_output.
+        # Multiple foremen allow parallel polling (20/20 workers active).
+        # 429 prevention relies on _GLOBAL_MIN_SUBMIT_GAP (45s) + SubmitGate,
+        # NOT on limiting foremen count.
         import math
         typical_output = self._get_typical_output_count()
-        foreman_cap = 12 if self._is_image_only_workload() else account.max_workers
-        raw_foreman_count = max(1, min(
-            math.ceil(account.max_workers / typical_output),
-            foreman_cap,
-        ))
+        raw_foreman_count = max(1, math.ceil(account.max_workers / typical_output))
         
         # G1: License gate — GLOBAL cap by permissions.limits.max_foremen
         # This caps total foremen across ALL accounts (not per-account)
@@ -3541,6 +3602,12 @@ class Engine:
                     account.release_workers(worker_count)
                     worker_count = 0
                     await self.wait_for_cooldown(account.email)
+                    # ★ Staggered resume: random jitter to avoid thundering herd
+                    # After cooldown, all foremen wake simultaneously → 429 again.
+                    # Adding 0.5-5s random delay spreads out resume.
+                    jitter = random.uniform(0.5, 5.0)
+                    log.debug(f"[{fid}] Post-cooldown jitter: {jitter:.1f}s")
+                    await asyncio.sleep(jitter)
                     continue
                 
                 # Bug 2 fix: Pause if profile reset in progress for this account
@@ -3559,6 +3626,18 @@ class Engine:
                     if not task:
                         account.release_workers(worker_count)
                         worker_count = 0
+                        
+                        # ★ Orphan rescue: if queue empty but READY tasks
+                        # exist in _all_tasks, re-enqueue them. Prevents
+                        # starvation after 429 requeue storms drain the
+                        # PriorityQueue with stale entries.
+                        if (self._dispatcher.ready_count == 0
+                                and self._dispatcher.running_count == 0):
+                            rescued = self._dispatcher.rescue_orphaned_tasks()
+                            if rescued > 0:
+                                self._task_available.set()
+                                continue  # Immediately retry
+                        
                         # Bug 14: Wait for task notification instead of busy-polling
                         self._task_available.clear()
                         try:
@@ -3767,10 +3846,10 @@ class Engine:
                         worker_count = 0
                         continue
                     
-                    # Bug 13: Per-account rate limiter — serialize requests per account
-                    # Ensures 4 workers on same account don't submit simultaneously
+                    # RC4: Per-account rate limiter — serialize submit pipeline
+                    # Semaphore(1): only 1 foreman in rate lock at a time (prevents 429 race)
                     if account.email not in self._account_rate_locks:
-                        self._account_rate_locks[account.email] = asyncio.Lock()
+                        self._account_rate_locks[account.email] = asyncio.Semaphore(1)
                     
                     # Step 7: Execute with RETRY + TIMEOUT
                     # Rate lock held ONLY during anti-detect delay + API call,
@@ -3808,11 +3887,22 @@ class Engine:
                                     f"{len(task.image_paths)} image(s) "
                                     f"[{task.stage.value}] progress={task.progress}%"
                                 )
-                            async with self._account_rate_locks[account.email]:
-                                # Fix G7: Anti-detect delay before image upload
-                                if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
-                                    await self._burst_controller.wait(account.email)
+                            # ★ Cache-hit bypass: skip rate lock if all images are
+                            # already cached (no API upload needed → no rate limiting)
+                            _all_cached = await self._check_all_images_cached(task, account)
+                            if _all_cached:
+                                log.info(
+                                    f"[Foreman:{account.email}] Task {task.id}: all "
+                                    f"{len(task.image_paths)} image(s) cached — "
+                                    f"resolving without rate lock"
+                                )
                                 await self._resolve_image_paths(task, account)
+                            else:
+                                async with self._account_rate_locks[account.email]:
+                                    # Fix G7: Anti-detect delay before image upload
+                                    if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else True:
+                                        await self._burst_controller.wait(account.email)
+                                    await self._resolve_image_paths(task, account)
                     
                     # Guard: I2V/R2V/F2V must have images after upload step
                     # If image_uris is still empty here, the task can never succeed.
@@ -3914,6 +4004,10 @@ class Engine:
                             # Layer 4: Cooldown — exponential backoff (30→180s)
                             # set_account_cooldown() was triggered by 403 handler below
                             await self.wait_for_cooldown(account.email)
+                            # ★ Staggered resume after cooldown
+                            jitter = random.uniform(0.5, 5.0)
+                            log.debug(f"[{fid}] Post-cooldown jitter: {jitter:.1f}s")
+                            await asyncio.sleep(jitter)
                             # Layer 5: Circuit Breaker — extension health
                             await self._wait_for_circuit(account.email)
                             # Re-check cooldown AFTER circuit wake — CircuitBreaker
@@ -3986,68 +4080,97 @@ class Engine:
                             result = None
                             break
                         
-                        # Lock: covers anti-detect delay + single API call only
+                        # ═══ PHASE 1: Gap reservation + sleep (OUTSIDE rate lock) ═══
+                        # Foremen sleep in PARALLEL — only timestamp reservation is serialized.
+                        # This allows N foremen to overlap their wait times instead of
+                        # serializing on Semaphore(1) for 45s each.
+                        _acct_lock = self._per_account_submit_locks.setdefault(
+                            account.email, asyncio.Lock()
+                        )
+                        _gap_wait_time = 0.0
+                        _gap_cooldown_break = False
+                        async with _acct_lock:
+                            # ── Model-tier-aware gap selection ──
+                            from config.constants import is_relaxed_model
+                            _task_model = getattr(task, 'model', '') or ''
+                            _is_lp = is_relaxed_model(_task_model)
+                            if _is_lp:
+                                gap = self._GLOBAL_MIN_SUBMIT_GAP        # 45s for LP
+                                _ts_dict = self._per_account_last_submit_ts_lp
+                            else:
+                                gap = self._GLOBAL_MIN_SUBMIT_GAP_FAST   # 3s for Fast
+                                _ts_dict = self._per_account_last_submit_ts
+                            
+                            now = time.time()
+                            elapsed = now - _ts_dict.get(account.email, 0)
+                            if elapsed < gap:
+                                _gap_wait_time = gap - elapsed
+                            
+                            # ── Reserve timestamp NOW (inside lock) ──
+                            # This "claims" the next slot so the NEXT foreman entering
+                            # this lock will see the correct future timestamp and calculate
+                            # its own gap relative to our reserved time.
+                            _ts_dict[account.email] = now + _gap_wait_time
+                        # Lock released — other foremen can now reserve their own slots
+                        
+                        # ── Sleep the gap OUTSIDE all locks (parallel) ──
+                        if _gap_wait_time > 0:
+                            _tier_label = "LP" if _is_lp else "Fast"
+                            log.info(
+                                f"[SubmitGate:{account.email}] Task {task.id}: "
+                                f"waiting {_gap_wait_time:.1f}s "
+                                f"(parallel gap sleep, model={_tier_label})"
+                            )
+                            for _w in range(int(_gap_wait_time), 0, -1):
+                                self._dispatcher.update_progress(
+                                    task.id, task.progress,
+                                    f"⏳ gate {_w}s"
+                                )
+                                if await self._interruptible_sleep(1):
+                                    break
+                            frac = _gap_wait_time - int(_gap_wait_time)
+                            if frac > 0:
+                                await asyncio.sleep(frac)
+                        
+                        # Re-check cooldown after gap sleep
+                        if self.is_account_on_cooldown(account.email):
+                            log.info(
+                                f"[Foreman:{account.email}] Task {task.id}: cooldown detected "
+                                f"after submit gate — requeueing"
+                            )
+                            self._dispatcher.requeue_task(task)
+                            account.release_workers(worker_count)
+                            worker_count = 0
+                            result = None
+                            break
+                        
+                        # ═══ PHASE 2: API call (INSIDE rate lock) ═══
+                        # Rate lock serializes ONLY the actual API call to prevent
+                        # burst-firing multiple requests in <100ms on same account.
                         async with self._account_rate_locks[account.email]:
                             # Fix F: Re-check cooldown INSIDE rate lock.
-                            # While this worker waited for the lock, another worker on
-                            # the same account may have hit 403 → set_cooldown().
-                            # Without this check, we'd waste a reCAPTCHA token + get 403.
                             if self.is_account_on_cooldown(account.email):
                                 log.info(
                                     f"[Foreman:{account.email}] Task {task.id}: cooldown detected INSIDE "
-                                    f"rate lock — requeueing task, will retry after cooldown"
+                                    f"rate lock — waiting for cooldown to expire"
                                 )
-                                # Fix F2: Requeue task instead of breaking out of retry loop.
-                                # Old code used `break` which exited the for-loop entirely,
-                                # causing the task to be PERMANENTLY FAILED even though it
-                                # never actually ran. Now we requeue and let another worker
-                                # pick it up after cooldown expires.
-                                self._dispatcher.requeue_task(task)
-                                account.release_workers(worker_count)
-                                worker_count = 0
-                                result = None  # No result — task was never attempted
-                                break  # Exit retry loop — task is safely back in queue
+                                _cd_until = self._account_cooldowns.get(account.email)
+                                if _cd_until:
+                                    _cd_secs = max(0, (_cd_until - datetime.now()).total_seconds())
+                                    for _w in range(int(_cd_secs), 0, -1):
+                                        self._dispatcher.update_progress(
+                                            task.id, task.progress,
+                                            f"⏳ cooldown {_w}s"
+                                        )
+                                        if await self._interruptible_sleep(1):
+                                            break
+                                continue  # Re-enter retry loop → re-acquire rate lock
                             
-                            # ── RC2: Per-account submit gate ──
-                            # Minimum gap between submits on SAME account (anti-detect).
-                            # Different accounts submit independently.
-                            _acct_lock = self._per_account_submit_locks.setdefault(
-                                account.email, asyncio.Lock()
-                            )
-                            async with _acct_lock:
-                                now = time.time()
-                                elapsed = now - self._per_account_last_submit_ts.get(account.email, 0)
-                                gap = self._GLOBAL_MIN_SUBMIT_GAP
-                                if elapsed < gap:
-                                    wait_time = gap - elapsed
-                                    log.info(
-                                        f"[SubmitGate:{account.email}] Waiting {wait_time:.1f}s "
-                                        f"(per-account inter-submit spacing)"
-                                    )
-                                    await asyncio.sleep(wait_time)
-                                # Re-check cooldown after wait
-                                if self.is_account_on_cooldown(account.email):
-                                    log.info(
-                                        f"[Foreman:{account.email}] Task {task.id}: cooldown detected "
-                                        f"after submit gate — requeueing"
-                                    )
-                                    self._dispatcher.requeue_task(task)
-                                    account.release_workers(worker_count)
-                                    worker_count = 0
-                                    result = None
-                                    break
-                                self._per_account_last_submit_ts[account.email] = time.time()
-                            
-                            # Step 6: Anti-Detect Spam — adaptive delay (SERIALIZED per account)
+                            # Anti-Detect burst delay (short, inside rate lock)
                             if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else getattr(self, '_anti_detect_enabled', True):
-                                # M1 fix: Use AdaptiveBurstController for intelligent pacing
-                                # Tightens delay after 10 successes, backs off on 403s
                                 _wt = (task.workflow_type or "").upper()
                                 _delay_s = self._burst_controller.get_delay(account.email)
                                 
-                                # Fix #3: Skip burst delay on first T2I/I2I submit (cold start)
-                                # Image generation is synchronous & lightweight — no need for
-                                # anti-detect delay on the very first submit per account.
                                 _t2i_first_done_key = f"_t2i_burst_done_{account.email}"
                                 _is_first_t2i = (
                                     _wt in ("T2I", "I2I")
@@ -4080,11 +4203,15 @@ class Engine:
                                         f"progress={task.progress}%"
                                     )
                                     await self._burst_controller.wait(account.email)
-                        
+                            
+                            # Update actual submit timestamp (inside rate lock)
+                            if _is_lp:
+                                self._per_account_last_submit_ts_lp[account.email] = time.time()
+                            else:
+                                self._per_account_last_submit_ts[account.email] = time.time()
+
                             try:
                                 # ★ PRIMARY PATH: Extension-based submission
-                                # Token generated + used atomically in page context (<100ms)
-                                # Eliminates reCAPTCHA token expiry + header mismatch issues
                                 ext_bridge = getattr(account, 'extension_bridge', None)
                                 use_extension = (
                                     ext_bridge is not None
@@ -4268,17 +4395,19 @@ class Engine:
                                     error=f"Request timed out after {timeout}s"
                                 )
                             
-                            # M2: Defense-in-depth — Worker.execute() handles primary
-                            # invalidation, but this covers TimeoutError (L833) where
-                            # Worker.execute may not have finished its cleanup.
-                            # invalidate_recaptcha() is idempotent — safe to double-call.
-                            # For Extension path: no-op (Extension manages its own reCAPTCHA).
+                            # M2: Defense-in-depth
                             account.invalidate_recaptcha()
                         # Rate lock released here — other workers can now submit
                         
                         if result.success:
                             # M1 fix: Record success for adaptive delay tightening
                             self._burst_controller.record_success(account.email)
+                            self._credit_window.record_success(account.email)
+                            # RC4: Adaptive gap decay — reduce gap on success (min 20s)
+                            if self._GLOBAL_MIN_SUBMIT_GAP > 45:
+                                self._GLOBAL_MIN_SUBMIT_GAP = max(
+                                    self._GLOBAL_MIN_SUBMIT_GAP - 1, 45
+                                )
                             break  # Success — exit retry loop
                         
                         # Layer 1: Network error → INSTANT pause, re-queue task
@@ -4360,45 +4489,58 @@ class Engine:
                             # Old: 2, 4, 8, 16, 30  →  New: 5, 10, 20, 40, 60
                             backoff = min(5 * (2 ** attempt), 60)
                             
-                            # ★ Fix 2B: Extended pause on persistent 429 (quota exhaustion)
+                            # ★ Fix 2B: Sliding window 429 tracking (quota exhaustion)
+                            # Tracks ALL 429 timestamps in a 60s window per account.
+                            # Unlike the old consecutive counter, this catches 429s from
+                            # different tasks and doesn't reset on a single success.
                             error_str = result.error or ""
                             if "429" in error_str or "exhausted" in error_str.lower():
-                                # ★ Per-ACCOUNT counter (not per-task) — ensures escalation
-                                # works even when different tasks each hit 429 independently.
-                                if not hasattr(self, '_account_429_count'):
-                                    self._account_429_count = {}
-                                consecutive_429 = self._account_429_count.get(account.email, 0) + 1
-                                self._account_429_count[account.email] = consecutive_429
+                                import time as _time
+                                if not hasattr(self, '_account_429_window'):
+                                    self._account_429_window = {}
+                                now = _time.monotonic()
+                                window = self._account_429_window.setdefault(account.email, [])
+                                window.append(now)
+                                # Prune entries older than 60s
+                                window[:] = [t for t in window if now - t < 60]
+                                recent_429_count = len(window)
                                 
-                                # ★ Soft 429: first hit = per-task backoff only, no account cooldown.
-                                # Other foremen can still try different prompts — sometimes
-                                # the API rejects one request but accepts the next.
-                                # Account cooldown only on consecutive≥2 (quota truly exhausted).
-                                if consecutive_429 >= 2:
-                                    # Quota confirmed exhausted — block all foremen
-                                    cooldown_secs = min(30 * consecutive_429, 120)  # 60s, 90s, 120s...
+                                # RC4: Credit-based 429 tracking
+                                low_health = self._credit_window.record_429(account.email)
+                                if low_health:
+                                    # Adaptive gap: increase submit spacing on low credits
+                                    old_gap = self._GLOBAL_MIN_SUBMIT_GAP
+                                    self._GLOBAL_MIN_SUBMIT_GAP = min(
+                                        self._GLOBAL_MIN_SUBMIT_GAP + 10, 90
+                                    )
+                                    log.info(
+                                        f"[AdaptiveGap] {account.email}: gap "
+                                        f"{old_gap:.0f}→{self._GLOBAL_MIN_SUBMIT_GAP:.0f}s "
+                                        f"(429 low credits)"
+                                    )
+                                
+                                # ★ Tiered response based on 429 density in 60s window:
+                                # 1 hit  → soft per-task backoff (10s), others can try
+                                # 2 hits → account cooldown (60s)
+                                # 3+ hits → hard cooldown + requeue + extended pause
+                                if recent_429_count >= 3:
+                                    # Quota severely exhausted — requeue + extended pause
+                                    cooldown_secs = min(30 * recent_429_count, 120)
                                     self.set_account_cooldown(
                                         account.email,
-                                        f"429/quota_exhausted (consecutive={consecutive_429})"
+                                        f"429/quota_exhausted (window={recent_429_count}/60s)"
                                     )
                                     log.warning(
                                         f"[Foreman:{account.email}] Task {task.id}: "
-                                        f"429 quota exhausted x{consecutive_429} → account cooldown {cooldown_secs}s"
+                                        f"429 x{recent_429_count} in 60s → account cooldown {cooldown_secs}s"
                                     )
-                                else:
-                                    # First 429 — just this task backs off, others can try
-                                    backoff = 10  # Short backoff for first 429
-                                    log.info(
-                                        f"[Foreman:{account.email}] Task {task.id}: "
-                                        f"429 (first hit) → per-task backoff {backoff}s, "
-                                        f"other prompts can still submit"
-                                    )
-                                
-                                if consecutive_429 >= 3:
                                     backoff = 120  # 2min for quota reset
+                                    # RC4: Queue Status — requeue notification
+                                    self._dispatcher.update_progress(
+                                        task.id, task.progress,
+                                        f"🔄 429 ×{recent_429_count} requeue"
+                                    )
                                     # ★ BUG-B19 fix: Release workers during extended 429 pause.
-                                    # Without this, 5+ foremen sleeping 120s each hold workers,
-                                    # starving new tasks of capacity → triggers thundering herd.
                                     if worker_count > 0:
                                         log.info(
                                             f"[Foreman:{account.email}] Task {task.id}: "
@@ -4410,16 +4552,43 @@ class Engine:
                                     self._dispatcher.requeue_task(task, notify=False)
                                     log.warning(
                                         f"[Foreman:{account.email}] Task {task.id}: "
-                                        f"{consecutive_429}x consecutive 429 → requeued + pause {backoff}s"
+                                        f"{recent_429_count}x 429 in window → requeued + pause {backoff}s"
                                     )
-                                    # Sleep for quota reset, then loop back (task already requeued)
                                     await self._interruptible_sleep(backoff)
                                     result = None  # Signal: task was requeued
                                     break  # Exit retry loop — task is back in queue
+                                elif recent_429_count >= 2:
+                                    # Quota likely exhausted — account cooldown
+                                    cooldown_secs = min(30 * recent_429_count, 120)
+                                    self.set_account_cooldown(
+                                        account.email,
+                                        f"429/quota_exhausted (window={recent_429_count}/60s)"
+                                    )
+                                    log.warning(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"429 x{recent_429_count} in 60s → account cooldown {cooldown_secs}s"
+                                    )
+                                    # RC4: Queue Status — cooldown notification
+                                    self._dispatcher.update_progress(
+                                        task.id, task.progress,
+                                        f"⛔ 429 ×{recent_429_count} wait {cooldown_secs}s"
+                                    )
+                                else:
+                                    # First 429 in window — soft per-task backoff only
+                                    backoff = 10
+                                    log.info(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"429 (first in 60s window) → per-task backoff {backoff}s, "
+                                        f"other prompts can still submit"
+                                    )
+                                    # RC4: Queue Status — retry notification
+                                    self._dispatcher.update_progress(
+                                        task.id, task.progress,
+                                        f"⏳ 429 retry {backoff}s"
+                                    )
                             else:
-                                # Non-429 error → reset account 429 counter
-                                if hasattr(self, '_account_429_count'):
-                                    self._account_429_count.pop(account.email, None)
+                                # Non-429 error → no window changes (timestamps auto-expire)
+                                pass
                             
                             # ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
                             # TIERED 403 RECOVERY STATE MACHINE
@@ -4453,6 +4622,11 @@ class Engine:
                                 
                                 # Layer 4: Cooldown — apply to ALL workers on this account
                                 self.set_account_cooldown(account.email, f"403/{result.error}")
+                                # RC4: Queue Status — 403 notification
+                                self._dispatcher.update_progress(
+                                    task.id, task.progress,
+                                    f"⛔ 403 recover"
+                                )
                                 
                                 # ═══ SMART RECOVERY — replaces Phase 0-3 state machine ═══
                                 # Diagnose error → try targeted remedies → verify health
@@ -4526,7 +4700,17 @@ class Engine:
                                 f"(attempt {attempt + 1}/{max_retries + 1}): {result.error}. "
                                 f"Retrying in {backoff}s..."
                             )
-                            if await self._interruptible_sleep(backoff): break
+                            # RC4: Countdown loop — update Queue Status every second
+                            _interrupted = False
+                            for _cd in range(int(backoff), 0, -1):
+                                self._dispatcher.update_progress(
+                                    task.id, task.progress,
+                                    f"⏳ retry {_cd}s"
+                                )
+                                if await self._interruptible_sleep(1):
+                                    _interrupted = True
+                                    break
+                            if _interrupted: break
                     
                     # Worker stays held until task fully completes (poll + download).
                     # This ensures max_workers limits actual concurrent tasks.
@@ -5405,7 +5589,8 @@ class Engine:
                 )
                 try:
                     fixed = await self._fix_policy_prompt(
-                        task, all_errors[0], account
+                        task, all_errors[0], account,
+                        attempt=_fix_attempts + 1
                     )
                     if fixed:
                         task.prompt = fixed
@@ -5744,16 +5929,19 @@ class Engine:
                         account.release_workers(worker_count)
                         worker_count = 0
                         return
+                    
+                    # Burst delay INSIDE lock (RC3: prevents Semaphore(3) race)
+                    _settings = self._settings
+                    _anti_detect = getattr(_settings, 'anti_detect_enabled', True) if _settings else True
+                    if _anti_detect:
+                        log.info(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"adaptive delay before batch submit ({_oc} images)"
+                        )
+                        await self._burst_controller_t2i.wait(account.email)
+                    
+                    # RC3: Timestamp INSIDE lock
                     self._per_account_last_submit_ts[account.email] = time.time()
-                
-                _settings = self._settings
-                _anti_detect = getattr(_settings, 'anti_detect_enabled', True) if _settings else True
-                if _anti_detect:
-                    log.info(
-                        f"[T2I-BG:{account.email}] Task {task.id}: "
-                        f"adaptive delay before batch submit ({_oc} images)"
-                    )
-                    await self._burst_controller_t2i.wait(account.email)
             
             # ── Phase 2: Build all request bodies upfront ──
             ext_bridge = getattr(account, 'extension_bridge', None)
@@ -5976,8 +6164,9 @@ class Engine:
                                 gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I
                                 if elapsed < gap:
                                     await asyncio.sleep(gap - elapsed)
+                                # RC3: Burst delay + timestamp INSIDE lock
+                                await self._burst_controller_t2i.wait(account.email)
                                 self._per_account_last_submit_ts[account.email] = time.time()
-                            await self._burst_controller_t2i.wait(account.email)
                         
                         try:
                             endpoint_key_r, body_r = self._api_client.build_request_body(
@@ -7898,6 +8087,14 @@ class Engine:
             )
             await asyncio.sleep(5.0)
             return False
+
+        # ★ Tab-dead bail-out: if tab was declared dead, don't even start recovery
+        if bridge.is_tab_dead(account.email):
+            log.warning(
+                f"[Foreman:{account.email}] 💀 Tab declared dead — skipping reCAPTCHA recovery "
+                f"(waiting for browser restart from AppController)"
+            )
+            return False
         
         start = asyncio.get_event_loop().time()
         interval = 2.0
@@ -7944,6 +8141,12 @@ class Engine:
                 self._account_phase_403_count[account.email] = 0
                 return True
             else:
+                # ★ Tab-dead check inside loop — bail immediately if declared dead mid-wait
+                if bridge.is_tab_dead(account.email):
+                    log.warning(
+                        f"[Foreman:{account.email}] 💀 Tab declared dead during reCAPTCHA wait — aborting recovery"
+                    )
+                    return False
                 log.info(
                     f"[Foreman:{account.email}] ⏳ reCAPTCHA not ready "
                     f"(attempt #{attempt}, {elapsed:.1f}/{max_wait:.0f}s) — "
@@ -8064,6 +8267,15 @@ class Engine:
                                 f"[Foreman:{account.email}] ⚠️ reCAPTCHA still dead "
                                 f"after hard navigation + {nav_wait:.0f}s + 3 verify attempts"
                             )
+                        
+                        # ★ Tab-dead bail-out after hard navigation fails
+                        # AppController._on_tab_dead handles browser restart.
+                        if bridge.is_tab_dead(account.email):
+                            log.error(
+                                f"[Foreman:{account.email}] 💀 Tab confirmed dead after hard nav failure — "
+                                f"aborting recovery (AppController will restart browser)"
+                            )
+                            return False
                     except Exception as e:
                         log.error(
                             f"[Foreman:{account.email}] Hard navigation error: {e}"
@@ -8255,6 +8467,65 @@ class Engine:
                 log.info(f"[PreUpload:{account.email}] ImageLibrary index saved ({uploaded} new mediaIds)")
             except Exception as _e:
                 log.warning(f"[PreUpload:{account.email}] ImageLibrary save failed: {_e}")
+    
+    async def _check_all_images_cached(self, task: 'Task', account: 'AccountManager') -> bool:
+        """Pre-check if ALL image paths for a task have cache hits.
+        
+        Checks 3 layers (same as _resolve_image_paths._upload_single):
+        1. In-memory path cache: {path}:{email}
+        2. In-memory hash cache: hash:{md5}:{email}  
+        3. ImageLibrary persistent cache
+        
+        Returns True if no API upload is needed → caller can skip rate lock.
+        This is a LIGHTWEIGHT check — no actual uploads happen.
+        """
+        import hashlib
+        
+        for path in (task.image_paths or []):
+            # Layer 1: path-based cache (instant)
+            path_key = f"{path}:{account.email}"
+            async with self._upload_cache_lock:
+                if self._upload_cache.get(path_key):
+                    continue
+            
+            # Layer 2: content-hash cache (needs file read)
+            try:
+                loop = asyncio.get_running_loop()
+                def _compute_md5(p):
+                    try:
+                        h = hashlib.md5()
+                        with open(p, 'rb') as f:
+                            for chunk in iter(lambda: f.read(8192), b''):
+                                h.update(chunk)
+                        return h.hexdigest()
+                    except Exception:
+                        return ""
+                content_hash = await loop.run_in_executor(None, _compute_md5, path)
+                if content_hash:
+                    cache_key = f"hash:{content_hash}:{account.email}"
+                    async with self._upload_cache_lock:
+                        if self._upload_cache.get(cache_key):
+                            continue
+            except Exception:
+                pass
+            
+            # Layer 3: ImageLibrary persistent cache
+            try:
+                from services.image_library import get_image_library
+                _lib = get_image_library()
+                lib_id = await asyncio.to_thread(_lib.get_media_id, path, account.email)
+                if lib_id:
+                    # Populate in-memory cache for faster subsequent lookups
+                    async with self._upload_cache_lock:
+                        self._upload_cache[path_key] = lib_id
+                    continue
+            except Exception:
+                pass
+            
+            # No cache hit found for this image → real upload needed
+            return False
+        
+        return True  # All images cached
     
     async def _resolve_image_paths(self, task: Task, account: AccountManager):
         """Upload local image files to get mediaGenerationIds.
@@ -8675,9 +8946,9 @@ class Engine:
                             f"for {account.email} — skipping retries"
                         )
                         break
-                    # Risk 5 fix: Serialize upscale submits per account (prevents burst)
+                    # Risk 5 fix: Rate-limit upscale submits per account (prevents burst)
                     if account.email not in self._account_rate_locks:
-                        self._account_rate_locks[account.email] = asyncio.Lock()
+                        self._account_rate_locks[account.email] = asyncio.Semaphore(3)
                     # ── Pre-Submit Gate: validate before standalone upscale ──
                     _gate_ok = await self._pre_submit_gate(account, task, attempt)
                     if not _gate_ok:
@@ -8905,9 +9176,9 @@ class Engine:
                 elif is_free_upscale:
                     # 1080p poll FAILED → re-submit once (free, no credit cost)
                     log.info(f"Upscale {video_label}: 1080p failed, re-submitting (free)")
-                    # Risk 5+6 fix: Rate lock + cooldown for re-submit
+                    # Risk 5+6 fix: Rate semaphore + cooldown for re-submit
                     if account.email not in self._account_rate_locks:
-                        self._account_rate_locks[account.email] = asyncio.Lock()
+                        self._account_rate_locks[account.email] = asyncio.Semaphore(3)
                     # ── Pre-Submit Gate: validate before standalone upscale re-submit ──
                     _gate_ok = await self._pre_submit_gate(account, task)
                     if not _gate_ok:
