@@ -76,8 +76,8 @@ class SettingsProfilesMixin:
         self.profiles_table.setColumnWidth(4, 80)   # Plan
         self.profiles_table.setColumnWidth(5, 80)   # Credits
         self.profiles_table.setColumnWidth(6, 110)  # Status
-        self.profiles_table.setColumnWidth(7, 80)   # Workers - SpinBox 0-20
-        self.profiles_table.setColumnWidth(8, 60)   # LP - SpinBox 0-8
+        self.profiles_table.setColumnWidth(7, 70)   # Workers - SpinBox 0-20
+        self.profiles_table.setColumnWidth(8, 70)   # LP - SpinBox 0-8
         self.profiles_table.setColumnWidth(9, 50)   # Ext - emoji status
         self.profiles_table.setColumnWidth(10, 290) # Actions - 6 buttons
 
