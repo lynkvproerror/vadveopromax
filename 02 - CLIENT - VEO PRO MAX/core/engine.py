@@ -4127,8 +4127,12 @@ class Engine:
                         from config.constants import is_relaxed_model
                         _task_model = getattr(task, 'model', '') or ''
                         _is_lp = is_relaxed_model(_task_model)
+                        
+                        # LP bypass: LP has its own isolated worker pool (max 8),
+                        # so no gate serialization needed — submit in parallel.
+                        # Only Fast tasks need the gap to avoid 429 errors.
                         if _is_lp:
-                            gap = self._GLOBAL_MIN_SUBMIT_GAP        # 45s for LP
+                            gap = 0  # No gap for LP — parallel submission
                             _ts_dict = self._per_account_last_submit_ts_lp
                         else:
                             gap = self._GLOBAL_MIN_SUBMIT_GAP_FAST   # 3s for Fast
