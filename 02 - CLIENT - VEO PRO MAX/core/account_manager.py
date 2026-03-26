@@ -229,9 +229,19 @@ class AccountManager:
             return self._session.acquire_workers(n)
     
     def release_workers(self, n: int = 1):
-        """Release n ops workers (thread-safe)."""
+        """Release n Fast ops workers (thread-safe)."""
         with self._lock:
             self._session.release_workers(n)
+    
+    def acquire_workers_lp(self, n: int = 1) -> bool:
+        """Acquire n LP workers (thread-safe). LP soft cap = 8 within shared pool."""
+        with self._lock:
+            return self._session.acquire_workers_lp(n)
+    
+    def release_workers_lp(self, n: int = 1):
+        """Release n LP workers (thread-safe)."""
+        with self._lock:
+            self._session.release_workers_lp(n)
     
     def acquire_upscale_worker(self) -> bool:
         """Acquire 1 upscale worker slot (thread-safe).

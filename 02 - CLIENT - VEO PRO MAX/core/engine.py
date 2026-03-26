@@ -3649,6 +3649,29 @@ class Engine:
                             pass
                         continue
                     
+                    # ── LP Worker Pool Swap ──
+                    # Initial acquire_workers(1) used the Fast pool (model unknown).
+                    # Now that we know the task, swap to LP pool if needed.
+                    from config.constants import is_relaxed_model
+                    _task_is_lp = is_relaxed_model(getattr(task, 'model', '') or '')
+                    task._is_lp_task = _task_is_lp  # Flag for release_workers throughout foreman
+                    
+                    if _task_is_lp:
+                        # Swap: release Fast worker → acquire LP worker
+                        account.release_workers(worker_count)
+                        if not account.acquire_workers_lp(1):
+                            # LP pool full — requeue task
+                            worker_count = 0
+                            log.debug(
+                                f"[{fid}] LP pool full "
+                                f"({account.session.active_workers_lp}/{account.session.max_workers_lp}) "
+                                f"— requeueing task {task.id}"
+                            )
+                            self._dispatcher.requeue_task(task, notify=False)
+                            await asyncio.sleep(2.0)
+                            continue
+                        worker_count = 1  # Now held from LP pool
+                    
                     # ═══ LICENSE GATES G2/G3/G4 ═══
                     _ctrl = getattr(self, '_app_controller', None)
                     _perm = getattr(_ctrl, '_permissions', None) if _ctrl else None
@@ -3669,7 +3692,7 @@ class Engine:
                                         task.id, 
                                         f"Daily limit reached ({today}/{daily_limit}). Upgrade license."
                                     )
-                                    account.release_workers(worker_count)
+                                    (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                     worker_count = 0
                                     if self._on_task_failed:
                                         self._on_task_failed(task, f"Daily limit ({today}/{daily_limit})")
@@ -3688,7 +3711,7 @@ class Engine:
                                 if not _perm.has_feature(Feature.CONTINUATION):
                                     log.warning(f"[G4:{fid}] Continuation blocked for TRIAL — task {task.id}")
                                     self._dispatcher.fail_task(task.id, "Continuation requires Premium license")
-                                    account.release_workers(worker_count)
+                                    (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                     worker_count = 0
                                     continue
                         except Exception:
@@ -3721,7 +3744,7 @@ class Engine:
                         output_count = account.max_workers
                     if output_count > 1:
                         extra = output_count - 1
-                        if account.acquire_workers(extra):
+                        if (account.acquire_workers_lp(extra) if getattr(task, "_is_lp_task", False) else account.acquire_workers(extra)):
                             worker_count += extra
                         else:
                             # Not enough capacity — requeue task, wait with backoff
@@ -3741,7 +3764,7 @@ class Engine:
                                     f"(need {output_count}, have {account.session.available_workers + 1})"
                                 )
                             self._dispatcher.requeue_task(task, notify=False)
-                            account.release_workers(worker_count)
+                            (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                             worker_count = 0
                             # 15s base + random jitter prevents all workers retrying simultaneously
                             if await self._interruptible_sleep(15.0 + random.uniform(0, 5.0)):
@@ -3766,7 +3789,7 @@ class Engine:
                         # instead of submit_task (which leaked +1)
                         task.state = TaskState.READY
                         self._dispatcher.requeue_task(task)
-                        account.release_workers(worker_count)
+                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                         worker_count = 0
                         await asyncio.sleep(0.1)
                         continue
@@ -3775,7 +3798,7 @@ class Engine:
                     # get_next_task and now (e.g., user deleted from queue)
                     if task.state == TaskState.CANCELLED:
                         log.info(f"[Foreman:{account.email}] Task {task.id} was cancelled, skipping")
-                        account.release_workers(worker_count)
+                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                         worker_count = 0
                         continue
                     
@@ -3833,7 +3856,7 @@ class Engine:
                         # max_workers=20 → max 20 concurrent pipelines (not 5).
                         _release = worker_count - 1
                         if _release > 0:
-                            account.release_workers(_release)
+                            (account.release_workers_lp(_release) if getattr(task, "_is_lp_task", False) else account.release_workers(_release))
                             _cap_evt = self._workers_available.get(account.email)
                             if _cap_evt:
                                 _cap_evt.set()  # Wake foremen waiting for capacity
@@ -4075,7 +4098,7 @@ class Engine:
                         gate_ok = await self._pre_submit_gate(account, task, attempt)
                         if not gate_ok:
                             self._dispatcher.requeue_task(task)
-                            account.release_workers(worker_count)
+                            (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                             worker_count = 0
                             result = None
                             break
@@ -4123,7 +4146,7 @@ class Engine:
                                 f"after submit gate — requeueing"
                             )
                             self._dispatcher.requeue_task(task)
-                            account.release_workers(worker_count)
+                            (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                             worker_count = 0
                             result = None
                             break
@@ -4475,7 +4498,7 @@ class Engine:
                                     f"extension disconnected — requeuing task"
                                 )
                                 self._dispatcher.requeue_task(task)
-                                account.release_workers(worker_count)
+                                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                 worker_count = 0
                                 result = None
                                 break
@@ -4541,7 +4564,7 @@ class Engine:
                                             f"[Foreman:{account.email}] Task {task.id}: "
                                             f"releasing {worker_count} worker(s) for 429 extended pause"
                                         )
-                                        account.release_workers(worker_count)
+                                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                         worker_count = 0
                                     # Requeue task so another foreman can try after quota resets
                                     self._dispatcher.requeue_task(task, notify=False)
@@ -4660,7 +4683,7 @@ class Engine:
                                     if not hasattr(task, 'excluded_accounts'):
                                         task.excluded_accounts = set()
                                     task.excluded_accounts.add(acct_email)
-                                    account.release_workers(worker_count)
+                                    (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                     worker_count = 0
                                     result = None
                                     break  # Exit retry loop
@@ -4796,7 +4819,7 @@ class Engine:
                             # max_workers=20 → max 20 concurrent pipelines (not 5).
                             _release = worker_count - 1
                             if _release > 0:
-                                account.release_workers(_release)
+                                (account.release_workers_lp(_release) if getattr(task, "_is_lp_task", False) else account.release_workers(_release))
                                 _cap_evt = self._workers_available.get(account.email)
                                 if _cap_evt:
                                     _cap_evt.set()  # Wake foremen waiting for capacity
@@ -4868,7 +4891,7 @@ class Engine:
                                     f"auto-retry #{task.chain_retry_count}/3 in {delay:.0f}s"
                                 )
                                 # Release workers before sleep
-                                account.release_workers(worker_count)
+                                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                 worker_count = 0
                                 # Set task to FAILED first — retry_chain() requires FAILED state
                                 task.state = TaskState.FAILED
@@ -4906,7 +4929,7 @@ class Engine:
                     # ★ Bug #4 fix: Centralized cleanup — guarantees workers released
                     # regardless of which code path was taken (success, error, exception)
                     if worker_count > 0:
-                        account.release_workers(worker_count)
+                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                         worker_count = 0
                         # T2: Wake foremen waiting for worker capacity
                         _cap_evt = self._workers_available.get(account.email)
@@ -4968,7 +4991,7 @@ class Engine:
                     self._on_task_failed(task, str(e))
         finally:
             if worker_count > 0:
-                account.release_workers(worker_count)
+                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
     
     # ═══════════════════════════════════════════════════════════════════════
     # Phase 1: Per-Video Worker Architecture (NEW)
@@ -5060,7 +5083,7 @@ class Engine:
                     self._on_task_failed(task, errors[0])
         finally:
             if worker_count > 0:
-                account.release_workers(worker_count)
+                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                 # T2: Wake foremen waiting for worker capacity
                 _cap_evt = self._workers_available.get(account.email)
                 if _cap_evt:
@@ -5896,7 +5919,7 @@ class Engine:
             gate_ok = await self._pre_submit_gate(account, task, 0)
             if not gate_ok:
                 self._dispatcher.requeue_task(task)
-                account.release_workers(worker_count)
+                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                 worker_count = 0
                 return
             
@@ -5907,7 +5930,7 @@ class Engine:
                         f"cooldown inside rate lock — requeuing"
                     )
                     self._dispatcher.requeue_task(task)
-                    account.release_workers(worker_count)
+                    (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                     worker_count = 0
                     return
                 _acct_lock = self._per_account_submit_locks.setdefault(
@@ -5921,7 +5944,7 @@ class Engine:
                         await asyncio.sleep(gap - elapsed)
                     if self.is_account_on_cooldown(account.email):
                         self._dispatcher.requeue_task(task)
-                        account.release_workers(worker_count)
+                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                         worker_count = 0
                         return
                     
@@ -5946,7 +5969,7 @@ class Engine:
                     f"extension not connected — requeuing"
                 )
                 self._dispatcher.requeue_task(task)
-                account.release_workers(worker_count)
+                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                 worker_count = 0
                 return
             
@@ -6140,14 +6163,14 @@ class Engine:
                         gate_ok = await self._pre_submit_gate(account, task, attempt)
                         if not gate_ok:
                             self._dispatcher.requeue_task(task)
-                            account.release_workers(worker_count)
+                            (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                             worker_count = 0
                             return
                         
                         async with self._account_rate_locks[account.email]:
                             if self.is_account_on_cooldown(account.email):
                                 self._dispatcher.requeue_task(task)
-                                account.release_workers(worker_count)
+                                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                 worker_count = 0
                                 return
                             _acct_lock = self._per_account_submit_locks.setdefault(
@@ -6251,7 +6274,7 @@ class Engine:
                                     )
                                     if recovery_result.failover:
                                         self._dispatcher.requeue_task(task)
-                                        account.release_workers(worker_count)
+                                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                                         worker_count = 0
                                         return
                                 if attempt < max_retries:
@@ -6311,7 +6334,7 @@ class Engine:
                 f"0/{_oc} images succeeded — requeuing task"
             )
             self._dispatcher.requeue_task(task)
-            account.release_workers(worker_count)
+            (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
             worker_count = 0
             return
         
@@ -6343,7 +6366,7 @@ class Engine:
             # ★ Release workers if still held (only if NOT transferred)
             if worker_count > 0:
                 try:
-                    account.release_workers(worker_count)
+                    (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                 except Exception:
                     pass
 
@@ -6580,7 +6603,7 @@ class Engine:
                     self._on_task_failed(task, str(e))
         finally:
             if worker_count > 0:
-                account.release_workers(worker_count)
+                (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
             # ★ Release T2I output semaphore slots (transferred from submit pipeline)
             if t2i_slots_held > 0:
                 sem = self._t2i_output_semaphores.get(account.email)

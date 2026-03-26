@@ -82,9 +82,13 @@ class AccountSession:
     
     # === Internal State ===
     state: AccountState = AccountState.DISCONNECTED
-    active_workers: int = 0     # Number of ops THỢ currently processing
-    max_workers: int = 20       # Total worker pool (ops + upscale)
+    active_workers: int = 0     # Number of Fast ops THỢ currently processing
+    max_workers: int = 20       # Total worker pool (Fast + LP + upscale)
     last_activity: Optional[datetime] = None
+    
+    # === LP Worker Pool (soft cap within shared pool) ===
+    active_workers_lp: int = 0    # Number of LP ops workers currently processing
+    max_workers_lp: int = 8       # LP soft cap (LP can use max 8 of the 20 total)
     
     # === Upscale Worker Pool ===
     active_upscale_workers: int = 0   # Number of inline upscale slots in use (affects ops capacity)
@@ -134,17 +138,33 @@ class AccountSession:
     
     @property
     def effective_ops_capacity(self) -> int:
-        """Max ops workers available, considering upscale pool.
+        """Max Fast ops workers available, considering upscale pool + LP.
         
-        When no upscale is running → all max_workers available for ops.
-        When upscale slots in use → ops capped at (max_workers - active_upscale).
+        Total pool = max_workers (20).
+        Fast capacity = max_workers - active_upscale - active_workers_lp.
         """
-        return self.max_workers - self.active_upscale_workers
+        return self.max_workers - self.active_upscale_workers - self.active_workers_lp
     
     @property
     def available_workers(self) -> int:
-        """Get number of available ops workers (dynamic pool)."""
+        """Get number of available Fast ops workers."""
         return max(0, self.effective_ops_capacity - self.active_workers)
+    
+    @property
+    def effective_lp_capacity(self) -> int:
+        """Max LP workers available.
+        
+        LP soft cap: min(max_workers_lp, total_remaining).
+        Total remaining = max_workers - active_upscale - active_workers (Fast).
+        This ensures LP + Fast + upscale never exceeds max_workers.
+        """
+        total_remaining = self.max_workers - self.active_upscale_workers - self.active_workers
+        return min(self.max_workers_lp, total_remaining)
+    
+    @property
+    def available_workers_lp(self) -> int:
+        """Get number of available LP ops workers."""
+        return max(0, self.effective_lp_capacity - self.active_workers_lp)
     
     @property
     def available_upscale_workers(self) -> int:
@@ -153,8 +173,8 @@ class AccountSession:
     
     @property
     def total_active(self) -> int:
-        """Total active workers (ops + upscale) for UI display."""
-        return self.active_workers + self.active_upscale_workers
+        """Total active workers (Fast + LP + upscale) for UI display."""
+        return self.active_workers + self.active_workers_lp + self.active_upscale_workers
     
     # --- Deprecated slot properties (backward compat) ---
     @property
@@ -215,8 +235,24 @@ class AccountSession:
         return True
     
     def release_workers(self, n: int = 1):
-        """Release n ops workers."""
+        """Release n Fast ops workers."""
         self.active_workers = max(0, self.active_workers - n)
+    
+    def acquire_workers_lp(self, n: int = 1) -> bool:
+        """Acquire n LP workers. Checks both LP cap and total pool.
+        
+        LP soft cap: active_workers_lp + n ≤ max_workers_lp (8)
+        Total cap:   Fast + LP + upscale ≤ max_workers (20)
+        """
+        if self.active_workers_lp + n > self.effective_lp_capacity:
+            return False
+        self.active_workers_lp += n
+        self.last_activity = datetime.now()
+        return True
+    
+    def release_workers_lp(self, n: int = 1):
+        """Release n LP workers."""
+        self.active_workers_lp = max(0, self.active_workers_lp - n)
     
     def acquire_upscale_worker(self) -> bool:
         """Acquire 1 upscale worker slot. Returns False if pool full.
@@ -348,6 +384,7 @@ class AccountSession:
             "state": self.state.value,
             # Per-account worker settings
             "max_workers": self.max_workers,
+            "max_workers_lp": self.max_workers_lp,
             "retry_count": self.retry_count,
             "request_timeout": self.request_timeout,
             # Browser profile
@@ -390,8 +427,10 @@ class AccountSession:
             session.max_workers = data["max_slots"] * 4
         else:
             session.max_workers = 20
+        session.max_workers_lp = data.get("max_workers_lp", 8)
         # Bug #10 fix: Always reset active_workers on load (crash recovery)
         session.active_workers = 0
+        session.active_workers_lp = 0
         session.active_upscale_workers = 0  # Fix: prevent persistent upscale counter leak
         session.active_bg_upscale = 0        # Fix: reset background upscale counter
         session.retry_count = data.get("retry_count", 3)
