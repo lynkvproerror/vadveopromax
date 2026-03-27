@@ -1,14 +1,14 @@
 {
     "version": "2.3.10",
     "ext_version": "2.3.10",
-    "release_date": "2026-03-26",
+    "release_date": "2026-03-27",
     "changelog": "v2.3.10 — Nâng cấp Cảnh báo Chi phí, Tối ưu Giao diện & Pipeline\n\n💳 Quản lý Chi phí\n• Thêm cảnh báo chi phí Credit chi tiết (hỗ trợ tính toán cho model Fast và Upscale 4K).\n• Tự động hạ cấp model/chất lượng video xuống LP/1080p khi hủy chạy Fast/4K để tiết kiệm credit.\n\n🎨 Giao diện (UI/UX)\n• Nâng cấp toàn bộ hệ thống Popup: viền bo góc mượt mà, nền tối hiện đại, dễ nhận biết.\n• Bổ sung tiện ích \"Image Library\" vào sidebar của tab Project Builder giúp chọn ảnh trực tiếp.\n• Cài đặt Worker và LP riêng biệt cho từng tài khoản trong Chrome Profile.\n• Status bar hiển thị chi tiết: ⚡ Fast | 🐢 LP | ⬆️ Upscale.\n\n🚀 Hiệu năng & Ổn định\n• Cải thiện luồng xử lý riêng biệt cho model Fast, tăng tốc độ gửi yêu cầu tạo video.\n• LP Worker Pool độc lập: mỗi tài khoản có pool LP riêng, không ảnh hưởng Fast workers.\n• Tối ưu ưu tiên CPU: Chrome & Extension được ưu tiên CPU cao, FFmpeg chạy ở mức thấp hơn.\n• Ứng dụng ổn định hơn khi CPU tải cao (100%).",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.10/VEO_Pro_Max_v2.3.10.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.10/VEO_Extension_v2.3.10.zip",
-    "sha256": "82f44c5de59032e6c2b1ed0259b5e3129ade4b56bfb9919b35ceb6bab2e1bab6",
-    "ext_sha256": "65d8603b150f9178b14f88a14fe0469fd551f82fe134c4073cba4b66ad3e04c8",
+    "sha256": "c333f0f245c898367f83a5cafa252e903ada0d8225540eaf400b4afe21616506",
+    "ext_sha256": "d1dd1cdfb55ea840b9e64400c1ba68d2c747839f0316dab05e4e7fee37e242d1",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1774517428,
-    "build_time": "2026-03-26T16:30:28.414066"
+    "build_number": 1774586770,
+    "build_time": "2026-03-27T11:46:10.692699"
 }
