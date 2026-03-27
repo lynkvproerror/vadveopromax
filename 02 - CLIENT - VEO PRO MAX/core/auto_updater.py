@@ -3,6 +3,7 @@ VEO Pro Max - Auto Updater v2
 
 Supports granular updates:
 - Full ZIP: when app version changes (~67MB, requires restart)
+- Installer EXE: for minimum-version jumps or fragile legacy updates
 - Extension-only: when only extension version changes (~50KB, no restart)
 - Pending update: deferred full updates apply on next app startup
 
@@ -121,6 +122,10 @@ class UpdateInfo:
         self.ext_version: str = data.get("ext_version", "0.0.0")
         self.ext_download_url: str = data.get("ext_download_url", "")
         self.ext_sha256: str = data.get("ext_sha256", "")
+        # Installer
+        self.installer_url: str = data.get("installer_url", "")
+        self.installer_sha256: str = data.get("installer_sha256", "")
+        self.installer_filename: str = data.get("installer_filename", "")
         # Metadata
         self.release_date: str = data.get("release_date", "")
         self.changelog: str = data.get("changelog", "")
@@ -240,7 +245,7 @@ class UpdateCheckWorker(QThread):
 
 
 class UpdateDownloadWorker(QThread):
-    """Background thread to download update ZIP (full or extension-only)."""
+    """Background thread to download an update payload (ZIP or installer)."""
     
     progress = Signal(int)      # 0-100 percentage
     finished = Signal(str)      # Path to downloaded file
@@ -355,7 +360,7 @@ class AutoUpdater(QObject):
     update_available = Signal(object)   # UpdateInfo (with update_type set)
     up_to_date = Signal()               # Already on latest version
     download_progress = Signal(int)     # 0-100
-    download_complete = Signal(str)     # Path to ZIP
+    download_complete = Signal(str)     # Path to downloaded payload
     download_error = Signal(str)
     update_applied = Signal()           # Ready to restart (full update)
     ext_update_applied = Signal()       # Extension hot-replaced (no restart)
@@ -434,6 +439,10 @@ class AutoUpdater(QObject):
             url = info.download_url
             sha = info.sha256
             filename = f"VEO_Pro_Max_v{info.version}.zip"
+        elif info.update_type == "installer":
+            url = info.installer_url
+            sha = info.installer_sha256
+            filename = info.installer_filename or f"VEO_Pro_Max_Setup_v{info.version}.exe"
         elif info.update_type == "ext_only":
             url = info.ext_download_url
             sha = info.ext_sha256
@@ -465,6 +474,41 @@ class AutoUpdater(QObject):
         self._download_worker.finished.connect(self._on_download_complete)
         self._download_worker.error.connect(self.download_error.emit)
         self._download_worker.start()
+
+    @staticmethod
+    def _launch_detached_powershell(script_path: str):
+        """Launch a PowerShell helper that must survive parent exit."""
+        DETACHED_PROCESS = 0x00000008
+        subprocess.Popen(
+            [
+                "powershell", "-ExecutionPolicy", "Bypass",
+                "-WindowStyle", "Hidden",
+                "-File", script_path,
+            ],
+            creationflags=DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+            close_fds=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def _pre_shutdown_cleanup(self):
+        """Kill managed browser/process trees before a destructive update."""
+        try:
+            from core.chrome_manager import kill_all_managed_chromes
+            killed_any = False
+            for bp_dir in [
+                os.path.join(str(Path.home()), ".veoauto", "browser_profiles"),
+                os.path.join(self._get_app_dir(), "config", "browser_profiles"),
+            ]:
+                if os.path.isdir(bp_dir):
+                    kill_all_managed_chromes(bp_dir)
+                    log.info(f"Pre-update: killed Chrome in {bp_dir}")
+                    killed_any = True
+            if not killed_any:
+                log.debug("Pre-update: no browser_profiles dirs found")
+        except Exception as e:
+            log.warning(f"Pre-update Chrome kill failed: {e}")
     
     def apply_update(self, zip_path: str):
         """Apply FULL update: extract ZIP, create updater script, restart.
@@ -938,48 +982,18 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             
             # Launch updater PowerShell script and exit
             log.info(f"Launching updater: {ps1_path}")
-            # ★ FIX: Use DETACHED_PROCESS so PowerShell survives parent exit
-            # close_fds=True was killing the child process on os._exit(0)
-            DETACHED_PROCESS = 0x00000008
-            subprocess.Popen(
-                [
-                    "powershell", "-ExecutionPolicy", "Bypass",
-                    "-WindowStyle", "Hidden",
-                    "-File", ps1_path,
-                ],
-                creationflags=DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
-                close_fds=False,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            self._launch_detached_powershell(ps1_path)
             
-            # ★ R8-P0: Clear pending AFTER Popen succeeds
-            # If Popen throws, pending marker stays → retry on next startup
-            self.clear_pending_update()
+            # ★ R8-P0: Clear pending marker AFTER Popen succeeds
+            # Keep payload until helper script consumes it.
+            self.clear_pending_update(keep_payload=True)
             
             self.update_applied.emit()
             
             # ★ FIX R3: Kill all Chrome processes BEFORE exit
             # os._exit() bypasses closeEvent() → Chrome kill in app.py never runs
             # Chrome holds locks on DLLs, .pyd, extension/ files → PS1 Remove-Item fails
-            try:
-                from core.chrome_manager import kill_all_managed_chromes
-                # browser_profiles is at ~/.veoauto/browser_profiles (primary)
-                # and possibly config/browser_profiles (legacy) inside app dir
-                killed_any = False
-                for bp_dir in [
-                    os.path.join(str(Path.home()), ".veoauto", "browser_profiles"),
-                    os.path.join(self._get_app_dir(), "config", "browser_profiles"),
-                ]:
-                    if os.path.isdir(bp_dir):
-                        kill_all_managed_chromes(bp_dir)
-                        log.info(f"Pre-update: killed Chrome in {bp_dir}")
-                        killed_any = True
-                if not killed_any:
-                    log.debug("Pre-update: no browser_profiles dirs found")
-            except Exception as e:
-                log.warning(f"Pre-update Chrome kill failed: {e}")
+            self._pre_shutdown_cleanup()
             
             # Exit the app (3s delay for Chrome kill + file handle release)
             QTimer.singleShot(3000, lambda: os._exit(0))
@@ -990,6 +1004,111 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             if 'extract_dir' in locals():
                 shutil.rmtree(extract_dir, ignore_errors=True)
             self.download_error.emit(f"Apply failed: {e}")
+
+    def apply_installer_update(self, installer_path: str):
+        """Apply a downloaded installer silently into the current app directory."""
+        if getattr(self, '_applying_update', False):
+            log.warning("apply_installer_update already in progress — ignoring duplicate call")
+            return
+        self._applying_update = True
+        try:
+            installer_file = Path(installer_path)
+            if not installer_file.exists():
+                self.download_error.emit(f"Installer not found: {installer_path}")
+                self._applying_update = False
+                return
+
+            app_dir = self._get_app_dir()
+            exe_path = os.path.join(app_dir, os.path.basename(sys.executable))
+            ps1_path = os.path.join(tempfile.gettempdir(), "veo_installer_updater.ps1")
+            json_path = os.path.join(tempfile.gettempdir(), "veo_installer_paths.json")
+            log_path = os.path.join(tempfile.gettempdir(), "veo_installer_update.log")
+            paths_data = {
+                "appDir": app_dir,
+                "exePath": exe_path,
+                "installerPath": str(installer_file),
+                "logFile": log_path,
+                "pid": os.getpid(),
+            }
+            with open(json_path, "w", encoding="utf-8") as jf:
+                json.dump(paths_data, jf, ensure_ascii=False)
+
+            ps1_content = f"""
+$ErrorActionPreference = 'Stop'
+$jsonPath = @'
+{json_path}
+'@
+$cfg = Get-Content -Path $jsonPath -Raw -Encoding utf8 | ConvertFrom-Json
+$logFile = $cfg.logFile
+
+function Log($msg) {{
+    $ts = Get-Date -Format 'HH:mm:ss'
+    "$ts $msg" | Out-File -Append -FilePath $logFile -Encoding utf8
+}}
+
+Log '=== VEO Pro Max Installer Updater ==='
+
+try {{
+    $proc = Get-Process -Id $cfg.pid -ErrorAction SilentlyContinue
+    if ($proc) {{
+        $null = $proc.WaitForExit(60000)
+    }}
+}} catch {{
+    Log "WaitForExit warning: $_"
+}}
+
+$exeName = Split-Path $cfg.exePath -Leaf
+try {{
+    & taskkill /F /IM $exeName /T 2>&1 | Out-Null
+}} catch {{}}
+Start-Sleep -Seconds 2
+
+$setupLog = Join-Path $env:TEMP 'veo_setup_silent.log'
+$args = @(
+    '/SP-',
+    '/VERYSILENT',
+    '/SUPPRESSMSGBOXES',
+    '/NORESTART',
+    "/DIR=$($cfg.appDir)",
+    "/LOG=$setupLog"
+)
+
+Log "Launching installer: $($cfg.installerPath)"
+$setup = Start-Process -FilePath $cfg.installerPath -ArgumentList $args -PassThru -Wait
+Log "Installer exit code: $($setup.ExitCode)"
+if ($setup.ExitCode -ne 0) {{
+    exit $setup.ExitCode
+}}
+
+if (Test-Path $cfg.installerPath) {{
+    Remove-Item -Path $cfg.installerPath -Force -ErrorAction SilentlyContinue
+}}
+Remove-Item -Path $jsonPath -Force -ErrorAction SilentlyContinue
+
+if (-not (Test-Path $cfg.exePath)) {{
+    Log "ERROR: Installed exe not found at $($cfg.exePath)"
+    exit 1
+}}
+
+Log "Restarting app: $($cfg.exePath)"
+Start-Process -FilePath $cfg.exePath -WorkingDirectory $cfg.appDir
+Start-Sleep -Seconds 2
+Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+"""
+            with open(ps1_path, "w", encoding="utf-8") as f:
+                f.write(ps1_content)
+
+            log.info(f"Launching installer updater: {ps1_path}")
+            self._launch_detached_powershell(ps1_path)
+            self.clear_pending_update(keep_payload=True)
+            self.update_applied.emit()
+            self._pre_shutdown_cleanup()
+            QTimer.singleShot(1500, lambda: os._exit(0))
+
+        except Exception as e:
+            log.error(f"Failed to apply installer update: {e}")
+            self._applying_update = False
+            self.download_error.emit(f"Installer apply failed: {e}")
     
     def apply_extension_update(self, zip_path: str):
         """Hot-replace extension/ folder only. NO restart needed.
@@ -1025,27 +1144,33 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
     
     # ── Pending Update (defer full update to next startup) ──
     
-    def save_pending_update(self, zip_path: str, version: str, sha256: str = ""):
-        """Save pending update marker for deferred full update.
+    def save_pending_update(
+        self,
+        zip_path: str,
+        version: str,
+        sha256: str = "",
+        update_type: str = "full",
+    ):
+        """Save a pending update payload for deferred install on next startup.
         
-        Copies ZIP to ~/.veoauto/updates/ (persistent across reboots).
+        Copies the payload to ~/.veoauto/updates/ (persistent across reboots).
         Cleans up any existing pending update before saving new one.
         """
         try:
-            # Copy ZIP to persistent location (temp may be cleaned)
+            # Copy payload to persistent location (temp may be cleaned)
             updates_dir = PENDING_UPDATE_FILE.parent / "updates"
             updates_dir.mkdir(parents=True, exist_ok=True)
             
             persistent_zip = updates_dir / Path(zip_path).name
             shutil.copy2(zip_path, str(persistent_zip))
-            log.info(f"Copied update ZIP to persistent location: {persistent_zip}")
+            log.info(f"Copied update payload to persistent location: {persistent_zip}")
             
             # ★ R17-4+R12-1: Clear old pending AFTER copy succeeds, but skip
             # deleting old ZIP if it's the same path (same-version re-defer)
             try:
                 if PENDING_UPDATE_FILE.exists():
                     old_data = json.loads(PENDING_UPDATE_FILE.read_text(encoding='utf-8'))
-                    old_zip = old_data.get("zip_path", "")
+                    old_zip = old_data.get("package_path") or old_data.get("zip_path", "")
                     # Only delete old ZIP if path differs from new (avoids deleting our fresh copy)
                     if old_zip and old_zip != str(persistent_zip) and Path(old_zip).exists():
                         Path(old_zip).unlink(missing_ok=True)
@@ -1068,8 +1193,9 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             # ★ R18-4: Use standard import instead of __import__ anti-pattern
             from datetime import datetime as _dt
             data = {
+                "package_path": str(persistent_zip),
                 "zip_path": str(persistent_zip),
-                "update_type": "full",
+                "update_type": update_type,
                 "version": version,
                 "sha256": expected_sha,
                 "saved_at": _dt.now().isoformat(),
@@ -1085,18 +1211,19 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             self.download_error.emit(f"Failed to save pending update: {e}")
     
     @staticmethod
-    def clear_pending_update():
-        """Remove pending update marker AND persistent ZIP."""
+    def clear_pending_update(keep_payload: bool = False):
+        """Remove pending update marker and optionally its stored payload."""
         try:
             if PENDING_UPDATE_FILE.exists():
-                # Also delete the stored ZIP file
-                try:
-                    data = json.loads(PENDING_UPDATE_FILE.read_text(encoding='utf-8'))
-                    zip_path = data.get("zip_path", "")
-                    if zip_path and Path(zip_path).exists():
-                        Path(zip_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
+                if not keep_payload:
+                    # Also delete the stored payload file
+                    try:
+                        data = json.loads(PENDING_UPDATE_FILE.read_text(encoding='utf-8'))
+                        zip_path = data.get("package_path") or data.get("zip_path", "")
+                        if zip_path and Path(zip_path).exists():
+                            Path(zip_path).unlink(missing_ok=True)
+                    except Exception:
+                        pass
                 PENDING_UPDATE_FILE.unlink()
         except Exception:
             pass
@@ -1113,7 +1240,7 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
                 return None
             
             data = json.loads(PENDING_UPDATE_FILE.read_text(encoding='utf-8'))
-            zip_path = data.get("zip_path", "")
+            zip_path = data.get("package_path") or data.get("zip_path", "")
             
             if zip_path and Path(zip_path).exists():
                 log.info(f"Pending update found: v{data.get('version')} at {zip_path}")
@@ -1148,11 +1275,14 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
         below_min = compare_versions(current_app, info.min_version) < 0
         
         if below_min or app_cmp < 0:
-            # ★ R10-1: App version changed (or below minimum) → must do full update
-            info.update_type = "full"
+            # ★ R10-1: App version changed (or below minimum) → full ZIP or installer
+            if below_min and info.installer_url:
+                info.update_type = "installer"
+            else:
+                info.update_type = "full"
             reason = f" [BELOW MIN v{info.min_version}]" if below_min else ""
             log.info(
-                f"Full update available: app v{current_app}→v{info.version}, "
+                f"{info.update_type.title()} update available: app v{current_app}→v{info.version}, "
                 f"ext v{current_ext}→v{info.ext_version}{reason}"
             )
             self._latest_info = info

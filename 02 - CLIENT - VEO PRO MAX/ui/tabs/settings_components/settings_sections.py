@@ -1265,6 +1265,13 @@ class SettingsSectionsMixin:
             self._update_now_btn.setText(
                 f"⬇️ Full Update (v{info.version} — ~67MB)"
             )
+        elif info.update_type == "installer":
+            self._update_status_label.setText(
+                f"🆕 Installer Update v{info.version} {t('settings.update_sub.available')}"
+            )
+            self._update_now_btn.setText(
+                f"⬇️ Download Installer (v{info.version})"
+            )
         elif info.update_type == "ext_only":
             self._update_status_label.setText(
                 f"🆕 Extension v{info.ext_version} {t('settings.update_sub.available')}"
@@ -1289,6 +1296,8 @@ class SettingsSectionsMixin:
             if main_win and hasattr(main_win, 'show_toast'):
                 if info.update_type == "full":
                     msg = f"🆕 Full Update: v{info.version}"
+                elif info.update_type == "installer":
+                    msg = f"🆕 Installer Update: v{info.version}"
                 else:
                     msg = f"🆕 Extension Update: v{info.ext_version}"
                 main_win.show_toast(msg, "info", duration=8000)
@@ -1309,7 +1318,12 @@ class SettingsSectionsMixin:
             )
             return
         # ★ E5: Pre-validate URL before disabling button
-        url = info.download_url if info.update_type == "full" else info.ext_download_url
+        if info.update_type == "full":
+            url = info.download_url
+        elif info.update_type == "installer":
+            url = info.installer_url
+        else:
+            url = info.ext_download_url
         if not url:
             self._update_status_label.setText(
                 f"❌ No download URL available for {info.update_type} update"
@@ -1353,53 +1367,81 @@ class SettingsSectionsMixin:
             updater.apply_extension_update(zip_path)
             return
         
-        # Full update: ask user to restart now or later
+        # Full update / installer: ask user to install now or later
         # ★ R18-1: Capture metadata BEFORE blocking dialog (periodic check can update
         #   _latest_info during Qt's modal event loop, causing version/SHA mismatch)
         captured_version = info.version
-        captured_sha256 = info.sha256
+        if info.update_type == "installer":
+            captured_sha256 = info.installer_sha256
+            ready_title = "🔄 Installer Ready"
+            ready_text = (
+                f"Installer v{captured_version} đã tải xong.\n\n"
+                f"• Yes — Tắt app và chạy installer tự động ngay\n"
+                f"• No — Lưu installer, chạy khi mở app lần sau"
+            )
+        else:
+            captured_sha256 = info.sha256
+            ready_title = "🔄 Update Ready"
+            ready_text = (
+                f"v{captured_version} đã tải xong.\n\n"
+                f"• Yes — Tắt app, cài bản mới và khởi động lại ngay\n"
+                f"• No — Lưu lại, cài tự động khi mở app lần sau"
+            )
         
         # ★ R6-4: Guard against concurrent signals during blocking dialog
         self._confirm_dialog_open = True
         from ui.popups import show_confirm
         answer = show_confirm(
             self,
-            "🔄 Update Ready",
-            f"v{captured_version} đã tải xong.\n\n"
-            f"• Yes — Tắt app, cài bản mới và khởi động lại ngay\n"
-            f"• No — Lưu lại, cài tự động khi mở app lần sau"
+            ready_title,
+            ready_text
         )
         self._confirm_dialog_open = False
         
         if answer:
-            # Restart now — apply_update only uses zip_path, not info
+            # Restart now — apply selected update payload
             self._update_now_btn.setText(f"📦 {t('settings.update_sub.installing')}")
             self._update_status_label.setText(f"📦 {t('settings.update_sub.installing')}")
             try:
                 main_win = self.window()
                 if main_win and hasattr(main_win, 'show_toast'):
                     main_win.show_toast(
-                        f"📦 {t('settings.update_sub.restarting')}",
+                            f"📦 {t('settings.update_sub.restarting')}",
                         "success", duration=3000
                     )
             except Exception:
                 pass
-            updater.apply_update(zip_path)
+            if info.update_type == "installer":
+                updater.apply_installer_update(zip_path)
+            else:
+                updater.apply_update(zip_path)
         else:
             # Defer to next startup — use captured metadata (immune to _latest_info race)
-            updater.save_pending_update(zip_path, captured_version, sha256=captured_sha256)
-            self._update_now_btn.setVisible(False)
-            self._update_status_label.setText(
-                f"⏰ v{captured_version} sẽ cài khi khởi động lại app"
+            updater.save_pending_update(
+                zip_path,
+                captured_version,
+                sha256=captured_sha256,
+                update_type=info.update_type,
             )
+            self._update_now_btn.setVisible(False)
+            if info.update_type == "installer":
+                status_text = f"⏰ Installer v{captured_version} sẽ chạy khi khởi động lại app"
+            else:
+                status_text = f"⏰ v{captured_version} sẽ cài khi khởi động lại app"
+            self._update_status_label.setText(status_text)
             self._update_status_label.setStyleSheet(
                 f"color: {Theme.YELLOW}; font-size: 12px; margin-left: 12px;"
             )
             try:
                 main_win = self.window()
                 if main_win and hasattr(main_win, 'show_toast'):
+                    deferred_msg = (
+                        "⏰ Installer saved — will run on next startup"
+                        if info.update_type == "installer"
+                        else "⏰ Update saved — will install on next startup"
+                    )
                     main_win.show_toast(
-                        "⏰ Update saved — will install on next startup",
+                        deferred_msg,
                         "info", duration=5000
                     )
             except Exception:

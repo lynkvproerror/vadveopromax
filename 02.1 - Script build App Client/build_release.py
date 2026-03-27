@@ -9,6 +9,7 @@ executable using Nuitka, then organizes output to folder 03.
 Usage:
     python build_release.py             # Full build (standalone)
     python build_release.py --onefile   # Single exe (slower startup)
+    python build_release.py --installer-only  # Build 03.1-Installer from existing main.dist
     python build_release.py --hash-only # Generate hashes only
     python build_release.py --check     # Check dependencies
 
@@ -31,6 +32,12 @@ Output (onefile mode):
     +-- VEO_Pro_Max.exe              # Single self-extracting exe
     +-- version.json
     +-- build_info.json
+
+Output (installer mode):
+    03.1-Installer/
+    +-- VEO_Pro_Max_Setup_vX.Y.Z.iss # Rendered Inno Setup script
+    +-- VEO_Pro_Max_Setup_vX.Y.Z.exe # Built installer when ISCC.exe is available
+    +-- installer_build_info.json
 """
 
 import sys
@@ -43,21 +50,68 @@ import argparse
 import tempfile
 from pathlib import Path
 from datetime import datetime
+from string import Template
 
 # Paths
 SCRIPT_DIR = Path(__file__).parent
 BASE_DIR = SCRIPT_DIR.parent  # #NEW VEO API
 PROJECT_ROOT = BASE_DIR / "02 - CLIENT - VEO PRO MAX"
 OUTPUT_DIR = BASE_DIR / "03 - Final App Client"
+INSTALLER_OUTPUT_DIR = BASE_DIR / "03.1-Installer"
+INSTALLER_TEMPLATE = SCRIPT_DIR / "installer_template.iss"
 MAIN_PY = PROJECT_ROOT / "main.py"
 
 # GitHub config (must match auto_updater.py)
 GITHUB_REPO = "lynkvproerror/vadveopromax"
+APP_NAME = "VEO Pro Max"
+APP_PUBLISHER = "VEO Studio"
+APP_EXE_NAME = "VEO_Pro_Max.exe"
+APP_INSTALL_DIRNAME = "VEO Pro Max"
+APP_SETUP_PREFIX = "VEO_Pro_Max_Setup"
+INSTALLER_APP_ID = "veostudio.veopromax"
 
 # Fix encoding for Vietnamese characters in constants
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+
+def find_inno_setup_compiler() -> Path | None:
+    """Locate ISCC.exe for building the Windows installer."""
+    candidates = [
+        shutil.which("ISCC.exe"),
+        shutil.which("ISCC"),
+        r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        r"C:\Program Files\Inno Setup 6\ISCC.exe",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return Path(candidate)
+    return None
+
+
+def get_installer_base_name(version: str) -> str:
+    """Installer base filename without extension."""
+    return f"{APP_SETUP_PREFIX}_v{version}"
+
+
+def get_installer_filename(version: str) -> str:
+    """Installer filename uploaded as a release asset."""
+    return f"{get_installer_base_name(version)}.exe"
+
+
+def get_installer_release_url(version: str) -> str:
+    """GitHub release URL for the installer asset."""
+    tag = f"v{version}"
+    return (
+        f"https://github.com/{GITHUB_REPO}/releases/download/{tag}/"
+        f"{get_installer_filename(version)}"
+    )
+
+
+def get_dist_dir() -> Path:
+    """Return the standalone Nuitka output directory."""
+    return OUTPUT_DIR / "main.dist"
 
 
 def check_dependencies() -> dict:
@@ -102,6 +156,14 @@ def check_dependencies() -> dict:
             'name': None, 'ok': False,
             'note': 'Nuitka will auto-download MinGW64 on first build',
         }
+
+    # Inno Setup (optional, only required for installer EXE)
+    iscc_path = find_inno_setup_compiler()
+    results['inno_setup'] = {
+        'version': str(iscc_path) if iscc_path else None,
+        'ok': bool(iscc_path),
+        'note': 'Optional - required for 03.1-Installer setup.exe',
+    }
 
     return results
 
@@ -259,6 +321,163 @@ def generate_build_info(hashes: dict) -> dict:
         "critical_file_hashes": hashes,
         "build_number": int(datetime.now().timestamp()),
     }
+
+
+def build_installer_context(build_info: dict) -> dict:
+    """Prepare template values for the Inno Setup script."""
+    version = build_info["app_version"]
+    dist_dir = get_dist_dir()
+    icon_path = PROJECT_ROOT / "assets" / "icon.ico"
+    if not icon_path.exists():
+        icon_path = dist_dir / "assets" / "icon.ico"
+
+    setup_icon_line = f"SetupIconFile={icon_path}" if icon_path.exists() else ""
+    return {
+        "APP_ID": INSTALLER_APP_ID,
+        "APP_NAME": APP_NAME,
+        "APP_VERSION": version,
+        "APP_PUBLISHER": APP_PUBLISHER,
+        "APP_URL": f"https://github.com/{GITHUB_REPO}",
+        "APP_EXE_NAME": APP_EXE_NAME,
+        "DEFAULT_SUBDIR": APP_INSTALL_DIRNAME,
+        "SOURCE_DIR": str(dist_dir),
+        "OUTPUT_DIR": str(INSTALLER_OUTPUT_DIR),
+        "OUTPUT_BASENAME": get_installer_base_name(version),
+        "SETUP_ICON_LINE": setup_icon_line,
+    }
+
+
+def write_installer_script(build_info: dict) -> Path:
+    """Render the Inno Setup script for the current build."""
+    if not INSTALLER_TEMPLATE.exists():
+        raise FileNotFoundError(f"Installer template not found: {INSTALLER_TEMPLATE}")
+
+    version = build_info["app_version"]
+    script_path = INSTALLER_OUTPUT_DIR / f"{get_installer_base_name(version)}.iss"
+    template = Template(INSTALLER_TEMPLATE.read_text(encoding="utf-8"))
+    content = template.safe_substitute(build_installer_context(build_info))
+    INSTALLER_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    script_path.write_text(content, encoding="utf-8")
+    return script_path
+
+
+def write_installer_manifest(build_info: dict, **extra):
+    """Persist installer build metadata to 03.1-Installer."""
+    manifest = {
+        "app_version": build_info["app_version"],
+        "generated_at": datetime.now().isoformat(),
+        "source_dist": str(get_dist_dir()),
+        "installer_asset_name": get_installer_filename(build_info["app_version"]),
+        "installer_release_url": get_installer_release_url(build_info["app_version"]),
+    }
+    manifest.update(extra)
+
+    INSTALLER_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    manifest_path = INSTALLER_OUTPUT_DIR / "installer_build_info.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def build_installer(build_info: dict):
+    """Generate an Inno Setup installer from 03/main.dist."""
+    version = build_info["app_version"]
+    dist_dir = get_dist_dir()
+    exe_path = dist_dir / APP_EXE_NAME
+
+    INSTALLER_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not dist_dir.exists() or not exe_path.exists():
+        print(f"  [ERR] Standalone output missing: {dist_dir}")
+        write_installer_manifest(
+            build_info,
+            status="missing_dist",
+            script_path="",
+            compiler_path="",
+            installer_path="",
+            installer_sha256="",
+        )
+        return None
+
+    try:
+        script_path = write_installer_script(build_info)
+    except Exception as e:
+        print(f"  [ERR] Cannot generate installer script: {e}")
+        write_installer_manifest(
+            build_info,
+            status="script_error",
+            script_path="",
+            compiler_path="",
+            installer_path="",
+            installer_sha256="",
+            error=str(e),
+        )
+        return None
+    compiler_path = find_inno_setup_compiler()
+
+    if not compiler_path:
+        print("  [WARN] Inno Setup not found — generated .iss only")
+        write_installer_manifest(
+            build_info,
+            status="script_only",
+            script_path=str(script_path),
+            compiler_path="",
+            installer_path="",
+            installer_sha256="",
+        )
+        return None
+
+    print(f"  [INFO] Compiling installer with: {compiler_path}")
+    try:
+        result = subprocess.run(
+            [str(compiler_path), str(script_path)],
+            cwd=str(SCRIPT_DIR),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        if result.stdout:
+            print(result.stdout.strip().splitlines()[-1])
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or e.stdout or "").strip()
+        print(f"  [ERR] Installer build failed: {stderr[:240]}")
+        write_installer_manifest(
+            build_info,
+            status="compile_failed",
+            script_path=str(script_path),
+            compiler_path=str(compiler_path),
+            installer_path="",
+            installer_sha256="",
+            error=stderr[:2000],
+        )
+        return None
+
+    installer_path = INSTALLER_OUTPUT_DIR / get_installer_filename(version)
+    if not installer_path.exists():
+        print("  [ERR] Installer compile finished but output EXE was not found")
+        write_installer_manifest(
+            build_info,
+            status="missing_output",
+            script_path=str(script_path),
+            compiler_path=str(compiler_path),
+            installer_path=str(installer_path),
+            installer_sha256="",
+        )
+        return None
+
+    sha256 = hashlib.sha256(installer_path.read_bytes()).hexdigest()
+    size_mb = installer_path.stat().st_size / (1024 * 1024)
+    print(f"  [OK] {installer_path.name}: {size_mb:.1f} MB")
+    write_installer_manifest(
+        build_info,
+        status="built",
+        script_path=str(script_path),
+        compiler_path=str(compiler_path),
+        installer_path=str(installer_path),
+        installer_sha256=sha256,
+    )
+    return installer_path
 
 
 def run_nuitka_build(onefile: bool = False):
@@ -479,6 +698,9 @@ def generate_version_json(build_info: dict, changelog: str = "") -> dict:
         "ext_download_url": ext_download_url,
         "sha256": "",
         "ext_sha256": "",
+        "installer_url": "",
+        "installer_sha256": "",
+        "installer_filename": "",
         "min_version": "1.0.0",
         "force_update": False,
         "build_number": build_info["build_number"],
@@ -493,6 +715,7 @@ def generate_version_json(build_info: dict, changelog: str = "") -> dict:
     print(f"  ext_version: {ext_version}")
     print(f"  download_url: {download_url}")
     print(f"  ext_download_url: {ext_download_url}")
+    print("  installer_url: (set after installer build)")
     print(f"  changelog: {changelog[:80]}..." if len(changelog) > 80 else f"  changelog: {changelog}")
 
     return version_data
@@ -504,9 +727,16 @@ def main():
     parser.add_argument("--hash-only", action="store_true", help="Generate hashes only")
     parser.add_argument("--skip-compile", action="store_true", help="Skip Nuitka compilation")
     parser.add_argument("--onefile", action="store_true", help="Build single exe (slower startup)")
+    parser.add_argument("--installer-only", action="store_true", help="Build 03.1-Installer from existing main.dist")
+    parser.add_argument("--skip-installer", action="store_true", help="Skip setup.exe generation")
     parser.add_argument("--skip-organize", action="store_true", help="Skip post-build folder cleanup")
     parser.add_argument("--skip-publish", action="store_true", help="Skip ZIP + Git + GitHub release")
     args = parser.parse_args()
+
+    if args.installer_only:
+        args.skip_compile = True
+        args.skip_organize = True
+        args.skip_publish = True
 
     print("=" * 60)
     print("  VEO Pro Max -- Build Release Script v2.0")
@@ -516,12 +746,15 @@ def main():
     print("\n[1] Checking dependencies...")
     deps = check_dependencies()
     all_ok = True
+    optional_missing = {'c_compiler', 'inno_setup'}
+    if args.skip_compile:
+        optional_missing.update({'nuitka', 'pyside6'})
     for name, info in deps.items():
         status = "OK" if info['ok'] else "MISSING"
         version = info.get('version') or info.get('name') or 'missing'
         note = f" ({info['note']})" if 'note' in info else ""
         print(f"  [{status}] {name}: {version}{note}")
-        if not info['ok'] and name != 'c_compiler':
+        if not info['ok'] and name not in optional_missing:
             all_ok = False
 
     if args.check:
@@ -541,19 +774,26 @@ def main():
     sys.path.insert(0, str(PROJECT_ROOT))
     build_info = generate_build_info(hashes)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    build_info_path = OUTPUT_DIR / "build_info.json"
-    with open(build_info_path, 'w', encoding='utf-8') as f:
-        json.dump(build_info, f, indent=2)
-    print(f"\n[3] Build info saved: {build_info_path}")
+    if not args.installer_only:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        build_info_path = OUTPUT_DIR / "build_info.json"
+        with open(build_info_path, 'w', encoding='utf-8') as f:
+            json.dump(build_info, f, indent=2)
+        print(f"\n[3] Build info saved: {build_info_path}")
+    else:
+        print("\n[3] Installer-only mode -- keeping existing 03 build metadata")
 
     if args.hash_only:
         print("\n[DONE] Hash generation complete (--hash-only mode)")
         sys.exit(0)
 
     # Step 3.5: Inject integrity hashes into source BEFORE compile
-    print("\n[3.5] Injecting integrity hashes into integrity_check.py...")
-    hashes_injected = inject_integrity_hashes(hashes)
+    hashes_injected = False
+    if not args.installer_only:
+        print("\n[3.5] Injecting integrity hashes into integrity_check.py...")
+        hashes_injected = inject_integrity_hashes(hashes)
+    else:
+        print("\n[3.5] Installer-only mode -- skipping source patching")
 
     # NOTE: Extension version is INDEPENDENT from APP_VERSION (BUILD_RULES.md Rule #2b)
     # Bump manifest.json manually when extension code changes, NOT auto-synced.
@@ -573,45 +813,54 @@ def main():
         restore_integrity_check()
 
     # Step 5: Copy optional release files + generate version.json
-    print("\n[5] Copying release files...")
-    copy_release_files()
+    if not args.installer_only:
+        print("\n[5] Copying release files...")
+        copy_release_files()
 
-    print("\n[5.1] Generating version.json (from APP_VERSION)...")
-    generate_version_json(build_info)
+        print("\n[5.1] Generating version.json (from APP_VERSION)...")
+        generate_version_json(build_info)
+    else:
+        print("\n[5] Installer-only mode -- leaving 03 - Final App Client files unchanged")
 
     # Step 5.8: Encrypt workflow data (replace .md → .enc in dist)
-    print("\n[5.8] Encrypting workflow data...")
-    try:
-        from encrypt_data import encrypt_directory
-        data_dir = OUTPUT_DIR / "main.dist" / "data"
-        if data_dir.exists():
-            count = encrypt_directory(data_dir)
-            if count > 0:
-                print(f"  [OK] {count} workflow files encrypted")
+    if not args.installer_only:
+        print("\n[5.8] Encrypting workflow data...")
+        try:
+            from encrypt_data import encrypt_directory
+            data_dir = get_dist_dir() / "data"
+            if data_dir.exists():
+                count = encrypt_directory(data_dir)
+                if count > 0:
+                    print(f"  [OK] {count} workflow files encrypted")
+                else:
+                    print("  [SKIP] No .md files found in data/")
             else:
-                print("  [SKIP] No .md files found in data/")
-        else:
-            print("  [SKIP] data/ directory not found in dist")
-    except ImportError:
-        print("  [WARN] encrypt_data.py not found — shipping plaintext!")
-    except Exception as e:
-        print(f"  [ERR] Encryption failed: {e}")
+                print("  [SKIP] data/ directory not found in dist")
+        except ImportError:
+            print("  [WARN] encrypt_data.py not found — shipping plaintext!")
+        except Exception as e:
+            print(f"  [ERR] Encryption failed: {e}")
+    else:
+        print("\n[5.8] Installer-only mode -- reusing existing encrypted data")
 
     # Step 5.5: Obfuscate and deploy extension
-    print("\n[5.5] Obfuscating and deploying extension...")
-    try:
-        from obfuscate_extension import process_extension
-        ext_output = OUTPUT_DIR / "main.dist" / "extension"
-        if process_extension(ext_output):
-            print(f"  [OK] Extension deployed to: {ext_output}")
-        else:
-            print("  [SKIP] Extension deployment skipped (source not found)")
-    except ImportError:
-        ext_script = SCRIPT_DIR / "obfuscate_extension.py"
-        if ext_script.exists():
-            subprocess.run([sys.executable, str(ext_script)], cwd=str(PROJECT_ROOT))
-        else:
-            print("  [SKIP] obfuscate_extension.py not found")
+    if not args.installer_only:
+        print("\n[5.5] Obfuscating and deploying extension...")
+        try:
+            from obfuscate_extension import process_extension
+            ext_output = get_dist_dir() / "extension"
+            if process_extension(ext_output):
+                print(f"  [OK] Extension deployed to: {ext_output}")
+            else:
+                print("  [SKIP] Extension deployment skipped (source not found)")
+        except ImportError:
+            ext_script = SCRIPT_DIR / "obfuscate_extension.py"
+            if ext_script.exists():
+                subprocess.run([sys.executable, str(ext_script)], cwd=str(PROJECT_ROOT))
+            else:
+                print("  [SKIP] obfuscate_extension.py not found")
+    else:
+        print("\n[5.5] Installer-only mode -- keeping existing extension payload")
 
     # Step 6: Organize dist folder (standalone only)
     if not args.onefile and not args.skip_organize:
@@ -619,6 +868,36 @@ def main():
         organize_dist_folder()
     elif args.onefile:
         print("\n[6] Onefile mode -- no cleanup needed")
+    else:
+        print("\n[6] Skipping organize step")
+
+    installer_path = None
+    if args.onefile:
+        print("\n[6.5] Skipping installer build in onefile mode")
+    elif args.skip_installer:
+        print("\n[6.5] Skipping installer build (--skip-installer)")
+    else:
+        print(f"\n[6.5] Building installer output in: {INSTALLER_OUTPUT_DIR}")
+        installer_path = build_installer(build_info)
+
+        version_path = OUTPUT_DIR / "version.json"
+        if not args.installer_only and version_path.exists():
+            vdata = json.loads(version_path.read_text(encoding="utf-8"))
+            if installer_path and installer_path.exists():
+                installer_sha256 = hashlib.sha256(installer_path.read_bytes()).hexdigest()
+                vdata["installer_url"] = get_installer_release_url(build_info["app_version"])
+                vdata["installer_sha256"] = installer_sha256
+                vdata["installer_filename"] = installer_path.name
+                print(f"  [OK] version.json installer_sha256: {installer_sha256[:16]}...")
+            else:
+                vdata["installer_url"] = ""
+                vdata["installer_sha256"] = ""
+                vdata["installer_filename"] = ""
+                print("  [WARN] Installer not built — cleared installer metadata")
+            version_path.write_text(
+                json.dumps(vdata, indent=4, ensure_ascii=False),
+                encoding="utf-8",
+            )
 
     # ── Steps 7-9: ZIP + Git + GitHub Release ──
     if not args.skip_publish:
@@ -648,6 +927,15 @@ def main():
                     vdata["ext_download_url"] = ""
                     vdata["ext_sha256"] = ""
                     print("  [WARN] Extension ZIP not created — cleared ext_download_url")
+                if installer_path and installer_path.exists():
+                    installer_sha256 = hashlib.sha256(installer_path.read_bytes()).hexdigest()
+                    vdata["installer_url"] = get_installer_release_url(version)
+                    vdata["installer_sha256"] = installer_sha256
+                    vdata["installer_filename"] = installer_path.name
+                else:
+                    vdata["installer_url"] = ""
+                    vdata["installer_sha256"] = ""
+                    vdata["installer_filename"] = ""
                 version_path.write_text(
                     json.dumps(vdata, indent=4, ensure_ascii=False), encoding="utf-8"
                 )
@@ -656,13 +944,13 @@ def main():
         print(f"\n[8] Git push to remote...")
         git_push_release(version)
 
-        # Step 9: GitHub Release (upload both ZIPs)
+        # Step 9: GitHub Release (upload ZIPs + installer when available)
         print(f"\n[9] Creating GitHub Release...")
-        zip_files = [p for p in [zip_path, ext_zip_path] if p and p.exists()]
-        if zip_files:
-            github_create_release(version, zip_files)
+        release_assets = [p for p in [zip_path, ext_zip_path, installer_path] if p and p.exists()]
+        if release_assets:
+            github_create_release(version, release_assets)
         else:
-            print("  [SKIP] No ZIP files to upload")
+            print("  [SKIP] No release assets to upload")
 
         # Step 9.5: Push version.json to PUBLIC repo (vadveopromax)
         # Origin = private repo (veo-pro-max), but clients fetch from PUBLIC repo.
@@ -673,7 +961,8 @@ def main():
         print("\n[SKIP] Steps 7-9 skipped (--skip-publish)")
 
     print("\n" + "=" * 60)
-    print(f"  [DONE] BUILD + PUBLISH COMPLETE -- Output: {OUTPUT_DIR}")
+    print(f"  [DONE] BUILD COMPLETE -- App: {OUTPUT_DIR}")
+    print(f"  [DONE] INSTALLER OUTPUT -- {INSTALLER_OUTPUT_DIR}")
     print("=" * 60)
 
 
@@ -694,11 +983,20 @@ def create_release_zip(version: str):
     if zip_path.exists():
         zip_path.unlink()
 
+    excluded_dirs = {"logs", "sessions", "__pycache__", "browser_profiles"}
+    excluded_suffixes = (".log", ".tmp", ".lock")
     file_count = 0
     with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
         for root_str, dirs, files in os.walk(str(dist_dir)):
+            dirs[:] = [d for d in dirs if d.lower() not in excluded_dirs]
             for f in files:
                 fp = os.path.join(root_str, f)
+                rel = os.path.relpath(fp, str(dist_dir))
+                rel_parts = [part.lower() for part in Path(rel).parts]
+                if any(part in excluded_dirs for part in rel_parts):
+                    continue
+                if rel.lower().endswith(excluded_suffixes):
+                    continue
                 arcname = 'VEO_Pro_Max/' + os.path.relpath(fp, str(dist_dir))
                 zf.write(fp, arcname)
                 file_count += 1
@@ -787,12 +1085,12 @@ def git_push_release(version: str):
 #  9) GitHub Release
 # ═══════════════════════════════════════════════════════════
 
-def github_create_release(version: str, zip_files: list):
+def github_create_release(version: str, asset_files: list):
     """Create GitHub release via gh CLI or print manual instructions.
     
     Args:
         version: App version string
-        zip_files: List of Path objects to upload as release assets
+        asset_files: List of Path objects to upload as release assets
     """
     tag = f"v{version}"
     changelog = ""
@@ -807,13 +1105,13 @@ def github_create_release(version: str, zip_files: list):
                 "--repo", GITHUB_REPO,
                 "--title", f"VEO Pro Max {tag}",
                 "--notes", changelog or f"VEO Pro Max {tag}",
-            ] + [p.name for p in zip_files]
+            ] + [str(p) for p in asset_files]
             result = subprocess.run(
-                cmd, cwd=str(OUTPUT_DIR),
+                cmd, cwd=str(BASE_DIR),
                 capture_output=True, text=True, timeout=300
             )
             if result.returncode == 0:
-                names = ', '.join(p.name for p in zip_files)
+                names = ', '.join(p.name for p in asset_files)
                 print(f"  [OK] Release {tag} created + uploaded: {names}")
                 return
             else:
@@ -822,7 +1120,7 @@ def github_create_release(version: str, zip_files: list):
             print(f"  [WARN] gh error: {e}")
 
     # Fallback: manual instructions
-    assets = ' '.join(f'"{p}"' for p in zip_files)
+    assets = ' '.join(f'"{p}"' for p in asset_files)
     print(f"\n  ┌─────────────────────────────────────────┐")
     print(f"  │  MANUAL: gh CLI not found                │")
     print(f"  │  Install: winget install GitHub.cli       │")

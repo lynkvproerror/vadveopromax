@@ -933,13 +933,22 @@ class MainWindow(QMainWindow):
                 return
             
             from ui.popups import show_confirm
-            answer = show_confirm(
-                self,
-                "🔄 Pending Update",
-                f"v{pending_ver} was downloaded previously.\n\n"
-                f"• Yes — Install now and restart\n"
-                f"• No — Skip this update"
-            )
+            pending_type = pending.get("update_type", "full")
+            if pending_type == "installer":
+                pending_title = "🔄 Pending Installer"
+                pending_body = (
+                    f"Installer v{pending_ver} was downloaded previously.\n\n"
+                    f"• Yes — Run installer now\n"
+                    f"• No — Skip this update"
+                )
+            else:
+                pending_title = "🔄 Pending Update"
+                pending_body = (
+                    f"v{pending_ver} was downloaded previously.\n\n"
+                    f"• Yes — Install now and restart\n"
+                    f"• No — Skip this update"
+                )
+            answer = show_confirm(self, pending_title, pending_body)
             
             if answer and self._auto_updater:
                 # ★ R14-4: Reset flag BEFORE apply (if apply_update fails internally,
@@ -989,7 +998,10 @@ class MainWindow(QMainWindow):
                     f"📦 Installing v{pending_ver}...", "info", duration=3000
                 )
                 # ★ R12-3: Use verified local zip_path consistently
-                self._auto_updater.apply_update(zip_path)
+                if pending_type == "installer":
+                    self._auto_updater.apply_installer_update(zip_path)
+                else:
+                    self._auto_updater.apply_update(zip_path)
             elif answer and not self._auto_updater:
                 # ★ R17-5: User chose "Install" but updater is gone — show error, keep ZIP
                 logging.getLogger('veo').error(
@@ -1098,10 +1110,17 @@ class MainWindow(QMainWindow):
         if msg.clickedButton() == update_btn:
             # ★ R2-1: Open browser to downloads page instead of check_now()+quit race
             import webbrowser
-            webbrowser.open("https://github.com/lynkvproerror/vadveopromax/releases")
+            target_url = "https://github.com/lynkvproerror/vadveopromax/releases"
+            try:
+                info = getattr(self._auto_updater, "latest_info", None)
+                if info and getattr(info, "installer_url", ""):
+                    target_url = info.installer_url
+            except Exception:
+                pass
+            webbrowser.open(target_url)
         
         # ★ E2: Hard exit — QApplication.quit() can be bypassed by closeEvent.ignore()
-        QTimer.singleShot(100, lambda: os._exit(0))
+        QTimer.singleShot(100, lambda: self._force_exit_with_cleanup(0))
     
     def _show_maintenance_block(self):
         """Show blocking dialog when server is in maintenance mode."""
@@ -1120,7 +1139,21 @@ class MainWindow(QMainWindow):
         msg.exec()
         
         # ★ E2: Hard exit — QApplication.quit() can be bypassed by closeEvent.ignore()
-        QTimer.singleShot(100, lambda: os._exit(0))
+        QTimer.singleShot(100, lambda: self._force_exit_with_cleanup(0))
+    
+    @staticmethod
+    def _force_exit_with_cleanup(code: int = 0):
+        """Hard exit that releases SingleInstance mutex first.
+        
+        os._exit() skips finally blocks, so we must release
+        the mutex explicitly to prevent 'already running' errors.
+        """
+        try:
+            from core.single_instance import release_global
+            release_global()
+        except Exception:
+            pass
+        os._exit(code)
     
     def set_status(self, message: str):
         """Update status bar message (no-op, status_label removed)."""
@@ -1134,6 +1167,8 @@ class MainWindow(QMainWindow):
         try:
             if info.update_type == "full":
                 msg = f"🆕 Full Update v{info.version} available!"
+            elif info.update_type == "installer":
+                msg = f"🆕 Installer Update v{info.version} available!"
             elif info.update_type == "ext_only":
                 msg = f"🆕 Extension v{info.ext_version} update available!"
             else:
