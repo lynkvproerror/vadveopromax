@@ -5,13 +5,13 @@
     "changelog": "v2.3.11 — Cập nhật ổn định ứng dụng và extension\n\n🔧 Ổn định\n• Đồng bộ ứng dụng Windows và extension lên phiên bản 2.3.11.\n• Cải thiện độ ổn định khi cài đặt, làm mới và nhận diện extension.\n• Tăng độ ổn định cho một số xử lý nền trong quá trình sử dụng.\n\n🚀 Tương thích\n• Tăng khả năng tương thích giữa app và extension trong bản cập nhật mới.\n• Chuẩn bị luồng cập nhật đồng bộ cho ứng dụng và extension.",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.11/VEO_Pro_Max_v2.3.11.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.11/VEO_Extension_v2.3.11.zip",
-    "sha256": "3274139f52e7edf75b0182731c3ef8476b91ead7acfb573b074bda59269e67af",
+    "sha256": "48dafcfff1f8160042d4f23730f232c12b7633783b04bd48a82ea55dbb6a494b",
     "ext_sha256": "49397f5c54986376c652d23c2983c40ca2d15499773f4913d9a23f7db129a771",
     "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.11/VEO_Pro_Max_Setup_v2.3.11.exe",
-    "installer_sha256": "d9b26e0c0ea48fc4e8d8006c1ce4bf00dbdfcacaaa2b0a98ae6501cd2e83c546",
+    "installer_sha256": "3ae4f0c50a55bad62764fc3765329084e84c67f08ed9d3bc2e63fc4d804b61c1",
     "installer_filename": "VEO_Pro_Max_Setup_v2.3.11.exe",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1774963805,
-    "build_time": "2026-03-31T20:30:05.930952"
+    "build_number": 1774970818,
+    "build_time": "2026-03-31T22:26:58.668216"
 }
