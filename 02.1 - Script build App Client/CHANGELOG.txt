@@ -1,10 +1,13 @@
-v2.3.11 — Cập nhật ổn định ứng dụng và extension
+v2.3.12 — Nâng cấp bảo mật, thư viện media và luồng cập nhật
 
-🔧 Ổn định
-• Đồng bộ ứng dụng Windows và extension lên phiên bản 2.3.11.
-• Cải thiện độ ổn định khi cài đặt, làm mới và nhận diện extension.
-• Tăng độ ổn định cho một số xử lý nền trong quá trình sử dụng.
+🔒 Bảo mật
+• Tăng cường độ ổn định và an toàn cho các cơ chế bảo vệ ứng dụng.
+• Cải thiện luồng cập nhật để đồng bộ tốt hơn giữa app, installer và dữ liệu phiên bản.
 
-🚀 Tương thích
-• Tăng khả năng tương thích giữa app và extension trong bản cập nhật mới.
-• Chuẩn bị luồng cập nhật đồng bộ cho ứng dụng và extension.
+🖼️ Media & workflow
+• Cải thiện thư viện ảnh và bổ sung thư viện giọng nói để thao tác media thuận tiện hơn.
+• Tối ưu queue, pipeline và các popup thao tác để xử lý dự án mượt và rõ ràng hơn.
+
+🧩 Extension & tương thích
+• Cải thiện extension bridge, popup và xử lý nền để hoạt động ổn định hơn.
+• Tăng độ ổn định khi cài đặt, làm mới và đồng bộ extension với ứng dụng Windows.
