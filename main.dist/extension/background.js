@@ -1,2080 +1,3364 @@
-/* VEO Pro Max Extension v2.2.2 - Protected */
-const EXT_VERSION = chrome.runtime.getManifest().version;
-const MAX_TABS = 3;
+/**
+ * VEO Pro Max Bridge — Background Service Worker
+ *
+ * Responsibilities:
+ * 1. Intercept x-browser-* and Authorization headers from real web requests
+ * 2. Maintain WebSocket connection to Python app (ws://127.0.0.1:8765)
+ * 3. Relay reCAPTCHA token requests from App → content.js → App
+ * 4. Auto-push captured headers when they change
+ * 5. Track content.js heartbeats for health monitoring
+ * 6. Relay activity simulation commands to content.js
+ * 7. Lightweight header refresh without full page reload
+ */
+
+// ── State ──────────────────────────────────────────────────────────────
+const EXT_VERSION = chrome.runtime.getManifest().version; // e.g. '2.3.0'
+const MAX_TABS = 3; // Maximum number of browser tabs allowed (Gmail, YouTube, VEO Flow)
+const LAST_GOOD_PORT_KEY = 'veo_bridge_last_good_port';
+
+// WebSocket is now managed by offscreen.js (persistent, not subject to SW suspension).
+// background.js relays messages via chrome.runtime.
 let wsConnected = false;
+
+// Per-tab state: tabId → {email, headers, accessToken, lastHeartbeat, recaptchaReady}
 const tabState = {};
+
+// Fix G: Guard flag — prevents onWsConnected from running before tabState is restored
 let _tabStateRestored = false;
+
+// Fix J: Message queue for when offscreen is restarting
 let _wsSendQueue = [];
+const _bridgeDebug = {
+  bgStartedAt: Date.now(),
+  lastOffscreenCreatedAt: 0,
+  lastOffscreenSyncAt: 0,
+  lastOffscreenSyncOk: null,
+  lastOffscreenSyncError: '',
+  lastOffscreenEvent: 'startup',
+  offscreen: null,
+  lastWsConnectedAt: 0,
+  lastWsDisconnectedAt: 0,
+  lastTabRegisterAt: 0,
+  lastTabRegisterEmail: '',
+  lastQueuedAction: '',
+  lastQueuedAt: 0,
+  lastSentAction: '',
+  lastSentAt: 0,
+  lastGetStatusAt: 0,
+};
+const SNAPSHOT_PUSH_COOLDOWN_MS = 20000;
+const _lastSnapshotPushAt = {};
+
+// ── tabState Persistence ───────────────────────────────────────────────
+// MV3 service workers get terminated/restarted by Chrome.
+// Without persistence, tabState is lost → onWsConnected sends nothing
+// → Python sees unregistered connection → "extension disconnected".
 let _persistTimer = null;
 function persistTabState() {
-if (_persistTimer) clearTimeout(_persistTimer);
-_persistTimer = setTimeout(() => {
-const serializable = {};
-for (const [tabId, state] of Object.entries(tabState)) {
-serializable[tabId] = {
-email: state.email,
-headers: state.headers || {},
-accessToken: state.accessToken,
-lastHeartbeat: state.lastHeartbeat,
-recaptchaReady: state.recaptchaReady || false,
-};
+  // Debounce: batch rapid changes into one write
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    const serializable = {};
+    for (const [tabId, state] of Object.entries(tabState)) {
+      serializable[tabId] = {
+        email: state.email,
+        headers: state.headers || {},
+        accessToken: state.accessToken,
+        lastHeartbeat: state.lastHeartbeat,
+        recaptchaReady: state.recaptchaReady || false,
+      };
+    }
+    chrome.storage.session.set({ tabState: serializable }).catch(() => { });
+  }, 1000);
 }
-chrome.storage.session.set({ tabState: serializable }).catch(() => { });
-}, 1000);
-}
+
 async function restoreTabState() {
-try {
-const result = await chrome.storage.session.get('tabState');
-if (result.tabState && Object.keys(result.tabState).length > 0) {
-for (const [tabId, state] of Object.entries(result.tabState)) {
-try {
-const tab = await chrome.tabs.get(parseInt(tabId));
-if (tab && tab.url && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome:')) {
-tabState[tabId] = state;
-} else if (tab) {
+  try {
+    const result = await chrome.storage.session.get('tabState');
+    if (result.tabState && Object.keys(result.tabState).length > 0) {
+      // Verify tabs still exist AND have valid URLs before restoring
+      for (const [tabId, state] of Object.entries(result.tabState)) {
+        try {
+          const tab = await chrome.tabs.get(parseInt(tabId));
+          // RC3 FIX: Skip about:blank and chrome:// tabs — they cause
+          // Chrome to consider offscreen doc unnecessary and kill it
+          if (tab && tab.url && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome:')) {
+            tabState[tabId] = state;
+          } else if (tab) {
+            console.debug(`[VEO Bridge] Skipping restored tab ${tabId} (URL: ${tab.url || 'none'})`);
+          }
+        } catch (_) {
+          // Tab no longer exists — skip
+        }
+      }
+      if (Object.keys(tabState).length > 0) {
+        console.log(`[VEO Bridge] ✅ Restored ${Object.keys(tabState).length} tab state(s) from session storage`);
+        return;
+      }
+    }
+  } catch (e) {
+    console.debug('[VEO Bridge] Session storage restore failed:', e.message);
+  }
+
+  // Fallback: discover VEO tabs by URL (only real VEO pages, not about:blank)
+  try {
+    const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    for (const tab of tabs) {
+      // RC3 FIX: Double-check URL is actually labs.google (not about:blank)
+      if (!tabState[tab.id] && tab.url && tab.url.includes('labs.google')) {
+        tabState[tab.id] = {
+          email: null, headers: {}, accessToken: null,
+          lastHeartbeat: 0, recaptchaReady: false,
+        };
+      }
+    }
+    if (tabs.length > 0) {
+      console.log(`[VEO Bridge] 🔍 Discovered ${tabs.length} VEO tab(s) (no stored state)`);
+    }
+  } catch (e) {
+    console.debug('[VEO Bridge] Tab discovery failed:', e.message);
+  }
 }
-} catch (_) {
-}
-}
-if (Object.keys(tabState).length > 0) {
-return;
-}
-}
-} catch (e) {
-}
-try {
-const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
-for (const tab of tabs) {
-if (!tabState[tab.id] && tab.url && tab.url.includes('labs.google')) {
-tabState[tab.id] = {
-email: null, headers: {}, accessToken: null,
-lastHeartbeat: 0, recaptchaReady: false,
-};
-}
-}
-if (tabs.length > 0) {
-}
-} catch (e) {
-}
-}
+
+// Global x-browser-validation captured from ANY request (including Chrome internal)
+// This header is only present on cross-origin requests to googleapis.com
 let globalBrowserValidation = null;
+
+// Headers we care about (per Protocol Analysis §1.4)
 const BROWSER_HEADERS = [
-'x-browser-channel',
-'x-browser-copyright',
-'x-browser-year',
-'x-browser-validation',
-'x-client-data',
+  'x-browser-channel',
+  'x-browser-copyright',
+  'x-browser-year',
+  'x-browser-validation',
+  'x-client-data',
 ];
+
+// Pending reCAPTCHA requests: requestId → {tabId, resolve}
 const pendingRecaptcha = {};
+
+// Short token tracking: tabId → consecutive short token count
+// When >= 3, auto-reload tab to re-initialize reCAPTCHA widget
 const shortTokenCounts = {};
 const SHORT_TOKEN_RELOAD_THRESHOLD = 3;
+
+// ★ Debounce timers for headers_update (email → timerId)
+// Collapses 6+ duplicate sends from a single page reload into 1
 const _headersDebounceTimers = {};
-const HEADERS_DEBOUNCE_MS = 2000;
-const HEARTBEAT_TIMEOUT = 45000;
-const FROZEN_RELOAD_MAX = 3;
-const FROZEN_RELOAD_WINDOW = 300000;
+const HEADERS_DEBOUNCE_MS = 2000;  // 2s window
+
+// Content heartbeat tracking
+const HEARTBEAT_TIMEOUT = 45000;  // 45s without heartbeat = frozen tab
+const FROZEN_RELOAD_MAX = 3;      // Max reloads per window before declaring tab dead
+const FROZEN_RELOAD_WINDOW = 300000; // 5 min window for reload cap
 let _heartbeatCheckTimer = null;
-const RELOAD_COOLDOWN_MS = 20000;
-const tabLastReloadTime = {};
+
+// ★ Global tab reload cooldown: prevents cascading reloads during startup.
+// Multiple systems (recaptcha check, heartbeat, header refresh) can all try
+// to reload the same tab. Without cooldown, the VEO page (13s+ load time)
+// never finishes loading → grecaptcha never initializes → 330-char tokens.
+const RELOAD_COOLDOWN_MS = 20000; // 20s between reloads per tab
+const tabLastReloadTime = {};     // tabId → Date.now() of last reload
+
+/**
+ * Reload a tab with global cooldown protection.
+ * Returns true if reload was executed, false if skipped (cooldown active).
+ */
 async function safeTabReload(tabId, reason, bypassCache = false) {
-const now = Date.now();
-const lastReload = tabLastReloadTime[tabId] || 0;
-const elapsed = now - lastReload;
-if (elapsed < RELOAD_COOLDOWN_MS) {
-return false;
+  const now = Date.now();
+  const lastReload = tabLastReloadTime[tabId] || 0;
+  const elapsed = now - lastReload;
+
+  if (elapsed < RELOAD_COOLDOWN_MS) {
+    console.debug(
+      `[VEO Bridge] ⏳ Skipping reload for tab ${tabId} — ` +
+      `cooldown active (${Math.ceil((RELOAD_COOLDOWN_MS - elapsed) / 1000)}s remaining, reason: ${reason})`
+    );
+    return false;
+  }
+
+  try {
+    // ★ Notify Python to suspend zombie detection for this tab's email
+    // Tab reload kills content.js → 20-40s email detection gap → Python would
+    // false-positive zombie-detect and kill the WS connection
+    const state = tabState[tabId];
+    if (state && state.email) {
+      wsSend({
+        action: 'tab_reloading',
+        email: state.email,
+        tabId: tabId,
+        gracePeriodMs: 60000, // 60s grace for reload + email detect + reCAPTCHA init
+        reason: reason,
+      });
+    }
+
+    await chrome.tabs.reload(tabId, { bypassCache });
+    tabLastReloadTime[tabId] = now;
+    console.log(`[VEO Bridge] 🔄 Reloaded tab ${tabId} (reason: ${reason})`);
+    return true;
+  } catch (e) {
+    console.debug(`[VEO Bridge] Tab ${tabId} reload failed: ${e.message}`);
+    return false;
+  }
 }
-try {
-const state = tabState[tabId];
-if (state && state.email) {
-wsSend({
-action: 'tab_reloading',
-email: state.email,
-tabId: tabId,
-gracePeriodMs: 60000,
-reason: reason,
-});
-}
-await chrome.tabs.reload(tabId, { bypassCache });
-tabLastReloadTime[tabId] = now;
-return true;
-} catch (e) {
-return false;
-}
-}
+
+
+/**
+ * Send a message to a content script with auto-retry on failure.
+ * If first attempt fails (content script not loaded), re-injects content.js
+ * and retries after 3s.
+ */
 async function sendMessageWithRetry(tabId, message, maxRetries = 1) {
-for (let attempt = 0; attempt <= maxRetries; attempt++) {
-try {
-return await chrome.tabs.sendMessage(tabId, message);
-} catch (e) {
-if (attempt < maxRetries) {
-try {
-await chrome.scripting.executeScript({
-target: { tabId },
-files: ['content.js'],
-});
-await new Promise(r => setTimeout(r, 3000));
-} catch (injectErr) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await chrome.tabs.sendMessage(tabId, message);
+    } catch (e) {
+      if (attempt < maxRetries) {
+        console.log(
+          `[VEO Bridge] 🔁 sendMessage failed for tab ${tabId}, ` +
+          `re-injecting content.js (retry ${attempt + 1}/${maxRetries})`
+        );
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content.js'],
+          });
+          await new Promise(r => setTimeout(r, 3000)); // Wait for content.js to init
+        } catch (injectErr) {
+          console.debug(`[VEO Bridge] Re-inject failed: ${injectErr.message}`);
+        }
+      } else {
+        throw e;
+      }
+    }
+  }
 }
-} else {
-throw e;
-}
-}
-}
-}
-let _offscreenCreating = null;
+
+
+// ── Offscreen Document Management ──────────────────────────────────────
+// WebSocket lives in offscreen.js — persistent, never suspended by Chrome.
+// background.js manages its lifecycle and relays messages.
+
+let _offscreenCreating = null; // Promise guard against concurrent creation
+
 async function ensureOffscreenDocument() {
-const existingContexts = await chrome.runtime.getContexts({
-contextTypes: ['OFFSCREEN_DOCUMENT'],
-documentUrls: [chrome.runtime.getURL('offscreen.html')],
-});
-if (existingContexts.length > 0) {
-return;
+  // Check if offscreen doc already exists
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [chrome.runtime.getURL('offscreen.html')],
+  });
+  if (existingContexts.length > 0) {
+    return; // Already exists
+  }
+
+  // Prevent concurrent creation
+  if (_offscreenCreating) {
+    await _offscreenCreating;
+    return;
+  }
+
+  // Fix I: Retry up to 3 times with 2s delay on creation failure
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    _offscreenCreating = chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['WORKERS'],  // MV3 reason for persistent background work
+      justification: 'Persistent WebSocket connection to Python app',
+    });
+
+    try {
+      await _offscreenCreating;
+      console.log('[VEO Bridge] ✅ Offscreen document created for persistent WebSocket');
+      _bridgeDebug.lastOffscreenCreatedAt = Date.now();
+      _offscreenCreating = null;
+      return; // Success
+    } catch (e) {
+      _offscreenCreating = null;
+      if (attempt < 3) {
+        console.warn(`[VEO Bridge] ⚠️ Offscreen creation failed (attempt ${attempt}/3): ${e.message} — retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        console.error(`[VEO Bridge] ❌ Offscreen creation failed after 3 attempts: ${e.message}`);
+      }
+    }
+  }
 }
-if (_offscreenCreating) {
-await _offscreenCreating;
-return;
+
+async function getOffscreenWsStatus() {
+  try {
+    const status = await chrome.runtime.sendMessage({ type: 'offscreen_ws_status' });
+    if (status) {
+      _bridgeDebug.offscreen = status;
+    }
+    return status || null;
+  } catch (e) {
+    _bridgeDebug.lastOffscreenSyncError = e.message || 'offscreen_status_failed';
+    return null;
+  }
 }
-for (let attempt = 1; attempt <= 3; attempt++) {
-_offscreenCreating = chrome.offscreen.createDocument({
-url: 'offscreen.html',
-reasons: ['WORKERS'],
-justification: 'Persistent WebSocket connection to Python app',
-});
-try {
-await _offscreenCreating;
-_offscreenCreating = null;
-return;
-} catch (e) {
-_offscreenCreating = null;
-if (attempt < 3) {
-await new Promise(r => setTimeout(r, 2000));
-} else {
-console.error(`[VEO Bridge] ❌ Offscreen creation failed after 3 attempts: ${e.message}`);
+
+async function getOffscreenContextCount() {
+  try {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [chrome.runtime.getURL('offscreen.html')],
+    });
+    return contexts.length;
+  } catch (_) {
+    return 0;
+  }
 }
+
+/**
+ * Re-sync background.js with the already-running offscreen document.
+ *
+ * Why this matters:
+ * - MV3 service workers restart frequently and lose in-memory `wsConnected`
+ * - offscreen.js may still hold a live WebSocket to Python
+ * - without an explicit status query, background stays "disconnected"
+ *   forever until the socket reconnects again, so tabs remain orange
+ *
+ * Returns true if offscreen reports a live WebSocket.
+ */
+async function syncOffscreenWsState() {
+  _bridgeDebug.lastOffscreenSyncAt = Date.now();
+  try {
+    const status = await getOffscreenWsStatus();
+    const wasConnected = wsConnected;
+    wsConnected = !!(status && status.connected);
+    _bridgeDebug.lastOffscreenSyncOk = wsConnected;
+    _bridgeDebug.lastOffscreenSyncError = '';
+
+    if (wsConnected && !wasConnected) {
+      console.log('[VEO Bridge] ♻️ Re-synced live WebSocket from existing offscreen document');
+      await onWsConnected();
+    } else if (!wsConnected && wasConnected) {
+      console.log('[VEO Bridge] ⚠️ Offscreen reported WebSocket disconnected during resync');
+    }
+
+    return wsConnected;
+  } catch (e) {
+    _bridgeDebug.lastOffscreenSyncOk = false;
+    _bridgeDebug.lastOffscreenSyncError = e.message || 'offscreen_sync_failed';
+    console.debug('[VEO Bridge] Offscreen WS sync failed:', e.message);
+    return false;
+  }
 }
+
+/**
+ * Recover the offscreen bridge eagerly instead of waiting for the watchdog.
+ *
+ * This is used on high-signal events such as:
+ * - a VEO tab registering itself
+ * - popup status checks while disconnected
+ *
+ * Without this, a missing offscreen document can leave the bridge orange/red
+ * until the 15s watchdog and 45s startup grace eventually allow recreation.
+ */
+async function ensureBridgeReady(reason = 'unknown') {
+  let offscreenCount = await getOffscreenContextCount();
+  if (offscreenCount === 0) {
+    console.warn(`[VEO Bridge] 🧩 Offscreen missing during ${reason} — recreating now`);
+    await ensureOffscreenDocument();
+    offscreenCount = await getOffscreenContextCount();
+  }
+
+  let status = await getOffscreenWsStatus();
+
+  if (
+    offscreenCount > 0 &&
+    status &&
+    !status.connected &&
+    !status.reconnectScheduled &&
+    !status.fastScanActive
+  ) {
+    console.log(`[VEO Bridge] 🔁 Forcing offscreen WS reconnect (${reason})`);
+    try {
+      await chrome.runtime.sendMessage({ type: 'offscreen_ws_reconnect' });
+      await new Promise(r => setTimeout(r, 250));
+      status = await getOffscreenWsStatus();
+    } catch (e) {
+      console.debug('[VEO Bridge] Forced offscreen reconnect failed:', e.message);
+    }
+  }
+
+  return syncOffscreenWsState();
 }
+
+async function collectBridgeStatus(forceSync = false) {
+  _bridgeDebug.lastGetStatusAt = Date.now();
+
+  if (forceSync || !wsConnected) {
+    await ensureBridgeReady(forceSync ? 'popup_status' : 'status_refresh');
+  }
+
+  const offscreen = await getOffscreenWsStatus();
+  const offscreenCount = await getOffscreenContextCount();
+
+  return {
+    connected: wsConnected,
+    port: (offscreen && offscreen.currentPort) || null,
+    tabs: Object.entries(tabState)
+      .filter(([_, s]) => s.email)
+      .map(([id, s]) => ({
+        tabId: parseInt(id),
+        email: s.email,
+        headerCount: Object.keys(s.headers).length,
+        lastHeartbeat: s.lastHeartbeat || 0,
+        recaptchaReady: s.recaptchaReady || false,
+      })),
+    debug: {
+      offscreenExists: offscreenCount > 0,
+      offscreenCount,
+      background: {
+        startedAt: _bridgeDebug.bgStartedAt,
+        tabStateRestored: _tabStateRestored,
+        wsConnected,
+        wsQueueDepth: _wsSendQueue.length,
+        lastOffscreenCreatedAt: _bridgeDebug.lastOffscreenCreatedAt,
+        lastOffscreenSyncAt: _bridgeDebug.lastOffscreenSyncAt,
+        lastOffscreenSyncOk: _bridgeDebug.lastOffscreenSyncOk,
+        lastOffscreenSyncError: _bridgeDebug.lastOffscreenSyncError,
+        lastOffscreenEvent: _bridgeDebug.lastOffscreenEvent,
+        lastWsConnectedAt: _bridgeDebug.lastWsConnectedAt,
+        lastWsDisconnectedAt: _bridgeDebug.lastWsDisconnectedAt,
+        lastTabRegisterAt: _bridgeDebug.lastTabRegisterAt,
+        lastTabRegisterEmail: _bridgeDebug.lastTabRegisterEmail,
+        lastQueuedAction: _bridgeDebug.lastQueuedAction,
+        lastQueuedAt: _bridgeDebug.lastQueuedAt,
+        lastSentAction: _bridgeDebug.lastSentAction,
+        lastSentAt: _bridgeDebug.lastSentAt,
+        lastGetStatusAt: _bridgeDebug.lastGetStatusAt,
+      },
+      offscreen: offscreen || _bridgeDebug.offscreen,
+    },
+  };
 }
+
+// ── WebSocket Relay (via Offscreen Document) ───────────────────────────
+// wsSend() no longer uses a direct WebSocket. Instead, it sends the data
+// to offscreen.js via chrome.runtime.sendMessage, which forwards it over WS.
+
 function wsSend(data) {
-if (!wsConnected) {
-if (_wsSendQueue.length < 50) {
-_wsSendQueue.push(data);
+  if (!wsConnected) {
+    // Fix J: Queue message for when WS reconnects (max 50 to prevent leak)
+    if (_wsSendQueue.length < 50) {
+      _wsSendQueue.push(data);
+    }
+    _bridgeDebug.lastQueuedAction = data?.action || '';
+    _bridgeDebug.lastQueuedAt = Date.now();
+    return false;
+  }
+  _bridgeDebug.lastSentAction = data?.action || '';
+  _bridgeDebug.lastSentAt = Date.now();
+  // Send via offscreen.js with error recovery
+  chrome.runtime.sendMessage({
+    type: 'offscreen_ws_send',
+    data: data,
+  }).catch(() => {
+    // Offscreen doc might be restarting — queue for retry
+    if (_wsSendQueue.length < 50) {
+      _wsSendQueue.push(data);
+    }
+  });
+  return true;
 }
-return false;
+
+function pushTabSnapshotToApp(tabId, reason = 'snapshot', force = false) {
+  const state = tabState[tabId];
+  if (!state || !state.email) return false;
+
+  const now = Date.now();
+  const lastPushed = _lastSnapshotPushAt[tabId] || 0;
+  if (!force && (now - lastPushed) < SNAPSHOT_PUSH_COOLDOWN_MS) {
+    return false;
+  }
+  _lastSnapshotPushAt[tabId] = now;
+
+  wsSend({
+    action: 'register',
+    email: state.email,
+    tabId: parseInt(tabId),
+    version: EXT_VERSION,
+  });
+
+  let pushed = false;
+  if (Object.keys(state.headers || {}).length > 0) {
+    wsSend({
+      action: 'headers_update',
+      email: state.email,
+      headers: state.headers,
+      accessToken: state.accessToken,
+    });
+    pushed = true;
+    console.log(`[VEO Bridge] 📤 Pushed cached headers for ${state.email} (${reason})`);
+  }
+
+  if (state.accessToken) {
+    wsSend({
+      action: 'access_token',
+      requestId: null,
+      email: state.email,
+      token: state.accessToken,
+      tokenEmail: state.email,
+    });
+  }
+
+  return pushed;
 }
-chrome.runtime.sendMessage({
-type: 'offscreen_ws_send',
-data: data,
-}).catch(() => {
-if (_wsSendQueue.length < 50) {
-_wsSendQueue.push(data);
-}
-});
-return true;
-}
+
+// Handle WS connection state + reconnect on initial load
 async function onWsConnected() {
-if (!_tabStateRestored) {
-const start = Date.now();
-while (!_tabStateRestored && Date.now() - start < 2000) {
-await new Promise(r => setTimeout(r, 100));
+  console.log('[VEO Bridge] ✅ WebSocket connected (via offscreen)');
+
+  // Fix G: Wait for tabState restore before registering
+  // Prevents sending empty tabState when offscreen connects before restore finishes
+  if (!_tabStateRestored) {
+    console.debug('[VEO Bridge] ⏳ Waiting for tabState restore before registering...');
+    const start = Date.now();
+    while (!_tabStateRestored && Date.now() - start < 2000) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    if (!_tabStateRestored) {
+      console.warn('[VEO Bridge] ⚠️ tabState restore timed out (2s) — proceeding with current state');
+    }
+  }
+
+  // Fix J: Flush queued messages first
+  if (_wsSendQueue.length > 0) {
+    console.log(`[VEO Bridge] 📤 Flushing ${_wsSendQueue.length} queued message(s)`);
+    const queue = [..._wsSendQueue];
+    _wsSendQueue = [];
+    for (const msg of queue) {
+      wsSend(msg);
+    }
+  }
+
+  // Register all known tabs + immediately push cached data
+  for (const [tabId, state] of Object.entries(tabState)) {
+    if (state.email) {
+      pushTabSnapshotToApp(tabId, 'ws_connected', true);
+
+      // Extract fresh access token from page
+      extractAndPushToken(parseInt(tabId), state.email);
+    }
+  }
 }
-if (!_tabStateRestored) {
-}
-}
-if (_wsSendQueue.length > 0) {
-const queue = [..._wsSendQueue];
-_wsSendQueue = [];
-for (const msg of queue) {
-wsSend(msg);
-}
-}
-for (const [tabId, state] of Object.entries(tabState)) {
-if (state.email) {
-wsSend({
-action: 'register',
-email: state.email,
-tabId: parseInt(tabId),
-version: EXT_VERSION,
-});
-if (Object.keys(state.headers).length > 0) {
-wsSend({
-action: 'headers_update',
-email: state.email,
-headers: state.headers,
-accessToken: state.accessToken,
-});
-}
-extractAndPushToken(parseInt(tabId), state.email);
-}
-}
-}
+
+
+// ── Handle Messages from App ───────────────────────────────────────────
+
 async function handleAppMessage(msg) {
-switch (msg.action) {
-case 'request_recaptcha': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'recaptcha_token',
-requestId: msg.requestId,
-token: null,
-error: `No tab found for ${msg.email}`,
-});
-return;
-}
-try {
-const scriptPromise = chrome.scripting.executeScript({
-target: { tabId },
-world: 'MAIN',
-func: async (siteKey) => {
-if (typeof grecaptcha === 'undefined' ||
-typeof grecaptcha.enterprise === 'undefined' ||
-typeof grecaptcha.enterprise.execute !== 'function') {
-return { token: null, error: 'reCAPTCHA Enterprise not available on page' };
-}
-if (!siteKey) {
-for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
-const m = s.src.match(/render=([^&]+)/);
-if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
-}
-}
-if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
-for (const id in ___grecaptcha_cfg.clients) {
-const client = ___grecaptcha_cfg.clients[id];
-for (const key in client) {
-const obj = client[key];
-if (obj && typeof obj === 'object') {
-for (const k2 in obj) {
-const v = obj[k2];
-if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
-}
-}
-if (siteKey) break;
-}
-if (siteKey) break;
-}
-}
-if (!siteKey) {
-return { token: null, error: 'Could not extract reCAPTCHA site key' };
-}
-try {
-const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
-if (token && token.length >= 1500) {
-return { token, tokenLength: token.length };
-}
-return { token: null, error: `Token too short (${token ? token.length : 0} chars, need ≥1500)`, tokenLength: token ? token.length : 0 };
-} catch (err) {
-return { token: null, error: err.message, tokenLength: 0 };
-}
-},
-args: [msg.siteKey || null],
-});
-const rcTimeoutMs = msg.rcTimeout || 15000;
-const timeoutPromise = new Promise((_, reject) =>
-setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s) — widget may be frozen`)), rcTimeoutMs)
-);
-const results = await Promise.race([scriptPromise, timeoutPromise]);
-const result = results?.[0]?.result;
-if (result?.error?.includes('too short')) {
-shortTokenCounts[tabId] = (shortTokenCounts[tabId] || 0) + 1;
-if (shortTokenCounts[tabId] >= SHORT_TOKEN_RELOAD_THRESHOLD) {
-shortTokenCounts[tabId] = 0;
-const reloaded = await safeTabReload(tabId, 'short-token-threshold', true);
-if (reloaded) {
-await new Promise(r => setTimeout(r, 5000));
-}
-}
-} else if (result?.token) {
-shortTokenCounts[tabId] = 0;
-}
-wsSend({
-action: 'recaptcha_token',
-requestId: msg.requestId,
-email: msg.email,
-token: result?.token || null,
-error: result?.error || null,
-});
-} catch (e) {
-wsSend({
-action: 'recaptcha_token',
-requestId: msg.requestId,
-email: msg.email,
-token: null,
-error: e.message,
-});
-}
-break;
-}
-case 'request_headers': {
-const tabId = findTabForEmail(msg.email);
-const state = tabId ? tabState[tabId] : null;
-wsSend({
-action: 'headers',
-email: msg.email,
-headers: state?.headers || {},
-accessToken: state?.accessToken || null,
-});
-break;
-}
-case 'request_access_token': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'access_token',
-requestId: msg.requestId,
-email: msg.email,
-token: null,
-error: `No tab found for ${msg.email}`,
-});
-return;
-}
-try {
-const response = await chrome.tabs.sendMessage(tabId, {
-action: 'get_access_token',
-});
-wsSend({
-action: 'access_token',
-requestId: msg.requestId,
-email: msg.email,
-token: response?.token || null,
-tokenEmail: response?.email || null,
-});
-} catch (e) {
-wsSend({
-action: 'access_token',
-requestId: msg.requestId,
-email: msg.email,
-token: null,
-error: e.message,
-});
-}
-break;
-}
-case 'refresh_headers': {
-const refreshed = await reloadVeoTabs(msg.email);
-wsSend({
-action: 'headers_refreshed',
-requestId: msg.requestId || null,
-email: msg.email || null,
-tabsReloaded: refreshed,
-});
-break;
-}
-case 'refresh_headers_lightweight': {
-const tabId = findTabForEmail(msg.email);
-if (tabId) {
-try {
-await chrome.tabs.sendMessage(tabId, { action: 'lightweight_header_refresh' });
-wsSend({
-action: 'headers_refreshed_lightweight',
-requestId: msg.requestId || null,
-email: msg.email || null,
-success: true,
-});
-} catch (e) {
-const refreshed = await reloadVeoTabs(msg.email);
-wsSend({
-action: 'headers_refreshed',
-requestId: msg.requestId || null,
-email: msg.email || null,
-tabsReloaded: refreshed,
-});
-}
-} else {
-wsSend({
-action: 'headers_refreshed_lightweight',
-requestId: msg.requestId || null,
-email: msg.email || null,
-success: false,
-error: 'No tab found',
-});
-}
-break;
-}
-case 'simulate_activity': {
-const tabId = findTabForEmail(msg.email);
-if (tabId) {
-try {
-await chrome.tabs.sendMessage(tabId, { action: 'simulate_activity' });
-wsSend({
-action: 'activity_simulated',
-requestId: msg.requestId || null,
-email: msg.email,
-success: true,
-});
-} catch (e) {
-wsSend({
-action: 'activity_simulated',
-requestId: msg.requestId || null,
-email: msg.email,
-success: false,
-error: e.message,
-});
-}
-}
-break;
-}
-case 'reload_extension': {
-const reason = msg.reason || 'version mismatch';
-const targetVer = msg.target_version || 'unknown';
-setTimeout(() => {
-chrome.runtime.reload();
-}, 1000);
-break;
-}
-case 'assign_email': {
-const email = msg.email;
-if (!email) break;
-let existingTabId = findTabForEmail(email);
-if (existingTabId) {
-wsSend({ action: 'register', email, tabId: existingTabId, version: EXT_VERSION });
-break;
-}
-const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
-if (veoTabs.length > 0) {
-let targetTab = veoTabs.find(t => !tabState[t.id]?.email) || veoTabs[0];
-const tabId = targetTab.id;
-if (!tabState[tabId]) {
-tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
-}
-tabState[tabId].email = email;
-wsSend({ action: 'register', email, tabId, version: EXT_VERSION });
-} else {
-const allTabs = await chrome.tabs.query({ currentWindow: true });
-if (allTabs.length >= MAX_TABS) {
-wsSend({
-action: 'register',
-email,
-tabId: null,
-version: EXT_VERSION,
-error: `Tab limit reached (${MAX_TABS})`,
-});
-} else {
-const newTab = await chrome.tabs.create({
-url: VEO_URL,
-active: false,
-pinned: true,
-});
-tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
-wsSend({ action: 'register', email, tabId: newTab.id, version: EXT_VERSION });
-try { chrome.tabs.update(newTab.id, { autoDiscardable: false }); } catch (_) { }
-startZombieTimer(newTab.id);
-}
-}
-break;
-}
-case 'check_recaptcha_ready': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'recaptcha_ready',
-requestId: msg.requestId,
-ready: false,
-details: { error: `No tab found for ${msg.email}` },
-});
-return;
-}
-try {
-const scriptPromise = chrome.scripting.executeScript({
-target: { tabId },
-world: 'MAIN',
-func: async () => {
-const hasGrecaptcha = typeof grecaptcha !== 'undefined';
-const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
-const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
-const pageLoaded = document.readyState === 'complete';
-const hasRecaptchaScript = !!document.querySelector('script[src*="recaptcha"]');
-if (!hasExecute) {
-return {
-ready: false,
-grecaptchaLoaded: hasGrecaptcha,
-enterpriseLoaded: hasEnterprise,
-executeAvailable: hasExecute,
-pageLoaded,
-hasRecaptchaScript,
-token: null,
-tokenLength: 0,
-};
-}
-let siteKey = null;
-for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
-const m = s.src.match(/render=([^&]+)/);
-if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
-}
-if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
-for (const id in ___grecaptcha_cfg.clients) {
-const client = ___grecaptcha_cfg.clients[id];
-for (const key in client) {
-const obj = client[key];
-if (obj && typeof obj === 'object') {
-for (const k2 in obj) {
-const v = obj[k2];
-if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
-}
-}
-if (siteKey) break;
-}
-if (siteKey) break;
-}
-}
-if (!siteKey) {
-return {
-ready: false,
-grecaptchaLoaded: hasGrecaptcha,
-enterpriseLoaded: hasEnterprise,
-executeAvailable: hasExecute,
-pageLoaded,
-hasRecaptchaScript,
-token: null,
-tokenLength: 0,
-error: 'Could not extract site key',
-};
-}
-const trialAction = 'VIDEO_GENERATION';
-try {
-const token = await grecaptcha.enterprise.execute(siteKey, { action: trialAction });
-return {
-ready: !!(token && token.length >= 1500),
-grecaptchaLoaded: true,
-enterpriseLoaded: true,
-executeAvailable: true,
-pageLoaded: true,
-hasRecaptchaScript: true,
-token: (token && token.length >= 1500) ? token : null,
-tokenLength: token ? token.length : 0,
-trialAction,
-};
-} catch (err) {
-return {
-ready: false,
-grecaptchaLoaded: true,
-enterpriseLoaded: true,
-executeAvailable: true,
-pageLoaded: true,
-hasRecaptchaScript: true,
-token: null,
-tokenLength: 0,
-error: err.message,
-};
-}
-},
-args: [],
-});
-const timeoutPromise = new Promise((_, reject) =>
-setTimeout(() => reject(new Error('executeScript timeout (20s) — tab may be frozen')), 20000)
-);
-const results = await Promise.race([scriptPromise, timeoutPromise]);
-const details = results?.[0]?.result || {};
-wsSend({
-action: 'recaptcha_ready',
-requestId: msg.requestId,
-ready: details.ready || false,
-token: details.token || null,
-details,
-});
-} catch (e) {
-if (e.message.includes('timeout') || e.message.includes('frozen')) {
-await safeTabReload(tabId, 'recaptcha-check-timeout');
-}
-wsSend({
-action: 'recaptcha_ready',
-requestId: msg.requestId,
-ready: false,
-details: { error: e.message },
-});
-}
-break;
-}
-case 'submit_prompt': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'submit_prompt_result',
-requestId: msg.requestId,
-success: false,
-error: `No tab found for ${msg.email}`,
-});
-return;
-}
-const keepaliveTimer = setInterval(() => {
-chrome.runtime.getPlatformInfo(() => { });
-}, 25000);
-try {
-const ENDPOINTS = {
-T2V: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText',
-I2V_SINGLE: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage',
-I2V_DUAL: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage',
-R2V: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages',
-STATUS: 'https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus',
-UPSCALE_VIDEO: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo',
-UPLOAD: 'https://aisandbox-pa.googleapis.com/v1:uploadUserImage',
-UPSCALE_IMAGE: 'https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage',
-};
-let endpointUrl;
-if (msg.endpoint === 'T2I') {
-const projectId = msg.payload?.body?.clientContext?.projectId || '';
-if (!projectId) {
-wsSend({
-action: 'submit_prompt_result',
-requestId: msg.requestId,
-success: false,
-error: 'T2I requires projectId in clientContext',
-});
-return;
-}
-endpointUrl = `https://aisandbox-pa.googleapis.com/v1/projects/${projectId}/flowMedia:batchGenerateImages`;
-} else {
-endpointUrl = ENDPOINTS[msg.endpoint] || msg.endpointUrl;
-}
-if (!endpointUrl) {
-wsSend({
-action: 'submit_prompt_result',
-requestId: msg.requestId,
-success: false,
-error: `Unknown endpoint: ${msg.endpoint}`,
-});
-return;
-}
-const scriptPromise = chrome.scripting.executeScript({
-target: { tabId },
-world: 'MAIN',
-func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey, rcTimeoutMs, fetchTimeoutMs) => {
-let siteKey = null;
-if (needsRecaptcha) {
-for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
-const m = s.src.match(/render=([^&]+)/);
-if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
-}
-if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
-for (const id in ___grecaptcha_cfg.clients) {
-const client = ___grecaptcha_cfg.clients[id];
-for (const key in client) {
-const obj = client[key];
-if (obj && typeof obj === 'object') {
-for (const k2 in obj) {
-const v = obj[k2];
-if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
-}
-}
-if (siteKey) break;
-}
-if (siteKey) break;
-}
-}
-if (!siteKey) {
-return { success: false, error: 'Could not extract reCAPTCHA site key' };
-}
-}
-if (needsRecaptcha) {
-try {
-const randomX = Math.floor(Math.random() * window.innerWidth * 0.6 + window.innerWidth * 0.2);
-const randomY = Math.floor(Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.2);
-['mousemove', 'mouseover', 'mousedown', 'mouseup', 'click'].forEach(type => {
-document.dispatchEvent(new MouseEvent(type, {
-bubbles: true, clientX: randomX, clientY: randomY,
-view: window, detail: type === 'click' ? 1 : 0,
-}));
-});
-window.scrollBy(0, Math.floor(Math.random() * 50) - 25);
-document.dispatchEvent(new Event('focus'));
-window.dispatchEvent(new Event('focus'));
-await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 400)));
-} catch (_simErr) {
-}
-}
-const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
-const rcAction = needsRecaptcha ? (imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION') : null;
-let recaptchaToken = null;
-if (needsRecaptcha) {
-try {
-const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
-const rcTimeout_ = new Promise((_, reject) =>
-setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s)`)), rcTimeoutMs)
-);
-recaptchaToken = await Promise.race([rcPromise, rcTimeout_]);
-if (!recaptchaToken || recaptchaToken.length < 1500) {
-return {
-success: false,
-error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1500)`,
-tokenLength: recaptchaToken ? recaptchaToken.length : 0,
-};
-}
-} catch (err) {
-return { success: false, error: `reCAPTCHA execute failed: ${err.message}` };
-}
-}
-const body = payload.body || {};
-if (needsRecaptcha && recaptchaToken) {
-if (!body.clientContext) body.clientContext = {};
-body.clientContext.recaptchaContext = {
-token: recaptchaToken,
-applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
-};
-if (Array.isArray(body.requests)) {
-for (let i = 0; i < body.requests.length; i++) {
-const req = body.requests[i];
-let itemToken = recaptchaToken;
-if (i > 0 && req.clientContext) {
-try {
-await new Promise(r => setTimeout(r, 300 + Math.floor(Math.random() * 200)));
-itemToken = await grecaptcha.enterprise.execute(siteKey, { action: rcAction });
-if (!itemToken || itemToken.length < 1500) {
-itemToken = recaptchaToken;
-}
-} catch (_freshErr) {
-itemToken = recaptchaToken;
-}
-}
-if (req.clientContext) {
-req.clientContext.recaptchaContext = {
-token: itemToken,
-applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
-};
-}
-}
-}
-}
-let authHeaderValue = (cachedAccessToken && cachedAccessToken.startsWith('Bearer ')) ? cachedAccessToken : null;
-if (!authHeaderValue) {
-const nextDataEl = document.getElementById('__NEXT_DATA__');
-if (nextDataEl) {
-try {
-const data = JSON.parse(nextDataEl.textContent);
-const props = data?.props?.pageProps || {};
-const session = props.session || {};
-let token = session.access_token || session.accessToken;
-if (!token) {
-const user = props.user || {};
-token = user.accessToken;
-}
-if (token) {
-authHeaderValue = `Bearer ${token}`;
-}
-} catch (e) {  }
-}
-}
-const headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
-if (authHeaderValue) {
-headers['Authorization'] = authHeaderValue;
-}
-const controller = new AbortController();
-const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey)
-? Math.max(fetchTimeoutMs || 20000, 90000) : (fetchTimeoutMs || 20000);
-const fetchTimer = setTimeout(() => controller.abort(), fetchTimeout);
-try {
-const bodyStr = JSON.stringify(body);
-const resp = await fetch(endpointUrl, {
-method: 'POST',
-headers,
-credentials: 'include',
-body: bodyStr,
-signal: controller.signal,
-});
-clearTimeout(fetchTimer);
-const responseText = await resp.text();
-let responseData = null;
-try {
-responseData = JSON.parse(responseText);
-} catch (e) {
-responseData = { raw: responseText.substring(0, 1000) };
-}
-if (siteKey && recaptchaToken) {
-try {
-fetch(`https://www.google.com/recaptcha/enterprise/clr?k=${siteKey}`, {
-method: 'POST',
-headers: { 'Content-Type': 'application/x-protobuffer' },
-credentials: 'include',
-mode: 'no-cors',
-body: `\n(${siteKey}`,
-}).catch(() => {});
-} catch (_clrErr) {  }
-}
-return {
-success: resp.ok,
-status: resp.status,
-statusText: resp.statusText,
-data: responseData,
-error: resp.ok ? undefined : (
-(responseData?.error?.message) ||
-(responseData?.error?.status) ||
-(typeof responseData?.error === 'string' ? responseData.error : '') ||
-(responseData?.raw ? responseData.raw.substring(0, 200) : '') ||
-resp.statusText || `HTTP ${resp.status}`
-),
-tokenLength: recaptchaToken ? recaptchaToken.length : 0,
-};
-} catch (fetchErr) {
-clearTimeout(fetchTimer);
-const errMsg = fetchErr.name === String.fromCharCode(0x41,0x62,0x6f,0x72,0x74,0x45,0x72,0x72,0x6f,0x72)
-? `fetch timeout (${fetchTimeout / 1000}s) — API did not respond`
-: `fetch failed: ${fetchErr.message}`;
-return {
-success: false,
-error: errMsg,
-tokenLength: recaptchaToken ? recaptchaToken.length : 0,
-};
-}
-},
-args: [
-endpointUrl,
-msg.payload || {},
-msg.needsRecaptcha !== false,
-tabState[tabId]?.accessToken || null,
-msg.endpoint || '',
-msg.rcTimeout || 15000,
-msg.fetchTimeout || 20000,
-],
-});
-const scriptTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(msg.endpoint) ? 120000 : 30000;
-const timeoutPromise = new Promise((_, reject) =>
-setTimeout(() => reject(new Error(`submit_prompt timeout (${scriptTimeout / 1000}s)`)), scriptTimeout)
-);
-const results = await Promise.race([scriptPromise, timeoutPromise]);
-const result = results?.[0]?.result || {};
-let trimmedResult = { ...result };
-if (result.data) {
-const dataStr = JSON.stringify(result.data);
-if (dataStr.length > 50000 && msg.endpoint !== 'UPSCALE_IMAGE') {
-const strip = (obj) => {
-if (!obj || typeof obj !== 'object') return obj;
-if (Array.isArray(obj)) return obj.map(strip);
-const out = {};
-for (const [k, v] of Object.entries(obj)) {
-if (k === 'encodedVideo' || k === 'encodedImage') continue;
-if (typeof v === 'string' && v.length > 10000) {
-out[k] = `[trimmed ${v.length} chars]`;
-} else if (typeof v === 'object') {
-out[k] = strip(v);
-} else {
-out[k] = v;
-}
-}
-return out;
-};
-trimmedResult.data = strip(result.data);
-trimmedResult._trimmed = true;
-}
-}
-wsSend({
-action: 'submit_prompt_result',
-requestId: msg.requestId,
-...trimmedResult,
-});
-} catch (e) {
-console.error(`[VEO Bridge] ❌ submit_prompt failed for ${msg.email}: ${e.message}`);
-wsSend({
-action: 'submit_prompt_result',
-requestId: msg.requestId,
-success: false,
-error: e.message,
-});
-} finally {
-clearInterval(keepaliveTimer);
-}
-break;
-}
-case 'relay_fetch': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'relay_fetch_result',
-requestId: msg.requestId,
-success: false,
-error: `No tab found for ${msg.email}`,
-});
-return;
-}
-try {
-const requestUrl = msg.url || '';
-if (requestUrl.includes('labs.google')) {
-try {
-const tab = await chrome.tabs.get(tabId);
-if (tab && tab.url && !tab.url.includes('labs.google')) {
-await chrome.tabs.update(tabId, { url: VEO_URL });
-await new Promise((resolve) => {
-const onUpdated = (updatedTabId, changeInfo) => {
-if (updatedTabId === tabId && changeInfo.status === 'complete') {
-chrome.tabs.onUpdated.removeListener(onUpdated);
-resolve();
-}
-};
-chrome.tabs.onUpdated.addListener(onUpdated);
-setTimeout(() => {
-chrome.tabs.onUpdated.removeListener(onUpdated);
-resolve();
-}, 15000);
-});
-await new Promise(r => setTimeout(r, 2000));
-}
-} catch (navErr) {
-}
-}
-const scriptResult = await chrome.scripting.executeScript({
-target: { tabId },
-world: 'MAIN',
-func: async (url, method, body, headers, credentials) => {
-try {
-const controller = new AbortController();
-const timeoutId = setTimeout(() => controller.abort(), 15000);
-const fetchOpts = {
-method: method || 'POST',
-signal: controller.signal,
-};
-if (credentials) fetchOpts.credentials = credentials;
-if (headers && Object.keys(headers).length > 0) {
-fetchOpts.headers = headers;
-} else {
-fetchOpts.headers = { 'Content-Type': 'application/json' };
-}
-if (body && method !== 'GET') {
-fetchOpts.body = JSON.stringify(body);
-}
-const resp = await fetch(url, fetchOpts);
-clearTimeout(timeoutId);
-let data = null;
-const contentType = resp.headers.get('content-type') || '';
-if (contentType.includes('json')) {
-data = await resp.json().catch(() => null);
-} else {
-const text = await resp.text().catch(() => '');
-try { data = JSON.parse(text); } catch { data = { text }; }
-}
-return {
-success: resp.ok,
-status: resp.status,
-statusText: resp.statusText,
-data,
-};
-} catch (e) {
-return {
-success: false,
-status: 0,
-error: e.message || String(e),
-};
-}
-},
-args: [
-msg.url,
-msg.method || 'POST',
-msg.body || null,
-msg.headers || {},
-msg.credentials || 'include',
-],
-});
-const result = scriptResult?.[0]?.result || {
-success: false,
-error: 'executeScript returned no result',
-};
-wsSend({
-action: 'relay_fetch_result',
-requestId: msg.requestId,
-...result,
-});
-} catch (e) {
-console.error(`[VEO Bridge] ❌ relay_fetch failed for ${msg.email}: ${e.message}`);
-wsSend({
-action: 'relay_fetch_result',
-requestId: msg.requestId,
-success: false,
-error: e.message,
-});
-}
-break;
-}
-case 'navigate_tab': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'navigate_tab_result',
-requestId: msg.requestId,
-success: false,
-error: `No tab found for ${msg.email}`,
-});
-return;
-}
-const targetUrl = msg.url;
-if (!targetUrl) {
-wsSend({
-action: 'navigate_tab_result',
-requestId: msg.requestId,
-success: false,
-error: 'No URL specified',
-});
-return;
-}
-try {
-const startTime = Date.now();
-await chrome.tabs.update(tabId, { url: targetUrl });
-await new Promise(r => setTimeout(r, 1500));
-const maxWait = 25000;
-let loadComplete = false;
-while (Date.now() - startTime < maxWait + 1500) {
-try {
-const tab = await chrome.tabs.get(tabId);
-if (tab.status === 'complete') {
-loadComplete = true;
-break;
-}
-} catch (e) {
-}
-await new Promise(r => setTimeout(r, 500));
-}
-const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
-if (loadComplete) {
-} else {
-}
-wsSend({
-action: 'navigate_tab_result',
-requestId: msg.requestId,
-success: loadComplete,
-loadTime: parseFloat(loadTime),
-url: targetUrl,
-timedOut: !loadComplete,
-});
-} catch (e) {
-console.error(`[VEO Bridge] ❌ Navigation failed: ${e.message}`);
-wsSend({
-action: 'navigate_tab_result',
-requestId: msg.requestId,
-success: false,
-error: e.message,
-});
-}
-break;
-}
-case 'check_tab_alive': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: 'no_tab' });
-return;
-}
-try {
-const results = await chrome.scripting.executeScript({
-target: { tabId },
-func: () => document.readyState,
-});
-wsSend({
-action: 'tab_alive',
-requestId: msg.requestId,
-alive: results?.[0]?.result === 'complete',
-tabState: results?.[0]?.result,
-});
-} catch (e) {
-wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: e.message });
-}
-break;
-}
-case 'reload_tab': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'reload_tab_result',
-requestId: msg.requestId,
-success: false,
-error: `No tab found for ${msg.email}`,
-});
-return;
-}
-try {
-await chrome.tabs.reload(tabId);
-await new Promise((resolve) => {
-const onUpdated = (updatedTabId, changeInfo) => {
-if (updatedTabId === tabId && changeInfo.status === 'complete') {
-chrome.tabs.onUpdated.removeListener(onUpdated);
-resolve();
-}
-};
-chrome.tabs.onUpdated.addListener(onUpdated);
-setTimeout(() => {
-chrome.tabs.onUpdated.removeListener(onUpdated);
-resolve();
-}, 15000);
-});
-wsSend({
-action: 'reload_tab_result',
-requestId: msg.requestId,
-success: true,
-});
-} catch (e) {
-wsSend({
-action: 'reload_tab_result',
-requestId: msg.requestId,
-success: false,
-error: e.message,
-});
-}
-break;
-}
-case 'reload_extension': {
-wsSend({
-action: 'extension_reloaded',
-requestId: msg.requestId || null,
-success: true,
-});
-setTimeout(() => {
-chrome.runtime.reload();
-}, 200);
-break;
-}
-case 'ping':
-wsSend({ action: 'pong' });
-break;
-case 'probe_browser_headers': {
-const tabId = findTabForEmail(msg.email);
-if (!tabId) {
-wsSend({
-action: 'probe_browser_headers_result',
-requestId: msg.requestId || null,
-success: false,
-error: `No tab found for ${msg.email}`,
-});
-break;
-}
-try {
-const results = await chrome.scripting.executeScript({
-target: { tabId },
-world: 'MAIN',
-func: async (apiKey) => {
-try {
-const resp = await fetch(
-`https://aisandbox-pa.googleapis.com/v1/credits?key=${apiKey}`,
-{
-method: 'GET',
-credentials: 'include',
-headers: {
-'Content-Type': 'application/json',
-'Origin': 'https://labs.google',
-'Referer': 'https://labs.google/',
-},
-}
-);
-return { status: resp.status, triggered: true };
-} catch (e) {
-return { triggered: true, error: e.message };
-}
-},
-args: [msg.apiKey || 'AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY'],
-});
-const result = results?.[0]?.result;
-await new Promise(r => setTimeout(r, 500));
-const state = tabState[tabId];
-const currentHeaders = state ? { ...state.headers } : {};
-if (globalBrowserValidation && !currentHeaders['x-browser-validation']) {
-currentHeaders['x-browser-validation'] = globalBrowserValidation;
-}
-wsSend({
-action: 'probe_browser_headers_result',
-requestId: msg.requestId || null,
-email: msg.email,
-success: true,
-probeResult: result,
-headers: currentHeaders,
-hasValidation: !!currentHeaders['x-browser-validation'],
-globalValidation: globalBrowserValidation,
-});
-if (state?.email && currentHeaders['x-browser-validation']) {
-if (state) Object.assign(state.headers, currentHeaders);
-wsSend({
-action: 'headers_update',
-email: state.email,
-headers: currentHeaders,
-accessToken: state?.accessToken,
-});
-}
-} catch (e) {
-console.error(`[VEO Bridge] Probe failed: ${e.message}`);
-wsSend({
-action: 'probe_browser_headers_result',
-requestId: msg.requestId || null,
-success: false,
-error: e.message,
-});
-}
-break;
-}
-case 'provision_gemini_key': {
-const requestId = msg.requestId;
-const email = msg.email;
-const RPC_BASE = 'https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService';
-const STATIC_KEY = 'AIzaSyDdP816MREB3SkjZO04QXbjsigfcI0GWOs';
-const tabId = findTabForEmail(email) || Object.keys(tabState).find(tid => tabState[tid].email);
-if (!tabId) {
-wsSend({
-action: 'provision_gemini_key_result',
-requestId, email, success: false,
-error: 'No tab available for Gemini key provisioning',
-});
-break;
-}
-try {
-const sapisidCookie = await chrome.cookies.get({
-url: 'https://aistudio.google.com',
-name: 'SAPISID',
-});
-const sapisid = sapisidCookie?.value;
-if (!sapisid) {
-wsSend({
-action: 'provision_gemini_key_result',
-requestId, email, success: false,
-error: 'no_sapisid', msg: 'SAPISID cookie not found — user may not be logged in',
-});
-break;
-}
-const phase1Fn = async (RPC, KEY, sapisidValue) => {
-async function buildSapisidHash(sapisid) {
-try {
-const ORIGIN = "https://aistudio.google.com";
-const ts = Math.floor(Date.now() / 1000);
-const input = `${ts} ${sapisid} ${ORIGIN}`;
-const buf = await crypto.subtle.digest("SHA-1",
-new TextEncoder().encode(input));
-const hex = [...new Uint8Array(buf)]
-.map(b => b.toString(16).padStart(2, '0')).join('');
-const hash = `${ts}_${hex}`;
-return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
-} catch (e) { return null; }
-}
-const authHeader = await buildSapisidHash(sapisidValue);
-const H = {
-"Content-Type": "application/json+protobuf",
-"x-goog-api-key": KEY,
-"x-goog-authuser": "0",
-"x-user-agent": "grpc-web-javascript/0.1",
-"x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
-};
-if (authHeader) H["authorization"] = authHeader;
-try {
-let r = await fetch(RPC + "/ListCloudProjects", {
-method: "POST", credentials: "include", headers: H,
-body: JSON.stringify([null, null, null, 1, null, null])
-});
-if (!r.ok) return { error: "list_projects_http_" + r.status };
-let projects = await r.json();
-let projectRef = null;
-let projectId = null;
-if (projects && Array.isArray(projects)) {
-const flat = JSON.stringify(projects);
-const m = flat.match(/projects\/(\d+)/);
-if (m) projectRef = "projects/" + m[1];
-const m2 = flat.match(/gen-lang-client-[\w-]+/);
-if (m2) projectId = m2[0];
-}
-if (!projectRef) {
-return { error: "no_project", needs_navigate: true };
-}
-r = await fetch(RPC + "/ListCloudApiKeys", {
-method: "POST", credentials: "include", headers: H,
-body: JSON.stringify([100, null, 1, [projectRef]])
-});
-if (!r.ok) return { error: "list_keys_http_" + r.status };
-let keys = await r.json();
-const keysFlat = JSON.stringify(keys);
-const km = keysFlat.match(/AIza[\w-]{35}/);
-if (km) return { key: km[0], source: "existing" };
-if (!projectId) return { error: "no_project_id" };
-r = await fetch(RPC + "/GenerateCloudApiKey", {
-method: "POST", credentials: "include", headers: H,
-body: JSON.stringify([projectId, null, null, "GEMINI API AUTO"])
-});
-if (!r.ok) return { error: "gen_key_http_" + r.status };
-let newKey = await r.json();
-const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
-if (nkm) return { key: nkm[0], source: "created" };
-return { error: "create_failed", needs_navigate: true };
-} catch (e) {
-return { error: e.message };
-}
-};
-const phase1Script = chrome.scripting.executeScript({
-target: { tabId: parseInt(tabId) },
-world: 'MAIN',
-func: phase1Fn,
-args: [RPC_BASE, STATIC_KEY, sapisid],
-});
-const phase1Timeout = new Promise((_, reject) =>
-setTimeout(() => reject(new Error('Gemini provision Phase 1 timeout (30s)')), 30000)
-);
-const phase1Results = await Promise.race([phase1Script, phase1Timeout]);
-let result = phase1Results?.[0]?.result;
-if (result?.needs_navigate) {
-const origUrl = (await chrome.tabs.get(parseInt(tabId))).url;
-await chrome.tabs.update(parseInt(tabId), { url: 'https://aistudio.google.com/api-keys' });
-await new Promise(r => setTimeout(r, 6000));
-const phase2Fn = async (RPC, KEY, sapisidValue) => {
-async function buildSapisidHash(sapisid) {
-try {
-const ORIGIN = "https://aistudio.google.com";
-const ts = Math.floor(Date.now() / 1000);
-const input = `${ts} ${sapisid} ${ORIGIN}`;
-const buf = await crypto.subtle.digest("SHA-1",
-new TextEncoder().encode(input));
-const hex = [...new Uint8Array(buf)]
-.map(b => b.toString(16).padStart(2, '0')).join('');
-const hash = `${ts}_${hex}`;
-return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
-} catch (e) { return null; }
-}
-function extractToken() {
-try {
-if (typeof WIZ_global_data !== 'undefined' && WIZ_global_data.SNlM0e) return WIZ_global_data.SNlM0e;
-} catch (e) { }
-try {
-if (window.__WIZ_global_data__ && window.__WIZ_global_data__.SNlM0e) return window.__WIZ_global_data__.SNlM0e;
-} catch (e) { }
-try {
-const scripts = document.querySelectorAll('script');
-for (const s of scripts) {
-const txt = s.textContent || '';
-if (txt.length < 50) continue;
-let tm = txt.match(/SNlM0e['"]\s*[:,=]\s*['"](![^'"]{20,})['"]/);
-if (tm) return tm[1];
-tm = txt.match(/"(![A-Za-z0-9_\-]{20,})"/);
-if (tm) return tm[1];
-}
-} catch (e) { }
-return null;
-}
-const authHeader = await buildSapisidHash(sapisidValue);
-const H = {
-"Content-Type": "application/json+protobuf",
-"x-goog-api-key": KEY,
-"x-goog-authuser": "0",
-"x-user-agent": "grpc-web-javascript/0.1",
-"x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
-};
-if (authHeader) H["authorization"] = authHeader;
-try {
-const token = extractToken();
-if (!token) return { error: "no_token", msg: "Cannot extract SNlM0e token from AI Studio" };
-// Create project
-let r = await fetch(RPC + "/CreateCloudProject", {
-method: "POST", credentials: "include", headers: H,
-body: JSON.stringify([token, "GEMINI API FOR AUTO FLOW"])
-});
-if (!r.ok) return { error: "create_project_http_" + r.status };
-let newProj = await r.json();
-const npFlat = JSON.stringify(newProj);
-let projectRef = null, projectId = null;
-const npm = npFlat.match(/projects\/(\d+)/);
-if (npm) projectRef = "projects/" + npm[1];
-const npm2 = npFlat.match(/gen-lang-client-[\w-]+/);
-if (npm2) projectId = npm2[0];
-if (!projectRef) return { error: "create_project_failed" };
-// List keys for new project
-r = await fetch(RPC + "/ListCloudApiKeys", {
-method: "POST", credentials: "include", headers: H,
-body: JSON.stringify([100, null, 1, [projectRef]])
-});
-if (r.ok) {
-let keys = await r.json();
-const km = JSON.stringify(keys).match(/AIza[\w-]{35}/);
-if (km) return { key: km[0], source: "existing" };
-}
-// Generate new key
-if (!projectId) return { error: "no_project_id" };
-r = await fetch(RPC + "/GenerateCloudApiKey", {
-method: "POST", credentials: "include", headers: H,
-body: JSON.stringify([projectId, token, null, "GEMINI API FOR AUTO FLOW"])
-});
-if (!r.ok) return { error: "gen_key_http_" + r.status };
-let newKey = await r.json();
-const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
-if (nkm) return { key: nkm[0], source: "created" };
-return { error: "create_failed" };
-} catch (e) {
-return { error: e.message };
-}
-};
-// Fix #3: Timeout guard for Phase 2 gRPC calls (30s)
-const phase2Script = chrome.scripting.executeScript({
-target: { tabId: parseInt(tabId) },
-world: 'MAIN',
-func: phase2Fn,
-args: [RPC_BASE, STATIC_KEY, sapisid],
-});
-const phase2Timeout = new Promise((_, reject) =>
-setTimeout(() => reject(new Error('Gemini provision Phase 2 timeout (30s)')), 30000)
-);
-const phase2Results = await Promise.race([phase2Script, phase2Timeout]);
-result = phase2Results?.[0]?.result;
-// Navigate back to VEO
-setTimeout(() => {
-chrome.tabs.update(parseInt(tabId), { url: origUrl || 'https://labs.google/fx/vi/tools/flow' });
-}, 1000);
-}
-// ── Send result ──
-if (result?.key) {
-wsSend({
-action: 'provision_gemini_key_result',
-requestId, email, success: true,
-key: result.key, source: result.source,
-});
-} else {
-wsSend({
-action: 'provision_gemini_key_result',
-requestId, email, success: false,
-error: result?.error || 'unknown', msg: result?.msg || '',
-});
-}
-} catch (e) {
-console.error(`[VEO Bridge] Gemini key provision error: ${e.message}`);
-wsSend({
-action: 'provision_gemini_key_result',
-requestId, email, success: false,
-error: e.message,
-});
-}
-break;
-}
-}
-}
+  console.log('[VEO Bridge] App →', msg.action, msg);
+
+  switch (msg.action) {
+    case 'request_recaptcha': {
+      // Find tab for this email (with stale tab recovery fallback)
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        // ★ Stale Tab Recovery: try to discover orphaned VEO tab
+        tabId = await recoverStaleTab(msg.email);
+      }
+      if (!tabId) {
+        wsSend({
+          action: 'recaptcha_token',
+          requestId: msg.requestId,
+          token: null,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      try {
+        // Execute directly in page's MAIN world via chrome.scripting API
+        // This bypasses CSP (no eval) and isolated world (direct grecaptcha access)
+        const scriptPromise = chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: async (siteKey) => {
+            // This runs in the page's main JS context — full access to grecaptcha
+            if (typeof grecaptcha === 'undefined' ||
+              typeof grecaptcha.enterprise === 'undefined' ||
+              typeof grecaptcha.enterprise.execute !== 'function') {
+              return { token: null, error: 'reCAPTCHA Enterprise not available on page' };
+            }
+
+            // Extract site key from page if not provided
+            if (!siteKey) {
+              for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+                const m = s.src.match(/render=([^&]+)/);
+                if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
+              }
+            }
+            if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
+              for (const id in ___grecaptcha_cfg.clients) {
+                const client = ___grecaptcha_cfg.clients[id];
+                for (const key in client) {
+                  const obj = client[key];
+                  if (obj && typeof obj === 'object') {
+                    for (const k2 in obj) {
+                      const v = obj[k2];
+                      if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
+                    }
+                  }
+                  if (siteKey) break;
+                }
+                if (siteKey) break;
+              }
+            }
+
+            if (!siteKey) {
+              return { token: null, error: 'Could not extract reCAPTCHA site key' };
+            }
+
+            // Use async/await for proper Promise resolution by chrome.scripting
+            try {
+              const token = await grecaptcha.enterprise.execute(siteKey, { action: 'VIDEO_GENERATION' });
+              if (token && token.length >= 1500) {
+                return { token, tokenLength: token.length };
+              }
+              return { token: null, error: `Token too short (${token ? token.length : 0} chars, need ≥1500)`, tokenLength: token ? token.length : 0 };
+            } catch (err) {
+              return { token: null, error: err.message, tokenLength: 0 };
+            }
+          },
+          args: [msg.siteKey || null],
+        });
+
+        // Fix #1: Timeout guard — prevents grecaptcha.execute() from hanging forever
+        // ★ Progressive timeout: use dynamic rcTimeout from Python (default 15000ms)
+        const rcTimeoutMs = msg.rcTimeout || 15000;
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s) — widget may be frozen`)), rcTimeoutMs)
+        );
+        const results = await Promise.race([scriptPromise, timeoutPromise]);
+
+        const result = results?.[0]?.result;
+
+        // Track consecutive short tokens per tab — auto-reload after threshold
+        if (result?.error?.includes('too short')) {
+          shortTokenCounts[tabId] = (shortTokenCounts[tabId] || 0) + 1;
+          console.warn(
+            `[VEO Bridge] ⚠️ Short token #${shortTokenCounts[tabId]} for tab ${tabId} ` +
+            `(${result.tokenLength || 0} chars)`
+          );
+          if (shortTokenCounts[tabId] >= SHORT_TOKEN_RELOAD_THRESHOLD) {
+            console.warn(
+              `[VEO Bridge] 🔄 Auto-reloading tab ${tabId} — ` +
+              `${shortTokenCounts[tabId]} consecutive short tokens (reCAPTCHA widget broken)`
+            );
+            shortTokenCounts[tabId] = 0;
+            const reloaded = await safeTabReload(tabId, 'short-token-threshold', true);
+            if (reloaded) {
+              // Wait for page to reload and reCAPTCHA to re-initialize
+              await new Promise(r => setTimeout(r, 5000));
+            }
+          }
+        } else if (result?.token) {
+          // Valid token — reset short token counter
+          shortTokenCounts[tabId] = 0;
+        }
+
+        wsSend({
+          action: 'recaptcha_token',
+          requestId: msg.requestId,
+          email: msg.email,
+          token: result?.token || null,
+          error: result?.error || null,
+        });
+      } catch (e) {
+        wsSend({
+          action: 'recaptcha_token',
+          requestId: msg.requestId,
+          email: msg.email,
+          token: null,
+          error: e.message,
+        });
+      }
+      break;
+    }
+
+    case 'request_headers': {
+      // Return cached headers for email
+      const tabId = findTabForEmail(msg.email);
+      const state = tabId ? tabState[tabId] : null;
+
+      wsSend({
+        action: 'headers',
+        email: msg.email,
+        headers: state?.headers || {},
+        accessToken: state?.accessToken || null,
+      });
+      break;
+    }
+
+    case 'request_access_token': {
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'access_token',
+          requestId: msg.requestId,
+          email: msg.email,
+          token: null,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, {
+          action: 'get_access_token',
+        });
+
+        wsSend({
+          action: 'access_token',
+          requestId: msg.requestId,
+          email: msg.email,
+          token: response?.token || null,
+          tokenEmail: response?.email || null,
+        });
+      } catch (e) {
+        wsSend({
+          action: 'access_token',
+          requestId: msg.requestId,
+          email: msg.email,
+          token: null,
+          error: e.message,
+        });
+      }
+      break;
+    }
+
+    case 'refresh_headers': {
+      // App requests fresh headers → reload VEO tabs to trigger API requests
+      console.log('[VEO Bridge] App requested header refresh');
+      const refreshed = await reloadVeoTabs(msg.email);
+      wsSend({
+        action: 'headers_refreshed',
+        requestId: msg.requestId || null,
+        email: msg.email || null,
+        tabsReloaded: refreshed,
+      });
+      break;
+    }
+
+    case 'refresh_headers_lightweight': {
+      // Lightweight refresh — tell content.js to trigger a fetch (no page reload)
+      console.log('[VEO Bridge] App requested lightweight header refresh');
+      const tabId = findTabForEmail(msg.email);
+      if (tabId) {
+        try {
+          await chrome.tabs.sendMessage(tabId, { action: 'lightweight_header_refresh' });
+          wsSend({
+            action: 'headers_refreshed_lightweight',
+            requestId: msg.requestId || null,
+            email: msg.email || null,
+            success: true,
+          });
+        } catch (e) {
+          // Content script not responding — fall back to full reload
+          console.log('[VEO Bridge] Lightweight refresh failed, falling back to full reload');
+          const refreshed = await reloadVeoTabs(msg.email);
+          wsSend({
+            action: 'headers_refreshed',
+            requestId: msg.requestId || null,
+            email: msg.email || null,
+            tabsReloaded: refreshed,
+          });
+        }
+      } else {
+        wsSend({
+          action: 'headers_refreshed_lightweight',
+          requestId: msg.requestId || null,
+          email: msg.email || null,
+          success: false,
+          error: 'No tab found',
+        });
+      }
+      break;
+    }
+
+    case 'simulate_activity': {
+      // App requests activity simulation on a specific tab
+      const tabId = findTabForEmail(msg.email);
+      if (tabId) {
+        try {
+          await chrome.tabs.sendMessage(tabId, { action: 'simulate_activity' });
+          console.log(`[VEO Bridge] 🖱️ Activity simulated for ${msg.email}`);
+          wsSend({
+            action: 'activity_simulated',
+            requestId: msg.requestId || null,
+            email: msg.email,
+            success: true,
+          });
+        } catch (e) {
+          wsSend({
+            action: 'activity_simulated',
+            requestId: msg.requestId || null,
+            email: msg.email,
+            success: false,
+            error: e.message,
+          });
+        }
+      }
+      break;
+    }
+
+    case 'reload_extension': {
+      // Bridge detected version mismatch → self-reload to pick up new code
+      const reason = msg.reason || 'version mismatch';
+      const targetVer = msg.target_version || 'unknown';
+      console.warn(
+        `[VEO Bridge] 🔄 Reload requested: ${reason} → target v${targetVer} (current v${EXT_VERSION})`
+      );
+      // Small delay to let the log message be sent
+      setTimeout(() => {
+        chrome.runtime.reload();
+      }, 1000);
+      break;
+    }
+
+    case 'assign_email': {
+      // Server tells us which email this browser belongs to
+      // (fallback when content.js email detection fails)
+      const email = msg.email;
+      if (!email) break;
+
+      const serverProfilePath = msg.profilePath || '';
+      // NOTE: MV3 extensions cannot access the browser's user-data-dir,
+      // so client-side profile verification is not possible. The profilePath
+      // is logged for server-side diagnostics only.
+      console.log(`[VEO Bridge] 📧 Server assigned email: ${email} (profilePath=${serverProfilePath || 'none'})`);
+
+      // First: check if ANY tab already has this email assigned
+      let existingTabId = findTabForEmail(email);
+      if (existingTabId) {
+        console.log(`[VEO Bridge] Email ${email} already assigned to tab ${existingTabId}`);
+        wsSend({ action: 'register', email, tabId: existingTabId, version: EXT_VERSION });
+        break;
+      }
+
+      // Second: find any VEO tab (broad match including locale prefixes like /vi/)
+      const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+      if (veoTabs.length > 0) {
+        // Use first unassigned VEO tab, or first tab if all assigned
+        let targetTab = veoTabs.find(t => !tabState[t.id]?.email) || veoTabs[0];
+        const tabId = targetTab.id;
+        if (!tabState[tabId]) {
+          tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+        }
+        tabState[tabId].email = email;
+        console.log(`[VEO Bridge] Assigned email ${email} to existing VEO tab ${tabId} (${targetTab.url})`);
+        wsSend({ action: 'register', email, tabId, version: EXT_VERSION });
+      } else {
+        // No VEO tab exists — check tab limit before creating
+        const allTabs = await chrome.tabs.query({ currentWindow: true });
+        if (allTabs.length >= MAX_TABS) {
+          console.warn(`[VEO Bridge] ⚠️ Tab limit reached (${allTabs.length}/${MAX_TABS}) — NOT creating tab for ${email}`);
+          wsSend({
+            action: 'register',
+            email,
+            tabId: null,
+            version: EXT_VERSION,
+            error: `Tab limit reached (${MAX_TABS})`,
+          });
+        } else {
+          console.log(`[VEO Bridge] Creating VEO tab for ${email} (${allTabs.length}/${MAX_TABS} tabs)...`);
+          const newTab = await chrome.tabs.create({
+            url: VEO_URL,
+            active: false,
+            pinned: true,
+          });
+          tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+          console.log(`[VEO Bridge] Created VEO tab ${newTab.id} for ${email}`);
+          wsSend({ action: 'register', email, tabId: newTab.id, version: EXT_VERSION });
+          try { chrome.tabs.update(newTab.id, { autoDiscardable: false }); } catch (_) { }
+          startZombieTimer(newTab.id);
+        }
+      }
+      break;
+    }
+
+
+    case 'check_recaptcha_ready': {
+      // Layer 1: Deep readiness check — trial-execute a real token.
+      // A simple `typeof execute === 'function'` check is NOT sufficient:
+      // it returns true before the widget is fully initialized, causing
+      // 330-538 char garbage tokens. Instead, we actually call execute() and
+      // check that the returned token is ≥ 1500 chars (HAR: valid = 1742-2169).
+      // The valid token is sent back for caching (not wasted).
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        // ★ Stale Tab Recovery
+        tabId = await recoverStaleTab(msg.email);
+      }
+      if (!tabId) {
+        wsSend({
+          action: 'recaptcha_ready',
+          requestId: msg.requestId,
+          ready: false,
+          details: { error: `No tab found for ${msg.email}` },
+        });
+        return;
+      }
+
+      try {
+        // Race: trial-execute vs 8s timeout (execute itself takes 3-5s)
+        const scriptPromise = chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: async () => {
+            const hasGrecaptcha = typeof grecaptcha !== 'undefined';
+            const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
+            const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
+            const pageLoaded = document.readyState === 'complete';
+            const hasRecaptchaScript = !!document.querySelector('script[src*="recaptcha"]');
+
+            // Only bail if grecaptcha.enterprise.execute doesn't exist yet.
+            // Don't require document.readyState === 'complete' — reCAPTCHA
+            // can be functional before the full page load finishes (the VEO
+            // page takes 13+ seconds to reach 'complete' after reload).
+            if (!hasExecute) {
+              return {
+                ready: false,
+                grecaptchaLoaded: hasGrecaptcha,
+                enterpriseLoaded: hasEnterprise,
+                executeAvailable: hasExecute,
+                pageLoaded,
+                hasRecaptchaScript,
+                token: null,
+                tokenLength: 0,
+              };
+            }
+
+            // Extract site key (same logic as request_recaptcha)
+            let siteKey = null;
+            for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+              const m = s.src.match(/render=([^&]+)/);
+              if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
+            }
+            if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
+              for (const id in ___grecaptcha_cfg.clients) {
+                const client = ___grecaptcha_cfg.clients[id];
+                for (const key in client) {
+                  const obj = client[key];
+                  if (obj && typeof obj === 'object') {
+                    for (const k2 in obj) {
+                      const v = obj[k2];
+                      if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
+                    }
+                  }
+                  if (siteKey) break;
+                }
+                if (siteKey) break;
+              }
+            }
+
+            if (!siteKey) {
+              return {
+                ready: false,
+                grecaptchaLoaded: hasGrecaptcha,
+                enterpriseLoaded: hasEnterprise,
+                executeAvailable: hasExecute,
+                pageLoaded,
+                hasRecaptchaScript,
+                token: null,
+                tokenLength: 0,
+                error: 'Could not extract site key',
+              };
+            }
+
+            // Trial execute — the real test (async/await for proper serialization)
+            // NOTE: Use VIDEO_GENERATION as the trial action (most common endpoint).
+            // The actual submit_prompt handler always generates its own fresh token
+            // with the correct action (IMAGE_GENERATION for T2I/UPSCALE_IMAGE,
+            // VIDEO_GENERATION for video endpoints). The trial token here is only
+            // used to verify widget health — but since it may be cached by the pool,
+            // we tag it with trialAction so Python can avoid action mismatches.
+            const trialAction = 'VIDEO_GENERATION';
+            try {
+              const token = await grecaptcha.enterprise.execute(siteKey, { action: trialAction });
+              return {
+                ready: !!(token && token.length >= 1500),
+                grecaptchaLoaded: true,
+                enterpriseLoaded: true,
+                executeAvailable: true,
+                pageLoaded: true,
+                hasRecaptchaScript: true,
+                token: (token && token.length >= 1500) ? token : null,
+                tokenLength: token ? token.length : 0,
+                trialAction,  // tag so pool knows what action this token was generated for
+              };
+            } catch (err) {
+              return {
+                ready: false,
+                grecaptchaLoaded: true,
+                enterpriseLoaded: true,
+                executeAvailable: true,
+                pageLoaded: true,
+                hasRecaptchaScript: true,
+                token: null,
+                tokenLength: 0,
+                error: err.message,
+              };
+            }
+          },
+          args: [],
+        });
+
+        // VEO page takes 13+ seconds to fully load after reload.
+        // Use 20s timeout to avoid premature "frozen" detection during startup.
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('executeScript timeout (20s) — tab may be frozen')), 20000)
+        );
+
+        const results = await Promise.race([scriptPromise, timeoutPromise]);
+        const details = results?.[0]?.result || {};
+        wsSend({
+          action: 'recaptcha_ready',
+          requestId: msg.requestId,
+          ready: details.ready || false,
+          token: details.token || null,
+          details,
+        });
+      } catch (e) {
+        console.warn(`[VEO Bridge] check_recaptcha_ready failed for ${msg.email}: ${e.message}`);
+
+        // If tab is frozen, try to wake it up (with cooldown protection)
+        if (e.message.includes('timeout') || e.message.includes('frozen')) {
+          await safeTabReload(tabId, 'recaptcha-check-timeout');
+        }
+
+        wsSend({
+          action: 'recaptcha_ready',
+          requestId: msg.requestId,
+          ready: false,
+          details: { error: e.message },
+        });
+      }
+      break;
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // submit_prompt — FULL API SUBMISSION FROM PAGE CONTEXT
+    //
+    // Flow: reCAPTCHA token → build body → fetch() from page → return result
+    // Token is used IMMEDIATELY (<100ms), headers auto-added by browser.
+    // This eliminates token expiry issues and header mismatches.
+    //
+    // Uses chrome.scripting.executeScript (world: MAIN) which bypasses CSP.
+    // Content.js <script> injection is blocked by labs.google CSP.
+    //
+    // MV3 keepalive: chrome.runtime.getPlatformInfo() every 25s resets
+    // Chrome's 30s service worker inactivity timer, preventing termination
+    // during long reCAPTCHA + fetch operations.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    case 'submit_prompt': {
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        // ★ Stale Tab Recovery
+        tabId = await recoverStaleTab(msg.email);
+      }
+      if (!tabId) {
+        wsSend({
+          action: 'submit_prompt_result',
+          requestId: msg.requestId,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      // ── MV3 Keepalive ──────────────────────────────────────────────────
+      // Call extension API every 25s to reset Chrome's 30s inactivity timer.
+      // This prevents service worker termination during long operations
+      // (reCAPTCHA ≤10s + fetch ≤20s = up to 30s total).
+      const keepaliveTimer = setInterval(() => {
+        chrome.runtime.getPlatformInfo(() => { });
+      }, 25000);
+
+      try {
+        // Endpoint URLs mapped by type
+        const ENDPOINTS = {
+          T2V: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoText',
+          I2V_SINGLE: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartImage',
+          I2V_DUAL: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoStartAndEndImage',
+          R2V: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages',
+          // T2I: dynamic — requires projects/{projectId}/ prefix (see below)
+          STATUS: 'https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus',
+          UPSCALE_VIDEO: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo',
+          UPLOAD: 'https://aisandbox-pa.googleapis.com/v1:uploadUserImage',
+          UPSCALE_IMAGE: 'https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage',
+        };
+
+        // T2I/I2I: URL requires projects/{projectId}/ prefix per HAR
+        let endpointUrl;
+        if (msg.endpoint === 'T2I') {
+          const projectId = msg.payload?.body?.clientContext?.projectId || '';
+          if (!projectId) {
+            wsSend({
+              action: 'submit_prompt_result',
+              requestId: msg.requestId,
+              success: false,
+              error: 'T2I requires projectId in clientContext',
+            });
+            return;
+          }
+          endpointUrl = `https://aisandbox-pa.googleapis.com/v1/projects/${projectId}/flowMedia:batchGenerateImages`;
+        } else {
+          endpointUrl = ENDPOINTS[msg.endpoint] || msg.endpointUrl;
+        }
+
+        if (!endpointUrl) {
+          wsSend({
+            action: 'submit_prompt_result',
+            requestId: msg.requestId,
+            success: false,
+            error: `Unknown endpoint: ${msg.endpoint}`,
+          });
+          return;
+        }
+
+        console.log(
+          `[VEO Bridge] 🚀 submit_prompt for ${msg.email} → ${msg.endpoint} ` +
+          `(tab ${tabId}) [executeScript + keepalive]`
+        );
+
+        // Race: script execution vs 30s timeout (reCAPTCHA takes 3-5s + fetch 2-10s)
+        const scriptPromise = chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: async (endpointUrl, payload, needsRecaptcha, cachedAccessToken, endpointKey, rcTimeoutMs, fetchTimeoutMs) => {
+            // ── Step 1: Extract reCAPTCHA site key ────────────────────────
+            let siteKey = null;
+            if (needsRecaptcha) {
+              for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+                const m = s.src.match(/render=([^&]+)/);
+                if (m && m[1] !== 'explicit') { siteKey = m[1]; break; }
+              }
+              if (!siteKey && typeof ___grecaptcha_cfg !== 'undefined' && ___grecaptcha_cfg.clients) {
+                for (const id in ___grecaptcha_cfg.clients) {
+                  const client = ___grecaptcha_cfg.clients[id];
+                  for (const key in client) {
+                    const obj = client[key];
+                    if (obj && typeof obj === 'object') {
+                      for (const k2 in obj) {
+                        const v = obj[k2];
+                        if (v && typeof v === 'object' && v.sitekey) { siteKey = v.sitekey; break; }
+                      }
+                    }
+                    if (siteKey) break;
+                  }
+                  if (siteKey) break;
+                }
+              }
+              if (!siteKey) {
+                return { success: false, error: 'Could not extract reCAPTCHA site key' };
+              }
+            }
+
+            // ── Step 1.5: Simulate human behavior before reCAPTCHA ─────────
+            // reCAPTCHA Enterprise scores based on behavioral signals collected
+            // before execute(). Without prior user events, the execution context
+            // looks suspicious (no mouse, no scroll, no timing signals).
+            // F12 analysis: web has natural interaction before each token request.
+            if (needsRecaptcha) {
+              try {
+                // 1. Mouse events (move → click pattern — realistic coordinates)
+                const randomX = Math.floor(Math.random() * window.innerWidth * 0.6 + window.innerWidth * 0.2);
+                const randomY = Math.floor(Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.2);
+                ['mousemove', 'mouseover', 'mousedown', 'mouseup', 'click'].forEach(type => {
+                  document.dispatchEvent(new MouseEvent(type, {
+                    bubbles: true, clientX: randomX, clientY: randomY,
+                    view: window, detail: type === 'click' ? 1 : 0,
+                  }));
+                });
+                // 2. Small random scroll (mimics reading behavior)
+                window.scrollBy(0, Math.floor(Math.random() * 50) - 25);
+                // 3. Focus signals (tab attention)
+                document.dispatchEvent(new Event('focus'));
+                window.dispatchEvent(new Event('focus'));
+                // 4. Natural human delay (200-600ms reaction time)
+                await new Promise(r => setTimeout(r, 200 + Math.floor(Math.random() * 400)));
+              } catch (_simErr) {
+                // Non-fatal — proceed even if simulation fails
+              }
+            }
+
+            // ── Step 2: Generate reCAPTCHA token ───────
+            // ★ rcTimeoutMs comes from function parameter (progressive tier from Python)
+            // HAR verified: T2I/UPSCALE_IMAGE use IMAGE_GENERATION, video endpoints use VIDEO_GENERATION
+            const imageEndpoints = ['T2I', 'UPSCALE_IMAGE'];
+            const rcAction = needsRecaptcha ? (imageEndpoints.includes(endpointKey) ? 'IMAGE_GENERATION' : 'VIDEO_GENERATION') : null;
+            let recaptchaToken = null;
+            if (needsRecaptcha) {
+              try {
+                const rcPromise = grecaptcha.enterprise.execute(siteKey, { action: rcAction });
+                const rcTimeout_ = new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error(`reCAPTCHA execute timeout (${rcTimeoutMs / 1000}s)`)), rcTimeoutMs)
+                );
+                recaptchaToken = await Promise.race([rcPromise, rcTimeout_]);
+                // HAR verified: valid tokens are 1742-2169 chars
+                // A 538-char token passed old threshold (500) but was rejected by Google
+                if (!recaptchaToken || recaptchaToken.length < 1500) {
+                  return {
+                    success: false,
+                    error: `reCAPTCHA token too short (${recaptchaToken ? recaptchaToken.length : 0} chars, need ≥1500)`,
+                    tokenLength: recaptchaToken ? recaptchaToken.length : 0,
+                  };
+                }
+              } catch (err) {
+                return { success: false, error: `reCAPTCHA execute failed: ${err.message}` };
+              }
+            }
+
+            // ── Step 3: Build request body with per-request tokens ────────
+            // F12 analysis: web generates a FRESH reCAPTCHA token per image
+            // request (reload → submit → clr → reload → submit → clr...).
+            // Match this pattern: first request uses initial token, subsequent
+            // requests get fresh tokens with small delays between them.
+            const body = payload.body || {};
+            if (needsRecaptcha && recaptchaToken) {
+              // Top-level clientContext gets first token
+              if (!body.clientContext) body.clientContext = {};
+              body.clientContext.recaptchaContext = {
+                token: recaptchaToken,
+                applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+              };
+              // Per-request clientContext: each gets its own fresh token
+              if (Array.isArray(body.requests)) {
+                for (let i = 0; i < body.requests.length; i++) {
+                  const req = body.requests[i];
+                  let itemToken = recaptchaToken; // First uses initial token
+                  if (i > 0 && req.clientContext) {
+                    // Generate fresh token for subsequent requests (match web pattern)
+                    try {
+                      // Small delay between requests — web has reload/clr cycle (~300-500ms)
+                      await new Promise(r => setTimeout(r, 300 + Math.floor(Math.random() * 200)));
+                      itemToken = await grecaptcha.enterprise.execute(siteKey, { action: rcAction });
+                      if (!itemToken || itemToken.length < 1500) {
+                        itemToken = recaptchaToken; // Fallback to first token
+                      }
+                    } catch (_freshErr) {
+                      itemToken = recaptchaToken; // Fallback to first token on error
+                    }
+                  }
+                  if (req.clientContext) {
+                    req.clientContext.recaptchaContext = {
+                      token: itemToken,
+                      applicationType: 'RECAPTCHA_APPLICATION_TYPE_WEB',
+                    };
+                  }
+                }
+              }
+            }
+
+            // ── Step 4: Get access token ──────────────────────────────────
+            // Priority: 1) fresh Bearer token from webRequest headers
+            //           2) fallback to __NEXT_DATA__ (may be stale after ~1h)
+            // IMPORTANT: Only use Bearer tokens. SAPISIDHASH is Google internal
+            // auth and causes 403 on VEO API (HAR-verified 27/02/2026).
+            let authHeaderValue = (cachedAccessToken && cachedAccessToken.startsWith('Bearer ')) ? cachedAccessToken : null;
+            if (!authHeaderValue) {
+              const nextDataEl = document.getElementById('__NEXT_DATA__');
+              if (nextDataEl) {
+                try {
+                  const data = JSON.parse(nextDataEl.textContent);
+                  const props = data?.props?.pageProps || {};
+                  const session = props.session || {};
+                  let token = session.access_token || session.accessToken;
+                  if (!token) {
+                    const user = props.user || {};
+                    token = user.accessToken;
+                  }
+                  if (token) {
+                    authHeaderValue = `Bearer ${token}`;
+                  }
+                } catch (e) { /* ignore parse errors */ }
+              }
+            }
+
+            // ── Step 5: Send API request (with 20s AbortController) ──────
+            const headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
+            if (authHeaderValue) {
+              headers['Authorization'] = authHeaderValue;
+            }
+
+            const controller = new AbortController();
+            // ★ Progressive timeout: T2I/I2I/UPSCALE_IMAGE synchronous → min 90s, others use dynamic fetchTimeoutMs
+            const fetchTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(endpointKey)
+              ? Math.max(fetchTimeoutMs || 20000, 90000) : (fetchTimeoutMs || 20000);
+            const fetchTimer = setTimeout(() => controller.abort(), fetchTimeout);
+            try {
+              // Diagnostic: log what we're about to send
+              const bodyStr = JSON.stringify(body);
+              console.log(
+                `[VEO Bridge] 📡 T2I fetch: url=${endpointUrl.substring(0, 120)}`,
+                `\n  auth=${authHeaderValue ? authHeaderValue.substring(0, 30) + '...' : 'NONE'}`,
+                `\n  bodySize=${bodyStr.length} bodyKeys=${Object.keys(body).join(',')}`,
+                `\n  hasRecaptcha=${!!body.clientContext?.recaptchaContext}`,
+                `\n  reqCount=${body.requests?.length || 0}`,
+              );
+              const resp = await fetch(endpointUrl, {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: bodyStr,
+                signal: controller.signal,
+              });
+              clearTimeout(fetchTimer);
+
+              const responseText = await resp.text();
+              let responseData = null;
+              try {
+                responseData = JSON.parse(responseText);
+              } catch (e) {
+                responseData = { raw: responseText.substring(0, 1000) };
+              }
+
+              // ── Step 6: recaptcha/enterprise/clr — Report completion ────
+              // F12 analysis (definitive): Web calls recaptcha/enterprise/clr
+              // after EVERY successful submit (reload → submit → clr cycle).
+              // This builds reCAPTCHA trust score for subsequent requests.
+              // Fire-and-forget: don't block on response, don't fail on error.
+              if (siteKey && recaptchaToken) {
+                try {
+                  fetch(`https://www.google.com/recaptcha/enterprise/clr?k=${siteKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-protobuffer' },
+                    credentials: 'include',
+                    mode: 'no-cors',  // F12: sec-fetch-mode: no-cors
+                    body: `\n(${siteKey}`,  // Minimal protobuf: field 5 (site key)
+                  }).catch(() => {}); // Truly fire-and-forget
+                } catch (_clrErr) { /* non-fatal */ }
+              }
+
+              return {
+                success: resp.ok,
+                status: resp.status,
+                statusText: resp.statusText,
+                data: responseData,
+                error: resp.ok ? undefined : (
+                  // Extract error details from API response body for non-OK responses
+                  (responseData?.error?.message) ||
+                  (responseData?.error?.status) ||
+                  (typeof responseData?.error === 'string' ? responseData.error : '') ||
+                  (responseData?.raw ? responseData.raw.substring(0, 200) : '') ||
+                  resp.statusText || `HTTP ${resp.status}`
+                ),
+                tokenLength: recaptchaToken ? recaptchaToken.length : 0,
+              };
+            } catch (fetchErr) {
+              clearTimeout(fetchTimer);
+              const errMsg = fetchErr.name === 'AbortError'
+                ? `fetch timeout (${fetchTimeout / 1000}s) — API did not respond`
+                : `fetch failed: ${fetchErr.message}`;
+              return {
+                success: false,
+                error: errMsg,
+                tokenLength: recaptchaToken ? recaptchaToken.length : 0,
+              };
+            }
+          },
+          args: [
+            endpointUrl,
+            msg.payload || {},
+            msg.needsRecaptcha !== false, // default: true
+            tabState[tabId]?.accessToken || null, // fresh token from webRequest headers
+            msg.endpoint || '', // endpoint key for reCAPTCHA action selection
+            msg.rcTimeout || 15000,   // ★ Dynamic reCAPTCHA timeout from Python tier
+            msg.fetchTimeout || 20000, // ★ Dynamic fetch timeout from Python tier
+          ],
+        });
+
+        // T2I/I2I: synchronous response (up to ~90s), video: async (quick)
+        const scriptTimeout = ['T2I', 'I2I', 'UPSCALE_IMAGE'].includes(msg.endpoint) ? 120000 : 30000;
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`submit_prompt timeout (${scriptTimeout / 1000}s)`)), scriptTimeout)
+        );
+
+        const results = await Promise.race([scriptPromise, timeoutPromise]);
+        const result = results?.[0]?.result || {};
+
+        console.log(
+          `[VEO Bridge] ${result.success ? '✅' : '❌'} submit_prompt result: ` +
+          `status=${result.status || 'N/A'} token=${result.tokenLength || 0}chars` +
+          (result.error ? ` error=${result.error}` : '') +
+          (result.data?.error ? ` apiError=${JSON.stringify(result.data.error).substring(0, 200)}` : '')
+        );
+
+        // Trim large response data to prevent WebSocket overflow.
+        // UPSCALE_VIDEO responses can be ~1MB+ (include video frame data).
+        // Python only needs operation name/sceneId, not the video binary.
+        let trimmedResult = { ...result };
+        if (result.data) {
+          const dataStr = JSON.stringify(result.data);
+          if (dataStr.length > 50000 && msg.endpoint !== 'UPSCALE_IMAGE') { // >50KB = likely contains video data (skip trim for UPSCALE_IMAGE — encodedImage IS the result)
+            console.log(
+              `[VEO Bridge] ✂️ Trimming large response: ${(dataStr.length / 1024).toFixed(0)}KB → keeping metadata only`
+            );
+            // Deep-strip large binary fields while preserving structure.
+            // API response: {operations: [{operation: {name: "..."}, sceneId: "...", response: {videos: [{encodedVideo: "HUGE"}]}}]}
+            // Python needs: operations[].operation.name, operations[].sceneId
+            const strip = (obj) => {
+              if (!obj || typeof obj !== 'object') return obj;
+              if (Array.isArray(obj)) return obj.map(strip);
+              const out = {};
+              for (const [k, v] of Object.entries(obj)) {
+                // Skip known huge fields
+                if (k === 'encodedVideo' || k === 'encodedImage') continue;
+                // Recursively strip nested objects, but skip huge string values
+                if (typeof v === 'string' && v.length > 10000) {
+                  out[k] = `[trimmed ${v.length} chars]`;
+                } else if (typeof v === 'object') {
+                  out[k] = strip(v);
+                } else {
+                  out[k] = v;
+                }
+              }
+              return out;
+            };
+            trimmedResult.data = strip(result.data);
+            trimmedResult._trimmed = true;
+          }
+        }
+
+        wsSend({
+          action: 'submit_prompt_result',
+          requestId: msg.requestId,
+          ...trimmedResult,
+        });
+      } catch (e) {
+        console.error(`[VEO Bridge] ❌ submit_prompt failed for ${msg.email}: ${e.message}`);
+        wsSend({
+          action: 'submit_prompt_result',
+          requestId: msg.requestId,
+          success: false,
+          error: e.message,
+        });
+      } finally {
+        clearInterval(keepaliveTimer);
+      }
+      break;
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // relay_fetch — GENERIC FETCH FROM PAGE CONTEXT
+    //
+    // Allows Python to make arbitrary HTTP requests from the VEO tab's
+    // browser context. Cookies are auto-attached (same-origin for labs.google).
+    // Used for: TRPC project creation/listing, checkAppAvailability, etc.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    case 'relay_fetch': {
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'relay_fetch_result',
+          requestId: msg.requestId,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      try {
+        console.log(
+          `[VEO Bridge] 🔄 relay_fetch for ${msg.email} → ${msg.method || 'POST'} ` +
+          `${(msg.url || '').substring(0, 100)} (tab ${tabId})`
+        );
+
+        // Domain check: TRPC endpoints require tab on labs.google domain
+        // (same-origin cookies). If tab is on myaccount.google.com or other
+        // domain, navigate to VEO flow page first.
+        const requestUrl = msg.url || '';
+        if (requestUrl.includes('labs.google')) {
+          try {
+            const tab = await chrome.tabs.get(tabId);
+            if (tab && tab.url && !tab.url.includes('labs.google')) {
+              console.log(
+                `[VEO Bridge] 🔄 relay_fetch: tab on ${new URL(tab.url).hostname} — ` +
+                `navigating to labs.google first`
+              );
+              await chrome.tabs.update(tabId, { url: VEO_URL });
+              // Wait for navigation to complete (up to 15s)
+              await new Promise((resolve) => {
+                const onUpdated = (updatedTabId, changeInfo) => {
+                  if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                    chrome.tabs.onUpdated.removeListener(onUpdated);
+                    resolve();
+                  }
+                };
+                chrome.tabs.onUpdated.addListener(onUpdated);
+                setTimeout(() => {
+                  chrome.tabs.onUpdated.removeListener(onUpdated);
+                  resolve(); // Proceed anyway after timeout
+                }, 15000);
+              });
+              // Extra settle time for page scripts to initialize
+              await new Promise(r => setTimeout(r, 2000));
+              console.log(`[VEO Bridge] ✅ Tab navigated to labs.google — proceeding with fetch`);
+            }
+          } catch (navErr) {
+            console.warn(`[VEO Bridge] ⚠️ Domain check failed: ${navErr.message}`);
+          }
+        }
+
+        const scriptResult = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: async (url, method, body, headers, credentials) => {
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+              const fetchOpts = {
+                method: method || 'POST',
+                signal: controller.signal,
+              };
+
+              // Add credentials if specified
+              if (credentials) fetchOpts.credentials = credentials;
+
+              // Add headers
+              if (headers && Object.keys(headers).length > 0) {
+                fetchOpts.headers = headers;
+              } else {
+                fetchOpts.headers = { 'Content-Type': 'application/json' };
+              }
+
+              // Add body for non-GET methods
+              if (body && method !== 'GET') {
+                fetchOpts.body = JSON.stringify(body);
+              }
+
+              const resp = await fetch(url, fetchOpts);
+              clearTimeout(timeoutId);
+
+              let data = null;
+              const contentType = resp.headers.get('content-type') || '';
+              if (contentType.includes('json')) {
+                data = await resp.json().catch(() => null);
+              } else {
+                const text = await resp.text().catch(() => '');
+                try { data = JSON.parse(text); } catch { data = { text }; }
+              }
+
+              return {
+                success: resp.ok,
+                status: resp.status,
+                statusText: resp.statusText,
+                data,
+              };
+            } catch (e) {
+              return {
+                success: false,
+                status: 0,
+                error: e.message || String(e),
+              };
+            }
+          },
+          args: [
+            msg.url,
+            msg.method || 'POST',
+            msg.body || null,
+            msg.headers || {},
+            msg.credentials || 'include',
+          ],
+        });
+
+        const result = scriptResult?.[0]?.result || {
+          success: false,
+          error: 'executeScript returned no result',
+        };
+
+        console.log(
+          `[VEO Bridge] ${result.success ? '✅' : '❌'} relay_fetch result: ` +
+          `status=${result.status} for ${msg.email}`
+        );
+
+        wsSend({
+          action: 'relay_fetch_result',
+          requestId: msg.requestId,
+          ...result,
+        });
+      } catch (e) {
+        console.error(`[VEO Bridge] ❌ relay_fetch failed for ${msg.email}: ${e.message}`);
+        wsSend({
+          action: 'relay_fetch_result',
+          requestId: msg.requestId,
+          success: false,
+          error: e.message,
+        });
+      }
+      break;
+    }
+
+    case 'navigate_tab': {
+      // Navigate VEO tab to a specific URL (e.g. project page)
+      // Uses chrome.tabs.update — cleaner than window.location.href
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      const targetUrl = msg.url;
+      if (!targetUrl) {
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: 'No URL specified',
+        });
+        return;
+      }
+
+      try {
+        const startTime = Date.now();
+        console.log(`[VEO Bridge] 📍 Navigating tab ${tabId} to: ${targetUrl}`);
+
+        // Navigate using chrome.tabs.update
+        await chrome.tabs.update(tabId, { url: targetUrl });
+
+        // Wait 1.5s for tab to actually START loading
+        // (tab.status can briefly remain 'complete' before navigation kicks in)
+        await new Promise(r => setTimeout(r, 1500));
+
+        // Poll for page to finish loading (every 500ms, max 25s)
+        const maxWait = 25000;
+        let loadComplete = false;
+        while (Date.now() - startTime < maxWait + 1500) {
+          try {
+            const tab = await chrome.tabs.get(tabId);
+            if (tab.status === 'complete') {
+              loadComplete = true;
+              break;
+            }
+          } catch (e) {
+            // Tab might be mid-navigation — continue polling
+          }
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        if (loadComplete) {
+          console.log(`[VEO Bridge] ✅ Navigation complete in ${loadTime}s: ${targetUrl}`);
+        } else {
+          // Fix #2: Navigation timeout — log warning + continue (don't hang)
+          console.warn(`[VEO Bridge] ⚠️ Navigation timeout after ${loadTime}s (max 25s): ${targetUrl} — proceeding without full load`);
+        }
+
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: loadComplete,
+          loadTime: parseFloat(loadTime),
+          url: targetUrl,
+          timedOut: !loadComplete,
+        });
+      } catch (e) {
+        console.error(`[VEO Bridge] ❌ Navigation failed: ${e.message}`);
+        wsSend({
+          action: 'navigate_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: e.message,
+        });
+      }
+      break;
+    }
+
+    case 'check_tab_alive': {
+      // On-demand check if VEO tab is alive (not discarded/frozen)
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: 'no_tab' });
+        return;
+      }
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => document.readyState,
+        });
+        wsSend({
+          action: 'tab_alive',
+          requestId: msg.requestId,
+          alive: results?.[0]?.result === 'complete',
+          tabState: results?.[0]?.result,
+        });
+      } catch (e) {
+        wsSend({ action: 'tab_alive', requestId: msg.requestId, alive: false, reason: e.message });
+      }
+      break;
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // reload_tab: Reload VEO tab for soft recovery (extension-only accounts)
+    // Used when soft_recover_browser() fails (no Playwright page).
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    case 'reload_tab': {
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'reload_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        return;
+      }
+
+      try {
+        console.log(`[VEO Bridge] 🔄 Reloading tab ${tabId} for ${msg.email} (soft recovery)`);
+        await chrome.tabs.reload(tabId);
+
+        // Wait for tab to finish loading (up to 15s)
+        await new Promise((resolve) => {
+          const onUpdated = (updatedTabId, changeInfo) => {
+            if (updatedTabId === tabId && changeInfo.status === 'complete') {
+              chrome.tabs.onUpdated.removeListener(onUpdated);
+              resolve();
+            }
+          };
+          chrome.tabs.onUpdated.addListener(onUpdated);
+          setTimeout(() => {
+            chrome.tabs.onUpdated.removeListener(onUpdated);
+            resolve();
+          }, 15000);
+        });
+
+        console.log(`[VEO Bridge] ✅ Tab ${tabId} reloaded successfully`);
+        wsSend({
+          action: 'reload_tab_result',
+          requestId: msg.requestId,
+          success: true,
+        });
+      } catch (e) {
+        console.warn(`[VEO Bridge] ❌ Tab reload failed: ${e.message}`);
+        wsSend({
+          action: 'reload_tab_result',
+          requestId: msg.requestId,
+          success: false,
+          error: e.message,
+        });
+      }
+      break;
+    }
+
+    case 'reload_extension': {
+      // Hot-reload extension from disk — reloads background.js + content.js
+      // without killing Chrome. Used when extension code is updated.
+      console.log('[VEO Bridge] 🔄 Reloading extension (chrome.runtime.reload)...');
+      wsSend({
+        action: 'extension_reloaded',
+        requestId: msg.requestId || null,
+        success: true,
+      });
+      // Small delay to ensure the WS message is sent before reload kills this context
+      setTimeout(() => {
+        chrome.runtime.reload();
+      }, 200);
+      break;
+    }
+
+    case 'ping':
+      wsSend({ action: 'pong' });
+      break;
+
+    case 'probe_browser_headers': {
+      // Trigger a cross-origin fetch from the VEO page to googleapis.com
+      // This causes Chrome to add x-browser-validation header,
+      // which is captured by the webRequest listener above.
+      const tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        wsSend({
+          action: 'probe_browser_headers_result',
+          requestId: msg.requestId || null,
+          success: false,
+          error: `No tab found for ${msg.email}`,
+        });
+        break;
+      }
+
+      try {
+        console.log(`[VEO Bridge] 🔍 Probing browser headers from tab ${tabId} (${msg.email})`);
+
+        // Execute a simple fetch in the page's MAIN world context
+        // The URL must be a cross-origin googleapis.com endpoint
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: async (apiKey) => {
+            try {
+              // Simple GET to credits endpoint — we don't care about the response,
+              // only that Chrome adds x-browser-validation to this cross-origin request
+              const resp = await fetch(
+                `https://aisandbox-pa.googleapis.com/v1/credits?key=${apiKey}`,
+                {
+                  method: 'GET',
+                  credentials: 'include',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://labs.google',
+                    'Referer': 'https://labs.google/',
+                  },
+                }
+              );
+              return { status: resp.status, triggered: true };
+            } catch (e) {
+              // Even if the fetch fails (CORS, etc.), the webRequest listener
+              // should have already captured the headers before the response
+              return { triggered: true, error: e.message };
+            }
+          },
+          args: [msg.apiKey || 'AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY'],
+        });
+
+        const result = results?.[0]?.result;
+
+        // Wait a bit for webRequest listener to process
+        await new Promise(r => setTimeout(r, 500));
+
+        // Send current state of headers back
+        const state = tabState[tabId];
+        const currentHeaders = state ? { ...state.headers } : {};
+
+        // Also inject global x-browser-validation if captured
+        if (globalBrowserValidation && !currentHeaders['x-browser-validation']) {
+          currentHeaders['x-browser-validation'] = globalBrowserValidation;
+        }
+
+        wsSend({
+          action: 'probe_browser_headers_result',
+          requestId: msg.requestId || null,
+          email: msg.email,
+          success: true,
+          probeResult: result,
+          headers: currentHeaders,
+          hasValidation: !!currentHeaders['x-browser-validation'],
+          globalValidation: globalBrowserValidation,
+        });
+
+        // Also push a headers_update if we now have x-browser-validation
+        if (state?.email && currentHeaders['x-browser-validation']) {
+          if (state) Object.assign(state.headers, currentHeaders);
+          wsSend({
+            action: 'headers_update',
+            email: state.email,
+            headers: currentHeaders,
+            accessToken: state?.accessToken,
+          });
+        }
+      } catch (e) {
+        console.error(`[VEO Bridge] Probe failed: ${e.message}`);
+        wsSend({
+          action: 'probe_browser_headers_result',
+          requestId: msg.requestId || null,
+          success: false,
+          error: e.message,
+        });
+      }
+      break;
+    }
+
+    case 'provision_gemini_key': {
+      // Auto-provision Gemini API key via AI Studio's gRPC-web service.
+      // 2-Phase approach:
+      //   Phase 1: Use chrome.cookies.get for SAPISID → run on VEO tab (no navigate)
+      //   Phase 2: Only if no GCP project → navigate to AI Studio for SNlM0e token
+      const requestId = msg.requestId;
+      const email = msg.email;
+      const RPC_BASE = 'https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService';
+      const STATIC_KEY = 'AIzaSyDdP816MREB3SkjZO04QXbjsigfcI0GWOs';
+
+      const tabId = findTabForEmail(email) || Object.keys(tabState).find(tid => tabState[tid].email);
+
+      if (!tabId) {
+        wsSend({
+          action: 'provision_gemini_key_result',
+          requestId, email, success: false,
+          error: 'No tab available for Gemini key provisioning',
+        });
+        break;
+      }
+
+      try {
+        console.log(`[VEO Bridge] 🔑 Provisioning Gemini key for ${email} via tab ${tabId}...`);
+
+        // ── Read SAPISID via chrome.cookies API (no navigation needed!) ──
+        const sapisidCookie = await chrome.cookies.get({
+          url: 'https://aistudio.google.com',
+          name: 'SAPISID',
+        });
+        const sapisid = sapisidCookie?.value;
+        if (!sapisid) {
+          wsSend({
+            action: 'provision_gemini_key_result',
+            requestId, email, success: false,
+            error: 'no_sapisid', msg: 'SAPISID cookie not found — user may not be logged in',
+          });
+          break;
+        }
+        console.log(`[VEO Bridge] 🍪 SAPISID obtained via chrome.cookies API (no navigation)`);
+
+        // ── Phase 1: Run gRPC-web on current tab (no navigate) ──
+        // Pass SAPISID as argument instead of reading document.cookie
+        const phase1Fn = async (RPC, KEY, sapisidValue) => {
+          // Build SAPISIDHASH from passed SAPISID value
+          async function buildSapisidHash(sapisid) {
+            try {
+              const ORIGIN = "https://aistudio.google.com";
+              const ts = Math.floor(Date.now() / 1000);
+              const input = `${ts} ${sapisid} ${ORIGIN}`;
+              const buf = await crypto.subtle.digest("SHA-1",
+                new TextEncoder().encode(input));
+              const hex = [...new Uint8Array(buf)]
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+              const hash = `${ts}_${hex}`;
+              return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
+            } catch (e) { return null; }
+          }
+
+          const authHeader = await buildSapisidHash(sapisidValue);
+          const H = {
+            "Content-Type": "application/json+protobuf",
+            "x-goog-api-key": KEY,
+            "x-goog-authuser": "0",
+            "x-user-agent": "grpc-web-javascript/0.1",
+            "x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
+          };
+          if (authHeader) H["authorization"] = authHeader;
+
+          try {
+            // Step 1: List Cloud Projects
+            let r = await fetch(RPC + "/ListCloudProjects", {
+              method: "POST", credentials: "include", headers: H,
+              body: JSON.stringify([null, null, null, 1, null, null])
+            });
+            if (!r.ok) return { error: "list_projects_http_" + r.status };
+            let projects = await r.json();
+
+            let projectRef = null;
+            let projectId = null;
+            if (projects && Array.isArray(projects)) {
+              const flat = JSON.stringify(projects);
+              const m = flat.match(/projects\/(\d+)/);
+              if (m) projectRef = "projects/" + m[1];
+              const m2 = flat.match(/gen-lang-client-[\w-]+/);
+              if (m2) projectId = m2[0];
+            }
+
+            if (!projectRef) {
+              // No project found — Phase 2 needed (navigate for token)
+              return { error: "no_project", needs_navigate: true };
+            }
+
+            // Step 2: List existing API Keys
+            r = await fetch(RPC + "/ListCloudApiKeys", {
+              method: "POST", credentials: "include", headers: H,
+              body: JSON.stringify([100, null, 1, [projectRef]])
+            });
+            if (!r.ok) return { error: "list_keys_http_" + r.status };
+            let keys = await r.json();
+            const keysFlat = JSON.stringify(keys);
+            const km = keysFlat.match(/AIza[\w-]{35}/);
+            if (km) return { key: km[0], source: "existing" };
+
+            // Step 3: Generate new API Key (no token needed for this!)
+            // GenerateCloudApiKey only needs projectId, not SNlM0e token
+            if (!projectId) return { error: "no_project_id" };
+            r = await fetch(RPC + "/GenerateCloudApiKey", {
+              method: "POST", credentials: "include", headers: H,
+              body: JSON.stringify([projectId, null, null, "GEMINI API AUTO"])
+            });
+            if (!r.ok) return { error: "gen_key_http_" + r.status };
+            let newKey = await r.json();
+            const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
+            if (nkm) return { key: nkm[0], source: "created" };
+
+            // If GenerateCloudApiKey without token fails, try with null token
+            return { error: "create_failed", needs_navigate: true };
+          } catch (e) {
+            return { error: e.message };
+          }
+        };
+
+        // Execute Phase 1 on current VEO tab (no navigation!)
+        // Fix #3: Timeout guard for gRPC fetch calls (30s)
+        const phase1Script = chrome.scripting.executeScript({
+          target: { tabId: parseInt(tabId) },
+          world: 'MAIN',
+          func: phase1Fn,
+          args: [RPC_BASE, STATIC_KEY, sapisid],
+        });
+        const phase1Timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini provision Phase 1 timeout (30s)')), 30000)
+        );
+        const phase1Results = await Promise.race([phase1Script, phase1Timeout]);
+
+        let result = phase1Results?.[0]?.result;
+
+        // ── Phase 2: Navigate to AI Studio ONLY if no project ──
+        if (result?.needs_navigate) {
+          console.log(`[VEO Bridge] 🔑 Phase 2: Account has no GCP project — navigating to AI Studio for token...`);
+
+          const origUrl = (await chrome.tabs.get(parseInt(tabId))).url;
+
+          // Navigate to AI Studio to get SNlM0e token from DOM
+          await chrome.tabs.update(parseInt(tabId), { url: 'https://aistudio.google.com/api-keys' });
+          await new Promise(r => setTimeout(r, 6000)); // Wait for SPA to load
+
+          // Phase 2: Full provision with token extraction (on AI Studio page)
+          const phase2Fn = async (RPC, KEY, sapisidValue) => {
+            async function buildSapisidHash(sapisid) {
+              try {
+                const ORIGIN = "https://aistudio.google.com";
+                const ts = Math.floor(Date.now() / 1000);
+                const input = `${ts} ${sapisid} ${ORIGIN}`;
+                const buf = await crypto.subtle.digest("SHA-1",
+                  new TextEncoder().encode(input));
+                const hex = [...new Uint8Array(buf)]
+                  .map(b => b.toString(16).padStart(2, '0')).join('');
+                const hash = `${ts}_${hex}`;
+                return `SAPISIDHASH ${hash} SAPISID1PHASH ${hash} SAPISID3PHASH ${hash}`;
+              } catch (e) { return null; }
+            }
+
+            // Token extraction (only works on AI Studio page)
+            function extractToken() {
+              try {
+                if (typeof WIZ_global_data !== 'undefined' && WIZ_global_data.SNlM0e) return WIZ_global_data.SNlM0e;
+              } catch (e) { }
+              try {
+                if (window.__WIZ_global_data__ && window.__WIZ_global_data__.SNlM0e) return window.__WIZ_global_data__.SNlM0e;
+              } catch (e) { }
+              try {
+                const scripts = document.querySelectorAll('script');
+                for (const s of scripts) {
+                  const txt = s.textContent || '';
+                  if (txt.length < 50) continue;
+                  let tm = txt.match(/SNlM0e['"]\s*[:,=]\s*['"](![^'"]{20,})['"]/);
+                  if (tm) return tm[1];
+                  tm = txt.match(/"(![A-Za-z0-9_\-]{20,})"/);
+                  if (tm) return tm[1];
+                }
+              } catch (e) { }
+              return null;
+            }
+
+            const authHeader = await buildSapisidHash(sapisidValue);
+            const H = {
+              "Content-Type": "application/json+protobuf",
+              "x-goog-api-key": KEY,
+              "x-goog-authuser": "0",
+              "x-user-agent": "grpc-web-javascript/0.1",
+              "x-goog-ext-519733851-bin": "CAESAUwwATgEQAA="
+            };
+            if (authHeader) H["authorization"] = authHeader;
+
+            try {
+              const token = extractToken();
+              if (!token) return { error: "no_token", msg: "Cannot extract SNlM0e token from AI Studio" };
+
+              // Create project
+              let r = await fetch(RPC + "/CreateCloudProject", {
+                method: "POST", credentials: "include", headers: H,
+                body: JSON.stringify([token, "GEMINI API FOR AUTO FLOW"])
+              });
+              if (!r.ok) return { error: "create_project_http_" + r.status };
+              let newProj = await r.json();
+              const npFlat = JSON.stringify(newProj);
+              let projectRef = null, projectId = null;
+              const npm = npFlat.match(/projects\/(\d+)/);
+              if (npm) projectRef = "projects/" + npm[1];
+              const npm2 = npFlat.match(/gen-lang-client-[\w-]+/);
+              if (npm2) projectId = npm2[0];
+              if (!projectRef) return { error: "create_project_failed" };
+
+              // List keys for new project
+              r = await fetch(RPC + "/ListCloudApiKeys", {
+                method: "POST", credentials: "include", headers: H,
+                body: JSON.stringify([100, null, 1, [projectRef]])
+              });
+              if (r.ok) {
+                let keys = await r.json();
+                const km = JSON.stringify(keys).match(/AIza[\w-]{35}/);
+                if (km) return { key: km[0], source: "existing" };
+              }
+
+              // Generate new key
+              if (!projectId) return { error: "no_project_id" };
+              r = await fetch(RPC + "/GenerateCloudApiKey", {
+                method: "POST", credentials: "include", headers: H,
+                body: JSON.stringify([projectId, token, null, "GEMINI API FOR AUTO FLOW"])
+              });
+              if (!r.ok) return { error: "gen_key_http_" + r.status };
+              let newKey = await r.json();
+              const nkm = JSON.stringify(newKey).match(/AIza[\w-]{35}/);
+              if (nkm) return { key: nkm[0], source: "created" };
+              return { error: "create_failed" };
+            } catch (e) {
+              return { error: e.message };
+            }
+          };
+
+          // Fix #3: Timeout guard for Phase 2 gRPC calls (30s)
+          const phase2Script = chrome.scripting.executeScript({
+            target: { tabId: parseInt(tabId) },
+            world: 'MAIN',
+            func: phase2Fn,
+            args: [RPC_BASE, STATIC_KEY, sapisid],
+          });
+          const phase2Timeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Gemini provision Phase 2 timeout (30s)')), 30000)
+          );
+          const phase2Results = await Promise.race([phase2Script, phase2Timeout]);
+
+          result = phase2Results?.[0]?.result;
+
+          // Navigate back to VEO
+          setTimeout(() => {
+            chrome.tabs.update(parseInt(tabId), { url: origUrl || 'https://labs.google/fx/vi/tools/flow' });
+          }, 1000);
+        }
+
+        // ── Send result ──
+        if (result?.key) {
+          console.log(`[VEO Bridge] 🔑 Gemini key ${result.source} for ${email}: ${result.key.substring(0, 10)}...`);
+          wsSend({
+            action: 'provision_gemini_key_result',
+            requestId, email, success: true,
+            key: result.key, source: result.source,
+          });
+        } else {
+          console.warn(`[VEO Bridge] ❌ Gemini key provision failed for ${email}:`, result);
+          wsSend({
+            action: 'provision_gemini_key_result',
+            requestId, email, success: false,
+            error: result?.error || 'unknown', msg: result?.msg || '',
+          });
+        }
+      } catch (e) {
+        console.error(`[VEO Bridge] Gemini key provision error: ${e.message}`);
+        wsSend({
+          action: 'provision_gemini_key_result',
+          requestId, email, success: false,
+          error: e.message,
+        });
+      }
+      break;
+    }
+  }
+}
+
+
 // ── Header Interception ────────────────────────────────────────────────
+
 chrome.webRequest.onBeforeSendHeaders.addListener(
-(details) => {
-if (!details.requestHeaders) return;
-const headers = {};
-let authHeader = null;
-for (const h of details.requestHeaders) {
-const name = h.name.toLowerCase();
-// Capture x-browser-* headers
-if (BROWSER_HEADERS.includes(name)) {
-headers[name] = h.value;
-}
-// Capture Authorization — ONLY Bearer tokens (OAuth2 access tokens).
-// SAPISIDHASH is Google's 1st-party internal auth (accounts.google.com)
-if (name === 'authorization' && h.value && h.value.startsWith('Bearer ')) {
-authHeader = h.value;
-}
-}
-if (headers['x-browser-validation']) {
-globalBrowserValidation = headers['x-browser-validation'];
-}
-if (details.tabId < 0) return;
-if (!tabState[details.tabId]) return;
-if (Object.keys(headers).length === 0 && !authHeader) return;
-const state = tabState[details.tabId];
-Object.assign(state.headers, headers);
-if (globalBrowserValidation && !state.headers['x-browser-validation']) {
-state.headers['x-browser-validation'] = globalBrowserValidation;
-}
-if (authHeader) {
-state.accessToken = authHeader;
-}
-if (state.email && Object.keys(headers).length > 0) {
-const email = state.email;
-if (_headersDebounceTimers[email]) {
-clearTimeout(_headersDebounceTimers[email]);
-}
-_headersDebounceTimers[email] = setTimeout(() => {
-delete _headersDebounceTimers[email];
-const s = tabState[details.tabId];
-if (s && s.email) {
-wsSend({
-action: 'headers_update',
-email: s.email,
-headers: s.headers,
-accessToken: s.accessToken,
-});
-}
-}, HEADERS_DEBOUNCE_MS);
-}
-},
-{
-urls: [
-'*://*.googleapis.com/*',
-'*://*.aisandbox.com/*',
-'*://labs.google/*',
-],
-},
-['requestHeaders', 'extraHeaders']
+  (details) => {
+    if (!details.requestHeaders) return;
+
+    const headers = {};
+    let authHeader = null;
+
+    for (const h of details.requestHeaders) {
+      const name = h.name.toLowerCase();
+
+      // Capture x-browser-* headers
+      if (BROWSER_HEADERS.includes(name)) {
+        headers[name] = h.value;
+      }
+
+      // Capture Authorization — ONLY Bearer tokens (OAuth2 access tokens).
+      // SAPISIDHASH is Google's 1st-party internal auth (accounts.google.com)
+      // and must NOT be used for VEO API calls (causes 403).
+      // HAR-verified: VEO API requires "Bearer ya29..." format.
+      if (name === 'authorization' && h.value && h.value.startsWith('Bearer ')) {
+        authHeader = h.value;
+      }
+    }
+
+    // Store x-browser-validation globally (from ANY request, even Chrome internal)
+    if (headers['x-browser-validation']) {
+      globalBrowserValidation = headers['x-browser-validation'];
+      console.log(`[VEO Bridge] 🔒 Captured x-browser-validation globally: ${globalBrowserValidation.substring(0, 10)}... (tabId=${details.tabId}, url=${details.url.substring(0, 60)})`);
+    }
+
+    // For non-tab requests (Chrome internal), only capture global x-browser-validation above
+    if (details.tabId < 0) return;
+    if (!tabState[details.tabId]) return; // Only update per-tab state for registered tabs
+
+    // Nothing useful captured for per-tab state
+    if (Object.keys(headers).length === 0 && !authHeader) return;
+
+    const state = tabState[details.tabId];
+
+    // Merge headers (don't overwrite with empty)
+    Object.assign(state.headers, headers);
+
+    // Inject global x-browser-validation if not already present in per-tab headers
+    if (globalBrowserValidation && !state.headers['x-browser-validation']) {
+      state.headers['x-browser-validation'] = globalBrowserValidation;
+    }
+
+    if (authHeader) {
+      state.accessToken = authHeader;
+    }
+
+    // Auto-push to app if connected and we have an email (debounced)
+    if (state.email && Object.keys(headers).length > 0) {
+      const email = state.email;
+      // Clear existing timer — restart debounce window
+      if (_headersDebounceTimers[email]) {
+        clearTimeout(_headersDebounceTimers[email]);
+      }
+      _headersDebounceTimers[email] = setTimeout(() => {
+        delete _headersDebounceTimers[email];
+        const s = tabState[details.tabId];
+        if (s && s.email) {
+          wsSend({
+            action: 'headers_update',
+            email: s.email,
+            headers: s.headers,
+            accessToken: s.accessToken,
+          });
+        }
+      }, HEADERS_DEBOUNCE_MS);
+    }
+  },
+  {
+    urls: [
+      '*://*.googleapis.com/*',   // Google APIs
+      '*://*.aisandbox.com/*',    // AI Sandbox
+      '*://labs.google/*',         // VEO website
+    ],
+  },
+  ['requestHeaders', 'extraHeaders']
 );
+
+
+// ── Offscreen Document Message Relay ───────────────────────────────────
+// Handle messages FROM offscreen.js (WebSocket state + incoming WS messages)
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-if (msg.type === 'offscreen_ws_state') {
-const wasConnected = wsConnected;
-wsConnected = msg.connected;
-if (msg.connected && !wasConnected) {
-onWsConnected();
-} else if (!msg.connected && wasConnected) {
-}
-sendResponse({ ok: true });
-return false;
-}
-if (msg.type === 'offscreen_ws_incoming') {
-handleAppMessage(msg.data).catch(e => {
-console.error(String.fromCharCode(0x5b,0x56,0x45,0x4f,0x20,0x42,0x72,0x69,0x64,0x67,0x65,0x5d,0x20,0x41,0x73,0x79,0x6e,0x63,0x20,0x68,0x61,0x6e,0x64,0x6c,0x65,0x72,0x20,0x65,0x72,0x72,0x6f,0x72,0x3a), e.message || e);
+  if (msg.type === 'offscreen_pref_port_get') {
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get(LAST_GOOD_PORT_KEY);
+        sendResponse({ ok: true, port: Number(stored?.[LAST_GOOD_PORT_KEY]) || null });
+      } catch (e) {
+        sendResponse({ ok: false, port: null, error: e.message || 'storage_get_failed' });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === 'offscreen_pref_port_set') {
+    (async () => {
+      try {
+        const port = Number(msg.port);
+        if (!Number.isFinite(port)) {
+          sendResponse({ ok: false, error: 'invalid_port' });
+          return;
+        }
+        await chrome.storage.local.set({ [LAST_GOOD_PORT_KEY]: port });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message || 'storage_set_failed' });
+      }
+    })();
+    return true;
+  }
+
+  // ── Offscreen: WS state change ──
+  if (msg.type === 'offscreen_ws_state') {
+    const wasConnected = wsConnected;
+    wsConnected = msg.connected;
+    if (msg.port) {
+      _bridgeDebug.offscreen = {
+        ...(_bridgeDebug.offscreen || {}),
+        currentPort: msg.port,
+        connected: msg.connected,
+      };
+    }
+    if (msg.connected && !wasConnected) {
+      _bridgeDebug.lastWsConnectedAt = Date.now();
+      onWsConnected();
+    } else if (!msg.connected && wasConnected) {
+      _bridgeDebug.lastWsDisconnectedAt = Date.now();
+      console.log('[VEO Bridge] ⚠️ WebSocket disconnected (offscreen)');
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === 'offscreen_ws_debug') {
+    _bridgeDebug.lastOffscreenEvent = msg.event || 'debug';
+    if (msg.debug) {
+      _bridgeDebug.offscreen = msg.debug;
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  // ── Offscreen: incoming WS message ──
+  if (msg.type === 'offscreen_ws_incoming') {
+    handleAppMessage(msg.data).catch(e => {
+      console.error('[VEO Bridge] Async handler error:', e.message || e);
+    });
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  // ── Below: existing Tab/Content message handling ──
+  return undefined; // Fall through to other handlers
 });
-sendResponse({ ok: true });
-return false;
-}
-return undefined;
-});
+
+
+// ── Tab Email Detection ────────────────────────────────────────────────
+
+// When content.js loads on VEO page, it sends email
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-if (msg.action === 'register_tab' && sender.tab) {
-const tabId = sender.tab.id;
-if (!tabState[tabId]) {
-tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
-}
-tabState[tabId].email = msg.email;
-tabState[tabId].lastHeartbeat = Date.now();
-persistTabState();
-if (tabState[tabId]._zombieTimer) {
-clearTimeout(tabState[tabId]._zombieTimer);
-delete tabState[tabId]._zombieTimer;
-}
-try {
-chrome.tabs.update(tabId, { autoDiscardable: false });
-} catch (e) {
-}
-wsSend({
-action: 'register',
-email: msg.email,
-tabId: tabId,
-version: EXT_VERSION,
+  if (msg.action === 'register_tab' && sender.tab) {
+    const tabId = sender.tab.id;
+    if (!tabState[tabId]) {
+      tabState[tabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+    }
+    tabState[tabId].email = msg.email;
+    tabState[tabId].lastHeartbeat = Date.now();
+    _bridgeDebug.lastTabRegisterAt = Date.now();
+    _bridgeDebug.lastTabRegisterEmail = msg.email;
+    persistTabState(); // Survive SW restart
+    // Clear zombie timer if was pending
+    if (tabState[tabId]._zombieTimer) {
+      clearTimeout(tabState[tabId]._zombieTimer);
+      delete tabState[tabId]._zombieTimer;
+    }
+
+    console.log(`[VEO Bridge] Tab ${tabId} registered: ${msg.email}`);
+
+    // ★ Fix #4: Prevent Chrome from discarding/suspending this tab
+    // Chrome Energy Saver suspends background tabs, killing reCAPTCHA widget
+    // and causing token generation failures. autoDiscardable: false prevents this.
+    try {
+      chrome.tabs.update(tabId, { autoDiscardable: false });
+      console.log(`[VEO Bridge] Tab ${tabId} marked autoDiscardable=false (anti-suspend)`);
+    } catch (e) {
+      console.debug(`[VEO Bridge] autoDiscardable update failed for tab ${tabId}: ${e.message}`);
+    }
+
+    // Notify app and push any already-captured headers immediately.
+    pushTabSnapshotToApp(tabId, 'register_tab', true);
+
+    // Fresh tab registration is the strongest signal that the bridge should
+    // be alive right now. Recover eagerly instead of waiting for the watchdog.
+    if (!wsConnected) {
+      ensureBridgeReady(`register_tab:${msg.email}`).catch(() => { });
+    }
+
+    sendResponse({ ok: true });
+  }
+
+
+  // ── Content Heartbeat ──
+  if (msg.action === 'content_heartbeat' && sender.tab) {
+    const tabId = sender.tab.id;
+    const state = tabState[tabId];
+    if (state) {
+      state.lastHeartbeat = Date.now();
+
+      // If the tab is alive but the bridge is not, recover immediately instead
+      // of waiting for the watchdog. This is the main path for orange-stuck UI
+      // where background keeps capturing headers but app-side WS has drifted.
+      if (!wsConnected) {
+        ensureBridgeReady(`content_heartbeat:${state.email || tabId}`).catch(() => { });
+      } else if (state.email && Object.keys(state.headers || {}).length > 0) {
+        pushTabSnapshotToApp(tabId, 'content_heartbeat');
+      }
+
+      // Forward heartbeat to Python app for tracking
+      wsSend({
+        action: 'content_heartbeat',
+        email: state.email || msg.email,
+        tabId,
+        timestamp: msg.timestamp,
+        readyState: msg.readyState,
+      });
+    }
+    sendResponse({ ok: true });
+  }
+
+  // ── reCAPTCHA Warmth Report ──
+  // GAP #10: Content.js warmth check runs in isolated world and can't see
+  // grecaptcha in MAIN world → false negatives. Override with MAIN world check.
+  if (msg.action === 'recaptcha_warmth' && sender.tab) {
+    const tabId = sender.tab.id;
+    const state = tabState[tabId];
+    if (state) {
+      // Wrap in async IIFE — onMessage callback is not async
+      (async () => {
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            func: () => {
+              const hasGrecaptcha = typeof grecaptcha !== 'undefined';
+              const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
+              const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
+              let hasSiteKey = false;
+              for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
+                const m = s.src.match(/render=([^&]+)/);
+                if (m && m[1] !== 'explicit') { hasSiteKey = true; break; }
+              }
+              return {
+                ready: hasExecute && hasSiteKey,
+                grecaptcha: hasGrecaptcha,
+                enterprise: hasEnterprise,
+                execute: hasExecute,
+                siteKey: hasSiteKey,
+              };
+            },
+          });
+          const mainResult = results?.[0]?.result;
+          if (mainResult) {
+            state.recaptchaReady = mainResult.ready;
+            wsSend({
+              action: 'recaptcha_warmth',
+              email: state.email || msg.email,
+              ready: mainResult.ready,
+              details: mainResult,
+            });
+          }
+        } catch (e) {
+          // Fallback to content.js report if MAIN world check fails
+          state.recaptchaReady = msg.ready;
+          wsSend({
+            action: 'recaptcha_warmth',
+            email: state.email || msg.email,
+            ready: msg.ready,
+            details: msg.details,
+          });
+        }
+        sendResponse({ ok: true });
+      })();
+      return true; // Keep sendResponse alive for async IIFE
+    }
+    sendResponse({ ok: true });
+  }
+
+  // ── Logout Detection from content.js ──
+  if (msg.action === 'tab_logout' && sender.tab) {
+    const tabId = sender.tab.id;
+    const state = tabState[tabId];
+    const email = state?.email;
+
+    console.warn(`[VEO Bridge] 🔴 Tab ${tabId} reported logout: ${msg.reason} (email: ${email || 'unknown'})`);
+
+    if (email) {
+      // Notify app that this account is logged out
+      wsSend({
+        action: 'account_logged_out',
+        email: email,
+        reason: msg.reason || 'unknown',
+        tabId: tabId,
+      });
+
+      // Clear tab state — this tab is no longer useful
+      delete tabState[tabId];
+      console.log(`[VEO Bridge] Cleared state for logged-out tab ${tabId} (${email})`);
+    }
+
+    sendResponse({ ok: true });
+  }
+
+  // Forward popup requests
+  if (msg.action === 'getStatus') {
+    (async () => {
+      try {
+        sendResponse(await collectBridgeStatus(true));
+      } catch (e) {
+        sendResponse({
+          connected: wsConnected,
+          tabs: [],
+          debug: {
+            offscreenExists: false,
+            offscreenCount: 0,
+            background: {
+              startedAt: _bridgeDebug.bgStartedAt,
+              tabStateRestored: _tabStateRestored,
+              wsConnected,
+              wsQueueDepth: _wsSendQueue.length,
+              lastOffscreenSyncError: e.message || 'get_status_failed',
+            },
+            offscreen: _bridgeDebug.offscreen,
+          },
+        });
+      }
+    })();
+    return true;
+  }
+
+  return false; // sync response
 });
-sendResponse({ ok: true });
-}
-if (msg.action === 'content_heartbeat' && sender.tab) {
-const tabId = sender.tab.id;
-const state = tabState[tabId];
-if (state) {
-state.lastHeartbeat = Date.now();
-wsSend({
-action: 'content_heartbeat',
-email: state.email || msg.email,
-tabId,
-timestamp: msg.timestamp,
-readyState: msg.readyState,
-});
-}
-sendResponse({ ok: true });
-}
-if (msg.action === 'recaptcha_warmth' && sender.tab) {
-const tabId = sender.tab.id;
-const state = tabState[tabId];
-if (state) {
-(async () => {
-try {
-const results = await chrome.scripting.executeScript({
-target: { tabId },
-world: 'MAIN',
-func: () => {
-const hasGrecaptcha = typeof grecaptcha !== 'undefined';
-const hasEnterprise = hasGrecaptcha && typeof grecaptcha.enterprise !== 'undefined';
-const hasExecute = hasEnterprise && typeof grecaptcha.enterprise.execute === 'function';
-let hasSiteKey = false;
-for (const s of document.querySelectorAll('script[src*="recaptcha"]')) {
-const m = s.src.match(/render=([^&]+)/);
-if (m && m[1] !== 'explicit') { hasSiteKey = true; break; }
-}
-return {
-ready: hasExecute && hasSiteKey,
-grecaptcha: hasGrecaptcha,
-enterprise: hasEnterprise,
-execute: hasExecute,
-siteKey: hasSiteKey,
-};
-},
-});
-const mainResult = results?.[0]?.result;
-if (mainResult) {
-state.recaptchaReady = mainResult.ready;
-wsSend({
-action: 'recaptcha_warmth',
-email: state.email || msg.email,
-ready: mainResult.ready,
-details: mainResult,
-});
-}
-} catch (e) {
-state.recaptchaReady = msg.ready;
-wsSend({
-action: 'recaptcha_warmth',
-email: state.email || msg.email,
-ready: msg.ready,
-details: msg.details,
-});
-}
-sendResponse({ ok: true });
-})();
-return true;
-}
-sendResponse({ ok: true });
-}
-if (msg.action === String.fromCharCode(0x74,0x61,0x62,0x5f,0x6c,0x6f,0x67,0x6f,0x75,0x74) && sender.tab) {
-const tabId = sender.tab.id;
-const state = tabState[tabId];
-const email = state?.email;
-if (email) {
-wsSend({
-action: 'account_logged_out',
-email: email,
-reason: msg.reason || 'unknown',
-tabId: tabId,
-});
-delete tabState[tabId];
-}
-sendResponse({ ok: true });
-}
-if (msg.action === 'getStatus') {
-sendResponse({
-connected: wsConnected,
-tabs: Object.entries(tabState)
-.filter(([_, s]) => s.email)
-.map(([id, s]) => ({
-tabId: parseInt(id),
-email: s.email,
-headerCount: Object.keys(s.headers).length,
-lastHeartbeat: s.lastHeartbeat || 0,
-recaptchaReady: s.recaptchaReady || false,
-})),
-});
-}
-return false;
-});
+
+
+// ── URL-Based Logout Detection + Tab Discard Recovery ──────────────────
+// Monitor VEO tabs for: logout redirects, Memory Saver discards
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-const state = tabState[tabId];
-if (!state) return;
-if (changeInfo.discarded === true && state.email) {
-wsSend({ action: 'tab_discarded', email: state.email, tabId });
-setTimeout(() => {
-safeTabReload(tabId, 'memory-saver-discard');
-}, 1000);
-return;
-}
-if (changeInfo.discarded === false && changeInfo.status === 'complete' && state.email) {
-chrome.scripting.executeScript({
-target: { tabId }, files: ['content.js'],
-}).catch(() => { });
-return;
-}
-if (!changeInfo.url) return;
-if (changeInfo.url.includes('accounts.google.com')) {
-const email = state.email;
-if (email) {
-wsSend({
-action: 'account_logged_out',
-email: email,
-reason: 'redirect_to_login',
-tabId: tabId,
+  const state = tabState[tabId];
+  if (!state) return;
+
+  // ── Tab Discard Detection (Memory Saver) ──
+  // Chrome can discard inactive tabs, killing content scripts.
+  // Detect immediately → notify app → auto-reload.
+  if (changeInfo.discarded === true && state.email) {
+    console.warn(`[VEO Bridge] ⚠️ Tab ${tabId} (${state.email}) DISCARDED by Memory Saver`);
+    wsSend({ action: 'tab_discarded', email: state.email, tabId });
+    // Auto-reload to restore content script (with cooldown protection)
+    setTimeout(() => {
+      safeTabReload(tabId, 'memory-saver-discard');
+    }, 1000);
+    return;
+  }
+
+  // ── Tab Restored from Discard — re-inject content.js ──
+  if (changeInfo.discarded === false && changeInfo.status === 'complete' && state.email) {
+    console.log(`[VEO Bridge] ✅ Tab ${tabId} restored from discard — re-injecting content.js`);
+    chrome.scripting.executeScript({
+      target: { tabId }, files: ['content.js'],
+    }).catch(() => { });
+    return;
+  }
+
+  // ── URL-Based Logout Detection ──
+  if (!changeInfo.url) return;
+  if (changeInfo.url.includes('accounts.google.com')) {
+    const email = state.email;
+    if (email) {
+      console.warn(`[VEO Bridge] 🔴 Tab ${tabId} (${email}) navigated to Google login — LOGGED OUT`);
+      wsSend({
+        action: 'account_logged_out',
+        email: email,
+        reason: 'redirect_to_login',
+        tabId: tabId,
+      });
+      delete tabState[tabId];
+    }
+  }
 });
-delete tabState[tabId];
-}
-}
-});
+
+
+// ── Tab Close Detection — Reassign Email to Remaining VEO Tab ──────────
+// When a VEO tab with a registered email is closed, find another VEO tab
+// and reassign the email so operations can continue without interruption.
+
 chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
-const state = tabState[tabId];
-if (!state || !state.email) {
-delete tabState[tabId];
-delete tabLastReloadTime[tabId];
-return;
-}
-const orphanedEmail = state.email;
-delete tabState[tabId];
-delete tabLastReloadTime[tabId];
-delete shortTokenCounts[tabId];
-wsSend({
-action: 'tab_closed',
-email: orphanedEmail,
-tabId: tabId,
+  const state = tabState[tabId];
+  if (!state || !state.email) {
+    // Tab wasn't tracked or had no email — just clean up
+    delete tabState[tabId];
+    delete tabLastReloadTime[tabId];
+    return;
+  }
+
+  const orphanedEmail = state.email;
+  console.warn(`[VEO Bridge] ❌ Tab ${tabId} (${orphanedEmail}) closed — looking for replacement...`);
+
+  // Clean up closed tab state
+  delete tabState[tabId];
+  delete tabLastReloadTime[tabId];
+  delete shortTokenCounts[tabId];
+
+  // Notify app that the email's tab was closed
+  wsSend({
+    action: 'tab_closed',
+    email: orphanedEmail,
+    tabId: tabId,
+  });
+
+  // Check if email is already assigned to another tab (e.g., duplicate registration)
+  const existingTabId = findTabForEmail(orphanedEmail);
+  if (existingTabId) {
+    console.log(`[VEO Bridge] ✅ Email ${orphanedEmail} already registered on tab ${existingTabId}`);
+    wsSend({ action: 'register', email: orphanedEmail, tabId: existingTabId, version: EXT_VERSION });
+    return;
+  }
+
+  // Find another VEO tab without an email assignment
+  try {
+    const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    // Prefer unassigned tab, fallback to any VEO tab
+    let targetTab = veoTabs.find(t => t.id !== tabId && !tabState[t.id]?.email);
+    if (!targetTab) {
+      targetTab = veoTabs.find(t => t.id !== tabId);
+    }
+
+    if (targetTab) {
+      const newTabId = targetTab.id;
+      if (!tabState[newTabId]) {
+        tabState[newTabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
+      }
+      tabState[newTabId].email = orphanedEmail;
+      console.log(`[VEO Bridge] 🔄 Reassigned ${orphanedEmail} to existing VEO tab ${newTabId}`);
+
+      // Inject content.js to ensure the tab can communicate
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: newTabId },
+          files: ['content.js'],
+        });
+      } catch (e) {
+        console.debug(`[VEO Bridge] Content.js inject on reassign: ${e.message}`);
+      }
+
+      // Re-register with Python app
+      wsSend({ action: 'register', email: orphanedEmail, tabId: newTabId, version: EXT_VERSION });
+
+      // Prevent Chrome from discarding this tab (same as initial registration)
+      try { chrome.tabs.update(newTabId, { autoDiscardable: false }); } catch (_) { }
+
+      // Push any cached headers from the new tab
+      const newState = tabState[newTabId];
+      if (Object.keys(newState.headers).length > 0) {
+        wsSend({
+          action: 'headers_update',
+          email: orphanedEmail,
+          headers: newState.headers,
+          accessToken: newState.accessToken,
+        });
+      }
+    } else {
+      console.warn(`[VEO Bridge] ⚠️ No remaining VEO tab for ${orphanedEmail} — will reconnect when new tab opens`);
+    }
+  } catch (e) {
+    console.error(`[VEO Bridge] Tab reassignment failed: ${e.message}`);
+  }
 });
-const existingTabId = findTabForEmail(orphanedEmail);
-if (existingTabId) {
-wsSend({ action: 'register', email: orphanedEmail, tabId: existingTabId, version: EXT_VERSION });
-return;
-}
-try {
-const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
-let targetTab = veoTabs.find(t => t.id !== tabId && !tabState[t.id]?.email);
-if (!targetTab) {
-targetTab = veoTabs.find(t => t.id !== tabId);
-}
-if (targetTab) {
-const newTabId = targetTab.id;
-if (!tabState[newTabId]) {
-tabState[newTabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
-}
-tabState[newTabId].email = orphanedEmail;
-try {
-await chrome.scripting.executeScript({
-target: { tabId: newTabId },
-files: ['content.js'],
-});
-} catch (e) {
-}
-wsSend({ action: 'register', email: orphanedEmail, tabId: newTabId, version: EXT_VERSION });
-try { chrome.tabs.update(newTabId, { autoDiscardable: false }); } catch (_) { }
-const newState = tabState[newTabId];
-if (Object.keys(newState.headers).length > 0) {
-wsSend({
-action: 'headers_update',
-email: orphanedEmail,
-headers: newState.headers,
-accessToken: newState.accessToken,
-});
-}
-} else {
-}
-} catch (e) {
-console.error(`[VEO Bridge] Tab reassignment failed: ${e.message}`);
-}
-});
+
 function checkHeartbeats() {
-const now = Date.now();
-for (const [tabId, state] of Object.entries(tabState)) {
-if (!state.email || !state.lastHeartbeat) continue;
-const elapsed = now - state.lastHeartbeat;
-if (elapsed > HEARTBEAT_TIMEOUT) {
-if (!state._frozenReloadCount) state._frozenReloadCount = 0;
-if (!state._frozenWindowStart) state._frozenWindowStart = now;
-if (now - state._frozenWindowStart > FROZEN_RELOAD_WINDOW) {
-state._frozenReloadCount = 0;
-state._frozenWindowStart = now;
+  const now = Date.now();
+  for (const [tabId, state] of Object.entries(tabState)) {
+    if (!state.email || !state.lastHeartbeat) continue;
+
+    const elapsed = now - state.lastHeartbeat;
+    if (elapsed > HEARTBEAT_TIMEOUT) {
+      // Initialize reload tracking per tab
+      if (!state._frozenReloadCount) state._frozenReloadCount = 0;
+      if (!state._frozenWindowStart) state._frozenWindowStart = now;
+
+      // Reset window if expired
+      if (now - state._frozenWindowStart > FROZEN_RELOAD_WINDOW) {
+        state._frozenReloadCount = 0;
+        state._frozenWindowStart = now;
+      }
+
+      state._frozenReloadCount++;
+
+      if (state._frozenReloadCount > FROZEN_RELOAD_MAX) {
+        // Tab is truly dead — stop reloading, notify Python
+        if (state._frozenReloadCount === FROZEN_RELOAD_MAX + 1) {
+          console.error(
+            `[VEO Bridge] 💀 Tab ${tabId} (${state.email}) DEAD — ` +
+            `${FROZEN_RELOAD_MAX} reloads failed in ${FROZEN_RELOAD_WINDOW / 1000}s`
+          );
+          wsSend({
+            action: 'tab_dead',
+            email: state.email,
+            tabId: parseInt(tabId),
+            reloadAttempts: FROZEN_RELOAD_MAX,
+            elapsedMs: elapsed,
+          });
+        }
+        // Don't reload — just wait for manual intervention or window reset
+        continue;
+      }
+
+      console.warn(
+        `[VEO Bridge] ⚠️ Tab ${tabId} (${state.email}) missed heartbeat ` +
+        `(${Math.floor(elapsed / 1000)}s ago) — ` +
+        `reload attempt ${state._frozenReloadCount}/${FROZEN_RELOAD_MAX}`
+      );
+
+      // Notify Python app about the frozen tab
+      wsSend({
+        action: 'tab_frozen',
+        email: state.email,
+        tabId: parseInt(tabId),
+        lastHeartbeat: state.lastHeartbeat,
+        elapsedMs: elapsed,
+        reloadAttempt: state._frozenReloadCount,
+      });
+
+      // Try to wake it up by reloading (with cooldown protection)
+      safeTabReload(parseInt(tabId), `heartbeat-frozen-attempt-${state._frozenReloadCount}`).then(didReload => {
+        if (didReload) {
+          state.lastHeartbeat = now; // Reset to avoid immediate re-trigger
+        }
+      });
+    }
+  }
 }
-state._frozenReloadCount++;
-if (state._frozenReloadCount > FROZEN_RELOAD_MAX) {
-if (state._frozenReloadCount === FROZEN_RELOAD_MAX + 1) {
-console.error(
-`[VEO Bridge] 💀 Tab ${tabId} (${state.email}) DEAD — ` +
-`${FROZEN_RELOAD_MAX} reloads failed in ${FROZEN_RELOAD_WINDOW / 1000}s`
-);
-wsSend({
-action: 'tab_dead',
-email: state.email,
-tabId: parseInt(tabId),
-reloadAttempts: FROZEN_RELOAD_MAX,
-elapsedMs: elapsed,
-});
-}
-continue;
-}
-wsSend({
-action: 'tab_frozen',
-email: state.email,
-tabId: parseInt(tabId),
-lastHeartbeat: state.lastHeartbeat,
-elapsedMs: elapsed,
-reloadAttempt: state._frozenReloadCount,
-});
-safeTabReload(parseInt(tabId), `heartbeat-frozen-attempt-${state._frozenReloadCount}`).then(didReload => {
-if (didReload) {
-state.lastHeartbeat = now;
-}
-});
-}
-}
-}
+
+// Start heartbeat check every 20s
 if (!_heartbeatCheckTimer) {
-_heartbeatCheckTimer = setInterval(checkHeartbeats, 20000);
+  _heartbeatCheckTimer = setInterval(checkHeartbeats, 20000);
 }
+
+
+// ── Zombie Tab Tracking ────────────────────────────────────────────────
+// When a tab is created/tracked but gets no email within 30s, warn about it
+
 function startZombieTimer(tabId) {
-if (!tabState[tabId]) return;
-tabState[tabId]._zombieTimer = setTimeout(() => {
-const state = tabState[tabId];
-if (state && !state.email) {
-wsSend({
-action: 'zombie_tab',
-tabId: tabId,
-message: 'Tab created but no email detected after 30 seconds',
-});
+  if (!tabState[tabId]) return;
+  tabState[tabId]._zombieTimer = setTimeout(() => {
+    const state = tabState[tabId];
+    if (state && !state.email) {
+      console.warn(`[VEO Bridge] ⚠️ Zombie tab ${tabId}: no email assigned after 30s`);
+      // Notify app about unresponsive tab
+      wsSend({
+        action: 'zombie_tab',
+        tabId: tabId,
+        message: 'Tab created but no email detected after 30 seconds',
+      });
+    }
+  }, 30000); // 30 seconds
 }
-}, 30000);
-}
+
+// Clean up on tab close + auto-reopen VEO tab
 chrome.tabs.onRemoved.addListener((tabId) => {
-if (tabState[tabId]) {
-const email = tabState[tabId].email;
-const wasVeoTab = !!email;
-delete tabState[tabId];
-if (email) {
-wsSend({ action: 'tab_closed', email, tabId });
-}
-if (wasVeoTab) {
-const otherVeoTabs = Object.entries(tabState).filter(([_, s]) => s.email);
-if (otherVeoTabs.length === 0) {
-setTimeout(() => ensureVeoTab(), 2000);
-} else {
-}
-}
-}
+  if (tabState[tabId]) {
+    const email = tabState[tabId].email;
+    const wasVeoTab = !!email; // VEO tabs have email registered
+    delete tabState[tabId];
+    if (email) {
+      wsSend({ action: 'tab_closed', email, tabId });
+    }
+    // Auto-reopen VEO tab if it was closed AND no other VEO tabs exist
+    if (wasVeoTab) {
+      // Check if there are other VEO tabs still open
+      const otherVeoTabs = Object.entries(tabState).filter(([_, s]) => s.email);
+      if (otherVeoTabs.length === 0) {
+        console.log(`[VEO Bridge] Last VEO tab ${tabId} closed — reopening in 2s...`);
+        setTimeout(() => ensureVeoTab(), 2000);
+      } else {
+        console.log(`[VEO Bridge] VEO tab ${tabId} closed — ${otherVeoTabs.length} other VEO tab(s) still open`);
+      }
+    }
+  }
 });
+
+// Close excess tabs whenever a new tab is created
 chrome.tabs.onCreated.addListener((tab) => {
-setTimeout(() => {
-closeExcessTabs().then(() => ensureVeoTab());
-}, 3000);
+  // Delay cleanup slightly to allow the tab to settle (URL may still be about:blank)
+  setTimeout(() => {
+    closeExcessTabs().then(() => ensureVeoTab());
+  }, 3000);
 });
+
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
 function findTabForEmail(email) {
-for (const [tabId, state] of Object.entries(tabState)) {
-if (state.email === email) {
-return parseInt(tabId);
+  for (const [tabId, state] of Object.entries(tabState)) {
+    if (state.email === email) {
+      return parseInt(tabId);
+    }
+  }
+  // GAP #6: Removed fallback that returned ANY tab with an email.
+  // Returning a wrong account's tab causes cross-account reCAPTCHA tokens.
+  // Callers must handle null explicitly.
+  return null;
 }
+
+
+/**
+ * ★ Stale Tab Recovery: when findTabForEmail() returns null but a Chrome tab
+ * with the VEO URL still exists, re-inject content.js and re-register it.
+ *
+ * Root cause: Chrome can discard tabs (memory saving) or the MV3 service worker
+ * can restart, losing tabState entries. The tab is still open in Chrome but
+ * invisible to the extension → "No tab found" → engine stalls permanently.
+ *
+ * Recovery strategy:
+ * 1. Query Chrome for all labs.google tabs
+ * 2. Find an orphaned tab (not in tabState with an email)
+ * 3. If tab was discarded by Chrome, reload it
+ * 4. Re-inject content.js to revive the content script
+ * 5. Assign the email and re-register with Python
+ *
+ * Cooldown: 30s between recovery attempts per email to prevent spam.
+ *
+ * @param {string} email - Account email to recover tab for
+ * @returns {number|null} - Recovered tabId or null if recovery failed
+ */
+const _recoveryCooldown = {};  // email → Date.now() of last attempt
+const RECOVERY_COOLDOWN_MS = 30000;  // 30s between attempts
+
+async function recoverStaleTab(email) {
+  // Cooldown check
+  const now = Date.now();
+  const lastAttempt = _recoveryCooldown[email] || 0;
+  if (now - lastAttempt < RECOVERY_COOLDOWN_MS) {
+    return null;  // Cooldown active
+  }
+  _recoveryCooldown[email] = now;
+
+  try {
+    // 1. Query Chrome for all VEO tabs
+    const veoTabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    if (veoTabs.length === 0) {
+      console.debug(`[VEO Bridge] 🔍 No VEO tabs found in Chrome for recovery (${email})`);
+      return null;
+    }
+
+    // 2. Find orphaned tab: exists in Chrome but not in tabState with an email,
+    //    OR has a different/null email in tabState
+    let targetTab = null;
+
+    // Priority 1: Tab that has this email but lost its tabState
+    for (const tab of veoTabs) {
+      if (!tabState[tab.id] || !tabState[tab.id].email) {
+        targetTab = tab;
+        break;
+      }
+    }
+
+    // Priority 2: ANY VEO tab where tabState.email doesn't match any connected email
+    if (!targetTab) {
+      const connectedEmails = new Set(
+        Object.values(tabState).map(s => s.email).filter(Boolean)
+      );
+      for (const tab of veoTabs) {
+        // If this tab's email is not the one we're looking for,
+        // but there's only one VEO tab and it has wrong email → might be ours
+        if (veoTabs.length === 1 && !connectedEmails.has(email)) {
+          targetTab = tab;
+          break;
+        }
+      }
+    }
+
+    if (!targetTab) {
+      console.debug(`[VEO Bridge] 🔍 All ${veoTabs.length} VEO tabs already assigned — no orphan for ${email}`);
+      return null;
+    }
+
+    console.warn(
+      `[VEO Bridge] 🔄 Recovering stale tab ${targetTab.id} for ${email} ` +
+      `(discarded=${targetTab.discarded || false}, url=${targetTab.url})`
+    );
+
+    // 3. If tab was discarded by Chrome, reload it
+    if (targetTab.discarded) {
+      try {
+        await chrome.tabs.reload(targetTab.id);
+        console.log(`[VEO Bridge] 🔄 Reloaded discarded tab ${targetTab.id}`);
+        await new Promise(r => setTimeout(r, 5000));  // Wait for page load
+      } catch (e) {
+        console.warn(`[VEO Bridge] Failed to reload discarded tab: ${e.message}`);
+        return null;
+      }
+    }
+
+    // 4. Re-inject content.js to revive the content script
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: targetTab.id },
+        files: ['content.js'],
+      });
+      console.log(`[VEO Bridge] 💉 Re-injected content.js into tab ${targetTab.id}`);
+      await new Promise(r => setTimeout(r, 3000));  // Wait for content.js init
+    } catch (e) {
+      console.warn(`[VEO Bridge] Content.js injection failed for tab ${targetTab.id}: ${e.message}`);
+      // Don't return null — tab might still be usable for executeScript in MAIN world
+    }
+
+    // 5. Register in tabState
+    if (!tabState[targetTab.id]) {
+      tabState[targetTab.id] = {
+        email: null, headers: {}, accessToken: null,
+        lastHeartbeat: 0, recaptchaReady: false,
+      };
+    }
+    tabState[targetTab.id].email = email;
+    tabState[targetTab.id].lastHeartbeat = Date.now();
+    persistTabState();
+
+    // 6. Prevent Chrome from auto-discarding this tab again
+    try {
+      await chrome.tabs.update(targetTab.id, { autoDiscardable: false });
+    } catch (_) { }
+
+    // 7. Notify Python
+    wsSend({
+      action: 'register',
+      email,
+      tabId: targetTab.id,
+      version: EXT_VERSION,
+    });
+
+    console.warn(
+      `[VEO Bridge] ✅ Recovered stale tab ${targetTab.id} for ${email} — re-registered with app`
+    );
+    return targetTab.id;
+
+  } catch (e) {
+    console.error(`[VEO Bridge] Stale tab recovery failed for ${email}: ${e.message}`);
+    return null;
+  }
 }
-return null;
-}
+
+
+
+// ── Extract and Push Token Helper ──────────────────────────────────────
+
 async function extractAndPushToken(tabId, email) {
-try {
-const response = await chrome.tabs.sendMessage(tabId, {
-action: 'get_access_token',
-});
-if (response?.token) {
-wsSend({
-action: 'access_token',
-requestId: null,
-email: email,
-token: response.token,
-tokenEmail: response.email || null,
-});
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, {
+      action: 'get_access_token',
+    });
+    if (response?.token) {
+      wsSend({
+        action: 'access_token',
+        requestId: null,  // unsolicited push (not a response to a request)
+        email: email,
+        token: response.token,
+        tokenEmail: response.email || null,
+      });
+      console.log(`[VEO Bridge] 🔑 Pushed access token for ${email}`);
+    }
+  } catch (e) {
+    console.debug(`[VEO Bridge] Token extract failed for tab ${tabId}: ${e.message}`);
+  }
 }
-} catch (e) {
-}
-}
+
+
+// ── Keepalive & Periodic Refresh ───────────────────────────────────────
+
 const KEEPALIVE_ALARM = 'ws-keepalive';
 const HEADER_REFRESH_ALARM = 'header-refresh';
 const TAB_CLEANUP_ALARM = 'tab-cleanup';
+
+// Chrome suspends service workers after ~30s of inactivity.
+// Reduced from 30s to 20s for faster keepalive.
 chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.33 });
+// Refresh headers every 3 minutes via lightweight fetch (instead of 5 min full reload)
 chrome.alarms.create(HEADER_REFRESH_ALARM, { periodInMinutes: 3 });
+// Periodic tab cleanup every 2 minutes
 chrome.alarms.create(TAB_CLEANUP_ALARM, { periodInMinutes: 2 });
+
 chrome.alarms.onAlarm.addListener((alarm) => {
-if (alarm.name === KEEPALIVE_ALARM) {
-if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
-ensureOffscreenDocument();
-}
-if (alarm.name === HEADER_REFRESH_ALARM) {
-lightweightRefreshAll();
-}
-if (alarm.name === TAB_CLEANUP_ALARM) {
-closeExcessTabs().then(() => ensureVeoTab());
-}
+  if (alarm.name === KEEPALIVE_ALARM) {
+    // RC2 FIX: Skip offscreen check during startup grace period (45s)
+    // Tab may still be about:blank → Chrome kills offscreen → recreate loop
+    if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
+    // Ensure offscreen document is alive (it handles WS keepalive internally)
+    ensureOffscreenDocument();
+  }
+
+  if (alarm.name === HEADER_REFRESH_ALARM) {
+    console.log('[VEO Bridge] ⏰ Periodic header refresh (lightweight)');
+    // Use lightweight refresh first — content.js triggers a fetch
+    // which causes onBeforeSendHeaders to fire and capture fresh headers
+    lightweightRefreshAll();
+  }
+
+  if (alarm.name === TAB_CLEANUP_ALARM) {
+    closeExcessTabs().then(() => ensureVeoTab());
+  }
 });
+
+// Lightweight refresh all tabs (no page reload)
 async function lightweightRefreshAll() {
-for (const [tabId, state] of Object.entries(tabState)) {
-if (!state.email) continue;
-try {
-await sendMessageWithRetry(parseInt(tabId), { action: 'lightweight_header_refresh' });
-} catch (e) {
-try {
-await safeTabReload(parseInt(tabId), 'lightweight-refresh-failed');
-} catch (re) {
+  for (const [tabId, state] of Object.entries(tabState)) {
+    if (!state.email) continue;
+    try {
+      await sendMessageWithRetry(parseInt(tabId), { action: 'lightweight_header_refresh' });
+      console.log(`[VEO Bridge] 🔄 Lightweight refresh for tab ${tabId} (${state.email})`);
+    } catch (e) {
+      // Content script not responding even after retry — try full reload as fallback
+      console.debug(`[VEO Bridge] Lightweight refresh failed for tab ${tabId}, using full reload`);
+      try {
+        await safeTabReload(parseInt(tabId), 'lightweight-refresh-failed');
+      } catch (re) {
+        console.debug(`[VEO Bridge] Full reload also failed for tab ${tabId}: ${re.message}`);
+      }
+    }
+  }
 }
-}
-}
-}
+
+
+// ── Reload VEO Tabs (shared by periodic + on-demand) ──────────────────
+
 async function reloadVeoTabs(email = null) {
-try {
-const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
-let reloaded = 0;
-for (const tab of tabs) {
-if (email) {
-const state = tabState[tab.id];
-if (state && state.email !== email) continue;
+  try {
+    const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    let reloaded = 0;
+
+    for (const tab of tabs) {
+      // If email specified, only reload tabs matching that email
+      if (email) {
+        const state = tabState[tab.id];
+        if (state && state.email !== email) continue;
+      }
+
+      try {
+        const didReload = await safeTabReload(tab.id, 'header-refresh');
+        if (didReload) reloaded++;
+      } catch (e) {
+        console.debug(`[VEO Bridge] Could not reload tab ${tab.id}: ${e.message}`);
+      }
+    }
+
+    console.log(`[VEO Bridge] Reloaded ${reloaded}/${tabs.length} VEO tab(s)`);
+    return reloaded;
+  } catch (e) {
+    console.error('[VEO Bridge] Failed to reload VEO tabs:', e);
+    return 0;
+  }
 }
-try {
-const didReload = await safeTabReload(tab.id, 'header-refresh');
-if (didReload) reloaded++;
-} catch (e) {
-}
-}
-return reloaded;
-} catch (e) {
-console.error('[VEO Bridge] Failed to reload VEO tabs:', e);
-return 0;
-}
-}
+
+
+// ── Auto-detect existing VEO tabs ──────────────────────────────────────
+
 async function injectExistingTabs() {
-try {
-const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
-for (const tab of tabs) {
-try {
-await chrome.scripting.executeScript({
-target: { tabId: tab.id },
-files: ['content.js'],
-});
-if (!tab.pinned) {
-chrome.tabs.update(tab.id, { pinned: true });
+  try {
+    const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    console.log(`[VEO Bridge] Found ${tabs.length} existing VEO tab(s)`);
+
+    for (const tab of tabs) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+        console.log(`[VEO Bridge] Injected content.js into tab ${tab.id}: ${tab.url}`);
+
+        // Pin VEO tabs that aren't already pinned
+        if (!tab.pinned) {
+          chrome.tabs.update(tab.id, { pinned: true });
+          console.log(`[VEO Bridge] 📌 Pinned VEO tab ${tab.id}`);
+        }
+
+        // Reload tab to trigger fresh API requests → headers get captured
+        setTimeout(() => {
+          chrome.tabs.reload(tab.id, { bypassCache: false });
+          console.log(`[VEO Bridge] Reloaded tab ${tab.id} for header capture`);
+        }, 1000); // Wait 1s for content.js to register email first
+
+      } catch (e) {
+        // Tab may not be accessible (e.g. chrome:// pages, about:blank)
+        console.debug(`[VEO Bridge] Could not inject into tab ${tab.id}: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    console.error('[VEO Bridge] Failed to query tabs:', e);
+  }
 }
-setTimeout(() => {
-chrome.tabs.reload(tab.id, { bypassCache: false });
-}, 1000);
-} catch (e) {
-}
-}
-} catch (e) {
-console.error('[VEO Bridge] Failed to query tabs:', e);
-}
-}
+
+
+// ── Ensure VEO Tab (auto-open + pin) ───────────────────────────────────
+
 const VEO_URL = 'https://labs.google/fx/vi/tools/flow';
-let _ensureVeoTabRunning = false;
+let _ensureVeoTabRunning = false; // debounce guard
+
 async function ensureVeoTab() {
-if (_ensureVeoTabRunning) return;
-_ensureVeoTabRunning = true;
-try {
-const existing = await chrome.tabs.query({ url: '*://labs.google/*' });
-if (existing.length > 0) {
-for (const tab of existing) {
-if (!tab.pinned) {
-try {
-await chrome.tabs.update(tab.id, { pinned: true });
-} catch (e) {
+  if (_ensureVeoTabRunning) return;
+  _ensureVeoTabRunning = true;
+
+  try {
+    // Check if any VEO tab already exists (broad match: any locale/path)
+    const existing = await chrome.tabs.query({ url: '*://labs.google/*' });
+    if (existing.length > 0) {
+      // Pin any unpinned VEO tabs
+      for (const tab of existing) {
+        if (!tab.pinned) {
+          try {
+            await chrome.tabs.update(tab.id, { pinned: true });
+            console.log(`[VEO Bridge] 📌 Pinned existing VEO tab ${tab.id}: ${tab.url}`);
+          } catch (e) {
+            console.debug(`[VEO Bridge] Could not pin tab ${tab.id}: ${e.message}`);
+          }
+        }
+      }
+      console.log(`[VEO Bridge] ✅ ${existing.length} VEO tab(s) already exist — skipping creation`);
+      return;
+    }
+
+    // Also check tabState — a tab might be loading and not yet queryable
+    const trackedVeoTabs = Object.entries(tabState).filter(([_, s]) => s.email);
+    if (trackedVeoTabs.length > 0) {
+      console.log(`[VEO Bridge] ✅ ${trackedVeoTabs.length} VEO tab(s) tracked in state — skipping creation`);
+      return;
+    }
+
+    // No VEO tab found — cleanup excess tabs first to make room
+    let allTabs = await chrome.tabs.query({ currentWindow: true });
+    if (allTabs.length >= MAX_TABS) {
+      console.log(`[VEO Bridge] Tab limit reached (${allTabs.length}/${MAX_TABS}) — cleaning up to make room for VEO tab...`);
+      await closeExcessTabs();
+      // Re-check after cleanup
+      allTabs = await chrome.tabs.query({ currentWindow: true });
+      if (allTabs.length >= MAX_TABS) {
+        // Still at limit — force-close one non-VEO tab to make room
+        const nonVeo = allTabs.filter(t => !(t.url || '').includes('labs.google'));
+        if (nonVeo.length > 0) {
+          const victim = nonVeo[nonVeo.length - 1]; // close last non-VEO tab
+          try {
+            await chrome.tabs.remove(victim.id);
+            if (tabState[victim.id]) delete tabState[victim.id];
+            console.log(`[VEO Bridge] 🔻 Force-closed tab ${victim.id} to make room for VEO tab`);
+          } catch (e) {
+            console.debug(`[VEO Bridge] Could not force-close tab: ${e.message}`);
+          }
+        } else {
+          console.warn(`[VEO Bridge] ⚠️ All tabs are VEO-related, cannot make room`);
+          return;
+        }
+      }
+    }
+
+    console.log(`[VEO Bridge] 🆕 No VEO tab found, opening one...`);
+    const tab = await chrome.tabs.create({
+      url: VEO_URL,
+      active: false, // don't steal focus from current tab
+      pinned: true,
+    });
+    console.log(`[VEO Bridge] 📌 Created pinned VEO tab ${tab.id}`);
+    startZombieTimer(tab.id);  // Track zombie potential
+
+    // Inject content.js after page loads
+    setTimeout(async () => {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+      } catch (e) {
+        console.debug(`[VEO Bridge] Content inject after create: ${e.message}`);
+      }
+    }, 5000); // Wait for page to finish loading
+
+  } catch (e) {
+    console.error('[VEO Bridge] ensureVeoTab failed:', e);
+  } finally {
+    _ensureVeoTabRunning = false;
+  }
 }
-}
-}
-return;
-}
-const trackedVeoTabs = Object.entries(tabState).filter(([_, s]) => s.email);
-if (trackedVeoTabs.length > 0) {
-return;
-}
-let allTabs = await chrome.tabs.query({ currentWindow: true });
-if (allTabs.length >= MAX_TABS) {
-await closeExcessTabs();
-allTabs = await chrome.tabs.query({ currentWindow: true });
-if (allTabs.length >= MAX_TABS) {
-const nonVeo = allTabs.filter(t => !(t.url || '').includes('labs.google'));
-if (nonVeo.length > 0) {
-const victim = nonVeo[nonVeo.length - 1];
-try {
-await chrome.tabs.remove(victim.id);
-if (tabState[victim.id]) delete tabState[victim.id];
-} catch (e) {
-}
-} else {
-return;
-}
-}
-}
-const tab = await chrome.tabs.create({
-url: VEO_URL,
-active: false,
-pinned: true,
-});
-startZombieTimer(tab.id);
-setTimeout(async () => {
-try {
-await chrome.scripting.executeScript({
-target: { tabId: tab.id },
-files: ['content.js'],
-});
-} catch (e) {
-}
-}, 5000);
-} catch (e) {
-console.error('[VEO Bridge] ensureVeoTab failed:', e);
-} finally {
-_ensureVeoTabRunning = false;
-}
-}
+
+
+// ── Lifecycle ───────────────────────────────────────────────────────────
+
 chrome.runtime.onInstalled.addListener(async () => {
-chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.33 });
-try {
-try { await chrome.scripting.unregisterContentScripts({ ids: ['stealth'] }); } catch (_) { }
-await chrome.scripting.registerContentScripts([{
-id: 'stealth',
-matches: ['*://labs.google/*'],
-js: ['stealth.js'],
-runAt: 'document_start',
-world: 'MAIN',
-}]);
-} catch (e) {
-}
-injectExistingTabs().then(() => {
-closeExcessTabs();
-ensureVeoTab();
+  console.log('[VEO Bridge] Extension installed/updated');
+  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.33 });
+
+  // Register stealth script to override navigator.webdriver BEFORE reCAPTCHA loads.
+  // CDP sets webdriver=true which tanks reCAPTCHA scores → 403 on every request.
+  // Uses programmatic registration (not manifest) so it fails gracefully if
+  // Chrome version doesn't support world: 'MAIN'.
+  try {
+    // Unregister first (idempotent — avoids "already registered" errors on update)
+    try { await chrome.scripting.unregisterContentScripts({ ids: ['stealth'] }); } catch (_) { }
+    await chrome.scripting.registerContentScripts([{
+      id: 'stealth',
+      matches: ['*://labs.google/*'],
+      js: ['stealth.js'],
+      runAt: 'document_start',
+      world: 'MAIN',
+    }]);
+    console.log('[VEO Bridge] ✅ Stealth script registered (navigator.webdriver override)');
+  } catch (e) {
+    console.warn('[VEO Bridge] ⚠️ Stealth script registration failed (Chrome too old?):', e.message);
+  }
+
+  // RC1 FIX: Do NOT create offscreen here — let initializeStartup() handle it
+  // to avoid race with restoreTabState() below.
+  // Inject into already-open VEO tabs, clean up excess, then ensure one exists
+  injectExistingTabs().then(() => {
+    closeExcessTabs();
+    ensureVeoTab();
+  });
 });
-});
+
+// ── Startup ─────────────────────────────────────────────────────────────
+
+// RC1 FIX: Consolidated startup — single sequential flow
+// Old code had 3 separate ensureOffscreenDocument() calls racing each other.
 async function initializeStartup() {
-try {
-await restoreTabState();
-} catch (_) { }
-_tabStateRestored = true;
-await ensureOffscreenDocument();
-try {
-await injectExistingTabs();
-closeExcessTabs();
-ensureVeoTab();
-} catch (e) {
-}
+  // Step 1: Restore tabState (filters out about:blank via RC3 fix)
+  try {
+    await restoreTabState();
+  } catch (_) { }
+  _tabStateRestored = true; // Fix G: Signal restore complete
+
+  // Step 2: Create offscreen document ONCE
+  await ensureOffscreenDocument();
+
+  // Step 2.5: Service worker may have restarted while offscreen.js kept the
+  // WebSocket alive. Re-sync state so existing tabs can register immediately.
+  await syncOffscreenWsState();
+
+  // Step 3: Inject into existing VEO tabs
+  try {
+    await injectExistingTabs();
+    closeExcessTabs();
+    ensureVeoTab();
+  } catch (e) {
+    console.debug('[VEO Bridge] Startup tab injection failed:', e.message);
+  }
 }
 initializeStartup();
+console.log(`[VEO Bridge] Background service worker started (v${EXT_VERSION} — offscreen WS + persistence)`);
+
+// RC2 FIX: Startup grace period — skip offscreen health checks during first 45s
+// During startup, tab is often about:blank → Chrome kills offscreen → loop
 const _startupTime = Date.now();
-const STARTUP_GRACE_MS = 45000;
+const STARTUP_GRACE_MS = 45000; // 45s grace for tab to navigate to labs.google
+
+// ── Offscreen Health Monitor ────────────────────────────────────────────
+// Chrome may destroy offscreen documents under memory pressure.
+// RC2+RC4 FIX: Grace period + exponential backoff on rapid failures.
 let _offscreenRecreateFailCount = 0;
 let _lastOffscreenRecreateTime = 0;
 setInterval(async () => {
-if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
-const backoffMs = Math.min(15000 * Math.pow(2, _offscreenRecreateFailCount), 120000);
-if (_offscreenRecreateFailCount > 0 && Date.now() - _lastOffscreenRecreateTime < backoffMs) {
-return;
-}
-try {
-const contexts = await chrome.runtime.getContexts({
-contextTypes: ['OFFSCREEN_DOCUMENT'],
-documentUrls: [chrome.runtime.getURL('offscreen.html')],
-});
-if (contexts.length === 0) {
-wsConnected = false;
-_lastOffscreenRecreateTime = Date.now();
-await ensureOffscreenDocument();
-await new Promise(r => setTimeout(r, 2000));
-const recheck = await chrome.runtime.getContexts({
-contextTypes: ['OFFSCREEN_DOCUMENT'],
-documentUrls: [chrome.runtime.getURL('offscreen.html')],
-});
-if (recheck.length > 0) {
-_offscreenRecreateFailCount = 0;
-} else {
-_offscreenRecreateFailCount++;
-}
-} else {
-if (_offscreenRecreateFailCount > 0) {
-_offscreenRecreateFailCount = 0;
-}
-}
-} catch (e) {
-}
+  const hasRegisteredTabs = Object.values(tabState).some(s => !!s.email);
+  const hasQueuedWsTraffic = _wsSendQueue.length > 0;
+
+  // RC2: Skip during startup grace period only while nothing is actively
+  // waiting for the bridge. Once a real tab has registered or traffic is
+  // queued, recover immediately.
+  if (
+    Date.now() - _startupTime < STARTUP_GRACE_MS &&
+    !hasRegisteredTabs &&
+    !hasQueuedWsTraffic
+  ) {
+    return;
+  }
+
+  // RC4: Exponential backoff — if recreate keeps failing, slow down
+  const backoffMs = Math.min(15000 * Math.pow(2, _offscreenRecreateFailCount), 120000);
+  if (_offscreenRecreateFailCount > 0 && Date.now() - _lastOffscreenRecreateTime < backoffMs) {
+    return; // Still in backoff period
+  }
+
+  try {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [chrome.runtime.getURL('offscreen.html')],
+    });
+    if (contexts.length === 0) {
+      console.warn(`[VEO Bridge] ⚠️ Offscreen document destroyed — recreating... (attempt ${_offscreenRecreateFailCount + 1})`);
+      wsConnected = false;
+      _lastOffscreenRecreateTime = Date.now();
+      await ensureOffscreenDocument();
+      await syncOffscreenWsState();
+
+      // Check if it actually survived
+      await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+      const recheck = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT'],
+        documentUrls: [chrome.runtime.getURL('offscreen.html')],
+      });
+      if (recheck.length > 0) {
+        console.log('[VEO Bridge] ✅ Offscreen document survived — resetting backoff');
+        _offscreenRecreateFailCount = 0; // Success — reset backoff
+      } else {
+        _offscreenRecreateFailCount++; // Failed again — increase backoff
+        console.warn(`[VEO Bridge] ⚠️ Offscreen killed again — backoff ${Math.ceil(backoffMs / 1000)}s`);
+      }
+    } else {
+      // Background SW may have restarted and lost `wsConnected` while the
+      // offscreen document stayed alive. Re-sync cheaply here as a safeguard.
+      if (!wsConnected) {
+        await syncOffscreenWsState();
+      }
+      // Healthy — reset failure counter
+      if (_offscreenRecreateFailCount > 0) {
+        _offscreenRecreateFailCount = 0;
+      }
+    }
+  } catch (e) {
+    console.debug('[VEO Bridge] Offscreen health check failed:', e.message);
+  }
 }, 15000);
+
+
+// ── Tab Cleanup ─────────────────────────────────────────────────────────
+// Close excess tabs beyond MAX_TABS limit.
+// Priority: about:blank > unrecognized > other allowed (Gmail, YouTube)
+// VEO tabs (labs.google) are IMMUNE — never closed by cleanup.
+
 const ALLOWED_URL_FRAGMENTS = [
-'mail.google.com',
-'youtube.com',
-'labs.google',
+  'mail.google.com',       // Gmail
+  'youtube.com',           // YouTube
+  'labs.google',           // Google Flow (VEO) — protected separately
 ];
+
 async function closeExcessTabs() {
-try {
-const allTabs = await chrome.tabs.query({ currentWindow: true });
-if (allTabs.length <= MAX_TABS) return 0;
-const veoTabs = [];
-const otherAllowed = [];
-const blank = [];
-const other = [];
-for (const tab of allTabs) {
-const url = tab.url || '';
-if (url === 'about:blank' || url === 'chrome://newtab/' || url === '') {
-blank.push(tab);
-} else if (url.includes('labs.google')) {
-veoTabs.push(tab);
-} else if (ALLOWED_URL_FRAGMENTS.some(frag => url.includes(frag))) {
-otherAllowed.push(tab);
-} else {
-other.push(tab);
-}
-}
-const maxCloseable = allTabs.length - MAX_TABS;
-const candidates = [...blank, ...other, ...otherAllowed];
-const toClose = candidates.slice(0, maxCloseable);
-while (toClose.length > 0 && allTabs.length - toClose.length < 1) {
-toClose.pop();
-}
-let closed = 0;
-for (const tab of toClose) {
-try {
-await chrome.tabs.remove(tab.id);
-if (tabState[tab.id]) {
-delete tabState[tab.id];
-}
-closed++;
-} catch (e) {
-}
-}
-if (closed > 0) {
-}
-return closed;
-} catch (e) {
-console.error('[VEO Bridge] closeExcessTabs failed:', e);
-return 0;
-}
+  try {
+    const allTabs = await chrome.tabs.query({ currentWindow: true });
+    if (allTabs.length <= MAX_TABS) return 0;
+
+    console.log(`[VEO Bridge] Tab cleanup: ${allTabs.length} tabs found (max=${MAX_TABS})`);
+
+    // Categorize tabs — VEO tabs are PROTECTED (never closed)
+    const veoTabs = [];      // labs.google — IMMUNE from cleanup
+    const otherAllowed = [];  // Gmail, YouTube — closeable if over limit
+    const blank = [];         // about:blank, chrome://newtab — first to close
+    const other = [];         // unrecognized URLs — second to close
+
+    for (const tab of allTabs) {
+      const url = tab.url || '';
+      if (url === 'about:blank' || url === 'chrome://newtab/' || url === '') {
+        blank.push(tab);
+      } else if (url.includes('labs.google')) {
+        veoTabs.push(tab);  // PROTECTED — never added to close list
+      } else if (ALLOWED_URL_FRAGMENTS.some(frag => url.includes(frag))) {
+        otherAllowed.push(tab);
+      } else {
+        other.push(tab);
+      }
+    }
+
+    // How many non-VEO tabs can we keep? (VEO tabs always survive)
+    const maxCloseable = allTabs.length - MAX_TABS;
+
+    // Build close list: blank > other > excess otherAllowed
+    // VEO tabs are NEVER included
+    const candidates = [...blank, ...other, ...otherAllowed];
+    const toClose = candidates.slice(0, maxCloseable);
+
+    // Keep at least 1 tab alive total
+    while (toClose.length > 0 && allTabs.length - toClose.length < 1) {
+      toClose.pop();
+    }
+
+    let closed = 0;
+    for (const tab of toClose) {
+      try {
+        await chrome.tabs.remove(tab.id);
+        // Also clean up tabState
+        if (tabState[tab.id]) {
+          delete tabState[tab.id];
+        }
+        closed++;
+        console.log(`[VEO Bridge] Closed excess tab ${tab.id}: ${(tab.url || '?').substring(0, 60)}`);
+      } catch (e) {
+        console.debug(`[VEO Bridge] Could not close tab ${tab.id}: ${e.message}`);
+      }
+    }
+
+    if (closed > 0) {
+      console.log(`[VEO Bridge] Tab cleanup complete: closed ${closed} tab(s), ${veoTabs.length} VEO tab(s) protected`);
+    }
+    return closed;
+  } catch (e) {
+    console.error('[VEO Bridge] closeExcessTabs failed:', e);
+    return 0;
+  }
 }

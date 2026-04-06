@@ -51,6 +51,57 @@
     .tabs-list li .email { color: #a7c957; }
     .tabs-list li .info { color: #888; }
     .empty { color: #666; font-size: 12px; font-style: italic; }
+    .diag {
+      margin: 8px 0 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #231f3a;
+      color: #d8d4f2;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .debug-list {
+      list-style: none;
+      padding: 0;
+      margin: 6px 0 0;
+    }
+    .debug-list li {
+      padding: 5px 8px;
+      margin-bottom: 4px;
+      background: #10192f;
+      border-radius: 6px;
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .debug-list .key {
+      color: #8ecae6;
+      flex: 0 0 132px;
+    }
+    .debug-list .value {
+      color: #e0e0e0;
+      flex: 1 1 auto;
+      text-align: right;
+      word-break: break-word;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+    button {
+      border: none;
+      border-radius: 6px;
+      background: #2c4b8e;
+      color: #fff;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #3760b7;
+    }
   </style>
 </head>
 <body>
@@ -61,10 +112,21 @@
     <span class="label" id="wsLabel">Checking...</span>
   </div>
 
+  <div class="diag" id="diagBox">Collecting bridge diagnostics...</div>
+
   <h3 style="font-size:13px; margin:8px 0 6px; color:#ccc;">Active Tabs</h3>
   <ul class="tabs-list" id="tabsList">
     <li class="empty">Loading...</li>
   </ul>
+
+  <h3 style="font-size:13px; margin:12px 0 6px; color:#ccc;">Debug Flags</h3>
+  <ul class="debug-list" id="debugList">
+    <li><span class="key">Loading</span><span class="value">...</span></li>
+  </ul>
+
+  <div class="actions">
+    <button id="refreshBtn" type="button">Refresh</button>
+  </div>
 
   <script src="popup.js"></script>
 </body>

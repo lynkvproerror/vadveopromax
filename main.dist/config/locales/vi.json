@@ -77,7 +77,11 @@
             "include_quality": "Đính kèm chất lượng vào tên file",
             "auto_start_queue": "Tự động bắt đầu hàng đợi khi thêm",
             "pause_on_error": "Tạm dừng khi lỗi",
-            "download_non_watermark": "Download Non-Watermark"
+            "download_non_watermark": "Download Non-Watermark",
+            "auto_clear_tasks": "Tự xóa task hoàn thành:",
+            "prune_age": "Tự xóa task cũ hơn:",
+            "log_buffer_size": "Bộ nhớ Log (RAM):",
+            "gemini_log_lines": "Dòng Log Gemini:"
         },
         "notification_sub": {
             "in_app_toast": "Thông báo ứng dụng:",
@@ -208,7 +212,14 @@
         "empty_prompts": "Prompt trống ở hàng:",
         "image_not_found": "Không tìm thấy ảnh —",
         "added_to_queue": "✅ Đã thêm {count} prompt vào hàng đợi",
-        "prompt_count": "{count} prompts"
+        "prompt_count": "{count} prompts",
+        "credit_warning": {
+            "title": "⚠️ CẢNH BÁO CREDIT",
+            "message": "Model: {model}\n\nƯớc tính credit sử dụng:\n  {prompts} prompt × {outputs} video × 10 = 💰 {total} credits\n\nBạn muốn tiếp tục với model Fast?\nChọn 'Không' để chuyển sang Fast [LP] (miễn phí).",
+            "confirm": "Có, dùng Fast",
+            "cancel": "Không → Fast [LP]",
+            "switched": "🔄 Đã chuyển sang {model}"
+        }
     },
     "sidebar": {
         "project_name": "📁 Tên dự án",
@@ -428,6 +439,8 @@
         "status_completed": "Hoàn thành",
         "status_failed": "Lỗi",
         "status_cancelled": "Đã hủy",
+        "status_partial_failed": "⚠️ Video lỗi",
+        "status_upscaling": "⬆️ Đang nâng cấp",
         "all_modes": "Tất cả chế độ",
         "do_nothing": "🔌 Không làm gì",
         "shutdown": "⚡ Tắt máy",
