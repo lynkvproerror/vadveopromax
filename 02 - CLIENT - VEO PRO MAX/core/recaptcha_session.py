@@ -166,7 +166,25 @@ class RecaptchaBrowserSession:
     
     @property
     def is_ready(self) -> bool:
-        return self._ready and self._page is not None
+        if not self._ready or self._page is None:
+            return False
+        # ★ FIX: When attached to debug browser via _SyncPageAsyncWrapper,
+        # check that the browser thread is still alive. After Playwright
+        # disconnects, the wrapper still exists but can't process commands.
+        if self._is_attached and isinstance(self._page, _SyncPageAsyncWrapper):
+            pc = self._page._profiles_controller
+            email = self._page._email
+            if pc and hasattr(pc, '_debug_browsers'):
+                entry = pc._debug_browsers.get(email)
+                if not entry:
+                    # Debug browser thread exited — mark ourselves dead
+                    log.debug(
+                        f"[RecaptchaBrowserSession] Debug browser gone for {email} "
+                        f"— marking not ready"
+                    )
+                    self._ready = False
+                    return False
+        return True
     
     @property
     def captured_headers(self) -> Dict[str, str]:

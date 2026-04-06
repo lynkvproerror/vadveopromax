@@ -7,6 +7,7 @@ Mixin class for TabQueue. All methods operate on `self` (the TabQueue instance).
 from PySide6.QtWidgets import QWidget, QLabel, QGraphicsOpacityEffect
 from PySide6.QtCore import QPropertyAnimation, QEasingCurve, QRect, Qt
 from PySide6.QtGui import QPixmap, QPainter, QColor, QFont, QPen, QBrush
+import time as _time_mod  # ★ P3: Module-level import (was inside hot path)
 
 import sys
 from pathlib import Path
@@ -191,7 +192,6 @@ class QueueAnimationMixin:
         
         # ★ Fix O4: Per-slot 200ms throttle — skip setStyleSheet if too recent.
         # Exceptions: pixmap transitions, completion, and upscale overlay require immediate update.
-        import time as _slot_time
         is_state_change = (
             has_pixmap != getattr(slot, '_last_had_pixmap', False)
             or progress >= 100
@@ -199,12 +199,12 @@ class QueueAnimationMixin:
             or is_upscaling
         )
         if not is_state_change:
-            now = _slot_time.time()
+            now = _time_mod.time()  # ★ P3: Use module-level import
             if now - getattr(slot, '_last_style_ts', 0) < 0.2:
                 return  # Skip — styled too recently
             slot._last_style_ts = now
         else:
-            slot._last_style_ts = _slot_time.time()
+            slot._last_style_ts = _time_mod.time()  # ★ P3: Use module-level import
         slot._last_had_pixmap = has_pixmap
         
         if has_pixmap and is_upscaling:
@@ -374,10 +374,13 @@ class QueueAnimationMixin:
     def _apply_upscale_overlay(self, slot: QLabel, upscale_status: str, progress: int = 0):
         """Paint dark overlay + progress % on an existing 720p thumbnail.
         
-        Called during upscale phase when the slot already has a 720p thumbnail.
-        Shows the thumbnail underneath with a semi-transparent dark tint,
-        and paints a rounded progress badge (e.g. '88%') centered on top.
+        ★ P4: Cached — only regenerates when progress % changes.
         """
+        # ★ P4: Skip if overlay already matches current progress
+        if getattr(slot, '_overlay_progress', -1) == progress:
+            return
+        slot._overlay_progress = progress
+        
         # Get the original thumbnail pixmap (before any overlay)
         original_key = '_original_pixmap'
         if not hasattr(slot, original_key) or getattr(slot, original_key) is None:
@@ -400,7 +403,7 @@ class QueueAnimationMixin:
         # ★ Paint progress % badge centered on thumbnail
         if progress > 0:
             text = f"{progress}%"
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
+            font = QFont("SF Pro Display", 10, QFont.Weight.Bold)
             painter.setFont(font)
             fm = painter.fontMetrics()
             text_width = fm.horizontalAdvance(text)

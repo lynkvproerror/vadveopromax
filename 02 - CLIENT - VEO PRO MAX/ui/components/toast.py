@@ -8,7 +8,7 @@ Replaces static status bar text with animated, dismissible toasts.
 from pathlib import Path
 import sys
 
-from PySide6.QtWidgets import QLabel, QFrame, QHBoxLayout, QWidget, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QLabel, QFrame, QHBoxLayout, QWidget, QGraphicsOpacityEffect, QPushButton
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QEasingCurve, Property
 from PySide6.QtGui import QFont
 
@@ -29,7 +29,8 @@ class ToastWidget(QFrame):
     """A single floating toast notification."""
     
     def __init__(self, message: str, level: str = "info",
-                 duration: int = 4000, parent: QWidget = None):
+                 duration: int = 4000, parent: QWidget = None,
+                 action_text: str = "", action_callback=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -73,6 +74,25 @@ class ToastWidget(QFrame):
         """)
         msg_label.setWordWrap(True)
         layout.addWidget(msg_label, stretch=1)
+        
+        # Optional action button (e.g., Cancel Shutdown)
+        if action_text and action_callback:
+            action_btn = QPushButton(action_text)
+            action_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Theme.RED};
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{ background-color: #d94040; }}
+            """)
+            action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            action_btn.clicked.connect(lambda: (action_callback(), self.dismiss()))
+            layout.addWidget(action_btn)
         
         # Close button
         close_btn = QLabel("✕")
@@ -151,7 +171,8 @@ class ToastManager:
         self._tester_mode = enabled
     
     def show_toast(self, message: str, level: str = "info", duration: int = 4000,
-                   audience: str = "user"):
+                   audience: str = "user", action_text: str = "",
+                   action_callback=None):
         """Show a new toast notification.
         
         Args:
@@ -169,7 +190,8 @@ class ToastManager:
             except RuntimeError:
                 pass  # Widget already deleted
         
-        toast = ToastWidget(message, level, duration, parent=None)
+        toast = ToastWidget(message, level, duration, parent=None,
+                            action_text=action_text, action_callback=action_callback)
         toast.adjustSize()
         
         # Calculate position

@@ -179,7 +179,7 @@ class GeminiApiPage(QWidget):
             # API config
             try:
                 source = getattr(s, 'pb_ai_source', 'account')
-                model = getattr(s, 'pb_ai_model', 'gemini-2.0-flash')
+                model = getattr(s, 'pb_ai_model', 'gemma-3-27b-it')
 
                 if source == 'custom':
                     keys = getattr(s, 'pb_ai_custom_keys', [])

@@ -30,6 +30,16 @@ import logging
 
 _log = logging.getLogger(__name__)
 
+# Opaque validation status codes (no readable strings in binary)
+_S_NF = 0x10     # not found
+_S_DS = 0x11     # deleted/stale
+_S_MM = 0x12     # machine mismatch
+_S_RV = 0x13     # revoked
+_S_CF = 0x14     # cross-validation failed
+_S_EX = 0x15     # expired
+_S_VS = 0x20     # valid single source
+_S_VC = 0x21     # valid cross-validated
+
 # AES-256 Encryption (Fernet uses AES-128, we use custom AES-256)
 try:
     from cryptography.fernet import Fernet
@@ -48,8 +58,8 @@ except ImportError:
 class _AES256Encryptor:
     """AES-256 encryption for API keys."""
     
-    # Static salt (obfuscated)
-    _SALT = b'\x56\x45\x4f\x5f\x50\x52\x4f\x5f\x4d\x41\x58\x5f\x32\x30\x32\x36'
+    # Static salt (runtime-assembled)
+    _SALT = bytes([_b ^ 0x73 for _b in [0x25,0x36,0x3c,0x2c,0x23,0x21,0x3c,0x2c,0x3e,0x32,0x2b,0x2c,0x41,0x43,0x41,0x45]])
     
     @staticmethod
     def derive_key(password: bytes) -> bytes:
@@ -181,8 +191,8 @@ class SecureFirebaseConfig:
     _PRIMARY_KEY_ENCRYPTED = None
     _BACKUP_KEY_ENCRYPTED = None
     
-    # Static key for multi-machine support (obfuscated)
-    _STATIC_KEY = b'\x56\x45\x4f\x5f\x50\x52\x4f\x5f\x4d\x41\x58\x5f\x53\x54\x41\x54'
+    # Static key for multi-machine support (runtime-assembled)
+    _STATIC_KEY = bytes([_b ^ 0x37 for _b in [0x61,0x72,0x78,0x68,0x67,0x65,0x78,0x68,0x7a,0x76,0x6f,0x68,0x64,0x63,0x76,0x63]])
     
     # Toggle: True = static key, False = hardware key
     _USE_STATIC_KEY = False
@@ -607,7 +617,7 @@ class FirebaseRESTClient:
         """
         # Case 1: Neither has data
         if not primary and not backup:
-            return False, "LICENSE_NOT_FOUND", {}
+            return False, _S_NF, {}
         
         def _check_machine_id(data: dict, mid: str) -> bool:
             """Check machine ID against both raw and hashed formats."""
@@ -647,7 +657,7 @@ class FirebaseRESTClient:
                 pass  # Allow — primary is authoritative
             elif backup and not primary and not primary_error:
                 # Primary returned 404, backup has data → KEY WAS DELETED!
-                return False, "LICENSE_DELETED_STALE_BACKUP", {}
+                return False, _S_DS, {}
             elif backup and not primary and primary_error:
                 # Primary had network error, backup has data → OK, use backup
                 pass  # Allow — network issue
@@ -657,12 +667,12 @@ class FirebaseRESTClient:
             
             # Verify machine_id
             if not _check_machine_id(valid_data, machine_id):
-                return False, "MACHINE_MISMATCH", {}
+                return False, _S_MM, {}
             
             if valid_data.get("revoked") or valid_data.get("_st") == "r":
-                return False, "LICENSE_REVOKED", {}
+                return False, _S_RV, {}
             
-            return True, "VALID_SINGLE_SOURCE", valid_data
+            return True, _S_VS, valid_data
         
         # Case 3: Both have data - CROSS VALIDATE!
         # Compare critical fields (support both naming conventions)
@@ -677,15 +687,15 @@ class FirebaseRESTClient:
             # Only compare if both have the field
             if p_val is not None and b_val is not None and p_val != b_val:
                 # TAMPERING DETECTED!
-                return False, "CROSS_VALIDATION_FAILED", {}
+                return False, _S_CF, {}
         
         # Verify machine_id
         if not _check_machine_id(primary, machine_id):
-            return False, "MACHINE_MISMATCH", {}
+            return False, _S_MM, {}
         
         # Check if revoked
         if primary.get("revoked") or primary.get("_st") == "r":
-            return False, "LICENSE_REVOKED", {}
+            return False, _S_RV, {}
         
         # Check expiry (support both _exp and expires)
         expires = primary.get("expires") or primary.get("_exp")
@@ -695,11 +705,11 @@ class FirebaseRESTClient:
                 if isinstance(expires, str):
                     exp_date = datetime.fromisoformat(expires.replace('Z', '+00:00'))
                     if datetime.now(exp_date.tzinfo) > exp_date:
-                        return False, "LICENSE_EXPIRED", {}
+                        return False, _S_EX, {}
             except:
                 pass
         
-        return True, "VALID_CROSS_VALIDATED", primary
+        return True, _S_VC, primary
     
     # ── HMAC Token Anti-DDoS ──────────────────────────────────
     
@@ -708,8 +718,8 @@ class FirebaseRESTClient:
         """Derive HMAC key from machine ID — unique per machine, not hardcoded."""
         import hmac as _hmac, hashlib
         return _hmac.new(
-            b"veo_rest_derive_2026",
-            (machine_id + "||REST_HMAC").encode(),
+            bytes([0x76,0x65,0x6f,0x5f,0x72,0x65,0x73,0x74,0x5f,0x64,0x65,0x72,0x69,0x76,0x65,0x5f,0x32,0x30,0x32,0x36]),
+            (machine_id + bytes([0x7c,0x7c,0x52,0x45,0x53,0x54,0x5f,0x48,0x4d,0x41,0x43]).decode()).encode(),
             hashlib.sha256
         ).digest()
     
@@ -1067,7 +1077,7 @@ class FirebaseRESTClient:
         return {"found": False}
     
     # ── MID-to-Key decryption (shared secret with admin) ──
-    _MID_KEY_SALT = b'VEO_MID_KEY_ENCRYPT_2026_v1'
+    _MID_KEY_SALT = bytes([0x56,0x45,0x4f,0x5f,0x4d,0x49,0x44,0x5f,0x4b,0x45,0x59,0x5f,0x45,0x4e,0x43,0x52,0x59,0x50,0x54,0x5f,0x32,0x30,0x32,0x36,0x5f,0x76,0x31])
     
     def _decrypt_mid_key(self, encrypted_b64: str, machine_id: str) -> str:
         """Decrypt license key from _mid_to_key._ek field.
@@ -1424,6 +1434,204 @@ class FirebaseRESTClient:
             "total_downloads": int(data.get("total_downloads", 0)),
             "last_sync_at": data.get("last_sync_at", ""),
         }
+    
+    # ── Trial Key Validation (server-authoritative) ───────────
+    
+    def validate_trial_key(self, trial_key: str, machine_id: str) -> dict:
+        """
+        Validate a trial key against Firebase _trial_keys/{key}.
+        
+        Returns:
+            {"valid": True}  — key exists, status=active, not yet bound
+            {"valid": False, "error": "reason"}
+        
+        Raises:
+            ConnectionError if both DBs unreachable
+        """
+        data = self._read_doc("_trial_keys", trial_key, machine_id)
+        
+        if not data:
+            return {"valid": False, "error": "Trial key không tồn tại"}
+        
+        status = data.get("status", "")
+        
+        if status == "used":
+            return {"valid": False, "error": "Trial key đã được sử dụng"}
+        
+        if status == "revoked":
+            return {"valid": False, "error": "Trial key đã bị thu hồi"}
+        
+        if status not in ("active", "available", ""):
+            return {"valid": False, "error": f"Trial key trạng thái không hợp lệ: {status}"}
+        
+        # Check machine binding (if key was pre-bound to specific MID)
+        bound_mid = data.get("machine_id", "") or data.get("_mid", "")
+        if bound_mid and bound_mid.upper() != machine_id.upper():
+            return {"valid": False, "error": "Trial key không dành cho máy này"}
+        
+        return {"valid": True}
+    
+    def burn_trial_key(self, trial_key: str, machine_id: str) -> bool:
+        """
+        Mark a trial key as used (burn) on Firebase _trial_keys/{key}.
+        
+        PATCHes status="used" + machine_id + used_at timestamp.
+        Replicates to backup DB (best-effort).
+        
+        Returns True if successfully burned.
+        """
+        primary_config = self.config.get_primary_config()
+        api_key = primary_config.get("api_key")
+        project_id = primary_config.get("project_id")
+        
+        if not api_key or not project_id:
+            return False
+        
+        base = _ConfigParts._get_api_base()
+        url = f"{base}/projects/{project_id}/databases/(default)/documents/_trial_keys/{trial_key}"
+        
+        payload = {
+            "fields": {
+                "status": {"stringValue": "used"},
+                "machine_id": {"stringValue": machine_id},
+                "used_at": {"stringValue": datetime.now().isoformat()},
+            }
+        }
+        
+        try:
+            response = self._session.patch(
+                url,
+                params={
+                    "key": api_key,
+                    "updateMask.fieldPaths": ["status", "machine_id", "used_at"],
+                },
+                json=payload,
+                timeout=self.TIMEOUT,
+            )
+            
+            if response.status_code == 200:
+                # Replicate to backup (best-effort)
+                try:
+                    backup_config = self.config.get_backup_config()
+                    if backup_config:
+                        b_key = backup_config.get("api_key")
+                        b_pid = backup_config.get("project_id")
+                        if b_key and b_pid:
+                            b_url = f"{base}/projects/{b_pid}/databases/(default)/documents/_trial_keys/{trial_key}"
+                            self._session.patch(
+                                b_url,
+                                params={"key": b_key, "updateMask.fieldPaths": ["status", "machine_id", "used_at"]},
+                                json=payload, timeout=self.TIMEOUT,
+                            )
+                except Exception:
+                    pass
+                return True
+            
+            _log.warning(f"[TrialKey] burn_trial_key failed: HTTP {response.status_code}")
+            return False
+        except Exception as e:
+            _log.warning(f"[TrialKey] burn_trial_key error: {e}")
+            return False
+    
+    # ── Generic Document Read/Write ───────────────────────────
+    
+    def read_document(self, collection: str, doc_id: str) -> dict:
+        """
+        Read a document from Firestore (load-balanced, SSL-checked).
+        
+        Public wrapper around _read_doc() for use by other modules
+        (e.g., LicenseRequestClient).
+        
+        Returns:
+            Parsed document dict, or None if not found.
+        """
+        return self._read_doc(collection, doc_id)
+    
+    def write_document(self, collection: str, doc_id: str, data: dict) -> bool:
+        """
+        Write/update a document to Firestore via PATCH.
+        
+        Converts plain Python dict to Firestore REST format automatically.
+        Replicates to backup DB (best-effort).
+        
+        Args:
+            collection: Firestore collection name
+            doc_id: Document ID
+            data: Plain dict with string/int/bool/None values
+            
+        Returns:
+            True if written successfully to primary
+        """
+        primary_config = self.config.get_primary_config()
+        api_key = primary_config.get("api_key")
+        project_id = primary_config.get("project_id")
+        
+        if not api_key or not project_id:
+            return False
+        
+        base = _ConfigParts._get_api_base()
+        url = f"{base}/projects/{project_id}/databases/(default)/documents/{collection}/{doc_id}"
+        
+        # Convert plain dict → Firestore REST format
+        fields = {}
+        for key, value in data.items():
+            fields[key] = self._to_firestore_value(value)
+        
+        payload = {"fields": fields}
+        
+        try:
+            response = self._session.patch(
+                url,
+                params={"key": api_key},
+                json=payload,
+                timeout=self.TIMEOUT,
+            )
+            
+            if response.status_code == 200:
+                # Replicate to backup (best-effort)
+                try:
+                    backup_config = self.config.get_backup_config()
+                    if backup_config:
+                        b_key = backup_config.get("api_key")
+                        b_pid = backup_config.get("project_id")
+                        if b_key and b_pid:
+                            b_url = f"{base}/projects/{b_pid}/databases/(default)/documents/{collection}/{doc_id}"
+                            self._session.patch(
+                                b_url, params={"key": b_key},
+                                json=payload, timeout=self.TIMEOUT,
+                            )
+                except Exception:
+                    pass
+                return True
+            
+            _log.warning(f"[REST] write_document({collection}/{doc_id}) failed: HTTP {response.status_code}")
+            return False
+        except Exception as e:
+            _log.warning(f"[REST] write_document({collection}/{doc_id}) error: {e}")
+            return False
+    
+    @staticmethod
+    def _to_firestore_value(value) -> dict:
+        """Convert a Python value to Firestore REST API value format."""
+        if value is None:
+            return {"nullValue": None}
+        elif isinstance(value, bool):
+            return {"booleanValue": value}
+        elif isinstance(value, int):
+            return {"integerValue": str(value)}
+        elif isinstance(value, float):
+            return {"doubleValue": value}
+        elif isinstance(value, str):
+            return {"stringValue": value}
+        elif isinstance(value, dict):
+            fields = {k: FirebaseRESTClient._to_firestore_value(v) for k, v in value.items()}
+            return {"mapValue": {"fields": fields}}
+        elif isinstance(value, list):
+            values = [FirebaseRESTClient._to_firestore_value(v) for v in value]
+            return {"arrayValue": {"values": values}}
+        else:
+            return {"stringValue": str(value)}
+
 
 # ============================================================
 # ADMIN: KEY ENCRYPTION UTILITY

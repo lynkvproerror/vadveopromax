@@ -280,8 +280,21 @@ def _local_pre_fix(prompt: str) -> Tuple[str, List[str]]:
 
 # ── JSON Prompt Helpers ─────────────────────────────────────────
 
+_PROMPT_JSON_KEYS = ("prompt_text", "prompt_en", "prompt", "text")
+
+
+def _extract_json_prompt(scene: dict) -> Tuple[str, str]:
+    """Return the first prompt-like field found in a JSON scene object."""
+    for key in _PROMPT_JSON_KEYS:
+        value = scene.get(key, "")
+        if isinstance(value, str) and value.strip():
+            return key, value
+        if value is not None and str(value).strip():
+            return key, str(value)
+    return "", ""
+
 def _unwrap_json(text: str) -> Tuple[bool, dict, str]:
-    """If text is JSON {...}, extract prompt_en. Otherwise pass through.
+    """If text is JSON {...}, extract prompt text from known schema keys.
     
     Returns:
         (is_json, scene_data, prompt_text)
@@ -291,21 +304,24 @@ def _unwrap_json(text: str) -> Tuple[bool, dict, str]:
         try:
             scene = json.loads(stripped)
             if isinstance(scene, dict):
-                prompt_en = scene.get('prompt_en', '') or scene.get('prompt', '')
-                if prompt_en:
-                    return True, scene, prompt_en
+                from core.batch_parser import BatchParser
+
+                scene = BatchParser._unwrap_single_key_scene(scene)
+                prompt_text, _ = BatchParser._extract_prompt_from_scene(scene)
+                if prompt_text:
+                    return True, scene, prompt_text
         except (json.JSONDecodeError, ValueError):
             pass
     return False, {}, text
 
 
 def _wrap_json(scene_data: dict, new_prompt: str) -> str:
-    """Put enhanced prompt_en back into JSON structure."""
+    """Put enhanced prompt text back into the original JSON field when possible."""
     updated = dict(scene_data)
-    if 'prompt_en' in updated:
-        updated['prompt_en'] = new_prompt
-    elif 'prompt' in updated:
-        updated['prompt'] = new_prompt
+    for key in _PROMPT_JSON_KEYS:
+        if key in updated:
+            updated[key] = new_prompt
+            break
     else:
         updated['prompt_en'] = new_prompt
     return json.dumps(updated, ensure_ascii=False)
@@ -383,7 +399,7 @@ class PromptEnhancer:
         if not api_key:
             return None
 
-        # JSON-aware: unwrap if JSON, enhance prompt_en only
+        # JSON-aware: unwrap if JSON, enhance only the prompt-bearing field
         is_json, scene_data, prompt_text = _unwrap_json(prompt)
 
         # Check cache
@@ -413,7 +429,7 @@ class PromptEnhancer:
         for model in models_to_try:
             try:
                 result = await self.client.generate(
-                    prompt=prompt_text,  # Send unwrapped prompt_en
+                    prompt=prompt_text,  # Send unwrapped prompt text only
                     system=self.client.ENHANCE_SYSTEM,
                     api_key=api_key,
                     max_tokens=4096,
@@ -516,7 +532,7 @@ class PromptEnhancer:
         Returns:
             Fixed prompt string, or None if failed.
         """
-        # JSON-aware: unwrap if JSON, fix prompt_en only
+        # JSON-aware: unwrap if JSON, fix only the prompt-bearing field
         is_json, scene_data, prompt_text = _unwrap_json(prompt)
 
         # -- Phase 1: Local Pre-Fix (instant, no API) --

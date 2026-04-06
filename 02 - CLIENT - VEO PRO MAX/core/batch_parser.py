@@ -12,7 +12,7 @@ Supported formats:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import json
 from pathlib import Path
 import re
@@ -36,6 +36,7 @@ class ParsedPrompt:
     duration: Optional[int] = None                       # Per-scene duration (seconds)
     scene_number: Optional[int] = None                   # Scene ordering
     metadata: Dict[str, str] = field(default_factory=dict)  # Extra fields (description_vi, narration_vi, etc.)
+    voice_id: str = ""                                       # R2V: voice mediaId (e.g. "aoede")
     
     @property
     def has_images(self) -> bool:
@@ -76,6 +77,17 @@ class BatchParser:
     def __init__(self):
         # Compile regex patterns
         self._image_patterns = [re.compile(p) for p in self.IMAGE_TAG_PATTERNS]
+        self._voice_name_cache = None  # Lazy-loaded set of known voice IDs
+    
+    def _get_voice_name_set(self) -> set:
+        """Get set of known voice IDs (lowercase) for voice-vs-image disambiguation."""
+        if self._voice_name_cache is None:
+            try:
+                from services.voice_library import VoiceLibrary
+                self._voice_name_cache = {v.id for v in VoiceLibrary.get_all_voices()}
+            except Exception:
+                self._voice_name_cache = set()
+        return self._voice_name_cache
     
     def parse_txt(self, file_path: str) -> List[ParsedPrompt]:
         """Parse a TXT file.
@@ -163,6 +175,7 @@ class BatchParser:
         images = []
         is_continuation = False
         continuation_source = None
+        voice_id = ""
         
         # Check for continuation markers
         for marker in self.CONTINUATION_MARKERS:
@@ -183,11 +196,33 @@ class BatchParser:
                         text = right
                         break
         
-        # Extract image tags
+        # Extract voice tag: {voice:aoede} or {voice: Aoede}
+        voice_match = re.search(r'\{voice:\s*([^}]+)\}', text, re.IGNORECASE)
+        if voice_match:
+            voice_id = voice_match.group(1).strip().lower()
+            text = text[:voice_match.start()] + text[voice_match.end():]
+        
+        # ★ Voice-aware bracket detection: [VoiceName] → voice_id, not image
+        # Supports dialogue format: [Aoede] Hello... [Algieba] World...
+        # Only the FIRST recognized voice bracket becomes voice_id for this line.
+        if not voice_id:
+            _voice_names = self._get_voice_name_set()
+            for m in re.finditer(r'\[([^\]]+)\]', text):
+                tag_lower = m.group(1).strip().lower()
+                if tag_lower in _voice_names:
+                    voice_id = tag_lower
+                    break  # First voice match wins
+        
+        # Extract image tags — but skip tags that are known voice names
+        _voice_names = self._get_voice_name_set()
         for pattern in self._image_patterns:
             matches = pattern.findall(text)
-            images.extend(matches)
-            # Remove tags from text
+            for match in matches:
+                tag_lower = match.strip().lower()
+                # Skip voice names and {voice:...} patterns
+                if tag_lower not in _voice_names and not tag_lower.startswith('voice:'):
+                    images.append(match)
+            # Remove tags from text (both image and voice brackets)
             text = pattern.sub('', text)
         
         # Clean up text
@@ -200,6 +235,7 @@ class BatchParser:
             is_continuation=is_continuation,
             continuation_source=continuation_source,
             raw_line=line,
+            voice_id=voice_id,
         )
     
     def parse_text(self, text: str) -> List[ParsedPrompt]:
@@ -373,25 +409,34 @@ class BatchParser:
             if not text.endswith(']'):
                 text = text + ']'
         
+        # ── Case 5: Bare objects without [] wrapper  ← MUST run BEFORE Case 4
+        # Handles: "{...}, {...}" (comma-sep) AND "{...}\n{...}" (newline-sep, no comma)
+        # IMPORTANT: This must precede Case 4 to avoid Case 4 extracting ["Piano"]-type
+        # sub-arrays from within the objects and corrupting them into ["Piano","Piano"].
+        text_stripped = text.strip()
+        if text_stripped.startswith('{') and not text_stripped.startswith('['):
+            # Normalize newline-only separators between objects to ", "
+            # Pattern: closing } followed only by whitespace then opening {
+            _normalized = re.sub(r'\}\s*\{', '}, {', text_stripped)
+            if re.search(r'\}\s*,\s*\{', _normalized):
+                text = '[' + _normalized + ']'
+        
         # ── Case 4: Labeled concat — text between arrays
-        # "Label:\n[{...}]\nLabel:\n[{...}]" → extract all [...] fragments and merge
-        # Only triggers if json.loads would fail on current text
+        # "Label:\n[{...}]\nLabel:\n[{...}]" → extract all array fragments and merge
+        # Only triggers if json.loads would fail on current text.
+        # Guard: only merge fragments that contain JSON objects (not plain arrays like ["Piano"])
         try:
             json.loads(text)
         except (json.JSONDecodeError, ValueError):
-            # Extract all JSON array fragments [...] from the text
+            # Extract only array fragments that contain at least one JSON object {}
             array_fragments = re.findall(r'\[([^\[\]]*(?:\{[^}]*\}[^\[\]]*)*)\]', text)
-            if len(array_fragments) >= 2:
-                # Merge all fragments into one array
-                merged = ', '.join(f.strip().strip(',') for f in array_fragments if f.strip())
+            # Filter: only keep fragments that contain a JSON object (has : inside)
+            obj_fragments = [f for f in array_fragments if '"' in f and ':' in f]
+            if len(obj_fragments) >= 2:
+                # Merge all object-containing fragments into one array
+                merged = ', '.join(f.strip().strip(',') for f in obj_fragments if f.strip())
                 if merged:
                     text = '[' + merged + ']'
-        
-        # ── Case 5: Bare objects "{...}, {...}" without [] wrapper
-        text_stripped = text.strip()
-        if text_stripped.startswith('{') and not text_stripped.startswith('['):
-            if re.search(r'\}\s*,\s*\{', text_stripped):
-                text = '[' + text_stripped + ']'
         
         # ── Case 5.5: Stray non-JSON characters between structural tokens ──
         # Handles AI copy-paste artifacts:
@@ -474,7 +519,8 @@ class BatchParser:
         - Bare objects: {...}, {...} → wrapped in []
         - Non-JSON prefix: [tag] [{...}] → prefix stripped
         
-        Required field per scene: prompt_en (the actual VEO prompt)
+        Preferred prompt fields per scene: prompt_en, prompt_text, prompt, text
+        Fallback: recursively synthesize prompt text from nested JSON values
         Optional fields: duration ("5s" or "8s" or int), scene_number,
                         description_vi, narration_vi, and any extra metadata.
         """
@@ -493,16 +539,13 @@ class BatchParser:
             if not isinstance(scene, dict):
                 continue
             
-            # Extract prompt text (required)
-            # Support common key names: prompt_en, prompt, prompt_text, text
-            prompt_text = (
-                scene.get('prompt_en', '')
-                or scene.get('prompt', '')
-                or scene.get('prompt_text', '')
-                or scene.get('text', '')
-            )
+            original_scene = scene
+            scene = self._unwrap_single_key_scene(scene)
+            prompt_text, _ = self._extract_prompt_from_scene(scene)
             if not prompt_text:
                 continue
+
+            display_scene = self._ensure_top_level_prompt_field(original_scene, prompt_text)
             
             # Parse duration: "8s" → 8, "5s" → 5, or plain int
             duration = self._parse_duration(scene.get('duration'))
@@ -558,14 +601,19 @@ class BatchParser:
                     # Not a file → treat as tag name (might resolve later)
                     image_tags.append(img_path_str.strip().strip('[]'))
             
+            # ── Extract voice reference ──
+            # Supports: "voice": "aoede" or "voice_id": "aoede"
+            voice_id = str(scene.get('voice', '') or scene.get('voice_id', '') or '').strip().lower()
+            
             prompts.append(ParsedPrompt(
-                text=json.dumps(scene, ensure_ascii=False),  # Full JSON for display
+                text=json.dumps(display_scene, ensure_ascii=False, indent=2),
                 line_number=i + 1,
                 images=image_tags,
                 duration=duration,
                 scene_number=scene.get('scene_number', i + 1),
                 metadata=metadata,
-                raw_line=prompt_text,  # prompt_en for API submission
+                raw_line=prompt_text,
+                voice_id=voice_id,
             ))
         
         return prompts
@@ -583,6 +631,264 @@ class BatchParser:
             except ValueError:
                 return None
         return None
+    
+    @staticmethod
+    def _unwrap_single_key_scene(scene: dict) -> dict:
+        """Unwrap wrapper objects like {"analysis": {...}} until a real scene dict is reached."""
+        transport_keys = {
+            'prompt_text', 'prompt_en', 'prompt', 'text',
+            'image', 'images',
+            'scene_number', 'duration',
+            'description_vi', 'narration_vi',
+            'voice', 'voice_id',
+        }
+        current = scene
+        while isinstance(current, dict):
+            if len(current) == 1:
+                inner = next(iter(current.values()))
+                if isinstance(inner, dict) and inner:
+                    current = inner
+                    continue
+                break
+
+            nested_candidates = [
+                (key, value)
+                for key, value in current.items()
+                if key not in transport_keys and isinstance(value, dict) and value
+            ]
+            if len(nested_candidates) == 1:
+                nested_key, nested_value = nested_candidates[0]
+                remaining_keys = {key for key in current.keys() if key != nested_key}
+                if remaining_keys.issubset(transport_keys):
+                    current = nested_value
+                    continue
+            break
+        return current
+
+    @staticmethod
+    def _extract_prompt_from_scene(scene: dict) -> Tuple[str, bool]:
+        """Return prompt text and whether it was synthesized from nested JSON."""
+        prompt_text = (
+            scene.get('prompt_en', '')
+            or scene.get('prompt', '')
+            or scene.get('prompt_text', '')
+            or scene.get('text', '')
+        )
+        if prompt_text:
+            return str(prompt_text).strip(), False
+
+        prompt_text = BatchParser._synthesize_prompt_from_analysis_scene(scene)
+        if prompt_text:
+            return prompt_text, True
+
+        prompt_text = BatchParser._extract_text_from_nested_json(scene)
+        if prompt_text:
+            return prompt_text, True
+        return "", False
+
+    @staticmethod
+    def _ensure_top_level_prompt_field(scene: dict, prompt_text: str) -> dict:
+        """Preserve the original JSON structure while ensuring a canonical top-level prompt field."""
+        if not isinstance(scene, dict):
+            return scene
+
+        if any(scene.get(key) for key in ('prompt_text', 'prompt_en', 'prompt', 'text')):
+            return scene
+
+        updated = dict(scene)
+        updated['prompt_text'] = prompt_text
+        return updated
+
+    @staticmethod
+    def _normalize_prompt_fragment(value) -> str:
+        """Normalize whitespace and trailing separators for synthesized prompt parts."""
+        if value is None:
+            return ""
+        text = re.sub(r'\s+', ' ', str(value)).strip()
+        return text.strip(' ,;')
+
+    @staticmethod
+    def _truncate_prompt_fragment(text: str, max_chars: int = 280) -> str:
+        """Trim a long fragment at a sentence boundary when possible."""
+        text = BatchParser._normalize_prompt_fragment(text)
+        if len(text) <= max_chars:
+            return text
+
+        clipped = text[:max_chars].rstrip(' ,;')
+        for sep in ('. ', '! ', '? ', '; '):
+            pos = clipped.rfind(sep)
+            if pos >= int(max_chars * 0.45):
+                return clipped[:pos + 1].rstrip(' ,;')
+        return clipped
+
+    @staticmethod
+    def _pick_first_non_empty(mapping: dict, keys, min_len: int = 1) -> str:
+        """Return the first non-empty string-like value for the requested keys."""
+        for key in keys:
+            value = mapping.get(key)
+            if value is None:
+                continue
+            value = BatchParser._normalize_prompt_fragment(value)
+            if len(value) >= min_len:
+                return value
+        return ""
+
+    @staticmethod
+    def _append_unique_prompt_part(parts: List[str], seen: set, text: str, max_chars: int = 280) -> None:
+        """Add a synthesized fragment once, keeping prompt size under control."""
+        text = BatchParser._truncate_prompt_fragment(text, max_chars=max_chars)
+        if not text:
+            return
+
+        fingerprint = text.casefold()
+        if fingerprint in seen:
+            return
+
+        seen.add(fingerprint)
+        parts.append(text)
+
+    @staticmethod
+    def _looks_like_analysis_scene(scene: dict) -> bool:
+        """Heuristically detect analysis-style JSON that needs prompt synthesis."""
+        if not isinstance(scene, dict) or not scene:
+            return False
+
+        scene_markers = {
+            'tong_quan', 'overview', 'summary', 'concept',
+            'chi_tiet_chuyen_dong', 'motion_details', 'movements', 'details',
+        }
+        if scene_markers.intersection(scene.keys()):
+            return True
+
+        detail_markers = {
+            'doi_tuong', 'subject', 'object', 'element',
+            'mo_ta_chuyen_dong', 'movement', 'motion', 'action',
+            'hieu_ung_thu_gian', 'effect', 'feeling', 'mood',
+        }
+        for value in scene.values():
+            if isinstance(value, list):
+                for item in value[:3]:
+                    if isinstance(item, dict) and detail_markers.intersection(item.keys()):
+                        return True
+        return False
+
+    @staticmethod
+    def _synthesize_prompt_from_analysis_scene(scene: dict) -> str:
+        """Build a concise prompt from analysis-style JSON instead of concatenating raw text."""
+        if not BatchParser._looks_like_analysis_scene(scene):
+            return ""
+
+        parts: List[str] = []
+        seen = set()
+
+        overview = BatchParser._pick_first_non_empty(
+            scene,
+            ('tong_quan', 'overview', 'summary', 'concept', 'setting', 'setting_chosen'),
+            min_len=20,
+        )
+        if overview:
+            BatchParser._append_unique_prompt_part(parts, seen, overview, max_chars=320)
+
+        detail_groups = []
+        for key in ('chi_tiet_chuyen_dong', 'motion_details', 'movements', 'details', 'elements'):
+            value = scene.get(key)
+            if isinstance(value, list) and value:
+                detail_groups.append(value)
+
+        if not detail_groups:
+            for value in scene.values():
+                if isinstance(value, list) and value and all(isinstance(item, dict) for item in value[: min(3, len(value))]):
+                    detail_groups.append(value)
+                    break
+
+        detail_count = 0
+        for group in detail_groups:
+            for item in group:
+                if not isinstance(item, dict):
+                    continue
+
+                subject = BatchParser._pick_first_non_empty(
+                    item,
+                    ('doi_tuong', 'subject', 'object', 'element', 'focus', 'name'),
+                    min_len=2,
+                )
+                motion = BatchParser._pick_first_non_empty(
+                    item,
+                    ('mo_ta_chuyen_dong', 'movement', 'motion', 'description', 'action', 'visual'),
+                    min_len=12,
+                )
+                effect = BatchParser._pick_first_non_empty(
+                    item,
+                    ('hieu_ung_thu_gian', 'effect', 'feeling', 'mood', 'impact'),
+                    min_len=16,
+                )
+
+                phrase = ""
+                if subject and motion:
+                    phrase = f"{subject}: {motion}"
+                else:
+                    phrase = motion or subject
+
+                if not phrase and effect:
+                    phrase = effect
+                elif effect and len(effect) <= 180:
+                    phrase = f"{phrase.rstrip('. ')}. {effect.lstrip('. ')}"
+
+                if not phrase:
+                    continue
+
+                BatchParser._append_unique_prompt_part(parts, seen, phrase, max_chars=260)
+                detail_count += 1
+                if detail_count >= 5:
+                    break
+            if detail_count >= 5:
+                break
+
+        if not parts:
+            return ""
+
+        prompt = '. '.join(part.rstrip('. ') for part in parts)
+        prompt = re.sub(r'\.\s+\.', '. ', prompt).strip(' .')
+        if prompt:
+            prompt += '.'
+        return BatchParser._truncate_prompt_fragment(prompt, max_chars=1200)
+
+    @staticmethod
+    def _extract_text_from_nested_json(obj, _depth: int = 0, _seen: Optional[set] = None) -> str:
+        """Recursively extract all meaningful string values from a nested JSON structure.
+        
+        Used as a fallback when no standard prompt key (prompt_en, prompt, etc.) is found.
+        Walks dicts and lists recursively, collecting non-trivial string values and joining
+        them into a single descriptive prompt string.
+        
+        Example input:
+            {"tong_quan": "Zen space...", "chi_tiet": [{"doi_tuong": "Water", ...}, ...]}
+        Example output:
+            "Zen space... Water ... gợn sóng ... âm thanh ..."
+        """
+        _MIN_LEN = 8  # Skip trivially short strings ("1", "All", "yes", etc.)
+        _MAX_DEPTH = 10
+        if _seen is None:
+            _seen = set()
+        texts = []
+        
+        if isinstance(obj, str):
+            s = BatchParser._normalize_prompt_fragment(obj)
+            if len(s) >= _MIN_LEN and s.casefold() not in _seen:
+                _seen.add(s.casefold())
+                texts.append(s)
+        elif isinstance(obj, dict) and _depth < _MAX_DEPTH:
+            for val in obj.values():
+                sub = BatchParser._extract_text_from_nested_json(val, _depth + 1, _seen)
+                if sub:
+                    texts.append(sub)
+        elif isinstance(obj, list) and _depth < _MAX_DEPTH:
+            for item in obj:
+                sub = BatchParser._extract_text_from_nested_json(item, _depth + 1, _seen)
+                if sub:
+                    texts.append(sub)
+        
+        return ' '.join(texts)
     
     def parse_json_file(self, file_path: str) -> List[ParsedPrompt]:
         """Parse a JSON file with scene prompts."""

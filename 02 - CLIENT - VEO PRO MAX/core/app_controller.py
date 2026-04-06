@@ -12,6 +12,7 @@ import threading
 import logging
 import json
 import sys
+import time
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -19,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.session import AccountSession
 from core.multi_account import MultiAccountManager
 from core.account_manager import AccountManager
-from core.dispatcher import Dispatcher, Task, TaskGroup, TaskState
+from core.dispatcher import Dispatcher, Task, TaskGroup, TaskState, TaskStage
 from core.worker import Worker, WorkerResult
 from core.api_client import VEOApiClient
 from core.auth_manager import AuthManager
@@ -39,7 +40,8 @@ from services.permissions import PermissionsSystem, Role, Feature
 
 # Config
 from config.settings import AppSettings
-from config.constants import WorkflowType, resolve_model_key
+from config.constants import WorkflowType, resolve_model_key, MIN_VALID_XCD
+from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +67,32 @@ class AppState:
         self.queue_count = 0
         self.completed_count = 0
         self.error_count = 0
+
+
+class _GuiCallBridge(QObject):
+    """Marshal Python callbacks onto the GUI thread via queued Qt signals."""
+
+    call_soon = Signal(object)
+    call_later = Signal(int, object)
+
+    def __init__(self):
+        super().__init__()
+        self.call_soon.connect(self._run_soon)
+        self.call_later.connect(self._run_later)
+
+    @Slot(object)
+    def _run_soon(self, callback):
+        if callable(callback):
+            callback()
+
+    @Slot(int, object)
+    def _run_later(self, delay_ms: int, callback):
+        if not callable(callback):
+            return
+        if delay_ms <= 0:
+            callback()
+            return
+        QTimer.singleShot(int(delay_ms), callback)
 
 
 class AppController:
@@ -139,6 +167,11 @@ class AppController:
         self._notified_groups: set = set()  # Track notified group IDs
         self._pipeline_awaiting_queue: bool = False  # Pipeline mid-transition (defer auto-stop)
         self._pipeline_mode_active: bool = False  # True while ANY pipeline stage is running
+        self._queue_groups_cache: Optional[List[Dict]] = None
+        self._queue_groups_cache_ts = 0.0
+        self._queue_groups_cache_ttl = 0.75  # Serve a short-lived snapshot to keep Queue tab responsive
+        self._queue_groups_cache_ttl_active = 2.0
+        self._queue_task_dto_cache: Dict[str, tuple] = {}
         
         # DevConsole reference (set by UI via set_dev_console)
         self._dev_console = None
@@ -158,7 +191,11 @@ class AppController:
         self._engine_future = None  # Track engine.start() Future for clean shutdown
         self._keepalive_future = None  # Track keepalive loop Future
         self._warmup_in_progress: set = set()  # Dedup proactive reCAPTCHA warmups
+        self._warmup_fail_counts: Dict[str, int] = {}    # email → consecutive warmup failures
+        self._warmup_cooldown_until: Dict[str, float] = {}  # email → timestamp: no warmup before this
+        self._warmup_last_schedule: Dict[str, float] = {}   # email → last schedule timestamp (60s throttle)
         self._restart_tracker: Dict[str, dict] = {}  # email → {count, last_time} — anti-loop guard
+        self._gui_call_bridge = _GuiCallBridge()
         
         # ProfilesController — shared singleton (also used by tab_settings)
         from core.profiles_controller import get_profiles_controller
@@ -528,9 +565,7 @@ class AppController:
         async def _flush_and_callback():
             await self._do_library_pre_upload(needs_upload, enabled)
             if on_done:
-                # Call on_done on main thread (UI-safe)
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(0, on_done)
+                self._call_on_gui_thread(on_done)
         
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(_flush_and_callback(), self._loop)
@@ -584,17 +619,13 @@ class AppController:
         # Check license
         self._update_permissions()
         
-        # Integrity check (compares critical file hashes — no-op in dev mode)
-        try:
-            from security.integrity_check import verify_startup_integrity
-            integrity = verify_startup_integrity()
-            if not integrity['skipped'] and not integrity['passed']:
-                log.critical(f"[Security] ❌ Integrity check FAILED: {integrity['failures']}")
-        except ImportError:
-            pass  # Module not available — dev environment
+        # Anti-tamper/integrity flag
+        # Integrity check now runs in main.py BEFORE popup gate.
+        # Only initialize flag here if not already set by main.py.
+        if not hasattr(self, '_tamper_detected'):
+            self._tamper_detected = False
         
         # Anti-tamper runtime guards (7 layers: monkey-patch, extraction, debugger, process, proxy, VM, sandbox)
-        self._tamper_detected = False
         try:
             from security.anti_tamper import register_critical_modules, run_all_guards
             register_critical_modules()
@@ -642,6 +673,10 @@ class AppController:
         
         # Auto-launch Chrome browsers for all ready profiles (runs in background)
         # Must be called AFTER async loop + extension bridge are ready
+        # ★ Signal subscription check to defer its own Playwright browser launch;
+        # prevents profile lock conflict → 60s CDP timeout → 90s startup delay.
+        if hasattr(self, '_profiles_controller') and self._profiles_controller:
+            self._profiles_controller._auto_launch_pending = True
         self._auto_launch_browsers()
     
     def set_splash_callback(self, cb):
@@ -653,20 +688,36 @@ class AppController:
         self._splash_finish_cb = cb
     
     def _splash_update(self, pct: int, msg: str):
-        """Thread-safe splash progress update via QTimer."""
+        """Thread-safe splash progress update on the GUI thread."""
         if self._splash_progress_cb:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, lambda: self._splash_progress_cb(pct, msg))
+            self._call_on_gui_thread(lambda: self._splash_progress_cb(pct, msg))
     
     def _splash_done(self):
-        """Thread-safe splash finish via QTimer."""
+        """Thread-safe splash finish on the GUI thread."""
         if self._splash_finish_cb:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, self._splash_finish_cb)
+            self._call_on_gui_thread(self._splash_finish_cb)
     
-    def stop(self):
-        """Stop the application controller."""
-        # Stop processing first (awaits engine shutdown properly)
+    def stop(self, kill_browsers: bool = True):
+        """Stop the application controller.
+        
+        Args:
+            kill_browsers: If True, kill all managed Chrome browsers on exit.
+                          Set to False for hot_reload (browsers persist for reconnect).
+        """
+        # ★ Kill Chrome browsers FIRST — before any slow operations.
+        # main.py has a 3s force-exit timer (os._exit). If we kill Chrome last,
+        # slow operations (stop_processing, stop_tab_keepalive) may exceed 3s
+        # and the force-exit fires BEFORE Chrome is killed → orphan browsers.
+        if kill_browsers:
+            try:
+                from core.chrome_manager import kill_all_managed_chromes
+                profiles_dir = str(Path.home() / ".veoauto" / "browser_profiles")
+                kill_all_managed_chromes(profiles_dir)
+                log.info("[AppController] 🔒 All managed Chrome browsers terminated")
+            except Exception as e:
+                log.warning(f"[AppController] Chrome cleanup error: {e}")
+        
+        # Stop processing (awaits engine shutdown properly)
         if self.state.is_processing:
             self.stop_processing()
         
@@ -705,12 +756,14 @@ class AppController:
         self._stop_async_loop()
         
         self._notify_status("Controller stopped")
+
     
     def _on_extension_headers_update(self, email: str, headers: Dict[str, str], access_token: str = None):
         """Callback from ExtensionBridge when new headers are received."""
         # Find the account manager for this email and update session headers
         account = self._multi_account.get_account(email)
         if account:
+            headers = self._get_best_runtime_headers(email, headers)
             # Use session.update_browser_headers() — has x-client-data downgrade guard
             account._session.update_browser_headers(
                 browser_validation=headers.get("x-browser-validation", account._session.browser_validation),
@@ -727,18 +780,60 @@ class AppController:
                 elif access_token.startswith("SAPISIDHASH"):
                     account._session._sapisidhash = access_token
                     log.debug(f"[ExtensionBridge] SAPISIDHASH stored for {email}")
-            log.info(f"[ExtensionBridge] Headers updated for {email}: {list(headers.keys())}")
+            log.info(
+                f"[ExtensionBridge] Headers updated for {email}: {list(headers.keys())} "
+                f"(xcd={len(headers.get('x-client-data', '') or '')})"
+            )
             
             # Cross-pollinate: if this account now has good x-client-data,
             # share it with other accounts that have short values
             new_cd = headers.get("x-client-data", "")
-            if len(new_cd) >= 20:
+            if len(new_cd) >= MIN_VALID_XCD:
                 self._multi_account.fix_short_client_data()
                 self._notify_status(f"🔑 {email}: x-client-data received ({len(new_cd)} chars) — tokens ready")
             
             self._push_all_status_debounced()  # Round 5 Fix G: Debounce instead of direct push from asyncio thread
         else:
             log.debug(f"[ExtensionBridge] No account found for {email} (headers ignored)")
+
+    def _get_best_runtime_headers(self, email: str, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        """Merge browser headers from bridge/CDP and keep the longest x-client-data.
+
+        Extension webRequest capture can be stuck at the short placeholder value,
+        while ProfilesController CDP ExtraInfo may have already captured the real
+        x-client-data. This helper consolidates both sources before we write into
+        AccountSession.
+        """
+        merged: Dict[str, str] = {}
+
+        def _merge(candidate: Optional[Dict[str, str]]) -> None:
+            if not candidate:
+                return
+            for key, value in candidate.items():
+                if not value:
+                    continue
+                if key == "x-client-data":
+                    if len(value) > len(merged.get(key, "")):
+                        merged[key] = value
+                elif not merged.get(key):
+                    merged[key] = value
+
+        _merge(base_headers)
+
+        if hasattr(self, '_extension_bridge') and self._extension_bridge:
+            try:
+                _merge(self._extension_bridge.get_cached_headers(email, max_age_seconds=0))
+            except Exception:
+                pass
+
+        pc = getattr(self, '_profiles_controller', None)
+        if pc:
+            try:
+                _merge(pc.get_debug_browser_headers(email))
+            except Exception:
+                pass
+
+        return merged
     
     def _on_extension_connect(self, email: str):
         """Callback from ExtensionBridge when an extension connects.
@@ -746,8 +841,23 @@ class AppController:
         Immediately requests fresh headers + access token so the app
         has data right away without waiting for the next auto-check cycle.
         Also schedules proactive reCAPTCHA warm-up after page settles.
+        
+        ★ FIX: 10s debounce per email — prevents WebSocket reconnection storm
+        from spawning hundreds of orphaned async coroutines. Lightweight ops
+        (circuit breaker, bridge injection) still run every connect; heavy ops
+        (refresh data, warmup, image library) are debounced.
         """
-        log.info(f"[ExtensionBridge] Extension connected for {email}")
+        import time as _time
+        _now = _time.monotonic()
+        if not hasattr(self, '_ext_connect_ts'):
+            self._ext_connect_ts = {}
+        _last = self._ext_connect_ts.get(email, 0)
+        _debounce_heavy = (_now - _last) < 10.0
+        self._ext_connect_ts[email] = _now
+        if _debounce_heavy:
+            log.debug(f"[ExtensionBridge] Debounced reconnect for {email} ({_now - _last:.1f}s < 10s) — heavy ops skipped")
+        else:
+            log.info(f"[ExtensionBridge] Extension connected for {email}")
         self._notify_status(f"Extension connected for {email}")
         
         # ★ Close CircuitBreaker immediately — extension is alive, no need to wait 30s backoff
@@ -757,12 +867,23 @@ class AppController:
                 self._engine._close_circuit_breaker(email)
                 log.info(f"[AppController] ⚡ CircuitBreaker closed on reconnect for {email}")
             
-            # ★ Clear tab-dead cooldown — extension reconnected, account is alive again
+            cooldown_reason = getattr(
+                self._engine, '_account_cooldown_reasons', {}
+            ).get(email, '')
+            # Only clear reconnect pauses that were explicitly set because the
+            # tab/account died. Do not bypass active 403/429 cooldowns.
             if email in self._engine._account_cooldowns:
-                del self._engine._account_cooldowns[email]
-                evt = self._engine._get_cooldown_event(email)
-                evt.set()  # Unblock engine workers
-                log.info(f"[AppController] ✅ Cooldown cleared on reconnect for {email}")
+                if cooldown_reason.startswith(("tab_dead/", "logout/")):
+                    self._engine.clear_account_pause(email)
+                    log.info(
+                        f"[AppController] ✅ Reconnect pause cleared for {email} "
+                        f"({cooldown_reason})"
+                    )
+                else:
+                    log.info(
+                        f"[AppController] Reconnect detected for {email} — "
+                        f"keeping active cooldown ({cooldown_reason or 'unknown'})"
+                    )
             
             # ★ Unpause upscale queue for this account
             uq = getattr(self._engine, '_upscale_queue', None)
@@ -778,6 +899,10 @@ class AppController:
         
         self._push_all_status_debounced()  # Round 4 Fix C: Coalesce instead of single push
         
+        # ★ Debounce gate: Skip heavy async operations if reconnecting too fast
+        if _debounce_heavy:
+            return  # Lightweight ops above already ran; skip heavy refresh/warmup/upload
+        
         # Immediate data refresh — don't wait for auto-check
         import asyncio
         try:
@@ -785,7 +910,7 @@ class AppController:
             asyncio.ensure_future(self._refresh_extension_data(email))
             # Proactive reCAPTCHA warm-up: schedule after page settles (~10s)
             # This pre-caches a valid token so "Start All" works instantly.
-            asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+            self._schedule_proactive_warmup(email, "extension-connect")
             
             # ★ Image Library: auto pre-upload for newly connected account
             # So hot-added accounts get all library images uploaded immediately
@@ -837,6 +962,26 @@ class AppController:
             f"({len(token)} chars) → AM + Pool"
         )
     
+    def _schedule_proactive_warmup(self, email: str, reason: str = ""):
+        """Schedule proactive warmup with throttle and cooldown guard.
+        
+        ★ Prevents warmup storm: won't schedule if:
+        - Already in progress for this email
+        - Cooldown active (failed warmup sets 60s cooldown)
+        - Scheduled within last 60s
+        """
+        now = time.time()
+
+        if email in self._warmup_in_progress:
+            return
+        if now < self._warmup_cooldown_until.get(email, 0):
+            return
+        if now - self._warmup_last_schedule.get(email, 0) < 60:
+            return
+
+        self._warmup_last_schedule[email] = now
+        asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+
     async def _proactive_recaptcha_warmup(self, email: str):
         """Proactive reCAPTCHA warm-up — run after extension connects.
         
@@ -886,47 +1031,22 @@ class AppController:
                     )
                     if ready2:
                         log.info(f"[ProactiveWarmup] {email}: ✅ reCAPTCHA ready on retry")
+                        self._warmup_fail_counts[email] = 0
                     else:
-                        # ★ Fix 3: Escalate — try full reload + hard navigation
-                        # Instead of just logging warning and giving up,
-                        # actively recover the reCAPTCHA widget during startup.
+                        # ★ FIX: Don't escalate to full reload / hard navigation here.
+                        # The extension already handles its own tab reload on timeout
+                        # (background.js safeTabReload). App-side escalation just
+                        # destroys the widget → extension reconnects → warmup re-schedules
+                        # → infinite storm loop.
+                        # Instead: set cooldown, defer to extension-side recovery.
+                        self._warmup_fail_counts[email] = self._warmup_fail_counts.get(email, 0) + 1
+                        self._warmup_cooldown_until[email] = time.time() + 60
+
                         log.warning(
-                            f"[ProactiveWarmup] {email}: ❌ still not ready → "
-                            f"escalating to full reload"
+                            f"[ProactiveWarmup] {email}: reCAPTCHA not ready after retry — "
+                            f"defer to extension-side recovery (fail #{self._warmup_fail_counts[email]}), "
+                            f"cooldown 60s, skip app-side reload storm"
                         )
-                        try:
-                            await self._extension_bridge._trigger_refresh(
-                                email, "ProactiveWarmup escalation", level="full"
-                            )
-                            await asyncio.sleep(25.0)  # VEO page load + reCAPTCHA init
-                            
-                            if not self._extension_bridge.is_connected(email):
-                                log.debug(f"[ProactiveWarmup] {email}: disconnected during reload")
-                            else:
-                                ready3 = await self._extension_bridge.check_recaptcha_ready(
-                                    email, timeout=20.0
-                                )
-                                if ready3:
-                                    log.info(f"[ProactiveWarmup] {email}: ✅ reCAPTCHA ready after reload")
-                                    self._notify_status(f"✅ {email}: reCAPTCHA recovered after reload")
-                                else:
-                                    log.warning(
-                                        f"[ProactiveWarmup] {email}: 🔄 reload failed → hard navigation"
-                                    )
-                                    await self._extension_bridge.trigger_hard_navigation(email)
-                                    await asyncio.sleep(20.0)
-                                    ready4 = await self._extension_bridge.check_recaptcha_ready(
-                                        email, timeout=20.0
-                                    )
-                                    if ready4:
-                                        log.info(f"[ProactiveWarmup] {email}: ✅ reCAPTCHA ready after hard nav")
-                                    else:
-                                        log.error(
-                                            f"[ProactiveWarmup] {email}: ❌ reCAPTCHA dead after "
-                                            f"all recovery attempts — engine will handle on Start All"
-                                        )
-                        except Exception as warmup_err:
-                            log.debug(f"[ProactiveWarmup] {email}: escalation error: {warmup_err}")
         except Exception as e:
             log.debug(f"[ProactiveWarmup] {email}: warm-up failed (non-fatal): {e}")
         finally:
@@ -1011,8 +1131,9 @@ class AppController:
             for p in profiles:
                 email = p.get("email")
                 if email and not self._extension_bridge.is_connected(email):
-                    log.info(f"[AutoAssign] 📧 Late-assign email: {email}")
-                    assigned = await self._extension_bridge.assign_email(email)
+                    profile_path = p.get("browser_profile_path", "")
+                    log.info(f"[AutoAssign] 📧 Late-assign email: {email} (profile={Path(profile_path).name if profile_path else '?'})")
+                    assigned = await self._extension_bridge.assign_email(email, profile_path=Path(profile_path).name if profile_path else "")
                     if assigned:
                         self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
         
@@ -1036,11 +1157,17 @@ class AppController:
             
             # GAP #7: Pause workers — set long cooldown so workers stop attempting
             if hasattr(self, '_engine') and self._engine:
-                from datetime import datetime, timedelta
-                self._engine._account_cooldowns[email] = datetime.now() + timedelta(seconds=300)
-                evt = self._engine._get_cooldown_event(email)
-                evt.clear()  # Block all workers for this account
-                log.warning(f"[AppController] ⏸️ Workers paused for {email} (300s cooldown after logout)")
+                delay = self._engine.set_account_cooldown(
+                    email,
+                    "logout/pause",
+                    override_delay=300,
+                    mutate_backoff=False,
+                    decay_backoff_on_expiry=False,
+                )
+                log.warning(
+                    f"[AppController] ⏸️ Workers paused for {email} "
+                    f"({delay}s cooldown after logout)"
+                )
             
             self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
         except Exception as e:
@@ -1074,11 +1201,17 @@ class AppController:
         try:
             # Pause engine workers — set long cooldown so workers stop attempting
             if hasattr(self, '_engine') and self._engine:
-                from datetime import datetime, timedelta
-                self._engine._account_cooldowns[email] = datetime.now() + timedelta(seconds=300)
-                evt = self._engine._get_cooldown_event(email)
-                evt.clear()  # Block all engine workers for this account
-                log.warning(f"[AppController] ⏸️ Engine workers paused for {email} (300s cooldown after tab death)")
+                delay = self._engine.set_account_cooldown(
+                    email,
+                    "tab_dead/pause",
+                    override_delay=300,
+                    mutate_backoff=False,
+                    decay_backoff_on_expiry=False,
+                )
+                log.warning(
+                    f"[AppController] ⏸️ Engine workers paused for {email} "
+                    f"({delay}s cooldown after tab death)"
+                )
             
             # Pause upscale queue workers
             if hasattr(self, '_engine') and self._engine:
@@ -1303,7 +1436,7 @@ class AppController:
         async def _launch():
             try:
                 # Step 1: Sync profiles
-                self.sync_profiles_to_runtime()
+                await asyncio.to_thread(self.sync_profiles_to_runtime)
                 log.info("[AutoLaunch] Profiles synced to runtime")
                 
                 # Step 2: Inject ProfilesController + ExtensionBridge
@@ -1408,6 +1541,9 @@ class AppController:
                     log.info(f"[AutoLaunch] Connecting {len(self._multi_account._accounts)} accounts to debug browsers...")
                     await self._multi_account.startup_browsers(headless=True)
                     log.info("[AutoLaunch] ✅ All accounts connected to browsers")
+                    # ★ Browser ready — allow deferred subscription checks to proceed
+                    if hasattr(self, '_profiles_controller') and self._profiles_controller:
+                        self._profiles_controller._auto_launch_pending = False
                     
                     # Defensive sweep: ensure bridge is injected on ALL accounts
                     # (covers startup timing race where accounts created before bridge)
@@ -1424,8 +1560,9 @@ class AppController:
                     for p in profiles:
                         email = p.get("email")
                         if email and not self._extension_bridge.is_connected(email):
-                            log.info(f"[AutoLaunch] 📧 Assigning email to unregistered extension: {email}")
-                            await self._extension_bridge.assign_email(email)
+                            profile_path = p.get("browser_profile_path", "")
+                            log.info(f"[AutoLaunch] 📧 Assigning email to unregistered extension: {email} (profile={Path(profile_path).name if profile_path else '?'})")
+                            await self._extension_bridge.assign_email(email, profile_path=Path(profile_path).name if profile_path else "")
                     
                     connected = self._extension_bridge.get_connected_emails()
                     log.info(f"[AutoLaunch] Extension status: {len(connected)} emails registered: {connected}")
@@ -1445,7 +1582,7 @@ class AppController:
                 if self._extension_bridge:
                     connected = self._extension_bridge.get_connected_emails()
                     for email in connected:
-                        asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+                        self._schedule_proactive_warmup(email, "auto-launch")
                     if connected:
                         log.info(f"[AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for {len(connected)} emails")
                 
@@ -1531,7 +1668,7 @@ class AppController:
                 log.info(f"[HotAdd] 🔥 Hot-adding profile: {email}")
                 
                 # Step 1: Sync profile to runtime
-                self.sync_profiles_to_runtime()
+                await asyncio.to_thread(self.sync_profiles_to_runtime)
                 log.info(f"[HotAdd] ✅ Profile synced to runtime: {email}")
                 
                 # Step 2: Inject bridge into new account
@@ -1570,8 +1707,10 @@ class AppController:
                 if self._extension_bridge:
                     await asyncio.sleep(3)  # Wait for extension to load
                     if not self._extension_bridge.is_connected(email):
-                        await self._extension_bridge.assign_email(email)
-                        log.info(f"[HotAdd] 📧 Email assigned to extension: {email}")
+                        _prof = self._profiles_controller.get_profile(email) if self._profiles_controller else None
+                        _ppath = getattr(_prof, 'browser_profile_path', '') or '' if _prof else ''
+                        await self._extension_bridge.assign_email(email, profile_path=Path(_ppath).name if _ppath else "")
+                        log.info(f"[HotAdd] 📧 Email assigned to extension: {email} (profile={Path(_ppath).name if _ppath else '?'})")
                     
                     # Ensure extension is installed
                     try:
@@ -1583,7 +1722,7 @@ class AppController:
                 
                 # Step 6: Proactive reCAPTCHA warm-up
                 if self._extension_bridge and self._extension_bridge.is_connected(email):
-                    asyncio.ensure_future(self._proactive_recaptcha_warmup(email))
+                    self._schedule_proactive_warmup(email, "hot-add")
                     log.info(f"[HotAdd] 🔥 reCAPTCHA warm-up scheduled: {email}")
                 
                 # Step 6b: NOW notify Engine (browser + extension + reCAPTCHA ready)
@@ -1736,20 +1875,9 @@ class AppController:
         Round 4 Fix C: Prevents triple-push storms when extension connect /
         browser state change fires all three pushes simultaneously.
         
-        Thread-safe: if called from non-GUI thread, uses QTimer.singleShot(0)
-        to marshal to GUI thread, preventing QObject::startTimer crash.
+        Thread-safe: always creates/starts the debounce timer on the GUI thread.
         """
-        from PySide6.QtCore import QThread, QTimer
-        try:
-            from PySide6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app and QThread.currentThread() != app.thread():
-                # Non-GUI thread: schedule on GUI thread
-                QTimer.singleShot(0, self._push_all_status_debounced_impl)
-                return
-        except Exception:
-            pass
-        self._push_all_status_debounced_impl()
+        self._call_on_gui_thread(self._push_all_status_debounced_impl)
     
     def _push_all_status_debounced_impl(self):
         """Internal: create/start QTimer — MUST run on GUI thread."""
@@ -2179,9 +2307,9 @@ class AppController:
         
         log.info("[AppController] Hot reload: stopping services...")
         
-        # Step 1: Stop engine gracefully
+        # Step 1: Stop engine gracefully (keep browsers alive for reconnect)
         try:
-            self.stop()
+            self.stop(kill_browsers=False)
         except Exception as e:
             log.warning(f"[AppController] stop() error during reload: {e}")
         
@@ -2311,6 +2439,17 @@ class AppController:
                 acc.enable()
             else:
                 acc.disable()
+        elif enabled:
+            # ★ FIX: Account not in runtime pool — sync to create it.
+            # Happens when app starts with account disabled, then user re-enables.
+            # Without this, browser launches but engine never spawns workers.
+            log.info(f"[AppController] {email}: not in runtime pool — syncing profiles...")
+            self.sync_profiles_to_runtime()
+            acc = self._multi_account.get_account(email)
+            if acc:
+                log.info(f"[AppController] ✅ {email}: synced to runtime pool")
+            else:
+                log.warning(f"[AppController] ⚠️ {email}: sync failed — profile may not exist")
         
         # ★ Browser lifecycle: close on disable, relaunch on enable
         import threading
@@ -3171,7 +3310,7 @@ class AppController:
                     
                     session.credits = profile_obj.credits
                     session.max_workers = getattr(profile_obj, 'max_workers', 20)
-                    session.max_workers_lp = getattr(profile_obj, 'max_workers_lp', 8)
+                    session.max_workers_lp = getattr(profile_obj, 'max_workers_lp', session.max_workers)
                     
                     # Add to runtime via async
                     future = self._run_async(
@@ -3188,10 +3327,11 @@ class AppController:
                                 acc_mgr._parent_manager = self._multi_account
                                 if hasattr(self, '_extension_bridge') and self._extension_bridge:
                                     acc_mgr.extension_bridge = self._extension_bridge
-                                    # FIX: Bridge may already have cached headers from
-                                    # earlier connections. Populate session immediately
-                                    # to prevent stale x-client-data (8 chars from disk).
-                                    cached = self._extension_bridge.get_cached_headers(email, max_age_seconds=0)
+                                    # Prefer the best available runtime headers:
+                                    # bridge cache when available, but also CDP-captured
+                                    # headers from ProfilesController if they already have
+                                    # the full x-client-data.
+                                    cached = self._get_best_runtime_headers(email)
                                     if cached:
                                         acc_mgr._session.update_browser_headers(
                                             browser_validation=cached.get('x-browser-validation', ''),
@@ -3201,8 +3341,9 @@ class AppController:
                                             browser_year=cached.get('x-browser-year', ''),
                                         )
                                         xcd_len = len(cached.get('x-client-data', ''))
-                                        if xcd_len >= 20:
-                                            log.info(f"[sync] {email}: populated session from bridge cache (x-client-data={xcd_len} chars)")
+                                        # ★ FIX C3: Use unified MIN_VALID_XCD threshold (was >=20)
+                                        if xcd_len >= MIN_VALID_XCD:
+                                            log.info(f"[sync] {email}: populated session from best header source (x-client-data={xcd_len} chars)")
                                 if hasattr(self, '_profiles_controller') and self._profiles_controller:
                                     acc_mgr.set_profiles_controller(self._profiles_controller)
                             
@@ -3225,7 +3366,7 @@ class AppController:
                                     acc_mgr.extension_bridge = self._extension_bridge
                                     # Populate session from bridge cache (same fix as success path)
                                     cached = self._extension_bridge.get_cached_headers(email, max_age_seconds=0)
-                                    if cached and len(cached.get('x-client-data', '')) >= 20:
+                                    if cached and len(cached.get('x-client-data', '')) >= MIN_VALID_XCD:
                                         acc_mgr._session.update_browser_headers(
                                             browser_validation=cached.get('x-browser-validation', ''),
                                             client_data=cached.get('x-client-data', ''),
@@ -3274,8 +3415,8 @@ class AppController:
             acc._parent_manager = self._multi_account  # for bridge auto-recovery
             if hasattr(self, '_extension_bridge') and self._extension_bridge:
                 acc.extension_bridge = self._extension_bridge
-                # FIX: ensure session has latest bridge headers
-                cached = self._extension_bridge.get_cached_headers(acc.email, max_age_seconds=0)
+                # Ensure session has the best known headers, not just the bridge stub.
+                cached = self._get_best_runtime_headers(acc.email)
                 if cached:
                     current_xcd = acc._session.client_data or ''
                     bridge_xcd = cached.get('x-client-data', '')
@@ -3378,6 +3519,7 @@ class AppController:
         settings: Optional[Dict] = None,
         continuation_map: Optional[Dict[int, int]] = None,  # index -> parent_index
         per_prompt_durations: Optional[Dict[int, int]] = None,  # index -> duration_seconds (from JSON scenes)
+        per_prompt_voice_ids: Optional[Dict[int, str]] = None,  # R2V: index -> voice_id (e.g. "aoede")
     ) -> str:
         """Submit prompts for processing.
         
@@ -3475,6 +3617,10 @@ class AppController:
             # add_i2v_batch / add_r2v_batch / add_i2i_batch resolve tags → local paths
             # and pass them as per_prompt_images/images, which land here in image_uris.
             # Local paths must go to image_paths so Engine._resolve_image_paths() uploads them.
+            
+            # Voice reference (R2V only)
+            if per_prompt_voice_ids and i in per_prompt_voice_ids:
+                task.voice_id = per_prompt_voice_ids[i]
             if task.image_uris:
                 from pathlib import Path as _P
                 from urllib.parse import unquote as _unquote
@@ -3737,6 +3883,7 @@ class AppController:
         per_prompt_images = {}
         prompt_texts = []
         continuation_map = {}
+        per_prompt_durations = {}
         
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
@@ -3770,6 +3917,9 @@ class AppController:
                 per_prompt_images[i] = resolved
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
+            # ★ FIX: Extract per-scene duration from JSON (was missing — only T2V had this)
+            if hasattr(p, 'duration') and p.duration is not None:
+                per_prompt_durations[i] = p.duration
         
         # Bug 3: Warn when I2V batch has prompts without images (will auto-convert to T2V)
         no_image_indices = [i for i in range(len(prompts)) if i not in per_prompt_images and i not in continuation_map]
@@ -3784,7 +3934,8 @@ class AppController:
             workflow=WorkflowType.I2V,
             per_prompt_images=per_prompt_images if per_prompt_images else None,
             settings=settings,
-            continuation_map=continuation_map if continuation_map else None
+            continuation_map=continuation_map if continuation_map else None,
+            per_prompt_durations=per_prompt_durations if per_prompt_durations else None,
         )
     
     def add_r2v_batch(self, prompts: List, settings: Dict) -> str:
@@ -3797,6 +3948,8 @@ class AppController:
         per_prompt_images = {}
         prompt_texts = []
         continuation_map = {}
+        per_prompt_durations = {}
+        per_prompt_voice_ids = {}
         for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
             resolved = []
@@ -3813,13 +3966,22 @@ class AppController:
                 per_prompt_images[i] = resolved
             if hasattr(p, 'continuation_from') and p.continuation_from is not None:
                 continuation_map[i] = p.continuation_from - 1
+            # ★ FIX: Extract per-scene duration from JSON (was missing — only T2V had this)
+            if hasattr(p, 'duration') and p.duration is not None:
+                per_prompt_durations[i] = p.duration
+            # Voice reference (R2V only)
+            voice_id = getattr(p, 'voice_id', '')
+            if voice_id:
+                per_prompt_voice_ids[i] = voice_id
         
         return self.submit_prompts(
             prompts=prompt_texts,
             workflow=WorkflowType.R2V,
             per_prompt_images=per_prompt_images if per_prompt_images else None,
             settings=settings,
-            continuation_map=continuation_map if continuation_map else None
+            continuation_map=continuation_map if continuation_map else None,
+            per_prompt_durations=per_prompt_durations if per_prompt_durations else None,
+            per_prompt_voice_ids=per_prompt_voice_ids if per_prompt_voice_ids else None,
         )
     
     def get_group_status(self, group_id: str) -> Optional[dict]:
@@ -4009,6 +4171,7 @@ class AppController:
             continuation_frame_local_path=frame_local,
             parent_task_id=task_id,
             required_account=source.assigned_account,
+            prompt_index=source.prompt_index,
         )
         
         # Add to same group as source
@@ -4162,6 +4325,10 @@ class AppController:
         self.state.is_processing = True
         self._engine_gen += 1  # ★ Race guard: old _shutdown_engine_bg will see stale gen
         
+        # ★ FIX: Record start timestamp for auto-stop grace period
+        import time as _time
+        self._engine_start_ts = _time.monotonic()
+        
         # ★ Pause Tab Keepalive — engine takes over tab management
         # Prevents conflict: both keepalive and engine use executeScript
         # on the same tabs (Chrome serializes → delays reCAPTCHA tokens)
@@ -4268,6 +4435,13 @@ class AppController:
         """
         if not self.state.is_processing:
             return
+        
+        # ★ DIAGNOSTIC: Log caller stack for debugging engine stop-start loops
+        import traceback
+        _caller_frames = traceback.format_stack(limit=5)
+        _caller_summary = ''.join(_caller_frames[-4:-1]).strip()
+        log.info(f"[Engine] stop_processing() invoked — caller trace:\n{_caller_summary}")
+        
         self.state.is_processing = False
         
         # ★ Resume Tab Keepalive — engine no longer managing tabs
@@ -4298,22 +4472,29 @@ class AppController:
         Uses shutdown_gen to detect if a new engine was started during shutdown.
         """
         try:
+            # ★ FIX: Snapshot future at call time to avoid racing with start_processing()
+            # start_processing() overwrites self._engine_future with new engine's future.
+            # Without snapshot, we'd wait on (or clear) the WRONG future.
+            _my_future = self._engine_future
+            
             # Wait for engine.start() TaskGroup to fully complete
             # (foremen exit, pipelines drain, browsers disconnect)
             # BUG-19: Increased from 15s to 30s — cooperative stop lets
             # pipelines finish gracefully (download retries, upscale polls)
-            if self._engine_future:
+            if _my_future:
                 try:
-                    self._engine_future.result(timeout=30.0)
+                    _my_future.result(timeout=30.0)
                 except Exception:
                     pass
-                self._engine_future = None
             
             # ★ Race guard: if start_processing() was called during our shutdown,
             # skip teardown — the new engine owns these resources now.
             if self._engine_gen != shutdown_gen:
                 log.info(f"[Shutdown] Engine re-started (gen {shutdown_gen}→{self._engine_gen}) — skipping teardown")
                 return
+            
+            # ★ Only clear _engine_future if gen matches (this is OUR engine, not a new one)
+            self._engine_future = None
             
             # Stop Watchdog
             try:
@@ -4366,20 +4547,7 @@ class AppController:
                     if getattr(s, 'auto_start_queue', False):
                         pending = self._dispatcher.ready_count
                         log.info(f"[AutoStop→Restart] {pending} new tasks found after shutdown — scheduling restart")
-                        from PySide6.QtCore import QTimer, QThread
-                        # ★ Thread-safe: _shutdown_engine_bg runs on daemon thread
-                        # QTimer.singleShot from non-Qt thread is unsafe.
-                        # Use a lambda that safely schedules on GUI thread.
-                        try:
-                            from PySide6.QtWidgets import QApplication
-                            app = QApplication.instance()
-                            if app and QThread.currentThread() != app.thread():
-                                # Marshal to GUI thread first, then schedule with delay
-                                QTimer.singleShot(0, lambda: QTimer.singleShot(2000, self.start_processing))
-                            else:
-                                QTimer.singleShot(2000, self.start_processing)
-                        except Exception:
-                            QTimer.singleShot(2000, self.start_processing)
+                        self._call_on_gui_thread(self.start_processing, delay_ms=2000)
                     else:
                         log.info(f"[AutoStop] {self._dispatcher.ready_count} new tasks found but auto_start_queue=False — skipping restart")
             except Exception as e:
@@ -4508,6 +4676,15 @@ class AppController:
         if not self.state.is_processing:
             return  # Already stopped
         
+        # ★ FIX: Startup grace period — don't auto-stop within 15s of engine start
+        # Prevents race where task callbacks from previous session (UpscaleQueue,
+        # TaskWatchdog) fire during engine initialization and trigger premature AutoStop.
+        import time as _time
+        _engine_age = _time.monotonic() - getattr(self, '_engine_start_ts', 0)
+        if _engine_age < 15.0:
+            log.debug(f"[AutoStop] Skipped — engine age {_engine_age:.1f}s < 15s grace period")
+            return
+        
         try:
             # ★ PRIORITY 1: Don't auto-stop if pipeline is mid-transition
             # Race condition: Stage 4 completes → auto-stop fires → Stage 5 adds
@@ -4542,8 +4719,25 @@ class AppController:
             # All tasks in terminal state + ready queue empty + no pending upscales → auto-stop
             log.info("[AutoStop] All tasks finished — stopping engine automatically")
             self.stop_processing()
+            
+            # ★ FIX P1-#1: Trigger post-queue action at app level
+            # (works even when Queue tab is not visible)
+            if hasattr(self, '_on_queue_complete_callback') and self._on_queue_complete_callback:
+                try:
+                    self._on_queue_complete_callback()
+                except Exception as cb_e:
+                    log.warning(f"[AutoStop] Post-queue callback failed: {cb_e}")
         except Exception as e:
             log.warning(f"[AutoStop] Check failed: {e}")
+    
+    def set_queue_complete_callback(self, callback):
+        """Register callback for when all queue work is done.
+        
+        Used by TabQueue to trigger post-queue actions (shutdown/sleep)
+        regardless of which tab is currently visible.
+        """
+        self._on_queue_complete_callback = callback
+
     
     def set_pipeline_queue_active(self, active: bool):
         """Called by TabProject when pipeline starts/stops queue polling.
@@ -4579,6 +4773,7 @@ class AppController:
     
     def _forward_progress_to_ui(self, task_id: str, progress: int, status_text: str = ""):
         """Forward dispatcher progress updates to the UI callback."""
+        self._invalidate_queue_groups_cache()
         if self._on_progress:
             self._on_progress(task_id, progress, status_text)
     
@@ -4600,15 +4795,38 @@ class AppController:
         self._on_progress = callback
         # Wire into dispatcher — this is where update_progress() actually fires
         if hasattr(self._dispatcher, '_on_progress_callback'):
-            self._dispatcher._on_progress_callback = callback
+            self._dispatcher._on_progress_callback = self._forward_progress_to_ui
     
     def _notify_status(self, status: str):
         """Notify status change."""
         if self._on_status_changed:
             self._on_status_changed(status)
+
+    def _call_on_gui_thread(self, callback: Callable[[], None], delay_ms: int = 0):
+        """Execute a callback on the GUI thread, optionally after a delay."""
+        if not callable(callback):
+            return
+
+        bridge = getattr(self, '_gui_call_bridge', None)
+        if bridge is None:
+            callback()
+            return
+
+        if QThread.currentThread() == bridge.thread():
+            if delay_ms > 0:
+                QTimer.singleShot(int(delay_ms), callback)
+            else:
+                callback()
+            return
+
+        if delay_ms > 0:
+            bridge.call_later.emit(int(delay_ms), callback)
+        else:
+            bridge.call_soon.emit(callback)
     
     def _notify_queue_updated(self):
         """Notify queue update (thread-safe)."""
+        self._invalidate_queue_groups_cache()
         status = self.get_queue_status()
         for cb in self._on_queue_updated:
             try:
@@ -4638,6 +4856,9 @@ class AppController:
         Security: Does NOT rely on cached _license_valid flag.
         Calls validate() directly every time (60s TTL cache in LicenseClient).
         """
+        # FIX P1: Tamper = absolute block on generation
+        if getattr(self, '_tamper_detected', False):
+            return False
         try:
             if not hasattr(self, '_license_client') or not self._license_client:
                 return False
@@ -4653,6 +4874,11 @@ class AppController:
     
     def _update_permissions(self):
         """Update permissions from license."""
+        # FIX P1: Tamper is absolute — cannot re-enable license
+        if getattr(self, '_tamper_detected', False):
+            self._license_valid = False
+            self._permissions.set_role(Role.TRIAL)
+            return
         try:
             info = self._license_client.validate()
             if info.valid and info.tier:
@@ -4722,16 +4948,46 @@ class AppController:
                 pass
     
     def _periodic_integrity_check(self):
-        """Periodic RAM integrity check — detect Cheat Engine / memory patches."""
+        """Periodic integrity check — detect RAM patches + file tampering.
+        
+        Two layers:
+        1. RAM limits integrity (anti Cheat Engine)
+        2. File hash integrity (anti post-startup file patches)
+        """
         try:
+            tampered = False
+            
+            # Layer 1: RAM limits integrity
             if not self._permissions.verify_limits_integrity():
                 log.critical("[License] ⛔ Periodic integrity check FAILED — RAM tampered!")
                 self._permissions.reset_limits_from_cache()
-                # Re-validate from server
-                self._update_permissions()
+                tampered = True
+            
+            # Layer 2: File hash integrity (re-verify critical files)
+            try:
+                from security.integrity_check import verify_startup_integrity
+                integrity = verify_startup_integrity()
+                if not integrity['skipped'] and not integrity['passed']:
+                    log.critical(f"[License] ⛔ Periodic file integrity FAILED: {integrity['failures']}")
+                    tampered = True
+            except ImportError:
+                pass
+            
+            if tampered:
+                self._tamper_detected = True
+                self._license_valid = False
+                if hasattr(self, '_permissions') and self._permissions:
+                    self._permissions._tamper_detected = True
+                try:
+                    self._license_client.storage.clear()
+                    self._license_client._invalidate_validate_cache()
+                except Exception:
+                    pass
+                # FIX P1: Do NOT call _update_permissions() here
+                # It re-validates from server and sets _license_valid=True
         except Exception as e:
             log.warning(f"[License] Integrity check error: {e}")
-    
+
     def activate_license(self, license_key: str) -> Dict:
         """Activate a license key.
         
@@ -4741,6 +4997,12 @@ class AppController:
             Dict with 'success', 'message', 'tier', 'role' keys.
         """
         try:
+            # FIX P1: Cannot activate while tampered
+            if getattr(self, '_tamper_detected', False):
+                return {
+                    "success": False,
+                    "message": "Security integrity check failed. Please reinstall the application.",
+                }
             info = self._license_client.activate(license_key)
             if info.valid:
                 # Update permissions from tier
@@ -4847,28 +5109,242 @@ class AppController:
     def get_queue_items(self) -> List[Dict]:
         """Get all queue items for UI display."""
         items = []
-        for task in self._dispatcher.get_all_tasks():
-            items.append({
-                "id": task.id,
-                "prompt": task.prompt,
-                "status": task.state.value,
-                "progress": task.progress,
-                "status_text": getattr(task, 'status_text', ''),
-                "mode": _wf_display(task.workflow_type) if task.workflow_type else "T2V",
-                "project": task.project_id or "Default",
-                "error": task.error,
-                "created_at": task.created_at,
-            })
+        now = datetime.now()
+        active_ids = set()
+        for i, task in enumerate(self._dispatcher.get_all_tasks()):
+            dto = self._build_task_dto_dict(task, i + 1, now=now)
+            active_ids.add(task.id)
+            dto["project"] = task.project_id or "Default"
+            dto["created_at"] = task.created_at
+            items.append(dto)
+        stale_ids = set(self._queue_task_dto_cache.keys()) - active_ids
+        for task_id in stale_ids:
+            self._queue_task_dto_cache.pop(task_id, None)
         return items
     
+    def _invalidate_queue_groups_cache(self):
+        """Drop cached Queue-tab group snapshot after any queue mutation."""
+        self._queue_groups_cache = None
+        self._queue_groups_cache_ts = 0.0
+
+    def _task_stage_value(self, task: Task) -> str:
+        stage = getattr(task, 'stage', '')
+        if hasattr(stage, 'value'):
+            return str(stage.value or '')
+        return str(stage or '')
+
+    def _task_is_actively_upscaling(self, task: Task) -> bool:
+        stage_value = self._task_stage_value(task).lower()
+        active_upscale_statuses = {"submitting", "polling", "pending", "retrying"}
+        upscale_lifecycle_stages = {
+            TaskStage.DOWNLOADED_720.value,
+            TaskStage.UPSCALING.value,
+            TaskStage.UPSCALED.value,
+            TaskStage.COMPLETED.value,
+        }
+        if stage_value == TaskStage.UPSCALING.value:
+            return True
+        if stage_value not in upscale_lifecycle_stages:
+            return False
+        video_outputs = getattr(task, 'video_outputs', None) or []
+        if any(
+            str(getattr(vo, 'upscale_status', '') or '').lower() in active_upscale_statuses
+            for vo in video_outputs
+        ):
+            return True
+        task_upscale_status = str(getattr(task, 'upscale_status', '') or '').lower()
+        return task_upscale_status in active_upscale_statuses
+
+    @staticmethod
+    def _queue_time_marker(value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value or None
+
+    @staticmethod
+    def _task_elapsed_seconds(task: Task, now: datetime) -> float:
+        started_at = getattr(task, 'started_at', None)
+        if not started_at:
+            return 0.0
+        end_time = getattr(task, 'completed_at', None) or now
+        return (end_time - started_at).total_seconds()
+
+    def _task_video_output_signature(self, task: Task):
+        outputs = getattr(task, 'video_outputs', None) or []
+        target_quality = getattr(task, 'download_quality', '1080p')
+        return tuple(
+            (
+                getattr(vo, 'index', 0),
+                getattr(vo, 'quality', ''),
+                getattr(vo, 'upscale_status', ''),
+                getattr(vo, 'upscale_error', ''),
+                getattr(vo, 'best_file', ''),
+                getattr(vo, 'border_color', 'gray'),
+                getattr(vo, 'thumbnail_path', ''),
+                target_quality,
+                getattr(vo, 'upscale_poll_count', 0),
+            )
+            for vo in outputs
+        )
+
+    def _task_dto_payload(self, task: Task, index: int, now: datetime) -> Dict[str, Any]:
+        stage_value = self._task_stage_value(task)
+        is_upscaling = self._task_is_actively_upscaling(task)
+        started_at = getattr(task, 'started_at', None)
+        completed_at = getattr(task, 'completed_at', None)
+        elapsed_seconds = self._task_elapsed_seconds(task, now)
+        outputs = getattr(task, 'video_outputs', None) or []
+        target_quality = getattr(task, 'download_quality', '1080p')
+
+        return {
+            "id": task.id,
+            "index": index,
+            "prompt": task.prompt,
+            "status": task.state.value,
+            "stage": stage_value,
+            "is_upscaling": is_upscaling,
+            "progress": task.progress,
+            "mode": _wf_display(task.workflow_type) if task.workflow_type else "T2V",
+            "has_continuation": task.parent_task_id is not None,
+            "parent_id": task.parent_task_id,
+            "error": task.error,
+            "output_count": task.output_count,
+            "output_files": list(task.output_uris) if task.output_uris else [],
+            "thumbnails": (
+                [vo.thumbnail_path for vo in outputs]
+                if outputs else
+                list(task.thumbnail_paths) if hasattr(task, 'thumbnail_paths') else []
+            ),
+            "image_paths": list(getattr(task, 'image_paths', [])) if task.image_paths else [],
+            "continuation_frame": task.continuation_frame_local_path or "",
+            "upscale_status": getattr(task, 'upscale_status', ''),
+            "upscale_error": getattr(task, 'upscale_error', ''),
+            "image_upload_status": getattr(task, 'image_upload_status', ''),
+            "download_quality": getattr(task, 'download_quality', '720p'),
+            "status_text": getattr(task, 'status_text', ''),
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "elapsed_seconds": elapsed_seconds,
+            "retry_progress": getattr(task, '_retry_progress', -1),
+            "retry_status_text": getattr(task, '_retry_status_text', ''),
+            "video_outputs": [
+                {
+                    "index": getattr(vo, 'index', 0),
+                    "quality": getattr(vo, 'quality', ''),
+                    "upscale_status": getattr(vo, 'upscale_status', ''),
+                    "upscale_error": getattr(vo, 'upscale_error', ''),
+                    "best_file": getattr(vo, 'best_file', ''),
+                    "border_color": getattr(vo, 'border_color', 'gray'),
+                    "thumbnail_path": getattr(vo, 'thumbnail_path', ''),
+                    "task_id": task.id,
+                    "target_quality": target_quality,
+                    "upscale_poll_count": getattr(vo, 'upscale_poll_count', 0),
+                }
+                for vo in outputs
+            ],
+        }
+
+    def _task_dto_fingerprint(self, task: Task, index: int, now: datetime):
+        elapsed_bucket = int(self._task_elapsed_seconds(task, now))
+        return (
+            index,
+            task.prompt,
+            task.state.value,
+            self._task_stage_value(task),
+            self._task_is_actively_upscaling(task),
+            task.progress,
+            _wf_display(task.workflow_type) if task.workflow_type else "T2V",
+            task.parent_task_id,
+            task.error,
+            task.output_count,
+            tuple(task.output_uris) if task.output_uris else (),
+            tuple(getattr(task, 'thumbnail_paths', []) or ()),
+            tuple(getattr(task, 'image_paths', []) or ()),
+            task.continuation_frame_local_path or "",
+            getattr(task, 'upscale_status', ''),
+            getattr(task, 'upscale_error', ''),
+            getattr(task, 'image_upload_status', ''),
+            getattr(task, 'download_quality', '720p'),
+            getattr(task, 'status_text', ''),
+            self._queue_time_marker(getattr(task, 'started_at', None)),
+            self._queue_time_marker(getattr(task, 'completed_at', None)),
+            elapsed_bucket,
+            getattr(task, '_retry_progress', -1),
+            getattr(task, '_retry_status_text', ''),
+            self._task_video_output_signature(task),
+        )
+
+    def _build_task_dto_dict(self, task: Task, index: int, now: Optional[datetime] = None) -> Dict[str, Any]:
+        now = now or datetime.now()
+        fingerprint = self._task_dto_fingerprint(task, index, now)
+        cached = self._queue_task_dto_cache.get(task.id)
+        if cached and cached[0] == fingerprint:
+            return cached[1]
+
+        payload = self._task_dto_payload(task, index, now)
+        task_dict = TaskDTO(**payload).to_dict()
+        self._queue_task_dto_cache[task.id] = (fingerprint, task_dict)
+        return task_dict
+
+    def _build_task_dto(self, task: Task, index: int, now: Optional[datetime] = None) -> TaskDTO:
+        now = now or datetime.now()
+        payload = self._task_dto_payload(task, index, now)
+        payload["video_outputs"] = [
+            VideoSlotDTO(**video_output)
+            for video_output in payload.get("video_outputs", [])
+        ]
+        return TaskDTO(**payload)
+
     def get_queue_groups(self) -> List[Dict]:
-        """Get queue groups with child tasks for hierarchical UI display."""
+        """Get queue groups with child tasks for hierarchical UI display.
+
+        Queue tab refreshes frequently while tasks are active. Rebuilding the full
+        DTO tree for thousands of tasks on every paint causes UI stalls, so serve
+        a short-lived cached snapshot unless the queue has changed.
+        """
+        now = time.monotonic()
+        cache = self._queue_groups_cache
+        
+        # ★ Adaptive cache TTL: scale with queue size to prevent O(N) DTO rebuilds
+        _total = len(self._dispatcher.get_all_tasks_dict()) if hasattr(self._dispatcher, 'get_all_tasks_dict') else 0
+        if _total > 50_000:
+            ttl = 60.0  # 10M queue: rebuild at most once per minute
+        elif _total > 10_000:
+            ttl = 30.0
+        elif _total > 1_000:
+            ttl = 10.0 if self.state.is_processing else 5.0
+        else:
+            ttl = (
+                self._queue_groups_cache_ttl_active
+                if self.state.is_processing else
+                self._queue_groups_cache_ttl
+            )
+        if cache is not None and (now - self._queue_groups_cache_ts) < ttl:
+            return cache
+
+        result = self._build_queue_groups()
+        self._queue_groups_cache = result
+        self._queue_groups_cache_ts = now
+        return result
+
+    def _build_queue_groups(self) -> List[Dict]:
+        """Build the full hierarchical Queue-tab DTO snapshot."""
+        build_started = time.monotonic()
         groups = self._dispatcher.get_all_groups()
         result = []
+        _now = datetime.now()
+        active_task_ids = set()
         for gid, group in groups.items():
             # Filter out replacement tasks (per-video retries) — they're invisible
             # to the user; their results slot back into original task's video_outputs
             visible_tasks = [t for t in group.tasks if not getattr(t, 'replace_target', None)]
+            # ★ Fix: Sort by prompt_index (stable batch position) so the Queue UI
+            # always shows tasks in original submission order regardless of which
+            # tasks are currently READY, RUNNING, or UPSCALING. Without this sort,
+            # Dispatcher's internal ordering shifts after recovery/un-exclude cycles,
+            # causing READY tasks with higher indices to appear above UPSCALING tasks.
+            visible_tasks.sort(key=lambda t: (getattr(t, 'prompt_index', 0), getattr(t, 'created_at', 0)))
+
             completed = sum(1 for t in visible_tasks if t.state == TaskState.COMPLETED)
             total = len(visible_tasks)
             # Detect mode/model from first task
@@ -4876,8 +5352,6 @@ class AppController:
             
             # Compute group elapsed time from task timestamps
             # BUG-T1 fix: Correctly handle completed vs running groups
-            from datetime import datetime as _dt
-            _now = _dt.now()
             started_tasks = [t for t in visible_tasks if getattr(t, 'started_at', None)]
             
             if started_tasks:
@@ -4922,62 +5396,21 @@ class AppController:
                 created_at=group.created_at,
                 elapsed_seconds=_elapsed,
                 tasks=[
-                    TaskDTO(
-                        id=t.id,
-                        index=i + 1,
-                        prompt=t.prompt,
-                        status=t.state.value,
-                        progress=t.progress,
-                        mode=_wf_display(t.workflow_type) if t.workflow_type else "T2V",
-                        has_continuation=t.parent_task_id is not None,
-                        parent_id=t.parent_task_id,
-                        error=t.error,
-                        output_count=t.output_count,
-                        output_files=list(t.output_uris) if t.output_uris else [],
-                        # Build thumbnails from video_outputs (per-video, index-safe)
-                        # instead of task.thumbnail_paths (flat list that shifts after retry)
-                        thumbnails=(
-                            [vo.thumbnail_path for vo in t.video_outputs]
-                            if hasattr(t, 'video_outputs') and t.video_outputs
-                            else list(t.thumbnail_paths) if hasattr(t, 'thumbnail_paths') else []
-                        ),
-                        image_paths=list(getattr(t, 'image_paths', [])) if t.image_paths else [],
-                        continuation_frame=t.continuation_frame_local_path or "",
-                        upscale_status=getattr(t, 'upscale_status', ''),
-                        upscale_error=getattr(t, 'upscale_error', ''),
-                        image_upload_status=getattr(t, 'image_upload_status', ''),
-                        download_quality=getattr(t, 'download_quality', '720p'),
-                        status_text=getattr(t, 'status_text', ''),
-                        started_at=getattr(t, 'started_at', None),
-                        completed_at=getattr(t, 'completed_at', None),
-                        # BUG-T3: Compute per-task elapsed time
-                        elapsed_seconds=(
-                            (
-                                (getattr(t, 'completed_at', None) or _now) - t.started_at
-                            ).total_seconds()
-                            if getattr(t, 'started_at', None) else 0.0
-                        ),
-                        retry_progress=getattr(t, '_retry_progress', -1),
-                        retry_status_text=getattr(t, '_retry_status_text', ''),
-                        video_outputs=[
-                            VideoSlotDTO(
-                                index=vo.index,
-                                quality=vo.quality,
-                                upscale_status=vo.upscale_status,
-                                upscale_error=vo.upscale_error,
-                                best_file=vo.best_file,
-                                border_color=vo.border_color,
-                                thumbnail_path=vo.thumbnail_path,
-                                task_id=t.id,
-                                target_quality=getattr(t, 'download_quality', '1080p'),
-                                upscale_poll_count=getattr(vo, 'upscale_poll_count', 0),
-                            )
-                            for vo in (t.video_outputs if hasattr(t, 'video_outputs') else [])
-                        ],
-                    )
+                    self._build_task_dto_dict(t, i + 1, now=_now)
                     for i, t in enumerate(visible_tasks)
                 ],
             ).to_dict())
+            active_task_ids.update(t.id for t in visible_tasks)
+
+        stale_ids = set(self._queue_task_dto_cache.keys()) - active_task_ids
+        for task_id in stale_ids:
+            self._queue_task_dto_cache.pop(task_id, None)
+
+        build_ms = (time.monotonic() - build_started) * 1000.0
+        if build_ms >= 50:
+            log.debug(
+                f"[QueueDTO] built {len(result)} groups / {len(active_task_ids)} tasks in {build_ms:.1f}ms"
+            )
         return result
     
     def update_group_settings(self, group_id: str, settings: dict) -> bool:
@@ -5022,6 +5455,10 @@ class AppController:
     def force_retry_task(self, task_id: str) -> bool:
         """Force retry a task regardless of state (including completed)."""
         return self._dispatcher.force_retry_task(task_id)
+
+    def force_retry_tasks(self, task_ids: List[str], label: str = "batch") -> int:
+        """Force retry many tasks with one dispatcher summary log."""
+        return self._dispatcher.force_retry_tasks(task_ids, label=label)
     
     def force_retry_video(self, task_id: str, video_index: int) -> bool:
         """Force retry a SINGLE video by index, preserving all other videos."""
@@ -5367,7 +5804,7 @@ class AppController:
         self._on_progress = callback
         # Wire into dispatcher so update_progress() reaches UI
         if hasattr(self._dispatcher, '_on_progress_callback'):
-            self._dispatcher._on_progress_callback = callback
+            self._dispatcher._on_progress_callback = self._forward_progress_to_ui
     
     def set_queue_updated_callback(self, callback: Callable[[Dict], None]):
         if not hasattr(self, '_on_queue_updated') or not isinstance(self._on_queue_updated, list):

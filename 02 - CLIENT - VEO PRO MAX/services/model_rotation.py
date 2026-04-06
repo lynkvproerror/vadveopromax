@@ -21,14 +21,27 @@ from typing import Optional, List, Dict
 
 log = logging.getLogger("veo.rotation")
 
-# Models verified via API test (supports generateContent), ordered by RPD
+# Models ordered by RPD (high→low). Rate limits from Google AI Studio dashboard.
+# Within same RPD tier: larger model first (better quality).
+# Deprecated models (RPD=0) removed: gemini-2.0-flash, gemini-2.0-flash-lite
 MODEL_POOL = [
-    {"id": "gemini-3.1-flash-lite-preview", "rpd": 500, "rpm": 15},
-    {"id": "gemini-3-flash-preview",        "rpd": 20,  "rpm": 5},
-    {"id": "gemini-2.5-flash",              "rpd": 20,  "rpm": 5},
-    {"id": "gemini-2.0-flash",              "rpd": 15,  "rpm": 15},
-    {"id": "gemini-2.5-flash-lite",         "rpd": 20,  "rpm": 10},
-    {"id": "gemini-2.0-flash-lite",         "rpd": 15,  "rpm": 15},
+    # ── Gemma 3 family: 14,400 RPD, 30 RPM, 15K TPM ──────────
+    # Massive free quota. Best value for prompt enhancement.
+    {"id": "gemma-3-27b-it",                "rpd": 14400, "rpm": 30},
+    {"id": "gemma-3-12b-it",                "rpd": 14400, "rpm": 30},
+    {"id": "gemma-3-4b-it",                 "rpd": 14400, "rpm": 30},
+    {"id": "gemma-3-2b-it",                 "rpd": 14400, "rpm": 30},
+    {"id": "gemma-3-1b-it",                 "rpd": 14400, "rpm": 30},
+    # ── Gemma 4 family: 1,500 RPD, 15 RPM, Unlimited TPM ─────
+    # Higher quality reasoning, unlimited token throughput.
+    {"id": "gemma-4-31b-it",                "rpd": 1500,  "rpm": 15},
+    {"id": "gemma-4-26b-it",                "rpd": 1500,  "rpm": 15},
+    # ── Gemini Flash family: 20-500 RPD ───────────────────────
+    # Proven models, lower quota but tested stable.
+    {"id": "gemini-3.1-flash-lite-preview", "rpd": 500,   "rpm": 15},
+    {"id": "gemini-3-flash-preview",        "rpd": 20,    "rpm": 5},
+    {"id": "gemini-2.5-flash",              "rpd": 20,    "rpm": 5},
+    {"id": "gemini-2.5-flash-lite",         "rpd": 20,    "rpm": 10},
 ]
 
 # Quick lookup

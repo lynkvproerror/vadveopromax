@@ -13,6 +13,7 @@ from datetime import datetime
 import asyncio
 import logging
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -43,6 +44,9 @@ class MultiAccountManager:
     def __init__(self):
         self._accounts: List[AccountManager] = []
         self._lock = asyncio.Lock()
+        self._machine_client_data_cache: str = ""
+        self._machine_client_data_checked_at: float = 0.0
+        self._machine_client_data_check_cooldown: float = 300.0
     
     @property
     def total_capacity(self) -> int:
@@ -80,7 +84,7 @@ class MultiAccountManager:
     def total_capacity_lp(self) -> int:
         """Sum of LP worker caps from all accounts."""
         return sum(
-            getattr(acc.session, 'max_workers_lp', 8)
+            getattr(acc.session, 'max_workers_lp', 20)
             for acc in self._accounts
         )
     
@@ -373,7 +377,14 @@ class MultiAccountManager:
             cd = acc.session.client_data or ""
             if len(cd) > len(best):
                 best = cd
+        machine_cd = self._machine_client_data_cache or ""
+        if len(machine_cd) > len(best):
+            best = machine_cd
         return best
+
+    def get_effective_min_xcd(self) -> int:
+        """Return the minimum xcd length required for stable submit paths."""
+        return MIN_VALID_XCD
     
     def fix_short_client_data(self):
         """Share x-client-data across accounts on the same machine.
@@ -391,14 +402,47 @@ class MultiAccountManager:
         best = ""
         best_source = None
         for acc in self._accounts:
-            cd = acc.session.client_data or ""
             # Only consider accounts with active Extension (valid PID)
             has_ext = acc.extension_bridge and acc.extension_bridge.is_connected(acc.email)
+            if not has_ext:
+                continue
+            try:
+                headers = acc.get_browser_headers() or {}
+            except Exception:
+                headers = {}
+            # ★ Fix: Only use LIVE bridge header — do NOT fall back to
+            # session.client_data (may be a stale/borrowed value from a
+            # previous session or from another account's fingerprint).
+            cd = headers.get('x-client-data', '')
             if len(cd) > len(best) and has_ext:
                 best = cd
                 best_source = acc.email
         
-        if len(best) < MIN_VALID_XCD:
+        required_len = MIN_VALID_XCD
+        if len(best) < required_len:
+            now = time.monotonic()
+            cached_machine_cd = self._machine_client_data_cache or ""
+            if len(cached_machine_cd) >= required_len:
+                best = cached_machine_cd
+                best_source = "machine_cache"
+            elif now - self._machine_client_data_checked_at >= self._machine_client_data_check_cooldown:
+                self._machine_client_data_checked_at = now
+                log.info("🔍 No account has good x-client-data yet — trying machine Chrome fallback...")
+                try:
+                    from core.client_data_extractor import extract_client_data_from_machine
+                    machine_cd = extract_client_data_from_machine() or ""
+                    self._machine_client_data_cache = machine_cd
+                    if len(machine_cd) >= required_len:
+                        best = machine_cd
+                        best_source = "machine_chrome"
+                        log.info(f"✅ Machine Chrome fallback produced x-client-data ({len(machine_cd)} chars)")
+                    elif machine_cd:
+                        log.info(f"Machine Chrome fallback returned short x-client-data ({len(machine_cd)} chars)")
+                except Exception as e:
+                    log.warning(f"Machine Chrome x-client-data fallback failed: {e}")
+
+        required_len = MIN_VALID_XCD
+        if len(best) < required_len:
             log.info(
                 f"⏳ No account has good x-client-data yet (best={len(best)} chars). "
                 f"Extension bridge will provide fresh value from browser headers."
@@ -407,11 +451,14 @@ class MultiAccountManager:
         
         fixed = 0
         for acc in self._accounts:
+            # ★ Fix: Skip self-borrow (account whose live header IS the best source)
+            if acc.email == best_source:
+                continue
             cd = acc.session.client_data or ""
-            if len(cd) < MIN_VALID_XCD:
+            if len(cd) < required_len:
                 log.info(
                     f"🔄 [{acc.email}] x-client-data too short ({len(cd)} chars), "
-                    f"borrowing from {best_source} ({len(best)} chars)"
+                    f"borrowing from {best_source} ({len(best)} chars, need ≥{required_len})"
                 )
                 acc.session.client_data = best
                 fixed += 1

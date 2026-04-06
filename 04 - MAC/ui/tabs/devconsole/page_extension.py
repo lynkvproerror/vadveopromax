@@ -149,7 +149,7 @@ class ExtensionDebugPage(QWidget):
 
         self._detail_text = QPlainTextEdit()
         self._detail_text.setReadOnly(True)
-        self._detail_text.setFont(QFont(Theme.FONT_FAMILY_MONO if hasattr(Theme, 'FONT_FAMILY_MONO') else 'Consolas', 10))
+        self._detail_text.setFont(QFont(Theme.FONT_FAMILY_MONO if hasattr(Theme, 'FONT_FAMILY_MONO') else 'Menlo', 10))
         self._detail_text.setStyleSheet(
             f"background-color: {Theme.MANTLE}; color: {Theme.SUBTEXT0}; "
             f"border: none; padding: 4px;"

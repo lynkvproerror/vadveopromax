@@ -157,6 +157,30 @@ class SellerPermissions:
 # SELLER FIREBASE MANAGER
 # ============================================================
 
+APP_COLLECTIONS = {
+    "VEO": {
+        "lic": "_lic",
+        "trials": "_trials",
+        "upgrade_requests": "_upgrade_requests",
+        "rate_limit": "_rate_limit",
+        "usage": "_usage",
+        "mid_to_key": "_mid_to_key",
+        "customers": "_customers",
+        "blocked": "_blocked_machines",
+    },
+    "GROK": {
+        "lic": "_lic_grok",
+        "trials": "_grok_trials",
+        "upgrade_requests": "_grok_upgrade_requests",
+        "rate_limit": "_grok_rate_limit",
+        "usage": "_grok_usage",
+        "mid_to_key": "_grok_mid_to_key",
+        "customers": "_grok_customers",
+        "blocked": "_grok_blocked_machines",
+    },
+}
+
+
 class SellerFirebaseManager:
     """Firebase operations for seller app (restricted access)."""
     
@@ -187,6 +211,26 @@ class SellerFirebaseManager:
         self._permissions = None
         self._seller_mid = None   # Authenticated seller MID
         self._last_status_check = None  # Last time status was re-verified
+        self._current_app = "VEO"
+    
+    # ── App selector ──────────────────────────────────────
+    
+    def set_app(self, app_name: str):
+        """Switch active app (VEO / GROK)."""
+        app_name = app_name.upper()
+        if app_name not in APP_COLLECTIONS:
+            raise ValueError(f"Unknown app: {app_name}")
+        self._current_app = app_name
+        self.LIC_COLLECTION = APP_COLLECTIONS[app_name]["lic"]
+        self.TRIALS_COLLECTION = APP_COLLECTIONS[app_name]["trials"]
+        self.REQUEST_COLLECTION = APP_COLLECTIONS[app_name]["upgrade_requests"]
+    
+    def col(self, name: str) -> str:
+        return APP_COLLECTIONS[self._current_app][name]
+    
+    @property
+    def current_app(self) -> str:
+        return self._current_app
     
     def connect(self) -> bool:
         """Connect to Firebase (same dual-Firebase as admin)."""
@@ -659,10 +703,10 @@ class SellerFirebaseManager:
                 "_lim": None,
             }
             
-            self.db.collection("_trials").document(machine_id).set(trial_data)
+            self.db.collection(self.col("trials")).document(machine_id).set(trial_data)
             if self.backup_db:
                 try:
-                    self.backup_db.collection("_trials").document(machine_id).set(trial_data)
+                    self.backup_db.collection(self.col("trials")).document(machine_id).set(trial_data)
                 except Exception:
                     pass
             
@@ -824,7 +868,7 @@ class SellerFirebaseManager:
                 FIRST_BUY = pricing.get('first_buy', self.PRICING_FALLBACK['first_buy'])
                 NORMAL = pricing.get('normal', self.PRICING_FALLBACK['normal'])
                 
-                cust_ref = self.db.collection("_customers").document(machine_id)
+                cust_ref = self.db.collection(self.col("customers")).document(machine_id)
                 cust_doc = cust_ref.get()
                 prev_count = 0
                 prev_paid = 0
@@ -855,7 +899,7 @@ class SellerFirebaseManager:
                 cust_ref.set(cust_update, merge=True)
                 if self.backup_db:
                     try:
-                        self.backup_db.collection("_customers").document(machine_id).set(cust_update, merge=True)
+                        self.backup_db.collection(self.col("customers")).document(machine_id).set(cust_update, merge=True)
                     except Exception:
                         pass
             except Exception:
@@ -886,10 +930,10 @@ class SellerFirebaseManager:
                 "expires": (datetime.now() + timedelta(days=days)).isoformat(),
                 "updated_at": datetime.now().isoformat(),
             }
-            self.db.collection("_mid_to_key").document(machine_id).set(mid_key_data)
+            self.db.collection(self.col("mid_to_key")).document(machine_id).set(mid_key_data)
             if self.backup_db:
                 try:
-                    self.backup_db.collection("_mid_to_key").document(machine_id).set(mid_key_data)
+                    self.backup_db.collection(self.col("mid_to_key")).document(machine_id).set(mid_key_data)
                 except Exception:
                     pass
             

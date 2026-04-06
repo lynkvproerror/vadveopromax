@@ -14,6 +14,7 @@
 // ── State ──────────────────────────────────────────────────────────────
 const EXT_VERSION = chrome.runtime.getManifest().version; // e.g. '2.3.0'
 const MAX_TABS = 3; // Maximum number of browser tabs allowed (Gmail, YouTube, VEO Flow)
+const LAST_GOOD_PORT_KEY = 'veo_bridge_last_good_port';
 
 // WebSocket is now managed by offscreen.js (persistent, not subject to SW suspension).
 // background.js relays messages via chrome.runtime.
@@ -27,6 +28,26 @@ let _tabStateRestored = false;
 
 // Fix J: Message queue for when offscreen is restarting
 let _wsSendQueue = [];
+const _bridgeDebug = {
+  bgStartedAt: Date.now(),
+  lastOffscreenCreatedAt: 0,
+  lastOffscreenSyncAt: 0,
+  lastOffscreenSyncOk: null,
+  lastOffscreenSyncError: '',
+  lastOffscreenEvent: 'startup',
+  offscreen: null,
+  lastWsConnectedAt: 0,
+  lastWsDisconnectedAt: 0,
+  lastTabRegisterAt: 0,
+  lastTabRegisterEmail: '',
+  lastQueuedAction: '',
+  lastQueuedAt: 0,
+  lastSentAction: '',
+  lastSentAt: 0,
+  lastGetStatusAt: 0,
+};
+const SNAPSHOT_PUSH_COOLDOWN_MS = 20000;
+const _lastSnapshotPushAt = {};
 
 // ── tabState Persistence ───────────────────────────────────────────────
 // MV3 service workers get terminated/restarted by Chrome.
@@ -246,6 +267,7 @@ async function ensureOffscreenDocument() {
     try {
       await _offscreenCreating;
       console.log('[VEO Bridge] ✅ Offscreen document created for persistent WebSocket');
+      _bridgeDebug.lastOffscreenCreatedAt = Date.now();
       _offscreenCreating = null;
       return; // Success
     } catch (e) {
@@ -260,6 +282,157 @@ async function ensureOffscreenDocument() {
   }
 }
 
+async function getOffscreenWsStatus() {
+  try {
+    const status = await chrome.runtime.sendMessage({ type: 'offscreen_ws_status' });
+    if (status) {
+      _bridgeDebug.offscreen = status;
+    }
+    return status || null;
+  } catch (e) {
+    _bridgeDebug.lastOffscreenSyncError = e.message || 'offscreen_status_failed';
+    return null;
+  }
+}
+
+async function getOffscreenContextCount() {
+  try {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [chrome.runtime.getURL('offscreen.html')],
+    });
+    return contexts.length;
+  } catch (_) {
+    return 0;
+  }
+}
+
+/**
+ * Re-sync background.js with the already-running offscreen document.
+ *
+ * Why this matters:
+ * - MV3 service workers restart frequently and lose in-memory `wsConnected`
+ * - offscreen.js may still hold a live WebSocket to Python
+ * - without an explicit status query, background stays "disconnected"
+ *   forever until the socket reconnects again, so tabs remain orange
+ *
+ * Returns true if offscreen reports a live WebSocket.
+ */
+async function syncOffscreenWsState() {
+  _bridgeDebug.lastOffscreenSyncAt = Date.now();
+  try {
+    const status = await getOffscreenWsStatus();
+    const wasConnected = wsConnected;
+    wsConnected = !!(status && status.connected);
+    _bridgeDebug.lastOffscreenSyncOk = wsConnected;
+    _bridgeDebug.lastOffscreenSyncError = '';
+
+    if (wsConnected && !wasConnected) {
+      console.log('[VEO Bridge] ♻️ Re-synced live WebSocket from existing offscreen document');
+      await onWsConnected();
+    } else if (!wsConnected && wasConnected) {
+      console.log('[VEO Bridge] ⚠️ Offscreen reported WebSocket disconnected during resync');
+    }
+
+    return wsConnected;
+  } catch (e) {
+    _bridgeDebug.lastOffscreenSyncOk = false;
+    _bridgeDebug.lastOffscreenSyncError = e.message || 'offscreen_sync_failed';
+    console.debug('[VEO Bridge] Offscreen WS sync failed:', e.message);
+    return false;
+  }
+}
+
+/**
+ * Recover the offscreen bridge eagerly instead of waiting for the watchdog.
+ *
+ * This is used on high-signal events such as:
+ * - a VEO tab registering itself
+ * - popup status checks while disconnected
+ *
+ * Without this, a missing offscreen document can leave the bridge orange/red
+ * until the 15s watchdog and 45s startup grace eventually allow recreation.
+ */
+async function ensureBridgeReady(reason = 'unknown') {
+  let offscreenCount = await getOffscreenContextCount();
+  if (offscreenCount === 0) {
+    console.warn(`[VEO Bridge] 🧩 Offscreen missing during ${reason} — recreating now`);
+    await ensureOffscreenDocument();
+    offscreenCount = await getOffscreenContextCount();
+  }
+
+  let status = await getOffscreenWsStatus();
+
+  if (
+    offscreenCount > 0 &&
+    status &&
+    !status.connected &&
+    !status.reconnectScheduled &&
+    !status.fastScanActive
+  ) {
+    console.log(`[VEO Bridge] 🔁 Forcing offscreen WS reconnect (${reason})`);
+    try {
+      await chrome.runtime.sendMessage({ type: 'offscreen_ws_reconnect' });
+      await new Promise(r => setTimeout(r, 250));
+      status = await getOffscreenWsStatus();
+    } catch (e) {
+      console.debug('[VEO Bridge] Forced offscreen reconnect failed:', e.message);
+    }
+  }
+
+  return syncOffscreenWsState();
+}
+
+async function collectBridgeStatus(forceSync = false) {
+  _bridgeDebug.lastGetStatusAt = Date.now();
+
+  if (forceSync || !wsConnected) {
+    await ensureBridgeReady(forceSync ? 'popup_status' : 'status_refresh');
+  }
+
+  const offscreen = await getOffscreenWsStatus();
+  const offscreenCount = await getOffscreenContextCount();
+
+  return {
+    connected: wsConnected,
+    port: (offscreen && offscreen.currentPort) || null,
+    tabs: Object.entries(tabState)
+      .filter(([_, s]) => s.email)
+      .map(([id, s]) => ({
+        tabId: parseInt(id),
+        email: s.email,
+        headerCount: Object.keys(s.headers).length,
+        lastHeartbeat: s.lastHeartbeat || 0,
+        recaptchaReady: s.recaptchaReady || false,
+      })),
+    debug: {
+      offscreenExists: offscreenCount > 0,
+      offscreenCount,
+      background: {
+        startedAt: _bridgeDebug.bgStartedAt,
+        tabStateRestored: _tabStateRestored,
+        wsConnected,
+        wsQueueDepth: _wsSendQueue.length,
+        lastOffscreenCreatedAt: _bridgeDebug.lastOffscreenCreatedAt,
+        lastOffscreenSyncAt: _bridgeDebug.lastOffscreenSyncAt,
+        lastOffscreenSyncOk: _bridgeDebug.lastOffscreenSyncOk,
+        lastOffscreenSyncError: _bridgeDebug.lastOffscreenSyncError,
+        lastOffscreenEvent: _bridgeDebug.lastOffscreenEvent,
+        lastWsConnectedAt: _bridgeDebug.lastWsConnectedAt,
+        lastWsDisconnectedAt: _bridgeDebug.lastWsDisconnectedAt,
+        lastTabRegisterAt: _bridgeDebug.lastTabRegisterAt,
+        lastTabRegisterEmail: _bridgeDebug.lastTabRegisterEmail,
+        lastQueuedAction: _bridgeDebug.lastQueuedAction,
+        lastQueuedAt: _bridgeDebug.lastQueuedAt,
+        lastSentAction: _bridgeDebug.lastSentAction,
+        lastSentAt: _bridgeDebug.lastSentAt,
+        lastGetStatusAt: _bridgeDebug.lastGetStatusAt,
+      },
+      offscreen: offscreen || _bridgeDebug.offscreen,
+    },
+  };
+}
+
 // ── WebSocket Relay (via Offscreen Document) ───────────────────────────
 // wsSend() no longer uses a direct WebSocket. Instead, it sends the data
 // to offscreen.js via chrome.runtime.sendMessage, which forwards it over WS.
@@ -270,8 +443,12 @@ function wsSend(data) {
     if (_wsSendQueue.length < 50) {
       _wsSendQueue.push(data);
     }
+    _bridgeDebug.lastQueuedAction = data?.action || '';
+    _bridgeDebug.lastQueuedAt = Date.now();
     return false;
   }
+  _bridgeDebug.lastSentAction = data?.action || '';
+  _bridgeDebug.lastSentAt = Date.now();
   // Send via offscreen.js with error recovery
   chrome.runtime.sendMessage({
     type: 'offscreen_ws_send',
@@ -283,6 +460,49 @@ function wsSend(data) {
     }
   });
   return true;
+}
+
+function pushTabSnapshotToApp(tabId, reason = 'snapshot', force = false) {
+  const state = tabState[tabId];
+  if (!state || !state.email) return false;
+
+  const now = Date.now();
+  const lastPushed = _lastSnapshotPushAt[tabId] || 0;
+  if (!force && (now - lastPushed) < SNAPSHOT_PUSH_COOLDOWN_MS) {
+    return false;
+  }
+  _lastSnapshotPushAt[tabId] = now;
+
+  wsSend({
+    action: 'register',
+    email: state.email,
+    tabId: parseInt(tabId),
+    version: EXT_VERSION,
+  });
+
+  let pushed = false;
+  if (Object.keys(state.headers || {}).length > 0) {
+    wsSend({
+      action: 'headers_update',
+      email: state.email,
+      headers: state.headers,
+      accessToken: state.accessToken,
+    });
+    pushed = true;
+    console.log(`[VEO Bridge] 📤 Pushed cached headers for ${state.email} (${reason})`);
+  }
+
+  if (state.accessToken) {
+    wsSend({
+      action: 'access_token',
+      requestId: null,
+      email: state.email,
+      token: state.accessToken,
+      tokenEmail: state.email,
+    });
+  }
+
+  return pushed;
 }
 
 // Handle WS connection state + reconnect on initial load
@@ -315,23 +535,7 @@ async function onWsConnected() {
   // Register all known tabs + immediately push cached data
   for (const [tabId, state] of Object.entries(tabState)) {
     if (state.email) {
-      wsSend({
-        action: 'register',
-        email: state.email,
-        tabId: parseInt(tabId),
-        version: EXT_VERSION,
-      });
-
-      // Push cached headers immediately
-      if (Object.keys(state.headers).length > 0) {
-        wsSend({
-          action: 'headers_update',
-          email: state.email,
-          headers: state.headers,
-          accessToken: state.accessToken,
-        });
-        console.log(`[VEO Bridge] 📤 Pushed cached headers for ${state.email}`);
-      }
+      pushTabSnapshotToApp(tabId, 'ws_connected', true);
 
       // Extract fresh access token from page
       extractAndPushToken(parseInt(tabId), state.email);
@@ -618,7 +822,11 @@ async function handleAppMessage(msg) {
       const email = msg.email;
       if (!email) break;
 
-      console.log(`[VEO Bridge] 📧 Server assigned email: ${email}`);
+      const serverProfilePath = msg.profilePath || '';
+      // NOTE: MV3 extensions cannot access the browser's user-data-dir,
+      // so client-side profile verification is not possible. The profilePath
+      // is logged for server-side diagnostics only.
+      console.log(`[VEO Bridge] 📧 Server assigned email: ${email} (profilePath=${serverProfilePath || 'none'})`);
 
       // First: check if ANY tab already has this email assigned
       let existingTabId = findTabForEmail(email);
@@ -2036,14 +2244,61 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 // ── Offscreen Document Message Relay ───────────────────────────────────
 // Handle messages FROM offscreen.js (WebSocket state + incoming WS messages)
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'offscreen_pref_port_get') {
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get(LAST_GOOD_PORT_KEY);
+        sendResponse({ ok: true, port: Number(stored?.[LAST_GOOD_PORT_KEY]) || null });
+      } catch (e) {
+        sendResponse({ ok: false, port: null, error: e.message || 'storage_get_failed' });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === 'offscreen_pref_port_set') {
+    (async () => {
+      try {
+        const port = Number(msg.port);
+        if (!Number.isFinite(port)) {
+          sendResponse({ ok: false, error: 'invalid_port' });
+          return;
+        }
+        await chrome.storage.local.set({ [LAST_GOOD_PORT_KEY]: port });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message || 'storage_set_failed' });
+      }
+    })();
+    return true;
+  }
+
   // ── Offscreen: WS state change ──
   if (msg.type === 'offscreen_ws_state') {
     const wasConnected = wsConnected;
     wsConnected = msg.connected;
+    if (msg.port) {
+      _bridgeDebug.offscreen = {
+        ...(_bridgeDebug.offscreen || {}),
+        currentPort: msg.port,
+        connected: msg.connected,
+      };
+    }
     if (msg.connected && !wasConnected) {
+      _bridgeDebug.lastWsConnectedAt = Date.now();
       onWsConnected();
     } else if (!msg.connected && wasConnected) {
+      _bridgeDebug.lastWsDisconnectedAt = Date.now();
       console.log('[VEO Bridge] ⚠️ WebSocket disconnected (offscreen)');
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === 'offscreen_ws_debug') {
+    _bridgeDebug.lastOffscreenEvent = msg.event || 'debug';
+    if (msg.debug) {
+      _bridgeDebug.offscreen = msg.debug;
     }
     sendResponse({ ok: true });
     return false;
@@ -2074,6 +2329,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     tabState[tabId].email = msg.email;
     tabState[tabId].lastHeartbeat = Date.now();
+    _bridgeDebug.lastTabRegisterAt = Date.now();
+    _bridgeDebug.lastTabRegisterEmail = msg.email;
     persistTabState(); // Survive SW restart
     // Clear zombie timer if was pending
     if (tabState[tabId]._zombieTimer) {
@@ -2093,13 +2350,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       console.debug(`[VEO Bridge] autoDiscardable update failed for tab ${tabId}: ${e.message}`);
     }
 
-    // Notify app
-    wsSend({
-      action: 'register',
-      email: msg.email,
-      tabId: tabId,
-      version: EXT_VERSION,
-    });
+    // Notify app and push any already-captured headers immediately.
+    pushTabSnapshotToApp(tabId, 'register_tab', true);
+
+    // Fresh tab registration is the strongest signal that the bridge should
+    // be alive right now. Recover eagerly instead of waiting for the watchdog.
+    if (!wsConnected) {
+      ensureBridgeReady(`register_tab:${msg.email}`).catch(() => { });
+    }
 
     sendResponse({ ok: true });
   }
@@ -2111,6 +2369,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const state = tabState[tabId];
     if (state) {
       state.lastHeartbeat = Date.now();
+
+      // If the tab is alive but the bridge is not, recover immediately instead
+      // of waiting for the watchdog. This is the main path for orange-stuck UI
+      // where background keeps capturing headers but app-side WS has drifted.
+      if (!wsConnected) {
+        ensureBridgeReady(`content_heartbeat:${state.email || tabId}`).catch(() => { });
+      } else if (state.email && Object.keys(state.headers || {}).length > 0) {
+        pushTabSnapshotToApp(tabId, 'content_heartbeat');
+      }
+
       // Forward heartbeat to Python app for tracking
       wsSend({
         action: 'content_heartbeat',
@@ -2208,18 +2476,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Forward popup requests
   if (msg.action === 'getStatus') {
-    sendResponse({
-      connected: wsConnected,
-      tabs: Object.entries(tabState)
-        .filter(([_, s]) => s.email)
-        .map(([id, s]) => ({
-          tabId: parseInt(id),
-          email: s.email,
-          headerCount: Object.keys(s.headers).length,
-          lastHeartbeat: s.lastHeartbeat || 0,
-          recaptchaReady: s.recaptchaReady || false,
-        })),
-    });
+    (async () => {
+      try {
+        sendResponse(await collectBridgeStatus(true));
+      } catch (e) {
+        sendResponse({
+          connected: wsConnected,
+          tabs: [],
+          debug: {
+            offscreenExists: false,
+            offscreenCount: 0,
+            background: {
+              startedAt: _bridgeDebug.bgStartedAt,
+              tabStateRestored: _tabStateRestored,
+              wsConnected,
+              wsQueueDepth: _wsSendQueue.length,
+              lastOffscreenSyncError: e.message || 'get_status_failed',
+            },
+            offscreen: _bridgeDebug.offscreen,
+          },
+        });
+      }
+    })();
+    return true;
   }
 
   return false; // sync response
@@ -2920,6 +3199,10 @@ async function initializeStartup() {
   // Step 2: Create offscreen document ONCE
   await ensureOffscreenDocument();
 
+  // Step 2.5: Service worker may have restarted while offscreen.js kept the
+  // WebSocket alive. Re-sync state so existing tabs can register immediately.
+  await syncOffscreenWsState();
+
   // Step 3: Inject into existing VEO tabs
   try {
     await injectExistingTabs();
@@ -2930,7 +3213,7 @@ async function initializeStartup() {
   }
 }
 initializeStartup();
-console.log('[VEO Bridge] Background service worker started (v2.3.0 — offscreen WS + persistence)');
+console.log(`[VEO Bridge] Background service worker started (v${EXT_VERSION} — offscreen WS + persistence)`);
 
 // RC2 FIX: Startup grace period — skip offscreen health checks during first 45s
 // During startup, tab is often about:blank → Chrome kills offscreen → loop
@@ -2943,8 +3226,19 @@ const STARTUP_GRACE_MS = 45000; // 45s grace for tab to navigate to labs.google
 let _offscreenRecreateFailCount = 0;
 let _lastOffscreenRecreateTime = 0;
 setInterval(async () => {
-  // RC2: Skip during startup grace period
-  if (Date.now() - _startupTime < STARTUP_GRACE_MS) return;
+  const hasRegisteredTabs = Object.values(tabState).some(s => !!s.email);
+  const hasQueuedWsTraffic = _wsSendQueue.length > 0;
+
+  // RC2: Skip during startup grace period only while nothing is actively
+  // waiting for the bridge. Once a real tab has registered or traffic is
+  // queued, recover immediately.
+  if (
+    Date.now() - _startupTime < STARTUP_GRACE_MS &&
+    !hasRegisteredTabs &&
+    !hasQueuedWsTraffic
+  ) {
+    return;
+  }
 
   // RC4: Exponential backoff — if recreate keeps failing, slow down
   const backoffMs = Math.min(15000 * Math.pow(2, _offscreenRecreateFailCount), 120000);
@@ -2962,6 +3256,7 @@ setInterval(async () => {
       wsConnected = false;
       _lastOffscreenRecreateTime = Date.now();
       await ensureOffscreenDocument();
+      await syncOffscreenWsState();
 
       // Check if it actually survived
       await new Promise(r => setTimeout(r, 2000)); // Wait 2s
@@ -2977,6 +3272,11 @@ setInterval(async () => {
         console.warn(`[VEO Bridge] ⚠️ Offscreen killed again — backoff ${Math.ceil(backoffMs / 1000)}s`);
       }
     } else {
+      // Background SW may have restarted and lost `wsConnected` while the
+      // offscreen document stayed alive. Re-sync cheaply here as a safeguard.
+      if (!wsConnected) {
+        await syncOffscreenWsState();
+      }
       // Healthy — reset failure counter
       if (_offscreenRecreateFailCount > 0) {
         _offscreenRecreateFailCount = 0;

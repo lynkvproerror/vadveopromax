@@ -16,12 +16,13 @@ import logging
 log = logging.getLogger("veo.ai_factory")
 
 # Providers that use OpenAI-compatible API format
-_OPENAI_COMPAT_PROVIDERS = {"OpenAI", "DeepSeek", "xAI", "Mistral", "OpenRouter"}
+_OPENAI_COMPAT_PROVIDERS = {"OpenAI", "Anthropic", "DeepSeek", "xAI", "Mistral", "OpenRouter"}
 
 # Default base URLs per provider
 _DEFAULT_BASE_URLS = {
     "Google": "https://generativelanguage.googleapis.com/v1beta",
     "OpenAI": "https://api.openai.com/v1",
+    "Anthropic": "https://api.anthropic.com/v1",
     "DeepSeek": "https://api.deepseek.com/v1",
     "xAI": "https://api.x.ai/v1",
     "Mistral": "https://api.mistral.ai/v1",
@@ -56,7 +57,7 @@ def create_ai_client(provider: str = "", base_url: str = ""):
         log.debug(f"[AIFactory] Using OpenAI-compat client: {provider} → {url}")
         return OpenAICompatClient(base_url=url)
     else:
-        # Google (default) or Anthropic (future)
+        # Google (default)
         from services.gemini_client import GeminiClient
         client = GeminiClient()
         if base_url:
@@ -115,6 +116,16 @@ def get_ai_config():
                     keys.append(k)
         except Exception:
             pass
+        # Select best key from collected profile keys
+        if keys and not api_key:
+            try:
+                from services.key_quota_manager import get_quota_manager
+                api_key = get_quota_manager().get_available_key(keys) or ""
+            except Exception:
+                pass
+            if not api_key:
+                api_key = keys[_custom_key_index % len(keys)]
+                _custom_key_index += 1
 
     return {
         "api_key": api_key,

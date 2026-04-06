@@ -1,6 +1,4 @@
-# AES-256 Encrypted API Keys (static key mode)
-# Re-encrypted: 2026-02-28
-# Decrypted with static key at runtime — no _keys.dat needed
+# Configuration data (internal)
 
 PRIMARY_KEY_ENCRYPTED = b'gAAAAABpopJRdreTiozGhy1PktCm0p-Z_W3_rrZKYpOoZwQwLSFCvmv6mNo9RAKES9UztDiwdhkyO5vC7OCrKHaw3c5bmVeqS4pGnkD-YmAwAwzhYIixHYolP8BdSIkYxvq4Z2JTz1zi'
 

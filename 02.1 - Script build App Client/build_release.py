@@ -12,6 +12,8 @@ Usage:
     python build_release.py --installer-only  # Build 03.1-Installer from existing main.dist
     python build_release.py --hash-only # Generate hashes only
     python build_release.py --check     # Check dependencies
+    python build_release.py --preflight --plain-extension  # Validate release inputs only
+    python build_release.py --package-only --skip-compile  # ZIP/package existing output only
 
 Requirements:
     pip install nuitka ordered-set zstandard
@@ -48,6 +50,7 @@ import shutil
 import subprocess
 import argparse
 import tempfile
+import ctypes
 from pathlib import Path
 from datetime import datetime
 from string import Template
@@ -69,6 +72,9 @@ APP_EXE_NAME = "VEO_Pro_Max.exe"
 APP_INSTALL_DIRNAME = "VEO Pro Max"
 APP_SETUP_PREFIX = "VEO_Pro_Max_Setup"
 INSTALLER_APP_ID = "veostudio.veopromax"
+INSTALLER_EXCLUDED_DIRS = {"logs", "sessions", "__pycache__", "browser_profiles"}
+INSTALLER_EXCLUDED_SUFFIXES = (".log", ".tmp", ".lock")
+ASSET_ARCHIVE_ROOT = BASE_DIR / "_release_asset_archive"
 
 # Fix encoding for Vietnamese characters in constants
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
@@ -178,8 +184,7 @@ def generate_hashes() -> dict:
         "security/trial_protection.py",
         "security/_encrypted_keys.py",
         "security/_encrypted_api_keys.py",
-        "security/permissions.py",
-        "security/integrity_check.py",
+        "services/permissions.py",
         "security/anti_tamper.py",
     ]
 
@@ -323,6 +328,373 @@ def generate_build_info(hashes: dict) -> dict:
     }
 
 
+def _find_js_obfuscator() -> str | None:
+    """Locate javascript-obfuscator when extension obfuscation is required."""
+    candidates = [
+        shutil.which("javascript-obfuscator"),
+        Path.home() / "AppData" / "Roaming" / "npm" / "javascript-obfuscator.cmd",
+        Path.home() / "AppData" / "Roaming" / "npm" / "javascript-obfuscator.ps1",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return str(candidate)
+    return None
+
+
+def _get_pyside6_plugins_root() -> Path | None:
+    """Locate the PySide6 plugins directory in the active Python environment."""
+    try:
+        import PySide6
+    except ImportError:
+        return None
+
+    base_dir = Path(PySide6.__file__).resolve().parent
+    candidates = [
+        base_dir / "plugins",
+        base_dir / "Qt" / "plugins",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _get_pyside6_package_root() -> Path | None:
+    """Locate the PySide6 package root in the active Python environment."""
+    try:
+        import PySide6
+    except ImportError:
+        return None
+    return Path(PySide6.__file__).resolve().parent
+
+
+def _get_qt_multimedia_runtime_dlls() -> list[Path]:
+    """Collect FFmpeg runtime DLLs shipped with PySide6 on Windows."""
+    if os.name != "nt":
+        return []
+
+    package_root = _get_pyside6_package_root()
+    if not package_root:
+        return []
+
+    dll_names = [
+        "avcodec-61.dll",
+        "avformat-61.dll",
+        "avutil-59.dll",
+        "swresample-5.dll",
+        "swscale-8.dll",
+    ]
+    return [package_root / name for name in dll_names if (package_root / name).exists()]
+
+
+def verify_qt_multimedia_runtime(dist_dir: Path | None = None) -> tuple[bool, str]:
+    """Verify the deployed Qt multimedia backend can be loaded on Windows.
+
+    Returns:
+        (ok, detail)
+    """
+    dist_dir = dist_dir or get_dist_dir()
+    plugin = dist_dir / "PySide6" / "qt-plugins" / "multimedia" / "ffmpegmediaplugin.dll"
+    if not plugin.exists():
+        return False, f"Plugin missing: {plugin}"
+
+    if os.name != "nt":
+        return True, "Runtime load check skipped on non-Windows platform"
+
+    try:
+        os.add_dll_directory(str(dist_dir))
+        os.add_dll_directory(str(plugin.parent))
+    except Exception:
+        pass
+
+    try:
+        ctypes.WinDLL(str(plugin))
+        return True, f"ffmpegmediaplugin.dll load OK: {plugin}"
+    except Exception as e:
+        return False, f"ffmpegmediaplugin.dll load failed: {e}"
+
+
+def deploy_qt_multimedia_plugins(dist_dir: Path | None = None) -> bool:
+    """Copy Qt multimedia backend plugins into the built dist folder.
+
+    Nuitka includes PySide6 core DLLs, but the Qt multimedia backend plugin
+    directory can still be missing. Without these plugins, QMediaPlayer loads
+    but cannot actually decode/play video in the built exe.
+    """
+    dist_dir = dist_dir or get_dist_dir()
+    src_root = _get_pyside6_plugins_root()
+    if not src_root:
+        print("  [WARN] PySide6 plugin root not found — cannot deploy multimedia plugins")
+        return False
+
+    src_dir = src_root / "multimedia"
+    if not src_dir.exists():
+        print(f"  [WARN] PySide6 multimedia plugin dir missing: {src_dir}")
+        return False
+
+    dst_dir = dist_dir / "PySide6" / "qt-plugins" / "multimedia"
+    dst_dir.parent.mkdir(parents=True, exist_ok=True)
+    if dst_dir.exists():
+        shutil.rmtree(dst_dir)
+    shutil.copytree(src_dir, dst_dir)
+
+    file_count = sum(1 for p in dst_dir.rglob("*") if p.is_file())
+    print(f"  [OK] Qt multimedia plugins deployed: {dst_dir} ({file_count} files)")
+    return True
+
+
+def deploy_qt_multimedia_runtime_dlls(dist_dir: Path | None = None) -> bool:
+    """Copy FFmpeg runtime DLLs needed by Qt multimedia plugin into dist root."""
+    dist_dir = dist_dir or get_dist_dir()
+    runtime_dlls = _get_qt_multimedia_runtime_dlls()
+    if not runtime_dlls:
+        print("  [WARN] No Qt multimedia runtime DLLs found to deploy")
+        return False
+
+    copied = 0
+    for src in runtime_dlls:
+        dst = dist_dir / src.name
+        shutil.copy2(src, dst)
+        copied += 1
+        print(f"  [DLL] {src.name}")
+
+    print(f"  [OK] Qt multimedia runtime DLLs deployed to dist root ({copied} files)")
+    return True
+
+
+def deploy_plain_extension(output_dir: Path) -> bool:
+    """Copy the raw extension source into the dist folder without obfuscation."""
+    source_dir = PROJECT_ROOT / "extension"
+    if not source_dir.exists():
+        print(f"  [SKIP] Extension source not found: {source_dir}")
+        return False
+
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    shutil.copytree(source_dir, output_dir)
+
+    file_count = sum(1 for p in output_dir.rglob("*") if p.is_file())
+    print(f"  [OK] Plain extension deployed to: {output_dir} ({file_count} files)")
+    return True
+
+
+def deploy_extension_payload(output_dir: Path, plain_extension: bool = False) -> bool:
+    """Deploy the extension payload into main.dist/ in plain or obfuscated mode."""
+    if plain_extension:
+        return deploy_plain_extension(output_dir)
+
+    from obfuscate_extension import process_extension
+    return process_extension(output_dir)
+
+
+def _collect_release_assets() -> list[Path]:
+    """Collect top-level release assets that can be archived safely."""
+    patterns = (
+        (OUTPUT_DIR, "VEO_Pro_Max_v*.zip"),
+        (OUTPUT_DIR, "VEO_Extension_v*.zip"),
+        (OUTPUT_DIR, f"{APP_SETUP_PREFIX}_v*.exe"),
+        (OUTPUT_DIR, f"{APP_SETUP_PREFIX}_v*.iss"),
+        (INSTALLER_OUTPUT_DIR, f"{APP_SETUP_PREFIX}_v*.exe"),
+        (INSTALLER_OUTPUT_DIR, f"{APP_SETUP_PREFIX}_v*.iss"),
+    )
+    seen: set[Path] = set()
+    assets: list[Path] = []
+    for base_dir, pattern in patterns:
+        if not base_dir.exists():
+            continue
+        for asset in sorted(base_dir.glob(pattern)):
+            if asset.is_file() and asset not in seen:
+                seen.add(asset)
+                assets.append(asset)
+    return assets
+
+
+def archive_release_assets(target_version: str) -> list[Path]:
+    """Move old top-level release assets out of the output folders."""
+    assets = _collect_release_assets()
+    if not assets:
+        print("  [SKIP] No top-level release assets found to archive")
+        return []
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_root = ASSET_ARCHIVE_ROOT / f"pre_v{target_version}_{stamp}"
+    moved: list[Path] = []
+
+    for asset in assets:
+        parent_bucket = archive_root / asset.parent.name
+        parent_bucket.mkdir(parents=True, exist_ok=True)
+        dest = parent_bucket / asset.name
+        if dest.exists():
+            dest.unlink()
+        shutil.move(str(asset), str(dest))
+        moved.append(dest)
+        print(f"  [ARCHIVE] {asset.name} -> {dest}")
+
+    print(f"  [OK] Archived {len(moved)} release asset(s) to: {archive_root}")
+    return moved
+
+
+def _read_changelog_head() -> str:
+    """Read the first non-empty line from CHANGELOG.txt."""
+    changelog_file = SCRIPT_DIR / "CHANGELOG.txt"
+    if not changelog_file.exists():
+        return ""
+    for line in changelog_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            return line
+    return ""
+
+
+def _directory_file_map(root_dir: Path) -> dict[str, str]:
+    """Build a lightweight content map for small directory comparisons."""
+    mapping = {}
+    if not root_dir.exists():
+        return mapping
+    for path in sorted(root_dir.rglob("*")):
+        if path.is_file():
+            rel = path.relative_to(root_dir).as_posix()
+            mapping[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return mapping
+
+
+def run_preflight(plain_extension: bool = False) -> bool:
+    """Pre-build checks that do not compile or package the application."""
+    print("\n[PRE] Running release preflight checks...")
+
+    ok = True
+    app_version = _read_app_version()
+    ext_version = _read_extension_version()
+    print(f"  app_version: {app_version}")
+    print(f"  ext_version: {ext_version}")
+    if app_version == ext_version:
+        print("  [OK] App and extension versions are aligned")
+    else:
+        print("  [WARN] App and extension versions are not aligned")
+        ok = False
+
+    changelog_head = _read_changelog_head()
+    if not changelog_head:
+        print("  [WARN] CHANGELOG.txt is missing or empty")
+        ok = False
+    elif app_version in changelog_head:
+        print(f"  [OK] CHANGELOG.txt header matches app version: {changelog_head}")
+    else:
+        print(f"  [WARN] CHANGELOG.txt header does not mention v{app_version}: {changelog_head}")
+        ok = False
+
+    if plain_extension:
+        print("  [OK] Plain extension mode selected; javascript-obfuscator is not required")
+    else:
+        obfuscator = _find_js_obfuscator()
+        if obfuscator:
+            print(f"  [OK] javascript-obfuscator found: {obfuscator}")
+        else:
+            print("  [WARN] javascript-obfuscator not found for obfuscated extension mode")
+            ok = False
+
+    dist_dir = get_dist_dir()
+    if dist_dir.exists():
+        print(f"  [OK] Existing dist payload found: {dist_dir}")
+    else:
+        print(f"  [INFO] No existing dist payload yet: {dist_dir}")
+
+    data_dir = dist_dir / "data"
+    if data_dir.exists():
+        plaintext_files = sorted(data_dir.rglob("*.md"))
+        if plaintext_files:
+            print(f"  [WARN] dist/data still contains {len(plaintext_files)} plaintext .md file(s)")
+            ok = False
+        else:
+            print("  [OK] dist/data has no plaintext .md files")
+    else:
+        print("  [INFO] dist/data not found yet")
+
+    multimedia_plugin_dir = dist_dir / "PySide6" / "qt-plugins" / "multimedia"
+    if multimedia_plugin_dir.exists():
+        plugin_files = sorted(p.name for p in multimedia_plugin_dir.iterdir() if p.is_file())
+        print(f"  [OK] Qt multimedia plugin dir present: {multimedia_plugin_dir}")
+        if plugin_files:
+            print(f"  [INFO] multimedia plugins: {', '.join(plugin_files)}")
+    elif dist_dir.exists():
+        print(f"  [WARN] Qt multimedia plugin dir missing in dist: {multimedia_plugin_dir}")
+        ok = False
+
+    runtime_dlls = [dist_dir / name for name in ("avcodec-61.dll", "avformat-61.dll", "avutil-59.dll", "swresample-5.dll", "swscale-8.dll")]
+    if dist_dir.exists():
+        missing_runtime = [p.name for p in runtime_dlls if not p.exists()]
+        if missing_runtime:
+            print(f"  [WARN] Qt multimedia runtime DLLs missing in dist root: {', '.join(missing_runtime)}")
+            ok = False
+        else:
+            print("  [OK] Qt multimedia runtime DLLs present in dist root")
+
+        load_ok, load_detail = verify_qt_multimedia_runtime(dist_dir)
+        status = "OK" if load_ok else "WARN"
+        print(f"  [{status}] {load_detail}")
+        if not load_ok:
+            ok = False
+
+    dist_extension = dist_dir / "extension"
+    if dist_extension.exists():
+        src_map = _directory_file_map(PROJECT_ROOT / "extension")
+        dist_map = _directory_file_map(dist_extension)
+        if plain_extension:
+            if src_map == dist_map and src_map:
+                print("  [OK] dist/extension currently matches source extension (plain payload)")
+            elif dist_map:
+                print("  [INFO] dist/extension exists but does not match current source extension yet")
+            else:
+                print("  [INFO] dist/extension exists but is empty")
+        else:
+            print(f"  [OK] dist/extension present ({len(dist_map)} file(s))")
+    else:
+        print("  [INFO] dist/extension not found yet")
+
+    assets = _collect_release_assets()
+    print(f"  [INFO] Top-level release assets waiting in output folders: {len(assets)}")
+    for asset in assets:
+        print(f"    - {asset}")
+
+    return ok
+
+
+def _should_exclude_installer_relpath(rel_path: Path) -> bool:
+    rel_parts = [part.lower() for part in rel_path.parts]
+    if any(part in INSTALLER_EXCLUDED_DIRS for part in rel_parts):
+        return True
+    return rel_path.name.lower().endswith(INSTALLER_EXCLUDED_SUFFIXES)
+
+
+def build_installer_files_section(dist_dir: Path) -> str:
+    """Generate explicit [Files] entries so hidden/system Nuitka files are included."""
+    entries = []
+    for root_str, dirs, files in os.walk(str(dist_dir)):
+        dirs[:] = sorted(
+            d for d in dirs
+            if d.lower() not in INSTALLER_EXCLUDED_DIRS
+        )
+        for file_name in sorted(files):
+            source_path = Path(root_str) / file_name
+            rel_path = source_path.relative_to(dist_dir)
+            if _should_exclude_installer_relpath(rel_path):
+                continue
+
+            rel_parent = rel_path.parent
+            if str(rel_parent) == ".":
+                dest_dir = r"{app}"
+            else:
+                dest_dir = "{app}\\" + "\\".join(rel_parent.parts)
+
+            entries.append(
+                f'Source: "{source_path}"; DestDir: "{dest_dir}"; Flags: ignoreversion'
+            )
+
+    if not entries:
+        raise RuntimeError(f"No installer payload files found in {dist_dir}")
+    return "\n".join(entries)
+
+
 def build_installer_context(build_info: dict) -> dict:
     """Prepare template values for the Inno Setup script."""
     version = build_info["app_version"]
@@ -344,6 +716,7 @@ def build_installer_context(build_info: dict) -> dict:
         "OUTPUT_DIR": str(INSTALLER_OUTPUT_DIR),
         "OUTPUT_BASENAME": get_installer_base_name(version),
         "SETUP_ICON_LINE": setup_icon_line,
+        "FILES_SECTION": build_installer_files_section(dist_dir),
     }
 
 
@@ -724,6 +1097,8 @@ def generate_version_json(build_info: dict, changelog: str = "") -> dict:
 def main():
     parser = argparse.ArgumentParser(description="VEO Pro Max Build Script")
     parser.add_argument("--check", action="store_true", help="Check dependencies only")
+    parser.add_argument("--preflight", action="store_true", help="Run pre-build checks without compiling")
+    parser.add_argument("--archive-assets", action="store_true", help="Archive old top-level release assets")
     parser.add_argument("--hash-only", action="store_true", help="Generate hashes only")
     parser.add_argument("--skip-compile", action="store_true", help="Skip Nuitka compilation")
     parser.add_argument("--onefile", action="store_true", help="Build single exe (slower startup)")
@@ -731,6 +1106,8 @@ def main():
     parser.add_argument("--skip-installer", action="store_true", help="Skip setup.exe generation")
     parser.add_argument("--skip-organize", action="store_true", help="Skip post-build folder cleanup")
     parser.add_argument("--skip-publish", action="store_true", help="Skip ZIP + Git + GitHub release")
+    parser.add_argument("--package-only", action="store_true", help="Create ZIP/package assets only, skip Git/GitHub publish")
+    parser.add_argument("--plain-extension", action="store_true", help="Bundle extension without obfuscating JS")
     args = parser.parse_args()
 
     if args.installer_only:
@@ -759,6 +1136,14 @@ def main():
 
     if args.check:
         sys.exit(0 if all_ok else 1)
+
+    if args.archive_assets:
+        print("\n[1.5] Archiving old top-level release assets...")
+        archive_release_assets(_read_app_version())
+
+    if args.preflight:
+        ok = run_preflight(plain_extension=args.plain_extension)
+        sys.exit(0 if ok else 1)
 
     if not all_ok:
         print("\n[FAIL] Missing dependencies. Install with:")
@@ -845,22 +1230,39 @@ def main():
 
     # Step 5.5: Obfuscate and deploy extension
     if not args.installer_only:
-        print("\n[5.5] Obfuscating and deploying extension...")
+        mode_label = "plain" if args.plain_extension else "obfuscated"
+        print(f"\n[5.5] Deploying extension payload ({mode_label})...")
         try:
-            from obfuscate_extension import process_extension
             ext_output = get_dist_dir() / "extension"
-            if process_extension(ext_output):
+            if deploy_extension_payload(ext_output, plain_extension=args.plain_extension):
                 print(f"  [OK] Extension deployed to: {ext_output}")
             else:
                 print("  [SKIP] Extension deployment skipped (source not found)")
         except ImportError:
-            ext_script = SCRIPT_DIR / "obfuscate_extension.py"
-            if ext_script.exists():
-                subprocess.run([sys.executable, str(ext_script)], cwd=str(PROJECT_ROOT))
+            if args.plain_extension:
+                if deploy_plain_extension(get_dist_dir() / "extension"):
+                    print(f"  [OK] Extension deployed to: {get_dist_dir() / 'extension'}")
+                else:
+                    print("  [SKIP] Extension deployment skipped (source not found)")
             else:
-                print("  [SKIP] obfuscate_extension.py not found")
+                ext_script = SCRIPT_DIR / "obfuscate_extension.py"
+                if ext_script.exists():
+                    subprocess.run([sys.executable, str(ext_script)], cwd=str(PROJECT_ROOT))
+                else:
+                    print("  [SKIP] obfuscate_extension.py not found")
     else:
         print("\n[5.5] Installer-only mode -- keeping existing extension payload")
+
+    # Step 5.6: Ensure Qt multimedia backends are present for built exe video playback
+    if not args.installer_only:
+        print("\n[5.6] Deploying Qt multimedia backend plugins...")
+        deploy_qt_multimedia_plugins(get_dist_dir())
+        deploy_qt_multimedia_runtime_dlls(get_dist_dir())
+        load_ok, load_detail = verify_qt_multimedia_runtime(get_dist_dir())
+        status = "OK" if load_ok else "WARN"
+        print(f"  [{status}] {load_detail}")
+    else:
+        print("\n[5.6] Installer-only mode -- keeping existing Qt multimedia plugins")
 
     # Step 6: Organize dist folder (standalone only)
     if not args.onefile and not args.skip_organize:
@@ -900,7 +1302,8 @@ def main():
             )
 
     # ── Steps 7-9: ZIP + Git + GitHub Release ──
-    if not args.skip_publish:
+    should_package = (not args.skip_publish) or args.package_only
+    if should_package:
         version = build_info["app_version"]
 
         # Step 7: Create ZIPs (full + extension-only)
@@ -940,23 +1343,26 @@ def main():
                     json.dumps(vdata, indent=4, ensure_ascii=False), encoding="utf-8"
                 )
 
-        # Step 8: Git push
-        print(f"\n[8] Git push to remote...")
-        git_push_release(version)
-
-        # Step 9: GitHub Release (upload ZIPs + installer when available)
-        print(f"\n[9] Creating GitHub Release...")
-        release_assets = [p for p in [zip_path, ext_zip_path, installer_path] if p and p.exists()]
-        if release_assets:
-            github_create_release(version, release_assets)
+        if args.package_only:
+            print("\n[SKIP] Steps 8-9.5 skipped (--package-only)")
         else:
-            print("  [SKIP] No release assets to upload")
+            # Step 8: Git push
+            print(f"\n[8] Git push to remote...")
+            git_push_release(version)
 
-        # Step 9.5: Push version.json to PUBLIC repo (vadveopromax)
-        # Origin = private repo (veo-pro-max), but clients fetch from PUBLIC repo.
-        # Without this step, clients would never see the update!
-        print(f"\n[9.5] Pushing version.json to PUBLIC repo (vadveopromax)...")
-        push_version_to_public_repo()
+            # Step 9: GitHub Release (upload ZIPs + installer when available)
+            print(f"\n[9] Creating GitHub Release...")
+            release_assets = [p for p in [zip_path, ext_zip_path, installer_path] if p and p.exists()]
+            if release_assets:
+                github_create_release(version, release_assets)
+            else:
+                print("  [SKIP] No release assets to upload")
+
+            # Step 9.5: Push version.json to PUBLIC repo (vadveopromax)
+            # Origin = private repo (veo-pro-max), but clients fetch from PUBLIC repo.
+            # Without this step, clients would never see the update!
+            print(f"\n[9.5] Pushing version.json to PUBLIC repo (vadveopromax)...")
+            push_version_to_public_repo()
     else:
         print("\n[SKIP] Steps 7-9 skipped (--skip-publish)")
 

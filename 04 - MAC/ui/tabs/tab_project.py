@@ -924,7 +924,7 @@ class TabProject(QWidget):
                 color: {Theme.TEXT};
                 border: 1px solid {Theme.BORDER};
                 border-radius: 4px;
-                font-family: 'Segoe UI', 'Inter', sans-serif;
+                font-family: 'SF Pro Display', 'Inter', sans-serif;
                 font-size: 12px; padding: 8px;
             }}
         """)

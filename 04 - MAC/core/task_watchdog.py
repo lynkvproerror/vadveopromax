@@ -114,12 +114,23 @@ class TaskWatchdog:
                     # (if any are truly inline, they'd be caught by RUNNING timeout above)
                     multi_acc.audit_upscale_counters(running_task_ids=set())
                 
-                # Task pruning: every 20 scans (~10 min) clear old completed tasks
+                # Task pruning: every 20 scans (~10 min) — respects user settings
                 if self._scans % 20 == 0:
                     try:
-                        pruned = self._dispatcher.prune_completed_tasks()
-                        if pruned:
-                            log.info(f"[Watchdog] Pruned {pruned} old tasks from memory")
+                        from config.settings import get_settings
+                        _s = get_settings()
+                        _age = getattr(_s, 'prune_age_minutes', 0)
+                        _cap = getattr(_s, 'auto_clear_tasks_max', 0)
+
+                        if _age > 0:
+                            pruned = self._dispatcher.prune_completed_tasks(max_age_minutes=_age)
+                            if pruned:
+                                log.info(f"[Watchdog] Pruned {pruned} tasks older than {_age} min")
+
+                        if _cap > 0:
+                            capped = self._dispatcher.enforce_task_cap(_cap)
+                            if capped:
+                                log.info(f"[Watchdog] Enforced task cap ({_cap}): removed {capped} oldest tasks")
                     except Exception as e:
                         log.debug(f"[Watchdog] Prune error: {e}")
                 
@@ -155,19 +166,20 @@ class TaskWatchdog:
             f"Re-queuing."
         )
         
-        # Reset task state for re-processing
-        prev_state = task.state
-        task.state = TaskState.READY
+        # ★ BUG-1 FIX: Do NOT set task.state=READY here!
+        # requeue_task() checks prev_state to decrement _running_count.
+        # If we set READY first, requeue sees prev_state=READY → skip decrement
+        # → _running_count drifts permanently.
+        # Save assigned_account BEFORE requeue clears it (for worker release below).
         assigned_account = task.assigned_account
-        task.assigned_account = None
-        task.operation_name = None
         
         # Clear partial results so UI doesn't show stale thumbnails on READY
         task.output_uris = []
         task.thumbnail_paths = []
         task.video_outputs = []
+        task.operation_name = None
         
-        # Re-queue in dispatcher
+        # Re-queue in dispatcher — handles state transition + counter decrement
         self._dispatcher.requeue_task(task)
         
         # Try to release the orphaned workers
@@ -188,7 +200,7 @@ class TaskWatchdog:
             "task_id": task.id,
             "reason": reason,
             "elapsed_sec": round(elapsed),
-            "prev_state": prev_state,
+            "prev_state": reason,
             "account": assigned_account,
         }, source="watchdog")
         

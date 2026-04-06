@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 _IMPORT_NAME_MAP = {
     "PySide6": "PySide6",
     "Pillow": "PIL",
-    "opencv-python": "cv2",
+    "opencv-python-headless": "cv2",
     "python-docx": "docx",
     "websocket-client": "websocket",
 }

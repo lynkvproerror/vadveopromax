@@ -1,0 +1,29 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "api/**/*.py",
+            "use": "@vercel/python"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/webhook/(.*)",
+            "dest": "/api/webhook/handler.py"
+        },
+        {
+            "src": "/api/cron/(.*)",
+            "dest": "/api/cron/$1.py"
+        },
+        {
+            "src": "/api/notify/(.*)",
+            "dest": "/api/notify/$1.py"
+        }
+    ],
+    "crons": [
+        {
+            "path": "/api/cron/check_pending",
+            "schedule": "0 0 * * *"
+        }
+    ]
+}

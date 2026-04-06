@@ -264,7 +264,7 @@ class SplashScreen(QWidget):
         title_y = int(H * 0.60)
         
         # Shadow
-        title_font = QFont("Segoe UI", 32, QFont.Bold)
+        title_font = QFont("SF Pro Display", 32, QFont.Bold)
         painter.setFont(title_font)
         painter.setPen(QColor(0, 0, 0, 120))
         painter.drawText(0, title_y + 2, W, 50, Qt.AlignCenter, "VEO PRO MAX")
@@ -274,7 +274,7 @@ class SplashScreen(QWidget):
         painter.drawText(0, title_y, W, 50, Qt.AlignCenter, "VEO PRO MAX")
         
         # ── 4. Subtitle ──
-        subtitle_font = QFont("Segoe UI", 13)
+        subtitle_font = QFont("SF Pro Display", 13)
         painter.setFont(subtitle_font)
         painter.setPen(QColor(Theme.SUBTEXT1))
         subtitle_y = title_y + 48
@@ -312,19 +312,19 @@ class SplashScreen(QWidget):
                 painter.drawEllipse(int(glow_x - 4), int(bar_y - 4), 16, 16)
         
         # ── 6. Percentage ──
-        pct_font = QFont("Segoe UI", 11, QFont.Bold)
+        pct_font = QFont("SF Pro Display", 11, QFont.Bold)
         painter.setFont(pct_font)
         painter.setPen(QColor(Theme.TEXT))
         painter.drawText(bar_x, bar_y - 22, bar_w, 20, Qt.AlignRight, f"{self._progress:.1f}%")
         
         # ── 7. Status text ──
-        status_font = QFont("Segoe UI", 11)
+        status_font = QFont("SF Pro Display", 11)
         painter.setFont(status_font)
         painter.setPen(QColor(Theme.SUBTEXT0))
         painter.drawText(bar_x, bar_y + bar_h + 12, bar_w, 20, Qt.AlignLeft, self._status_text)
         
         # ── 8. Version ──
-        ver_font = QFont("Segoe UI", 9)
+        ver_font = QFont("SF Pro Display", 9)
         painter.setFont(ver_font)
         painter.setPen(QColor(Theme.OVERLAY0))
         from config.constants import AppConstants

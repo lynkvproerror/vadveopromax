@@ -48,12 +48,16 @@ SW_HIDE = 0
 SW_SHOW = 5
 SW_RESTORE = 9
 
-def _find_hwnds_by_pid(pid: int) -> list:
+def _find_hwnds_by_pid(pid: int, profile_dir_name: str = "") -> list:
     """Find Chrome browser window handles owned by a process and its children.
     
     Chrome for Testing spawns child processes (GPU, renderer) that may own
     taskbar-visible windows. We scan the entire process tree to catch all
     Chrome_WidgetWin_1 windows.
+    
+    Fallback: If psutil.children() returns empty (common with Chrome launched
+    via DETACHED_PROCESS), scan ALL chrome.exe processes matching the same
+    --user-data-dir profile path.
     """
     if not pid:
         return []
@@ -63,8 +67,22 @@ def _find_hwnds_by_pid(pid: int) -> list:
     try:
         import psutil
         parent = psutil.Process(pid)
-        for child in parent.children(recursive=True):
+        children = parent.children(recursive=True)
+        for child in children:
             pids_to_check.add(child.pid)
+        
+        # Fallback: if no children found, scan all Chrome processes
+        # sharing the same --user-data-dir (they belong to this instance)
+        if not children and profile_dir_name:
+            for proc in psutil.process_iter(["pid", "name"]):
+                try:
+                    if "chrome" not in (proc.info["name"] or "").lower():
+                        continue
+                    cmdline_str = " ".join(proc.cmdline())
+                    if profile_dir_name in cmdline_str:
+                        pids_to_check.add(proc.info["pid"])
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
     except Exception:
         pass  # psutil not available or process gone — fall back to main PID only
     
@@ -301,6 +319,10 @@ class ProfilesController:
         self.storage_path = Path(storage_path)
         self._profiles: List[ChromeProfile] = []
         self._callbacks: Dict[str, Callable] = {}
+        
+        # Thread-safe lock for save_profiles (called from GUI, async, and bg threads)
+        import threading
+        self._save_lock = threading.Lock()
         
         # Ensure directory exists
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1277,7 +1299,7 @@ class ProfilesController:
             traceback.print_exc()
             return None
     
-    def open_browser_for_debug(self, email: str, on_state_change=None) -> bool:
+    def open_browser_for_debug(self, email: str, on_state_change=None, user_initiated: bool = False) -> bool:
         """Open browser with saved profile for manual debugging.
         
         Launches Chrome with the saved browser profile. Browser stays open
@@ -1288,6 +1310,8 @@ class ProfilesController:
             email: Account email to open browser for
             on_state_change: Optional callback(email, state) called when state changes.
                              state is "visible", "hidden", or "closed"
+            user_initiated: If True, user explicitly clicked "open" in Actions column.
+                            Overrides global hide policy — browser opens VISIBLE.
             
         Returns:
             True if browser launched successfully, False otherwise
@@ -1301,8 +1325,28 @@ class ProfilesController:
         
         # Prevent duplicate launches
         if email in self._debug_browsers:
-            log.info(f"[ProfilesController] Browser already open for {email}")
-            return True
+            existing = self._debug_browsers[email]
+            if existing.get("thread_alive", True):
+                # Active thread — truly already open
+                log.info(f"[ProfilesController] Browser already open for {email}")
+                return True
+            # Thread dead — check if Chrome is still alive
+            chrome_pid = existing.get("chrome_pid")
+            chrome_alive = False
+            if chrome_pid:
+                try:
+                    import psutil
+                    chrome_alive = psutil.Process(chrome_pid).is_running()
+                except Exception:
+                    pass
+            if not chrome_alive:
+                # Chrome dead — clean up stale entry, allow re-launch
+                self._debug_browsers.pop(email, None)
+                log.info(f"[ProfilesController] Cleaned stale entry for {email}, re-launching...")
+            else:
+                # Chrome alive but thread dead — show it via Win32
+                log.info(f"[ProfilesController] Chrome alive but disconnected for {email}")
+                return True
         
         profile = self.get_profile(email)
         if not profile or not profile.browser_profile_path:
@@ -1323,9 +1367,10 @@ class ProfilesController:
             cmd_queue = queue_mod.Queue()
             self._debug_browsers[email] = {
                 "cmd_queue": cmd_queue,
-                "state": "hidden",
+                "state": "launching",  # P1-A: Temporary state until launch completes
                 "context": None,
                 "page": None,
+                "user_initiated": user_initiated,  # P1-B: Track origin
             }
             
             def _run_debug_browser():
@@ -1345,7 +1390,9 @@ class ProfilesController:
                     from config.settings import get_settings as _get_settings
                     
                     _s = _get_settings()
-                    _should_hide = getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False)
+                    _policy_hide = getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False)
+                    # P1-B: User-initiated open → always visible, regardless of global policy
+                    _should_hide = _policy_hide and not user_initiated
                     
                     # Launch or reconnect to persistent Chrome
                     chrome_info = launch_or_reconnect(
@@ -1361,7 +1408,7 @@ class ProfilesController:
                     log.info(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port} ({'reconnected' if is_reconnect else 'new'})")
                     
                     # Collect HWNDs for later show/hide commands
-                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                    browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
                     if _should_hide:
                         # Ensure all windows are hidden (launch_chrome already hides,
                         # but child windows may appear after launch)
@@ -1373,6 +1420,17 @@ class ProfilesController:
                         _win32_send_to_back(browser_hwnds)
                         log.info(f"[ProfilesController] {len(browser_hwnds)} HWND(s) — visible (sent to back) for {email} (smart-hide disabled)")
                         _initial_state = "visible"
+                    
+                    # P1-A FIX: Set entry["state"] = _initial_state IMMEDIATELY
+                    # Without this, get_debug_browser_state() returns stale "launching"
+                    _entry_ref = self._debug_browsers.get(email)
+                    if _entry_ref:
+                        _entry_ref["state"] = _initial_state
+                        _entry_ref["chrome_pid"] = chrome_pid
+                        _entry_ref["hwnds"] = browser_hwnds
+                        _entry_ref["profile_path"] = str(profile_path)
+                        _entry_ref["thread_alive"] = True
+                        _entry_ref["cdp_port"] = cdp_port
                     
                     if on_state_change:
                         try:
@@ -1668,10 +1726,11 @@ class ProfilesController:
                         # ★ Post-setup re-hide: Chrome spawns new renderer processes
                         # during page navigation (step 4-5) — their HWNDs aren't
                         # captured by the initial hide at launch. Re-scan and hide.
-                        if _should_hide:
+                        # P1-B FIX: Skip re-hide when user explicitly opened browser
+                        if _should_hide and not user_initiated:
                             import time as _rehide_time
                             _rehide_time.sleep(1)  # Brief wait for renderers to settle
-                            browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                            browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
                             _win32_hide_hwnds(browser_hwnds)
                             # Update stored HWNDs
                             entry_ref = self._debug_browsers.get(email)
@@ -1680,6 +1739,18 @@ class ProfilesController:
                             log.info(
                                 f"[ProfilesController] 🔇 Post-setup re-hide: "
                                 f"{len(browser_hwnds)} HWND(s) hidden for {email}"
+                            )
+                        elif user_initiated:
+                            # User opened explicitly — just update HWNDs for future toggle
+                            import time as _rehide_time
+                            _rehide_time.sleep(1)
+                            browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
+                            entry_ref = self._debug_browsers.get(email)
+                            if entry_ref:
+                                entry_ref["hwnds"] = browser_hwnds
+                            log.info(
+                                f"[ProfilesController] 👁️ Post-setup: user-initiated, "
+                                f"keeping {len(browser_hwnds)} HWND(s) visible for {email}"
                             )
                         
                         # Command loop
@@ -1716,7 +1787,7 @@ class ProfilesController:
                                 
                                 elif cmd == "hide":
                                     # Re-scan HWNDs (Chrome may have spawned new windows)
-                                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                    browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
                                     _win32_hide_hwnds(browser_hwnds)
                                     entry = self._debug_browsers.get(email)
                                     if entry:
@@ -1729,7 +1800,7 @@ class ProfilesController:
                                             pass
                                             
                                 elif cmd == "show":
-                                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                    browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
                                     _win32_show_hwnds(browser_hwnds)
                                     entry = self._debug_browsers.get(email)
                                     if entry:
@@ -1820,9 +1891,20 @@ class ProfilesController:
                     # Chrome may still be alive — leave it running (no orphan kill)
                     # User only kills browsers on app shutdown
                 finally:
-                    self._debug_browsers.pop(email, None)
-                    state = "closed" if kill_on_exit else "disconnected"
-                    log.debug(f"[ProfilesController] Debug browser {state} for {email}")
+                    if kill_on_exit:
+                        # Chrome killed → remove entry entirely
+                        self._debug_browsers.pop(email, None)
+                        state = "closed"
+                    else:
+                        # Chrome still alive → KEEP entry for Win32 show/hide
+                        # Only mark thread as dead so show/hide falls back to direct Win32
+                        entry_ref = self._debug_browsers.get(email)
+                        if entry_ref:
+                            entry_ref["thread_alive"] = False
+                            # Preserve state: if user last saw it as visible, keep visible
+                            # (don't overwrite to "hidden" — user controls this)
+                        state = entry_ref.get("state", "hidden") if entry_ref else "closed"
+                    log.debug(f"[ProfilesController] Debug browser {state} for {email} (thread exited)")
                     if on_state_change:
                         try:
                             on_state_change(email, state)
@@ -1843,27 +1925,61 @@ class ProfilesController:
     def hide_debug_browser(self, email: str) -> bool:
         """Hide (minimize) a debug browser. Browser keeps running in background.
         
-        Thread-safe: sends 'hide' command via queue to the browser thread.
+        Thread-safe: sends 'hide' command via queue if thread alive,
+        falls back to direct Win32 API if thread is dead.
         """
         if not hasattr(self, '_debug_browsers'):
             return False
         entry = self._debug_browsers.get(email)
         if not entry:
             return False
-        entry["cmd_queue"].put("hide")
+        
+        if entry.get("thread_alive", True):
+            # Thread alive — use queue
+            entry["cmd_queue"].put("hide")
+        else:
+            # Thread dead — direct Win32 API
+            hwnds = entry.get("hwnds", [])
+            if not hwnds:
+                # Try to find HWNDs by PID
+                chrome_pid = entry.get("chrome_pid")
+                profile_path = entry.get("profile_path", "")
+                if chrome_pid:
+                    hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name if profile_path else "")
+                    entry["hwnds"] = hwnds
+            _win32_hide_hwnds(hwnds)
+            entry["state"] = "hidden"
+            log.info(f"[ProfilesController] 🔇 Browser hidden for {email}")
         return True
     
     def show_debug_browser(self, email: str) -> bool:
         """Show (restore) a hidden debug browser window.
         
-        Thread-safe: sends 'show' command via queue to the browser thread.
+        Thread-safe: sends 'show' command via queue if thread alive,
+        falls back to direct Win32 API if thread is dead.
         """
         if not hasattr(self, '_debug_browsers'):
             return False
         entry = self._debug_browsers.get(email)
         if not entry:
             return False
-        entry["cmd_queue"].put("show")
+        
+        if entry.get("thread_alive", True):
+            # Thread alive — use queue
+            entry["cmd_queue"].put("show")
+        else:
+            # Thread dead — direct Win32 API
+            hwnds = entry.get("hwnds", [])
+            if not hwnds:
+                # Try to find HWNDs by PID
+                chrome_pid = entry.get("chrome_pid")
+                profile_path = entry.get("profile_path", "")
+                if chrome_pid:
+                    hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name if profile_path else "")
+                    entry["hwnds"] = hwnds
+            _win32_show_hwnds(hwnds)
+            entry["state"] = "visible"
+            log.info(f"[ProfilesController] 👁️ Browser shown for {email}")
         return True
     
     def close_debug_browser(self, email: str) -> bool:
@@ -1877,6 +1993,10 @@ class ProfilesController:
         entry = self._debug_browsers.get(email)
         if not entry:
             return False
+        if not entry.get("thread_alive", True):
+            # Already disconnected — no-op
+            log.info(f"[ProfilesController] 🔗 Already disconnected for {email}")
+            return True
         entry["cmd_queue"].put("close")
         log.info(f"[ProfilesController] 🔗 Signaled disconnect for {email} (Chrome stays alive)")
         return True
@@ -1884,46 +2004,41 @@ class ProfilesController:
     def kill_debug_browser(self, email: str) -> bool:
         """Kill debug browser completely (terminate Chrome process).
         
-        Thread-safe: sends 'kill' command via queue to the browser thread.
-        Removes PID file and terminates the Chrome process.
+        Thread-safe: sends 'kill' command via queue if thread alive,
+        falls back to direct process kill if thread is dead.
         """
         if not hasattr(self, '_debug_browsers'):
             return False
         entry = self._debug_browsers.get(email)
         if not entry:
-            # No active Playwright connection — try direct kill via PID file
+            # No active entry — try direct kill via PID file
             profile = self.get_profile(email)
             if profile and profile.browser_profile_path:
                 from core.chrome_manager import kill_chrome
                 return kill_chrome(profile.browser_profile_path)
             return False
-        entry["cmd_queue"].put("kill")
+        
+        if entry.get("thread_alive", True):
+            # Thread alive — use queue
+            entry["cmd_queue"].put("kill")
+        else:
+            # Thread dead — direct kill
+            profile = self.get_profile(email)
+            if profile and profile.browser_profile_path:
+                from core.chrome_manager import kill_chrome
+                kill_chrome(profile.browser_profile_path)
+            self._debug_browsers.pop(email, None)
         log.info(f"[ProfilesController] 🔒 Signaled kill for {email}")
         return True
     
     def kill_all_debug_browsers(self):
         """Kill ALL debug browsers on app exit.
         
-        1. Send 'kill' command to each active debug browser thread
-        2. Fallback: kill any orphaned Chrome via PID files
+        Skips queue signaling (threads may not process in time) and goes
+        straight to killing all managed Chrome processes via PID files.
+        kill_all_managed_chromes uses SIGKILL — instant, no waiting.
         """
-        if not hasattr(self, '_debug_browsers'):
-            return
-        
-        # Phase 1: Signal kill to all active browser threads
-        emails = list(self._debug_browsers.keys())
-        for email in emails:
-            try:
-                entry = self._debug_browsers.get(email)
-                if entry and entry.get("cmd_queue"):
-                    entry["cmd_queue"].put("kill")
-                    log.info(f"[ProfilesController] 🔒 Signaled kill for {email}")
-            except Exception as e:
-                log.warning(f"[ProfilesController] Kill signal failed for {email}: {e}")
-        
-        # Phase 2: Fallback — kill any Chrome still alive via PID files
-        import time
-        time.sleep(1)  # Give threads a moment to process kill commands
+        # Direct kill via PID files — fastest path, no thread dependency
         try:
             from core.chrome_manager import kill_all_managed_chromes
             # Find the browser_profiles directory
@@ -1937,7 +2052,11 @@ class ProfilesController:
                 kill_all_managed_chromes(profiles_dir)
                 log.info(f"[ProfilesController] 🔒 Killed all managed Chrome processes")
         except Exception as e:
-            log.warning(f"[ProfilesController] Fallback Chrome kill failed: {e}")
+            log.warning(f"[ProfilesController] Chrome kill failed: {e}")
+        
+        # Clear browser tracking dict
+        if hasattr(self, '_debug_browsers'):
+            self._debug_browsers.clear()
     
     def is_debug_browser_open(self, email: str) -> bool:
         """Check if a debug browser is currently open (visible or hidden)."""
@@ -1949,12 +2068,29 @@ class ProfilesController:
         """Get the state of a debug browser.
         
         Returns: "visible", "hidden", or "closed"
+        When thread is dead, validates Chrome process is still alive.
         """
         if not hasattr(self, '_debug_browsers'):
             return "closed"
         entry = self._debug_browsers.get(email)
         if not entry:
             return "closed"
+        
+        # If thread is dead, verify Chrome process is still alive
+        if not entry.get("thread_alive", True):
+            chrome_pid = entry.get("chrome_pid")
+            if chrome_pid:
+                try:
+                    import psutil
+                    proc = psutil.Process(chrome_pid)
+                    if not proc.is_running():
+                        self._debug_browsers.pop(email, None)
+                        return "closed"
+                except Exception:
+                    # Process gone — clean up
+                    self._debug_browsers.pop(email, None)
+                    return "closed"
+        
         return entry.get("state", "visible")
     
     def get_debug_browser_page(self, email: str):
@@ -2178,7 +2314,7 @@ class ProfilesController:
                 log.info(f"[ProfilesController] Chrome PID={chrome_pid}, port={cdp_port}")
                 
                 # Collect HWNDs (don't hide yet — user needs to see login page)
-                browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
                 
                 if on_state_change:
                     try: on_state_change(session_email, "visible")
@@ -2564,14 +2700,26 @@ class ProfilesController:
                         entry["cdp_port"] = cdp_port
                         entry["chrome_pid"] = chrome_pid
                     
-                    # ALWAYS hide browser after save — user should not see it
+                    # P1-C FIX: Respect visibility policy instead of ALWAYS hiding.
+                    # Only hide if smart_hide or hide_all is enabled.
+                    from config.settings import get_settings as _gs_save
+                    _s_save = _gs_save()
+                    _hide_after_save = (
+                        getattr(_s_save, 'smart_hide_enabled', True) or
+                        getattr(_s_save, 'hide_all_browsers', False)
+                    )
                     time.sleep(1)
-                    browser_hwnds = _find_hwnds_by_pid(chrome_pid)
-                    _win32_hide_hwnds(browser_hwnds)
-                    log.info(f"[ProfilesController] 🔇 Browser hidden after profile save for {session_email}")
+                    browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
+                    if _hide_after_save:
+                        _win32_hide_hwnds(browser_hwnds)
+                        _post_save_state = "hidden"
+                        log.info(f"[ProfilesController] 🔇 Browser hidden after profile save for {session_email} (policy: hide)")
+                    else:
+                        _post_save_state = "visible"
+                        log.info(f"[ProfilesController] 👁️ Browser kept visible after profile save for {session_email} (policy: show)")
                     if entry:
                         entry["hwnds"] = browser_hwnds
-                        entry["state"] = "hidden"
+                        entry["state"] = _post_save_state
                     
                     # ── Command loop (same as open_browser_for_debug) ──
                     running = True
@@ -2600,7 +2748,7 @@ class ProfilesController:
                                 result_event.set()
                             
                             elif cmd == "hide":
-                                browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
                                 _win32_hide_hwnds(browser_hwnds)
                                 e = self._debug_browsers.get(session_email)
                                 if e: e["state"] = "hidden"
@@ -2610,7 +2758,7 @@ class ProfilesController:
                                     except Exception: pass
                             
                             elif cmd == "show":
-                                browser_hwnds = _find_hwnds_by_pid(chrome_pid)
+                                browser_hwnds = _find_hwnds_by_pid(chrome_pid, Path(profile_path).name)
                                 _win32_show_hwnds(browser_hwnds)
                                 e = self._debug_browsers.get(session_email)
                                 if e: e["state"] = "visible"
@@ -3020,145 +3168,35 @@ class ProfilesController:
             return None
 
     def copy_variations_and_warmup(self, email: str) -> bool:
-        """Phase 2 recovery: Copy Variations from donor + warm up browser with tabs.
+        """DEPRECATED — This method previously killed Chrome processes and violated
+        the close=disconnect contract. It is now a no-op.
         
-        Steps:
-        1. Kill any Chrome using this profile
-        2. Copy 'Local State' + 'Variations' from a working profile
-        3. Launch browser with 3 warmup tabs (gmail, youtube, labs.google)
-        4. Wait for Variations Service enrollment
-        5. Close browser
+        The method used to:
+        1. Call close_debug_browser() (disconnect Playwright)
+        2. PowerShell-kill ALL chrome.exe using this profile
+        3. Launch a warmup browser with gmail/youtube/labs tabs
+        4. Wait 15s for Variations enrollment
+        5. Terminate the warmup browser
+        
+        This was too invasive for an automatic recovery path:
+        - Step 2 killed Chrome of accounts that were actively running
+        - Step 3-5 opened a separate browser that fought with ProfilesController lifecycle
+        - The semantics "close = only disconnect" was silently changed to "close + kill + relaunch"
+        
+        For manual Variations recovery, use the Settings UI → "Repair Profile" action.
         
         Args:
-            email: Account email to recover
+            email: Account email (unused)
             
         Returns:
-            True if Variations copied + warmup completed
+            False always (no-op)
         """
-        import time
-        import subprocess
-        
-        log.info(f"[ProfilesController] 🟠 Phase 2: Copy Variations + warmup for {email}")
-        
-        profile = self.get_profile(email)
-        if not profile or not profile.browser_profile_path:
-            log.error(f"[ProfilesController] ❌ Profile not found: {email}")
-            return False
-        
-        profile_path = Path(profile.browser_profile_path)
-        
-        # Step 1: Disconnect Playwright (Chrome stays alive)
-        log.info(f"[ProfilesController] Step 1: Disconnecting Playwright for {profile_path.name}...")
-        try:
-            self.close_debug_browser(email)
-        except Exception:
-            pass
-        
-        try:
-            # Force-close debug browser entry
-            if hasattr(self, '_debug_browsers') and email in self._debug_browsers:
-                entry = self._debug_browsers[email]
-                try:
-                    ctx = entry.get("context")
-                    if ctx:
-                        ctx.close()
-                except Exception:
-                    pass
-                try:
-                    pw = entry.get("playwright")
-                    if pw:
-                        pw.stop()
-                except Exception:
-                    pass
-                self._debug_browsers[email] = {"context": None, "playwright": None}
-            
-            # Kill chrome.exe processes using this profile
-            kill_cmd = (
-                f'Get-WmiObject Win32_Process -Filter "Name=\'chrome.exe\'" | '
-                f'Where-Object {{ $_.CommandLine -like "*{profile_path.name}*" }} | '
-                f'ForEach-Object {{ $_.Terminate() }}'
-            )
-            subprocess.run(["powershell", "-Command", kill_cmd], capture_output=True, timeout=10,
-                           creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0)
-        except Exception as e:
-            log.warning(f"[ProfilesController] ⚠️ Chrome kill warning: {e}")
-        
-        time.sleep(3)  # Wait for Chrome to fully exit
-        
-        # Step 2: Copy Variations from donor
-        log.info(f"[ProfilesController] Step 2: Copying Variations from donor...")
-        donor_path = self._find_donor_profile(exclude_email=email)
-        
-        if not donor_path:
-            log.warning(f"[ProfilesController] ⚠️ No donor profile found — warmup only")
-        else:
-            log.info(f"[ProfilesController] Donor: {donor_path.name}")
-            self._copy_variations_files(donor_path, profile_path)
-        
-        time.sleep(3)  # Let Variations files settle
-        
-        # Step 3: Launch browser with warmup tabs
-        warmup_urls = [
-            "https://mail.google.com",
-            "https://www.youtube.com",
-            "https://labs.google/fx/tools/flow",
-        ]
-        
-        log.info(f"[ProfilesController] Step 3: Warming up browser with {len(warmup_urls)} tabs...")
-        try:
-            # Use subprocess.Popen instead of Playwright to avoid greenlet
-            # thread crash. Playwright's sync API requires main thread (greenlet),
-            # but this function is called via run_in_executor (thread pool) from
-            # engine.py Phase 2 recovery. subprocess.Popen is fully thread-safe.
-            _chrome_exe = _get_chrome_executable()
-            if not _chrome_exe:
-                # Fallback: try to find system Chrome
-                _chrome_exe = self._find_browser("auto")
-            
-            if not _chrome_exe:
-                log.error(f"[ProfilesController] ❌ No Chrome executable found for warmup")
-                return False
-            
-            chrome_args = [
-                _chrome_exe,
-                f"--user-data-dir={profile_path}",
-                "--disable-blink-features=AutomationControlled",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--start-maximized",
-                "--no-sandbox",
-            ] + warmup_urls  # Chrome opens each URL as a separate tab
-            
-            log.info(f"[ProfilesController] Launching: {Path(_chrome_exe).name} with {len(warmup_urls)} URLs")
-            proc = subprocess.Popen(
-                chrome_args,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            
-            # Wait for Variations Service enrollment + x-client-data generation
-            # Chrome needs ~15s of runtime for Variations Service to download
-            # config from Google servers and generate x-client-data header.
-            log.info(f"[ProfilesController] ⏳ Waiting 15s for Variations enrollment (PID={proc.pid})...")
-            time.sleep(15)
-            
-            # Graceful shutdown: terminate, then force-kill if needed
-            log.info(f"[ProfilesController] Closing warmup browser (PID={proc.pid})...")
-            proc.terminate()
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5)
-            
-            log.info(f"[ProfilesController] ✅ Phase 2 warmup complete for {email}")
-            return True
-            
-        except Exception as e:
-            log.error(f"[ProfilesController] ❌ Warmup browser error: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
+        log.warning(
+            f"[ProfilesController] ⚠️ copy_variations_and_warmup({email}) called — "
+            f"DEPRECATED: this invasive recovery has been disabled. "
+            f"Use 'Repair Profile' from Settings instead."
+        )
+        return False
     
     def _find_donor_profile(self, exclude_email: str) -> Optional[Path]:
         """Find a working Chrome profile to donate Variations files.
@@ -3546,11 +3584,28 @@ class ProfilesController:
     # =========================================================================
     
     def load_profiles(self) -> List[ChromeProfile]:
-        """Load profiles from JSON file."""
+        """Load profiles from JSON file.
+        
+        ★ SAFETY: On JSON parse errors (corrupt file from crash), tries
+        .bak backup before resetting to empty list. This prevents permanent
+        profile loss caused by non-atomic write failures.
+        """
         if not self.storage_path.exists():
-            log.info(f"[ProfilesController] No profiles file, starting fresh")
-            self._profiles = []
-            return self._profiles
+            # Try backup before giving up
+            bak = self.storage_path.with_suffix(".bak")
+            if bak.exists():
+                log.warning("[ProfilesController] Main file missing, restoring from backup...")
+                import shutil
+                try:
+                    shutil.copy2(bak, self.storage_path)
+                except Exception as e:
+                    log.error(f"[ProfilesController] Backup restore failed: {e}")
+                    self._profiles = []
+                    return self._profiles
+            else:
+                log.info(f"[ProfilesController] No profiles file, starting fresh")
+                self._profiles = []
+                return self._profiles
         
         try:
             with open(self.storage_path, "r", encoding="utf-8") as f:
@@ -3564,25 +3619,86 @@ class ProfilesController:
             
         except Exception as e:
             log.error(f"[ProfilesController] Error loading profiles: {e}")
+            
+            # ★ Try .bak backup before resetting to empty
+            bak = self.storage_path.with_suffix(".bak")
+            if bak.exists():
+                log.warning("[ProfilesController] 🔄 Main file corrupt — trying backup...")
+                try:
+                    with open(bak, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    self._profiles = [
+                        ChromeProfile.from_dict(p) 
+                        for p in data.get("profiles", [])
+                    ]
+                    log.info(
+                        f"[ProfilesController] ✅ Recovered {len(self._profiles)} "
+                        f"profiles from backup!"
+                    )
+                    # Restore the main file from backup
+                    import shutil
+                    shutil.copy2(bak, self.storage_path)
+                    return self._profiles
+                except Exception as bak_err:
+                    log.error(f"[ProfilesController] ❌ Backup also corrupt: {bak_err}")
+            
             self._profiles = []
         
         return self._profiles
     
     def save_profiles(self):
-        """Save profiles to JSON file."""
-        try:
-            data = {
-                "profiles": [p.to_dict() for p in self._profiles],
-                "last_updated": datetime.now().isoformat(),
-            }
-            
-            with open(self.storage_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            
-            log.info(f"[ProfilesController] Saved {len(self._profiles)} profiles")
-            
-        except Exception as e:
-            log.error(f"[ProfilesController] Error saving profiles: {e}")
+        """Save profiles to JSON file.
+        
+        ★ SAFETY features (prevent profile wipe):
+        1. Thread-safe lock (called from GUI, async, and background threads)
+        2. Guard against overwriting N profiles with 0 profiles
+        3. Backup .bak before overwriting
+        4. Atomic write (temp file → rename)
+        """
+        with self._save_lock:
+            try:
+                # ★ GUARD: Never overwrite non-empty file with empty profile list
+                if not self._profiles and self.storage_path.exists():
+                    try:
+                        size = self.storage_path.stat().st_size
+                        if size > 50:  # Non-trivial existing file
+                            log.warning(
+                                f"[ProfilesController] ⚠️ BLOCKED: attempted save of "
+                                f"0 profiles but file has {size} bytes — refusing to overwrite. "
+                                f"This prevents accidental profile wipe."
+                            )
+                            return
+                    except OSError:
+                        pass
+                
+                data = {
+                    "profiles": [p.to_dict() for p in self._profiles],
+                    "last_updated": datetime.now().isoformat(),
+                }
+                
+                # Step 1: Write to temp file first
+                tmp = self.storage_path.with_suffix(".tmp")
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                
+                # Step 2: Keep backup of old file BEFORE replacing
+                bak = self.storage_path.with_suffix(".bak")
+                if self.storage_path.exists():
+                    import shutil
+                    try:
+                        shutil.copy2(self.storage_path, bak)
+                    except Exception:
+                        pass  # Best-effort backup
+                
+                # Step 3: Atomic replace (temp → target)
+                if self.storage_path.exists():
+                    self.storage_path.unlink()
+                tmp.rename(self.storage_path)
+                
+                log.info(f"[ProfilesController] Saved {len(self._profiles)} profiles")
+                
+            except Exception as e:
+                log.error(f"[ProfilesController] Error saving profiles: {e}")
     
     # =========================================================================
     # Helpers

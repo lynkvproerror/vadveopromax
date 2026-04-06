@@ -356,9 +356,14 @@ class DebuggerDetector:
             buf = ctypes.create_string_buffer(buf_size.value)
             libc.sysctl(mib, 4, buf, ctypes.byref(buf_size), None, 0)
             
-            p_flag = struct.unpack_from("i", buf.raw, 32)[0]
-            if p_flag & 0x00000800:  # P_TRACED
-                flags.append("debugger_attached")
+            # kinfo_proc.kp_proc.p_flag offset by architecture:
+            #   x86_64 (Intel): 32 | arm64 (M-chip): 24
+            import platform
+            _p_flag_offset = 24 if platform.machine() == "arm64" else 32
+            if buf_size.value > _p_flag_offset + 4:
+                p_flag = struct.unpack_from("i", buf.raw, _p_flag_offset)[0]
+                if p_flag & 0x00000800:  # P_TRACED
+                    flags.append("debugger_attached")
         except Exception:
             pass
 

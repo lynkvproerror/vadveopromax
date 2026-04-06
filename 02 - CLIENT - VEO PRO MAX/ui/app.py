@@ -65,6 +65,12 @@ class MainWindow(QMainWindow):
     
     # Thread-safe network status signal: (latency_ms, online)
     _net_signal = Signal(int, bool)
+
+    # Thread-safe queue status update
+    _queue_status_signal = Signal(dict)
+
+    # Thread-safe notification playback
+    _play_sound_signal = Signal(str, int)
     
     def __init__(
         self,
@@ -225,6 +231,8 @@ class MainWindow(QMainWindow):
             Qt.ConnectionType.UniqueConnection,
         )
         self._net_signal.connect(self._update_network_signal)
+        self._queue_status_signal.connect(self._update_queue_status_gui)
+        self._play_sound_signal.connect(self._play_notification_sound)
         
         
         
@@ -501,11 +509,11 @@ class MainWindow(QMainWindow):
         # Sound notification — must run on GUI thread (QMediaPlayer has timers)
         if self.settings and getattr(self.settings, 'notify_sound_enabled', True):
             sound = getattr(self.settings, 'notify_sound_file', 'default')
-            from PySide6.QtCore import QThread, QTimer
+            from PySide6.QtCore import QThread
             if QThread.currentThread() != self.thread():
-                QTimer.singleShot(0, lambda: self._notification_manager.play(sound, duration_ms=4000))
+                self._play_sound_signal.emit(sound, 4000)
             else:
-                self._notification_manager.play(sound, duration_ms=4000)
+                self._play_notification_sound(sound, 4000)
     
     def _on_engine_status(self, status: str):
         """Handle status changes from AppController (16+ events).
@@ -564,17 +572,26 @@ class MainWindow(QMainWindow):
         """Update status bar with queue info.
         
         Thread-safe: may be called from async engine thread via _notify_queue_updated.
-        Defers QLabel.setText() to GUI thread when needed.
+        Uses a queued signal to marshal QLabel updates back to the GUI thread.
         """
-        from PySide6.QtCore import QThread, QTimer
+        from PySide6.QtCore import QThread
         if QThread.currentThread() != self.thread():
-            # Marshal to GUI thread — QLabel can only be updated from its thread
-            QTimer.singleShot(0, lambda s=status: self._update_queue_status(s))
+            self._queue_status_signal.emit(status)
             return
+        self._update_queue_status_gui(status)
+
+    @Slot(dict)
+    def _update_queue_status_gui(self, status: dict):
+        """Update queue counters on the GUI thread."""
         if "queue" in self._status_widgets:
             completed = status.get("completed", 0)
             total = status.get("total", 0)
             self._status_widgets["queue"].setText(f"📋 {completed}/{total}")
+
+    @Slot(str, int)
+    def _play_notification_sound(self, sound: str, duration_ms: int):
+        """Play notification sound on the GUI thread."""
+        self._notification_manager.play(sound, duration_ms=duration_ms)
     
     def update_account_status(self, active: int, total: int):
         """Update account status in status bar."""
@@ -809,7 +826,7 @@ class MainWindow(QMainWindow):
                 active_upscale = acc.get("active_upscale", 0)
                 max_upscale = acc.get("max_upscale", 4)
                 active_lp = acc.get("active_workers_lp", 0)
-                max_lp = acc.get("max_workers_lp", 8)
+                max_lp = acc.get("max_workers_lp", 20)
                 # Fast workers = total active ops minus LP workers
                 active_fast = max(0, active_workers - active_lp)
                 self._status_widgets["workers"].setText(
@@ -1143,11 +1160,19 @@ class MainWindow(QMainWindow):
     
     @staticmethod
     def _force_exit_with_cleanup(code: int = 0):
-        """Hard exit that releases SingleInstance mutex first.
+        """Hard exit that kills Chrome and releases SingleInstance mutex first.
         
-        os._exit() skips finally blocks, so we must release
-        the mutex explicitly to prevent 'already running' errors.
+        os._exit() skips finally blocks, so we must perform critical
+        cleanup explicitly to prevent orphan Chrome + 'already running' errors.
         """
+        # Kill all managed Chrome processes (last-resort safety net)
+        try:
+            from pathlib import Path
+            from core.chrome_manager import kill_all_managed_chromes
+            profiles_dir = str(Path.home() / ".veoauto" / "browser_profiles")
+            kill_all_managed_chromes(profiles_dir)
+        except Exception:
+            pass
         try:
             from core.single_instance import release_global
             release_global()
@@ -1297,6 +1322,10 @@ class MainWindow(QMainWindow):
         Stops all timers FIRST to prevent callbacks accessing destroyed widgets,
         then does session save, then Chrome cleanup in background thread.
         """
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+
         # ── Phase 0: Stop ALL QTimers immediately ──
         # Prevents timer callbacks from accessing destroyed widgets during close
         for timer_attr in ('_status_timer', '_license_countdown_timer', 
@@ -1307,12 +1336,26 @@ class MainWindow(QMainWindow):
                     timer.stop()
                 except Exception:
                     pass
+
+        # Stop active notification audio so QtMultimedia does not keep extra
+        # objects alive during shutdown.
+        try:
+            if hasattr(self, '_notification_manager') and self._notification_manager:
+                self._notification_manager.stop()
+        except Exception:
+            pass
+
+        # The hard-exit logic in main.py only starts after app.exec() returns.
+        # If a stray top-level popup/tool window keeps the event loop alive,
+        # that watchdog never starts. Arm a UI-side fallback here as well.
+        if app:
+            QTimer.singleShot(5000, lambda: self._force_exit_with_cleanup(0))
         
         if self.controller:
             # ── Phase 1: Save session (fast, sync) ──
             try:
                 tabs_data = {}
-                gen_tabs = ["t2v", "i2v", "r2v", "t2i", "i2i", "project"]
+                gen_tabs = ["t2v", "i2v", "r2v", "t2i", "i2i"]
                 for key in gen_tabs:
                     tab = self.tab_instances.get(key)
                     if tab and hasattr(tab, 'save_state'):
@@ -1352,9 +1395,144 @@ class MainWindow(QMainWindow):
                         print("[App] Chrome cleanup still running — proceeding with exit")
             except Exception as e:
                 print(f"[App] Chrome cleanup failed: {e}")
-        
+
+        # ── Phase 3: Close all remaining top-level widgets ──
+        # MainWindow.close() alone is not enough if any popup/tool window was
+        # created parentless; those windows can keep app.exec() alive forever.
+        if app:
+            try:
+                top_levels = [w for w in app.topLevelWidgets() if w is not self]
+                if top_levels:
+                    print(f"[App] Closing {len(top_levels)} remaining top-level widget(s)...")
+                for widget in top_levels:
+                    try:
+                        print(f"[App]   - closing {type(widget).__name__}")
+                        widget.close()
+                    except Exception as e:
+                        print(f"[App]   - close failed for {type(widget).__name__}: {e}")
+            except Exception as e:
+                print(f"[App] Top-level widget cleanup failed: {e}")
+
         super().closeEvent(event)
+
+        # Quit explicitly instead of relying only on Qt's lastWindowClosed
+        # heuristic, which can be defeated by lingering popup/tool windows.
+        if app:
+            QTimer.singleShot(0, app.quit)
     
+    # ── Drag-and-drop from Explorer (Windows OLE IDropTarget) ───────────
+    # On Windows, setAcceptDrops(True) on QMainWindow (line 82) registers
+    # the HWND as an OLE IDropTarget. When dragging from Explorer:
+    #   1. OLE::DragEnter → Qt dispatches QDragEnterEvent to widget at cursor
+    #   2. If cursor is over empty area, MainWindow itself receives the event
+    #   3. Default QWidget::dragEnterEvent calls event.ignore()
+    #   4. OLE gets DROPEFFECT_NONE → Windows shows 🚫 cursor
+    #   5. Even when cursor later moves over a child widget that would accept,
+    #      OLE may not recover from the initial "no drop" state on some setups
+    #
+    # Fix: MainWindow ACCEPTS drag events. Qt still routes the final Drop
+    # event to the deepest child widget under cursor that accepts drops.
+    # This ensures the ✅ drop cursor shows throughout the window.
+    
+    def dragEnterEvent(self, event):
+        """Accept drags so OLE shows drop cursor, Qt dispatches to children."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Keep accepting during drag movement for continuous drop feedback."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event):
+        """Forward drops to the correct child widget under cursor.
+        
+        Instead of constructing new QDropEvents (fragile, constructor varies
+        by PySide6 version), we directly invoke the target's processing logic:
+        1. ImageSlotWidget → call set_image_path() directly  
+        2. _DroppableTable → compute row via mapFromGlobal, emit signal
+        3. PromptTable wrapper → same as #2 via its internal table
+        """
+        from ui.components.image_slot_widget import ImageSlotWidget
+        
+        mime = event.mimeData()
+        if not mime or not mime.hasUrls():
+            event.ignore()
+            return
+        
+        # Extract first valid image file from the drop
+        IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff'}
+        image_path = None
+        for url in mime.urls():
+            if url.isLocalFile():
+                ext = Path(url.toLocalFile()).suffix.lower()
+                if ext in IMAGE_EXTS:
+                    image_path = url.toLocalFile()
+                    break
+        
+        if not image_path:
+            event.ignore()
+            return
+        
+        auto_tag = mime.text().strip() if mime.hasText() else ""
+        tag = auto_tag or Path(image_path).stem
+        
+        # Find the deepest widget under cursor
+        child = self.childAt(event.position().toPoint())
+        if not child:
+            event.ignore()
+            return
+        
+        # Walk up looking for known drop targets
+        target = child
+        while target and target is not self:
+            # Priority 1: ImageSlotWidget — direct method call
+            if isinstance(target, ImageSlotWidget):
+                target.set_image_path(image_path, auto_tag=tag)
+                event.acceptProposedAction()
+                print(f"[MainWindow.dropEvent] → ImageSlotWidget: {tag}")
+                return
+            
+            # Priority 2: _DroppableTable — compute row, emit signal
+            try:
+                from ui.components.prompt_table import _DroppableTable
+                if isinstance(target, _DroppableTable):
+                    # Map MainWindow-local → screen → viewport-local
+                    screen_pos = self.mapToGlobal(event.position().toPoint())
+                    viewport_pos = target.viewport().mapFromGlobal(screen_pos)
+                    row_idx = target.rowAt(viewport_pos.y())
+                    print(f"[MainWindow.dropEvent] → _DroppableTable row={row_idx}, tag={tag}")
+                    target.image_dropped_on_row.emit(row_idx, image_path, tag)
+                    event.acceptProposedAction()
+                    return
+            except ImportError:
+                pass
+            
+            # Priority 3: PromptTable wrapper → internal table
+            try:
+                from ui.components.prompt_table import PromptTable
+                if isinstance(target, PromptTable) and hasattr(target, 'table'):
+                    table = target.table
+                    screen_pos = self.mapToGlobal(event.position().toPoint())
+                    viewport_pos = table.viewport().mapFromGlobal(screen_pos)
+                    row_idx = table.rowAt(viewport_pos.y())
+                    print(f"[MainWindow.dropEvent] → PromptTable.table row={row_idx}, tag={tag}")
+                    table.image_dropped_on_row.emit(row_idx, image_path, tag)
+                    event.acceptProposedAction()
+                    return
+            except ImportError:
+                pass
+            
+            target = target.parentWidget()
+        
+        event.ignore()
+
+    
+
     def _restore_session(self):
         """Restore session state on startup."""
         if not self.controller:
@@ -1367,7 +1545,11 @@ class MainWindow(QMainWindow):
                 print("[App] Session restore SKIPPED: no session data")
                 return
             
-            tabs_data = data.get("tabs", {})
+            tabs_data = {
+                key: tab_data
+                for key, tab_data in data.get("tabs", {}).items()
+                if key != "project"
+            }
             restored_count = 0
             for key, tab_data in tabs_data.items():
                 tab = self.tab_instances.get(key)

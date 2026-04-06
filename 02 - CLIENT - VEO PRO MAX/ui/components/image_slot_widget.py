@@ -442,6 +442,13 @@ class ImageSlotWidget(QFrame):
                         return
         event.ignore()
     
+    def dragMoveEvent(self, event):
+        """Keep accepting during drag movement — required for drop to work."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
     def dragLeaveEvent(self, event):
         """Reset border on drag leave."""
         if not self._image_path:

@@ -1,5 +1,6 @@
 """
-VEO Pro Max - Security Protection
+DEPRECATED - DO NOT USE - Runtime uses security/ directory modules
+VEO Pro Max - Security Protection (LEGACY MODULE)
 
 Reference: SESSION_06_WORKFLOWS_SECURITY.md
 Role: Anti-tampering, anti-debug, environment checks

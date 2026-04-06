@@ -130,7 +130,14 @@ class AntiDebug:
             buf = ctypes.create_string_buffer(buf_size.value)
             libc.sysctl(mib, 4, buf, ctypes.byref(buf_size), None, 0)
             
-            p_flag = struct.unpack_from("i", buf.raw, 32)[0]
+            # kinfo_proc.kp_proc.p_flag offset differs by CPU architecture:
+            #   x86_64 (Intel Mac): offset 32
+            #   arm64  (M-chip)   : offset 24
+            import platform
+            _p_flag_offset = 24 if platform.machine() == "arm64" else 32
+            if buf_size.value <= _p_flag_offset + 4:
+                return False  # Buffer too small — safe fallback
+            p_flag = struct.unpack_from("i", buf.raw, _p_flag_offset)[0]
             return bool(p_flag & 0x00000800)  # P_TRACED
         except Exception:
             return False
@@ -185,7 +192,7 @@ class TimeTamperDetector:
     NTP_SERVERS = [
         "time.google.com",
         "pool.ntp.org",
-        "time.windows.com",
+        "time.apple.com",
     ]
     
     MAX_DRIFT_SECONDS = 300  # 5 minutes
@@ -258,7 +265,7 @@ class TrialProtection:
         self._marker_locations = [
             self._storage_dir / ".trial",
             self._storage_dir / ".cache" / ".ts",
-            Path(os.environ.get("TEMP", "/tmp")) / ".veo_ts",
+            Path(os.environ.get("TMPDIR", "/tmp")) / ".veo_ts",
         ]
     
     def init_trial(self) -> bool:

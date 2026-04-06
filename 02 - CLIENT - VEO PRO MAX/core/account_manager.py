@@ -234,7 +234,7 @@ class AccountManager:
             self._session.release_workers(n)
     
     def acquire_workers_lp(self, n: int = 1) -> bool:
-        """Acquire n LP workers (thread-safe). LP soft cap = 8 within shared pool."""
+        """Acquire n LP workers (thread-safe). LP soft cap defaults to full shared pool."""
         with self._lock:
             return self._session.acquire_workers_lp(n)
     
@@ -527,18 +527,37 @@ class AccountManager:
             return
         
         # Try to attach to existing debug browser page (for TRPCClient only)
+        launch_in_progress = False
+        launch_stage = ""
+        launch_error = ""
         if self._profiles_controller:
             debug_page = self._profiles_controller.get_debug_browser_page(self.email)
             if not debug_page:
                 # Check if debug browser is being opened (entry exists but page not ready)
                 entry = self._profiles_controller._debug_browsers.get(self.email) if hasattr(self._profiles_controller, '_debug_browsers') else None
                 if entry:
-                    log.info(f"[{self.email}] ⏳ Debug browser starting, waiting...")
-                    for _ in range(60):  # Wait up to 30s
-                        await asyncio.sleep(0.5)
+                    import time as _wait_time
+                    get_launch_status = getattr(self._profiles_controller, "get_debug_browser_launch_status", None)
+                    status = get_launch_status(self.email) if callable(get_launch_status) else {}
+                    launch_stage = status.get("stage") or "starting"
+                    launch_error = status.get("error") or ""
+                    launch_in_progress = launch_stage not in ("", "failed", "ready")
+                    log.info(f"[{self.email}] ⏳ Debug browser launching (stage={launch_stage})...")
+                    deadline = _wait_time.monotonic() + 5.0
+                    last_stage = launch_stage
+                    while _wait_time.monotonic() < deadline:
+                        await asyncio.sleep(0.25)
                         debug_page = self._profiles_controller.get_debug_browser_page(self.email)
                         if debug_page:
                             break
+                        status = get_launch_status(self.email) if callable(get_launch_status) else {}
+                        launch_stage = status.get("stage") or launch_stage or "starting"
+                        launch_error = status.get("error") or launch_error
+                        if launch_stage == "failed":
+                            break
+                        if launch_stage != last_stage:
+                            log.info(f"[{self.email}] ⏳ Debug browser launch stage → {launch_stage}")
+                            last_stage = launch_stage
             
             if debug_page:
                 log.info(f"[{self.email}] 🔗 Attaching to debug browser (page access only)")
@@ -546,6 +565,23 @@ class AccountManager:
                 self._browser_session.attach_to_sync_page(self._profiles_controller, self.email)
                 # NOTE: No header capture, no token extraction, no warmup.
                 # Extension bridge provides all runtime data.
+                return
+            
+            if launch_in_progress:
+                import time as _wait_time
+                get_launch_status = getattr(self._profiles_controller, "get_debug_browser_launch_status", None)
+                status = get_launch_status(self.email) if callable(get_launch_status) else {}
+                started_at = status.get("started_at")
+                elapsed = max(0.0, _wait_time.time() - started_at) if started_at else 0.0
+                stage = status.get("stage") or launch_stage or "starting"
+                err = status.get("error") or launch_error
+                if stage == "failed":
+                    log.warning(f"[{self.email}] Debug browser launch failed at stage={stage}: {err or 'unknown error'}")
+                else:
+                    log.info(
+                        f"[{self.email}] Debug browser still launching "
+                        f"(stage={stage}, elapsed={elapsed:.1f}s) — continuing extension-only for now"
+                    )
                 return
         
         # No debug browser available — that's fine in extension-only architecture.
@@ -566,6 +602,16 @@ class AccountManager:
         log.info(f"[{email}] 🔄 Soft browser recovery (no kill)...")
         
         if not self._browser_session:
+            # FIX L1: Extension-only accounts - try extension bridge recovery
+            if self._extension_bridge and self._extension_bridge.is_connected(email):
+                log.info(f"[{email}] No browser session - using extension hard_navigation")
+                try:
+                    result = await self._extension_bridge.trigger_hard_navigation(email)
+                    if result:
+                        log.info(f"[{email}] Extension hard_navigation recovery complete")
+                        return True
+                except Exception as e:
+                    log.warning(f"[{email}] Extension hard_navigation error: {e}")
             log.warning(f"[{email}] No browser session for soft recovery")
             return False
         

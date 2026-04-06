@@ -54,6 +54,8 @@ class TaskDTO:
     index: int = 0
     prompt: str = ""
     status: str = "pending"
+    stage: str = ""
+    is_upscaling: bool = False
     progress: int = 0
     mode: str = "T2V"
     has_continuation: bool = False
@@ -103,6 +105,7 @@ class GroupDTO:
     download_quality: str = "720p"
     created_at: Any = None  # datetime or str
     elapsed_seconds: float = 0.0  # computed: total processing time for this group
+    eta_seconds: float = 0.0      # computed: estimated remaining time for this group
     tasks: List[TaskDTO] = field(default_factory=list)
     
     def to_dict(self) -> dict:
@@ -122,6 +125,7 @@ class GroupDTO:
             "download_quality": self.download_quality,
             "created_at": self.created_at,
             "elapsed_seconds": self.elapsed_seconds,
-            "tasks": [t.to_dict() for t in self.tasks],
+            "eta_seconds": self.eta_seconds,
+            "tasks": [t if isinstance(t, dict) else t.to_dict() for t in self.tasks],
         }
         return d

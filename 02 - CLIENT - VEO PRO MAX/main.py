@@ -5,6 +5,18 @@ Version: 2.3.4
 """
 
 import sys
+# ★ Force Python to ALWAYS read .py source, never stale .pyc cache
+sys.dont_write_bytecode = True
+# ★ Clear existing __pycache__ on startup to ensure fresh code
+import importlib.util
+if hasattr(importlib.util, '_check_source'):
+    pass  # CPython always checks source timestamps
+import shutil, pathlib
+for _pycache in pathlib.Path(__file__).parent.rglob('__pycache__'):
+    try:
+        shutil.rmtree(_pycache)
+    except Exception:
+        pass
 import logging
 import logging.handlers
 import os
@@ -36,6 +48,10 @@ _terminal_handler.setFormatter(logging.Formatter(
     datefmt="%H:%M:%S",
 ))
 logging.getLogger().addHandler(_terminal_handler)
+
+_QT_DLL_DIR_HANDLES = []
+_QT_DLL_DIR_PATHS = set()
+_QT_PLUGIN_ROOT = None
 
 # In compiled mode (Nuitka/frozen), console is disabled.
 # Add rotating file handler to capture all logs for debugging.
@@ -113,20 +129,98 @@ def _hide_runtime_files():
         )
 
 
+def _configure_compiled_qt_runtime():
+    """Prepare Qt plugin and DLL search paths for compiled builds.
+
+    QMediaPlayer loads its multimedia backend plugin lazily. In the compiled
+    exe, that plugin may not find the FFmpeg runtime DLLs unless the app root
+    and Qt plugin folders are registered explicitly with the Windows DLL loader.
+    """
+    global _QT_PLUGIN_ROOT
+
+    if not (getattr(sys, 'frozen', False) or '__compiled__' in dir()):
+        return None
+
+    exe_dir = Path(os.path.dirname(sys.executable)).resolve()
+    qt_root = exe_dir / "PySide6"
+    qt_plugin_root = qt_root / "qt-plugins"
+    multimedia_root = qt_plugin_root / "multimedia"
+
+    if qt_plugin_root.exists():
+        _QT_PLUGIN_ROOT = qt_plugin_root
+
+        existing = [p for p in os.environ.get("QT_PLUGIN_PATH", "").split(os.pathsep) if p]
+        qt_plugin_root_str = str(qt_plugin_root)
+        if qt_plugin_root_str not in existing:
+            os.environ["QT_PLUGIN_PATH"] = (
+                os.pathsep.join([qt_plugin_root_str, *existing])
+                if existing else qt_plugin_root_str
+            )
+
+    if os.name == "nt" and hasattr(os, "add_dll_directory"):
+        for path in (exe_dir, qt_root, qt_plugin_root, multimedia_root):
+            if not path.exists():
+                continue
+
+            path_str = str(path)
+            if path_str in _QT_DLL_DIR_PATHS:
+                continue
+
+            try:
+                handle = os.add_dll_directory(path_str)
+                _QT_DLL_DIR_HANDLES.append(handle)
+                _QT_DLL_DIR_PATHS.add(path_str)
+            except OSError as exc:
+                logging.getLogger(__name__).warning(
+                    "[Startup] Failed to add Qt DLL directory %s: %s",
+                    path_str,
+                    exc,
+                )
+
+    return _QT_PLUGIN_ROOT
+
+
 def main():
     """Main entry point for VEO Pro Max application."""
+    qt_plugin_root = None
+
     # ── Hide runtime files in compiled mode (clean Explorer view) ──
     if getattr(sys, 'frozen', False) or '__compiled__' in dir():
+        try:
+            qt_plugin_root = _configure_compiled_qt_runtime()
+        except Exception:
+            pass  # Non-critical — don't block startup
         try:
             _hide_runtime_files()
         except Exception:
             pass  # Non-critical — don't block startup
     
+    # ── Pre-startup: Kill zombie VEO Pro Max instances ──
+    # 'Zombie' = previous run that exited the window but left a background process
+    # still holding the WebSocket port and Named Mutex. Kill them BEFORE acquiring
+    # the mutex so the fresh startup gets clean port + extension connections.
+    from core.single_instance import (
+        SingleInstanceLock,
+        kill_zombie_veo_instances,
+        restore_existing_veo_window,
+        show_already_running_dialog,
+    )
+    
+    _n_zombies = kill_zombie_veo_instances()
+    if _n_zombies > 0:
+        import time as _startup_time
+        print(f"[Startup] 🧟 Killed {_n_zombies} zombie VEO instance(s) — waiting 1s for mutex/port release...")
+        _startup_time.sleep(1)
+    
     # ── Single Instance Lock: block duplicate app windows ──
-    from core.single_instance import SingleInstanceLock, show_already_running_dialog
     instance_lock = SingleInstanceLock()
     if not instance_lock.acquire():
-        show_already_running_dialog()
+        # Real running instance detected.
+        # Attempt to bring its window to the foreground.
+        restored = restore_existing_veo_window()
+        if not restored:
+            # Window not found (zombie check missed it?) → show warning
+            show_already_running_dialog()
         sys.exit(0)
     
     try:
@@ -150,6 +244,13 @@ def main():
         app = QApplication(sys.argv)
         app.setApplicationName("VEO Pro Max")
         app.setApplicationVersion("2.1.0")
+
+        if qt_plugin_root and qt_plugin_root.exists():
+            app.addLibraryPath(str(qt_plugin_root))
+            logging.getLogger(__name__).debug(
+                "[Startup] Added Qt library path: %s",
+                qt_plugin_root,
+            )
         
         # Apply theme
         theme_manager = ThemeManager()
@@ -229,6 +330,27 @@ def main():
             controller._license_valid = False
             splash.set_status("License: TRIAL (default)")
         
+        # ── Integrity check BEFORE popup gate ──
+        splash.set_status("Checking integrity...")
+        try:
+            from security.integrity_check import verify_startup_integrity
+            integrity = verify_startup_integrity()
+            if not integrity['skipped'] and not integrity['passed']:
+                print(f"[SECURITY] Integrity FAILED: {integrity['failures']}")
+                controller._license_valid = False
+                controller._tamper_detected = True
+                if hasattr(controller, '_permissions') and controller._permissions:
+                    controller._permissions._tamper_detected = True
+                try:
+                    controller._license_client.storage.clear()
+                    controller._license_client._invalidate_validate_cache()
+                except Exception:
+                    pass
+            else:
+                print(f"[SECURITY] Integrity OK ({integrity.get('checked', 0)} files)")
+        except ImportError:
+            pass
+
         # ── License popup gate: block if invalid BEFORE launching anything ──
         if not controller._license_valid:
             splash.close()
@@ -237,11 +359,14 @@ def main():
             
             # Get the error message from the last validation
             _license_error = ""
-            try:
-                info = controller._license_client.validate()
-                _license_error = getattr(info, 'error', '') or ''
-            except Exception:
-                pass
+            if getattr(controller, '_tamper_detected', False):
+                _license_error = "Security integrity check failed. Please reinstall the application."
+            else:
+                try:
+                    info = controller._license_client.validate()
+                    _license_error = getattr(info, 'error', '') or ''
+                except Exception:
+                    pass
             
             # Loop: keep showing dialog until valid key or explicit exit
             while not controller._license_valid:
@@ -292,7 +417,19 @@ def main():
                 print(f"[App] ⚠️ {len(alive)} non-daemon thread(s) blocking exit:")
                 for t in alive:
                     print(f"  - {t.name} (ident={t.ident})")
-            print("[App] ⚠️ Cleanup timeout (3s) — force killing process")
+            print("[App] ⚠️ Cleanup timeout (3s) — killing Chrome + force exit")
+            # Kill Chrome before hard exit (last resort)
+            try:
+                from pathlib import Path as _Path
+                from core.chrome_manager import kill_all_managed_chromes
+                kill_all_managed_chromes(str(_Path.home() / ".veoauto" / "browser_profiles"))
+            except Exception:
+                pass
+            # Release mutex BEFORE hard exit (os._exit skips finally block)
+            try:
+                instance_lock.release()
+            except Exception:
+                pass
             os._exit(exit_code)
         _th.Thread(target=_force_exit, daemon=True, name="force-exit").start()
         
@@ -318,6 +455,13 @@ def main():
         print(f"[App] 🔴 Remaining non-daemon threads: {len(alive)}")
         for t in alive:
             print(f"  - {t.name} (ident={t.ident})")
+        
+        # Release mutex BEFORE hard exit (os._exit skips finally block!)
+        print("[App] 🔴 Step 3: releasing instance lock...")
+        try:
+            instance_lock.release()
+        except Exception:
+            pass
         
         print("[App] 🔴 Calling os._exit()...")
         os._exit(exit_code)  # Hard exit — skip Python cleanup that may hang

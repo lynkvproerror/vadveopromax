@@ -358,7 +358,7 @@ class PipelinePromptTable(QWidget):
                 border-radius: 4px;
                 padding: 8px;
                 font-size: 13px;
-                font-family: 'Segoe UI', 'Inter', sans-serif;
+                font-family: 'SF Pro Display', 'Inter', sans-serif;
             }}
             QTextEdit:focus {{
                 border: 1px solid {self._accent};

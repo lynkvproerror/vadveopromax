@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 17
+SETTINGS_VERSION = 18
 
 
 @dataclass
@@ -72,7 +72,6 @@ class AppSettings:
     restore_parsed_prompts: bool = True      # Parsed prompt table rows
     restore_prompt_images: bool = True       # Image paths in prompts (all tabs)
     restore_frame_mode: bool = True          # I2V frame mode dropdown
-    restore_project_builder: bool = True     # Project Builder topics + sidebar config
     
     # === WORKER DEFAULTS (applied to new accounts) ===
     # Per-account max_slots is stored in AccountSession, not here
@@ -292,6 +291,9 @@ class AppSettings:
             16: lambda d: {**d,
                 'auto_clear_tasks_max': 0 if d.get('auto_clear_tasks_max', 2000) == 2000 else d.get('auto_clear_tasks_max', 0),
             },
+            # 17 → 18: Remove Project Builder global-session restore toggle.
+            # Project Builder now manages its own project-local pipeline session.
+            17: lambda d: {k: v for k, v in d.items() if k != 'restore_project_builder'},
         }
         
         while file_version < SETTINGS_VERSION:

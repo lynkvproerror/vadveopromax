@@ -36,6 +36,13 @@ class FolderDropLineEdit(QLineEdit):
                     return
         event.ignore()
     
+    def dragMoveEvent(self, event):
+        """Keep accepting during drag movement."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
     def dropEvent(self, event: QDropEvent):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
@@ -92,6 +99,17 @@ class TextFileDropEdit(QTextEdit):
                         return
         # Fall back to default (accept plain text drops)
         super().dragEnterEvent(event)
+    
+    def dragMoveEvent(self, event):
+        """Keep accepting during drag movement."""
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    ext = Path(url.toLocalFile()).suffix.lower()
+                    if ext in self.TEXT_EXTENSIONS:
+                        event.acceptProposedAction()
+                        return
+        super().dragMoveEvent(event)
     
     def dropEvent(self, event: QDropEvent):
         if event.mimeData().hasUrls():

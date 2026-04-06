@@ -381,6 +381,7 @@ class VEOApiClient:
         image_uris: Optional[List[str]] = None,
         batch_id: str = "",
         session_id: str = "",
+        voice_id: str = "",  # R2V voice: mediaId like "aoede"
     ) -> Tuple[str, Dict[str, Any]]:
         """Build full request body for Extension-based submission.
         
@@ -491,14 +492,18 @@ class VEOApiClient:
                     {"imageUsageType": "IMAGE_USAGE_TYPE_ASSET", "mediaId": uri}
                     for uri in (image_uris or [])[:3]
                 ]
-                requests_list.append({
+                req_item = {
                     "aspectRatio": aspect_ratio,
                     "seed": validate_seed(actual_seed),
                     "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                     "videoModelKey": model,
                     "metadata": {},
                     "referenceImages": ref_images,
-                })
+                }
+                # Inject referenceAudio when voice is selected
+                if voice_id:
+                    req_item["referenceAudio"] = [{"mediaId": voice_id}]
+                requests_list.append(req_item)
             
             return "R2V", {
                 "mediaGenerationContext": {"batchId": str(_uuid.uuid4())},
@@ -852,11 +857,17 @@ class VEOApiClient:
         seed: Optional[int] = None,
         paygate_tier: str = "PAYGATE_TIER_TWO",
         account_headers: Optional[Dict[str, str]] = None,
+        voice_id: str = "",  # R2V voice: mediaId like "aoede"
     ) -> APIResponse:
         """References/Ingredients to Video.
         
         Endpoint: /v1/video:batchAsyncGenerateVideoReferenceImages (Async)
         HAR verified: uses referenceImages[] array of objects with imageUsageType + mediaId
+        
+        Args:
+            voice_id: Optional R2V voice name (e.g. "aoede"). When provided,
+                      injects "referenceAudio": [{"mediaId": voice_id}] into
+                      each request item (per R2V_Voice_Pipeline_Analysis.md §4).
         """
         import uuid
         # ★ VEO accepts full JSON as prompt — no unwrapping needed
@@ -874,14 +885,18 @@ class VEOApiClient:
                 actual_seed = seed + idx
             else:
                 actual_seed = generate_random_seed()
-            requests_list.append({
+            req_item = {
                 "aspectRatio": aspect_ratio,
                 "seed": validate_seed(actual_seed),
                 "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
                 "videoModelKey": model,
                 "referenceImages": ref_images,
                 "metadata": {},
-            })
+            }
+            # Inject referenceAudio when voice is selected
+            if voice_id:
+                req_item["referenceAudio"] = [{"mediaId": voice_id}]
+            requests_list.append(req_item)
         
         data = {
             "mediaGenerationContext": {"batchId": str(uuid.uuid4())},

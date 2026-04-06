@@ -248,12 +248,16 @@ class _VideoOverlayDialog(QDialog):
 # ═══════════════════════════════════════════════════════════════
 
 class _HoverZoomPopup(QDialog):
-    """Frameless tooltip-style popup showing a zoomed image."""
+    """Frameless tooltip-style popup showing a zoomed image.
+    
+    ★ Anti-flicker: Avoids redundant show()/setFixedSize()/setPixmap() calls.
+    """
     
     def __init__(self):
         super().__init__(None)
         self.setWindowFlags(
             Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+            | Qt.WindowTransparentForInput  # Mouse passes through → no Enter/Leave bounce
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
@@ -271,58 +275,101 @@ class _HoverZoomPopup(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._label)
+        
+        self._current_image_key: str = ""  # Track current image to skip redundant scaling
+    
+    def _compute_position(self, global_pos: QPoint, w: int, h: int) -> QPoint:
+        """Compute popup position, keeping it on screen."""
+        screen = QApplication.primaryScreen()
+        x = global_pos.x() + 16
+        y = global_pos.y() + 16
+        if screen:
+            geo = screen.availableGeometry()
+            if x + w > geo.right():
+                x = global_pos.x() - w - 8
+            if y + h > geo.bottom():
+                y = global_pos.y() - h - 8
+        return QPoint(x, y)
     
     def show_image(self, pixmap: QPixmap, global_pos: QPoint, zoom_size: int):
-        """Display zoomed image at the given global position."""
-        scaled = pixmap.scaled(
-            zoom_size, zoom_size,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._label.setPixmap(scaled)
-        self.setFixedSize(scaled.width() + 8, scaled.height() + 8)
+        """Display zoomed image. Skips redundant updates when already showing same image."""
+        image_key = f"{id(pixmap)}:{zoom_size}"
         
-        # Position below-right of cursor, stay on screen
-        screen = QApplication.primaryScreen()
-        if screen:
-            screen_geo = screen.availableGeometry()
-            x = global_pos.x() + 16
-            y = global_pos.y() + 16
-            if x + self.width() > screen_geo.right():
-                x = global_pos.x() - self.width() - 8
-            if y + self.height() > screen_geo.bottom():
-                y = global_pos.y() - self.height() - 8
-            self.move(x, y)
+        if self._current_image_key != image_key:
+            # Different image — need to rescale and update pixmap
+            self._current_image_key = image_key
+            scaled = pixmap.scaled(
+                zoom_size, zoom_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._label.setPixmap(scaled)
+            new_w = scaled.width() + 8
+            new_h = scaled.height() + 8
+            pos = self._compute_position(global_pos, new_w, new_h)
+            # Batch: resize + move before show to prevent intermediate blank frame
+            self.setGeometry(pos.x(), pos.y(), new_w, new_h)
         else:
-            self.move(global_pos.x() + 16, global_pos.y() + 16)
+            # Same image — just update position
+            pos = self._compute_position(global_pos, self.width(), self.height())
+            self.move(pos)
         
-        self.show()
+        if not self.isVisible():
+            self.show()
+    
+    def update_position(self, global_pos: QPoint):
+        """Move popup to follow cursor without recreating content."""
+        if self.isVisible():
+            pos = self._compute_position(global_pos, self.width(), self.height())
+            self.move(pos)
+    
+    def dismiss(self):
+        """Hide and reset tracking state."""
+        self._current_image_key = ""
+        self.hide()
 
 
 class _HoverZoomFilter(QWidget):
     """Event filter that shows a zoom popup on hover.
     
     Installed per-widget via attach_hover_zoom().
+    
+    ★ Anti-flicker design (Round 3):
+    - Popup uses WindowTransparentForInput → mouse events pass through
+    - Leave uses 150ms hysteresis delay → absorbs Enter/Leave bounce
+    - Re-enter during hysteresis cancels hide (no 300ms gap)
+    - MouseMove dynamically updates popup position while visible
+    - Popup skips redundant pixmap/size/show updates
     """
     
-    # Shared popup instance — only one zoom tooltip visible at a time
+    # Class-level shared state
     _shared_popup: Optional[_HoverZoomPopup] = None
+    _active_owner: Optional['_HoverZoomFilter'] = None
     
     def __init__(self, target: QWidget, image_path: str, zoom_size: int = 300):
-        super().__init__(target)  # Parent to target for lifetime management
+        super().__init__(target)
         self._target = target
         self._image_path = image_path
         self._zoom_size = zoom_size
         self._cached_pixmap: Optional[QPixmap] = None
+        
+        # Show delay timer
         self._show_timer = QTimer(self)
         self._show_timer.setSingleShot(True)
-        self._show_timer.setInterval(300)  # 300ms delay before showing
+        self._show_timer.setInterval(300)
         self._show_timer.timeout.connect(self._do_show)
+        
+        # Hide hysteresis timer
+        self._hide_timer = QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.setInterval(150)  # 150ms grace period
+        self._hide_timer.timeout.connect(self._do_hide)
+        
         self._pending_pos: Optional[QPoint] = None
     
     @classmethod
     def _get_popup(cls) -> _HoverZoomPopup:
-        if cls._shared_popup is None or not cls._shared_popup.isVisible:
+        if cls._shared_popup is None:
             cls._shared_popup = _HoverZoomPopup()
         return cls._shared_popup
     
@@ -339,7 +386,18 @@ class _HoverZoomFilter(QWidget):
         etype = event.type()
         
         if etype == QEvent.Enter:
-            # Start delayed show
+            # Cancel any pending hide
+            self._hide_timer.stop()
+            
+            # If popup is already visible and we own it → just keep it (no re-delay)
+            if (
+                _HoverZoomFilter._active_owner is self
+                and _HoverZoomFilter._shared_popup
+                and _HoverZoomFilter._shared_popup.isVisible()
+            ):
+                return False  # ★ No restart of 300ms delay — popup stays visible
+            
+            # Start delayed show for fresh hover
             self._pending_pos = self._target.mapToGlobal(
                 QPoint(self._target.width(), 0)
             )
@@ -348,19 +406,26 @@ class _HoverZoomFilter(QWidget):
         
         if etype == QEvent.Leave:
             self._show_timer.stop()
-            if _HoverZoomFilter._shared_popup and _HoverZoomFilter._shared_popup.isVisible():
-                _HoverZoomFilter._shared_popup.hide()
+            if _HoverZoomFilter._active_owner is self:
+                self._hide_timer.start()
             return False
         
         if etype == QEvent.MouseMove:
-            # Update position for pending show
-            self._pending_pos = self._target.mapToGlobal(event.position().toPoint())
+            pos = self._target.mapToGlobal(event.position().toPoint())
+            self._pending_pos = pos
+            # ★ Dynamically update popup position while visible
+            if (
+                _HoverZoomFilter._active_owner is self
+                and _HoverZoomFilter._shared_popup
+                and _HoverZoomFilter._shared_popup.isVisible()
+            ):
+                _HoverZoomFilter._shared_popup.update_position(pos)
             return False
         
         return False
     
     def _do_show(self):
-        """Actually show the zoom popup after delay."""
+        """Show the zoom popup after delay."""
         if not self._image_path or not Path(self._image_path).exists():
             return
         
@@ -372,7 +437,15 @@ class _HoverZoomFilter(QWidget):
         
         pos = self._pending_pos or QPoint(0, 0)
         popup = self._get_popup()
+        _HoverZoomFilter._active_owner = self
         popup.show_image(self._cached_pixmap, pos, self._zoom_size)
+    
+    def _do_hide(self):
+        """Hide popup after hysteresis delay (only if we still own it)."""
+        if _HoverZoomFilter._active_owner is self:
+            if _HoverZoomFilter._shared_popup:
+                _HoverZoomFilter._shared_popup.dismiss()
+            _HoverZoomFilter._active_owner = None
 
 
 def attach_hover_zoom(

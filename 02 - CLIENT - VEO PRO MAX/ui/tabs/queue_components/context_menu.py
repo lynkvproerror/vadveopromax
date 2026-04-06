@@ -165,8 +165,11 @@ class QueueContextMenuMixin:
             if failed_indices and len(failed_indices) < len(video_outputs):
                 retried = sum(1 for idx in failed_indices if self.controller.force_retry_video(task_id, idx))
                 if retried > 0:
-                    self._refresh_queue_from_controller()
-                    self._update_stats()
+                    if hasattr(self, '_request_immediate_queue_refresh'):
+                        self._request_immediate_queue_refresh()
+                    else:
+                        self._refresh_queue_from_controller()
+                        self._update_stats()
                     mw = self.window()
                     if mw and hasattr(mw, 'show_toast'):
                         mw.show_toast(f"♻️ {retried} failed video(s) queued for retry", "info")
@@ -176,8 +179,11 @@ class QueueContextMenuMixin:
         
         if self.controller and hasattr(self.controller, 'force_retry_task'):
             success = self.controller.force_retry_task(task_id)
-            self._refresh_queue_from_controller()
-            self._update_stats()
+            if hasattr(self, '_request_immediate_queue_refresh'):
+                self._request_immediate_queue_refresh()
+            else:
+                self._refresh_queue_from_controller()
+                self._update_stats()
             mw = self.window()
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
@@ -192,8 +198,11 @@ class QueueContextMenuMixin:
         task_id = str(item_id)
         if self.controller and hasattr(self.controller, 'force_retry_task'):
             success = self.controller.force_retry_task(task_id)
-            self._refresh_queue_from_controller()
-            self._update_stats()
+            if hasattr(self, '_request_immediate_queue_refresh'):
+                self._request_immediate_queue_refresh()
+            else:
+                self._refresh_queue_from_controller()
+                self._update_stats()
             mw = self.window()
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"🔄 Force retrying prompt #{item_id}" if success else f"Cannot force retry #{item_id}"
@@ -206,16 +215,16 @@ class QueueContextMenuMixin:
     def _on_delete_item(self, item_id):
         """Delete a specific task."""
         task_id = str(item_id)
-        # BUG-B1 fix: Use dispatcher's remove_task API instead of mutating internals
-        if self.controller and hasattr(self.controller, 'dispatcher'):
-            self.controller.dispatcher.remove_task(task_id)
-        tw = self._task_widgets.pop(task_id, None)
-        if tw:
-            tw.deleteLater()
-        self._item_widgets.pop(item_id, None)
-        self._queue_items = [i for i in self._queue_items if str(i.id) != task_id]
-        self._refresh_queue_from_controller()
-        self._update_stats()
+        dispatcher = self._get_dispatcher() if hasattr(self, '_get_dispatcher') else None
+        if not dispatcher:
+            return
+        removed = dispatcher.remove_task(task_id)
+        if removed:
+            if hasattr(self, '_request_immediate_queue_refresh'):
+                self._request_immediate_queue_refresh()
+            else:
+                self._refresh_queue_from_controller()
+                self._update_stats()
     
     def _on_reupscale_item(self, item_id, failed_only: bool = True):
         """Re-upscale videos in a completed task."""
@@ -396,8 +405,8 @@ class QueueContextMenuMixin:
                 self._apply_processing_overlay(slot, "♻️", Theme.PURPLE)
             # BUG-B8 fix: Delay refresh so overlay is visible (was immediately wiped)
             from PySide6.QtCore import QTimer
-            QTimer.singleShot(500, self._refresh_queue_from_controller)
-            QTimer.singleShot(500, self._update_stats)
+            QTimer.singleShot(500, self._request_immediate_queue_refresh)
+
             mw = self.window()
             if mw and hasattr(mw, 'show_toast'):
                 msg = f"♻️ Retrying video {video_index+1}" if success else f"Cannot retry video {video_index+1}"

@@ -161,25 +161,30 @@ class LicenseRequestClient:
         
         try:
             doc_id = self._get_document_id()
-            doc = self.db.collection(self.COLLECTION).document(doc_id).get()
             
-            if doc.exists:
-                data = doc.to_dict()
-                return LicenseRequest(
-                    machine_id=data.get('machine_id', ''),
-                    display_id=data.get('display_id', ''),
-                    client_name=data.get('client_name', ''),
-                    email=data.get('email', ''),
-                    phone=data.get('phone', ''),
-                    company=data.get('company', ''),
-                    address=data.get('address', ''),
-                    requested_tier=data.get('requested_tier', 'TRIAL'),
-                    requested_days=data.get('requested_days', 7),
-                    reason=data.get('reason', ''),
-                    status=RequestStatus(data.get('status', 'pending')),
-                    approved_key=data.get('approved_key'),
-                    admin_note=data.get('admin_note', '')
-                )
+            # Use REST client to read document from _license_requests/{doc_id}
+            if not hasattr(self, '_rest_client') or not self._rest_client:
+                return None
+            
+            data = self._rest_client.read_document(self.COLLECTION, doc_id)
+            if not data:
+                return None
+            
+            return LicenseRequest(
+                machine_id=data.get('machine_id', ''),
+                display_id=data.get('display_id', ''),
+                client_name=data.get('client_name', ''),
+                email=data.get('email', ''),
+                phone=data.get('phone', ''),
+                company=data.get('company', ''),
+                address=data.get('address', ''),
+                requested_tier=data.get('requested_tier', 'TRIAL'),
+                requested_days=data.get('requested_days', 7),
+                reason=data.get('reason', ''),
+                status=RequestStatus(data.get('status', 'pending')),
+                approved_key=data.get('approved_key'),
+                admin_note=data.get('admin_note', '')
+            )
         except Exception as e:
             print(f"Check existing error: {e}")
         
@@ -187,7 +192,7 @@ class LicenseRequestClient:
     
     def submit_request(self, info: Dict) -> RequestResult:
         """
-        Submit a license request.
+        Submit a license request via REST API.
         
         Args:
             info: Dict with keys:
@@ -262,7 +267,7 @@ class LicenseRequestClient:
                     existing_request=True
                 )
         
-        # Create new request
+        # Create new request via REST API
         try:
             doc_id = self._get_document_id()
             now = datetime.now()
@@ -279,17 +284,32 @@ class LicenseRequestClient:
                 'requested_days': info.get('requested_days', 7),
                 'reason': InputValidator.sanitize_text(info.get('reason', ''), 500),
                 'status': 'pending',
-                'created_at': firestore.SERVER_TIMESTAMP,
-                'updated_at': firestore.SERVER_TIMESTAMP,
+                'created_at': now.isoformat(),
+                'updated_at': now.isoformat(),
                 'request_count': 1,
-                'last_request_at': firestore.SERVER_TIMESTAMP,
+                'last_request_at': now.isoformat(),
                 'approved_key': None,
                 'admin_note': '',
                 'processed_at': None,
                 'processed_by': None
             }
             
-            self.db.collection(self.COLLECTION).document(doc_id).set(request_data)
+            # Use REST client to write document
+            if not hasattr(self, '_rest_client') or not self._rest_client:
+                return RequestResult(
+                    success=False,
+                    message="REST client không khả dụng."
+                )
+            
+            ok = self._rest_client.write_document(
+                self.COLLECTION, doc_id, request_data
+            )
+            
+            if not ok:
+                return RequestResult(
+                    success=False,
+                    message="Lỗi khi gửi yêu cầu. Vui lòng thử lại."
+                )
             
             return RequestResult(
                 success=True,

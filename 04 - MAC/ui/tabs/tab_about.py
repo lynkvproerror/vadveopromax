@@ -96,7 +96,7 @@ class TabAbout(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         
         logo = QLabel(self.ASCII_LOGO)
-        logo.setFont(QFont("Consolas", 9))
+        logo.setFont(QFont("Menlo", 9))
         logo.setStyleSheet(f"color: {Theme.BLUE};")
         logo.setAlignment(Qt.AlignCenter)
         logo.setWordWrap(False)
@@ -114,7 +114,7 @@ class TabAbout(QWidget):
             ("Version", AppConstants.APP_VERSION),
             ("Framework", "PySide6 + Playwright"),
             ("Python", "3.10+"),
-            ("Platform", "Windows 10/11"),
+            ("Platform", "macOS 13+ (Ventura+)"),
         ]
         
         for label, value in info_items:

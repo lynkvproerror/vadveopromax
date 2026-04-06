@@ -26,6 +26,7 @@ Usage:
 
 import logging
 import logging.handlers
+import queue
 import re
 import os
 import time
@@ -97,6 +98,12 @@ _account_handlers: dict[str, logging.Handler] = {}
 _log_dir: Path | None = None
 _installed = False
 
+# ── Non-blocking queue infrastructure ───────────────────────────────
+# A single shared queue + listener thread handles ALL file writes.
+# This prevents the event loop from ever blocking on file I/O.
+_log_queue: queue.Queue = queue.Queue(maxsize=10000)
+_queue_listener: logging.handlers.QueueListener | None = None
+
 # Rotation config: read from settings (with fallback defaults)
 _ROTATE_BACKUP_COUNT = 2
 
@@ -137,7 +144,12 @@ def _extract_email(message: str) -> str | None:
 
 
 def _get_account_handler(email: str) -> logging.Handler:
-    """Get or create rotating file handler for an account."""
+    """Get or create rotating file handler for an account.
+    
+    Returns the underlying RotatingFileHandler (used by the background
+    QueueListener). Never call handler.emit() directly from user code —
+    always route through the shared _log_queue instead.
+    """
     if email in _account_handlers:
         return _account_handlers[email]
     
@@ -158,7 +170,8 @@ def _get_account_handler(email: str) -> logging.Handler:
     ))
     _account_handlers[email] = handler
     
-    # Session separator — emit as a real LogRecord (compatible with rotation)
+    # Session separator — write synchronously only at handler creation time
+    # (this happens in the background listener thread, so it's safe)
     sep_msg = (
         f"\n{'='*70}\n"
         f"  Session: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -175,19 +188,42 @@ def _get_account_handler(email: str) -> logging.Handler:
     return handler
 
 
-class AccountLogInterceptor(logging.Handler):
-    """Intercepts log records, adds tags, routes to per-account files.
+class _AccountFileRouter(logging.Handler):
+    """Runs INSIDE the background QueueListener thread.
     
-    Attached to root logger or specific loggers (core.engine, etc.)
-    Does NOT affect console output — just adds per-account file routing.
+    Receives pre-tagged records from the queue and routes each one
+    to the correct per-account RotatingFileHandler. All file I/O
+    happens in this background thread — never on the event loop.
+    """
+    
+    def emit(self, record: logging.LogRecord):
+        try:
+            # record.account_email and record.msg with tag were set by
+            # AccountLogInterceptor before enqueueing.
+            email = getattr(record, "_acct_email", None)
+            if not email:
+                return
+            handler = _get_account_handler(email)
+            handler.emit(record)
+        except Exception:
+            pass
+
+
+class AccountLogInterceptor(logging.Handler):
+    """Intercepts log records, adds tags, and enqueues to background writer.
+    
+    This handler is attached to loggers on the main/asyncio thread.
+    It does NO file I/O — it only extracts email+tag, creates a tagged
+    LogRecord, and puts it onto a non-blocking queue.
+    The actual file write happens in a separate daemon thread via
+    QueueListener → _AccountFileRouter.
+    
+    ★ FIX: Prevents event loop freeze caused by GUI thread + asyncio thread
+    competing for the RotatingFileHandler lock during flush().
     """
     
     def __init__(self):
         super().__init__(level=logging.DEBUG)
-        self.setFormatter(logging.Formatter(
-            "%(asctime)s [%(levelname)-5s] [%(tag)s] %(message)s",
-            datefmt="%H:%M:%S",
-        ))
     
     def emit(self, record: logging.LogRecord):
         try:
@@ -198,10 +234,7 @@ class AccountLogInterceptor(logging.Handler):
             
             tag = _detect_tag(msg)
             
-            # Write to per-account file
-            handler = _get_account_handler(email)
-            
-            # Create a modified record with tag
+            # Build tagged record — no file I/O here
             tagged_record = logging.LogRecord(
                 name=record.name,
                 level=record.levelno,
@@ -211,7 +244,14 @@ class AccountLogInterceptor(logging.Handler):
                 args=(),
                 exc_info=record.exc_info,
             )
-            handler.emit(tagged_record)
+            # Stash routing info as an attribute
+            tagged_record._acct_email = email  # type: ignore[attr-defined]
+            
+            # Non-blocking enqueue — returns immediately even if flush is slow
+            try:
+                _log_queue.put_nowait(tagged_record)
+            except queue.Full:
+                pass  # Drop silently if queue is full (very rare)
         except Exception:
             pass  # Never crash the app due to logging
 
@@ -296,8 +336,15 @@ def install_account_logging():
     Attaches to core.engine, core.extension_bridge, core.api_client loggers
     to intercept their messages and route to per-account files.
     Also runs startup cleanup of old log files.
+    
+    Architecture (non-blocking):
+      Logger → AccountLogInterceptor.emit()  [fast: just enqueue]
+                     ↓  queue.put_nowait()
+              _log_queue (maxsize=10000)
+                     ↓  background daemon thread
+             _AccountFileRouter.emit()  [slow: file I/O here, never blocks callers]
     """
-    global _installed
+    global _installed, _queue_listener
     if _installed:
         return
     _installed = True
@@ -308,9 +355,19 @@ def install_account_logging():
     except Exception:
         pass  # Never block startup
     
-    interceptor = AccountLogInterceptor()
+    # ── Start the background file-writer thread ──────────────────────
+    # QueueListener pulls from _log_queue and dispatches to _AccountFileRouter.
+    # It runs as a daemon thread so it never blocks app shutdown.
+    file_router = _AccountFileRouter()
+    _queue_listener = logging.handlers.QueueListener(
+        _log_queue,
+        file_router,
+        respect_handler_level=True,
+    )
+    _queue_listener.start()
     
-    # Attach to key loggers
+    # ── Attach fast interceptor to key loggers ───────────────────────
+    interceptor = AccountLogInterceptor()
     for logger_name in [
         "core.engine",
         "core.extension_bridge",
@@ -324,7 +381,8 @@ def install_account_logging():
         logging.getLogger(logger_name).addHandler(interceptor)
     
     logging.getLogger("core.engine").info(
-        "[AccountLogger] Per-account logging installed → logs/accounts/"
+        "[AccountLogger] Non-blocking per-account logging installed "
+        "(QueueHandler → background thread) → logs/accounts/"
     )
 
 
@@ -346,8 +404,15 @@ def cleanup_single_account_handler(email: str):
 
 
 def cleanup_account_logging():
-    """Close all per-account file handlers. Call on shutdown."""
-    for email, handler in _account_handlers.items():
+    """Stop background listener and close all per-account file handlers."""
+    global _queue_listener
+    if _queue_listener is not None:
+        try:
+            _queue_listener.stop()
+        except Exception:
+            pass
+        _queue_listener = None
+    for email, handler in list(_account_handlers.items()):
         try:
             handler.close()
         except Exception:

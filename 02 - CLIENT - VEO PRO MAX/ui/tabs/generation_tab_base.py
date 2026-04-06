@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.theme import Theme
@@ -218,7 +218,14 @@ class GenerationTabBase(QWidget):
         self.prompt_input = TextFileDropEdit()
         self.prompt_input.setFixedHeight(150)
         self.prompt_input.setPlaceholderText(self.INPUT_PLACEHOLDER)
-        self.prompt_input.textChanged.connect(self._on_text_changed)
+        # ── Debounce: delay parsing 400ms after last keystroke ──
+        # Prevents UI freeze on large inputs (200k-300k lines).
+        # Zero change to _parse_prompts / BatchParser logic.
+        self._parse_timer = QTimer()
+        self._parse_timer.setSingleShot(True)
+        self._parse_timer.setInterval(400)  # 400ms idle before parsing
+        self._parse_timer.timeout.connect(self._on_text_changed)
+        self.prompt_input.textChanged.connect(self._parse_timer.start)
         layout.addWidget(self.prompt_input)
         
         # Action buttons
@@ -308,7 +315,6 @@ class GenerationTabBase(QWidget):
         return frame
     
     # ── Event Handlers ───────────────────────────────────────────
-    
 
     
     def _on_text_changed(self):
@@ -342,7 +348,9 @@ class GenerationTabBase(QWidget):
         for i, p in enumerate(parsed):
             idx = i + 1
             # For TEXT format: use raw_line (preserves [tag] references)
-            # For JSON format: use p.text (json.dumps of scene object)
+            # For JSON format: use canonical display text.
+            # Standard JSON keeps its scene object; synthesized nested JSON is
+            # already flattened into p.text for direct submission.
             is_json = bool(getattr(p, 'scene_number', None) is not None
                           or getattr(p, 'metadata', {}))
             display_text = p.text if is_json else (p.raw_line or p.text)
@@ -357,6 +365,11 @@ class GenerationTabBase(QWidget):
             # (BatchParser extracts from [tag], {tag}, @tag, and JSON image/images fields)
             if getattr(p, 'images', None):
                 row.image_tags = list(p.images)
+            # Wire ParsedPrompt.voice_id → PromptRow.voice_id
+            # (BatchParser extracts from {voice:xxx} in text or "voice":"xxx" in JSON)
+            voice_id = getattr(p, 'voice_id', '')
+            if voice_id:
+                row.voice_id = voice_id
             prompts.append(row)
         
         self.prompt_table.set_prompts(prompts)
@@ -365,9 +378,35 @@ class GenerationTabBase(QWidget):
             self._update_chain_indicator(prompts)
     
     def _sync_to_input(self, prompts):
-        """Sync prompt table changes back to text input (after edit/delete)."""
+        """Sync prompt table changes back to text input (after edit/delete).
+        
+        JSON-aware: if prompts contain JSON text, reconstruct a proper
+        JSON array/object instead of naively joining lines (which would
+        destroy multi-line JSON formatting).
+        """
         self.prompt_input.blockSignals(True)
-        text = '\n'.join(p.text for p in prompts)
+        
+        if prompts and prompts[0].text.strip().startswith('{'):
+            # JSON mode: each prompt.text is a JSON object (possibly multi-line)
+            import json as _json
+            json_objects = []
+            for p in prompts:
+                try:
+                    obj = _json.loads(p.text.strip())
+                    json_objects.append(obj)
+                except (ValueError, _json.JSONDecodeError):
+                    json_objects.append(p.text)
+            
+            if len(json_objects) == 1 and isinstance(json_objects[0], dict):
+                # Single object: output as pretty object
+                text = _json.dumps(json_objects[0], ensure_ascii=False, indent=2)
+            else:
+                # Multiple objects: output as pretty array
+                text = _json.dumps(json_objects, ensure_ascii=False, indent=2)
+        else:
+            # Plain text mode: simple newline join
+            text = '\n'.join(p.text for p in prompts)
+        
         self.prompt_input.setPlainText(text)
         self.prompt_input.blockSignals(False)
         self.prompt_count.setText(f"{len(prompts)} prompts")
@@ -504,6 +543,8 @@ class GenerationTabBase(QWidget):
         prompts = self.prompt_table.get_prompts()
         self._sync_to_input(prompts)
     
+    # ── Image Library Handlers (format-aware) ────────────────────
+    
     def _on_open_library(self):
         """Open image library manager (non-modal, singleton)."""
         if hasattr(self, '_library_popup') and self._library_popup and self._library_popup.isVisible():
@@ -515,39 +556,190 @@ class GenerationTabBase(QWidget):
             self,
             on_select=self._handle_library_select,
             on_use_for_all=self._handle_library_use_for_all,
+            on_assign_sequential=self._handle_library_assign_sequential,
         )
         self._library_popup.show()
     
+    def _detect_json_input(self, text: str) -> bool:
+        """Detect if prompt input text is JSON format (any non-empty line starts with {)."""
+        for line in text.strip().split('\n'):
+            stripped = line.strip()
+            if stripped and stripped.startswith('{'):
+                return True
+        return False
+    
+    def _apply_image_to_focused_row(self, tag: str):
+        """Apply image tag to the focused (selected) row in prompt table.
+        
+        Used by library Select for JSON mode — updates PromptRow.image_tags
+        and image slot directly without modifying raw JSON text.
+        Falls back to first row if no selection.
+        """
+        import json as _json
+        prompts = self.prompt_table.get_prompts()
+        if not prompts:
+            return
+        
+        selected = self.prompt_table.table.currentRow()
+        target_idx = selected if 0 <= selected < len(prompts) else 0
+        
+        row = prompts[target_idx]
+        if tag not in row.image_tags:
+            row.image_tags.append(tag)
+        
+        text = row.text
+        try:
+            json_obj = _json.loads(text.strip())
+            if isinstance(json_obj, dict):
+                json_obj.pop('image', None)
+                json_obj.pop('images', None)
+                if len(row.image_tags) == 1:
+                    json_obj['image'] = row.image_tags[0]
+                elif len(row.image_tags) > 1:
+                    json_obj['images'] = row.image_tags
+                row.text = _json.dumps(json_obj, ensure_ascii=False, indent=2)
+        except (ValueError, _json.JSONDecodeError):
+            pass
+        
+        self.prompt_table._add_image_cells(target_idx, row)
+        prompt_col = self.prompt_table._col_index("Prompt")
+        item = self.prompt_table.table.item(target_idx, prompt_col)
+        if item:
+            item.setText(row.text)
+            item.setToolTip(row.text)
+        self._sync_to_input(prompts)
+    
+    def _apply_image_to_all_rows(self, tag: str):
+        """Apply image tag to ALL rows in prompt table (JSON mode)."""
+        import json as _json
+        prompts = self.prompt_table.get_prompts()
+        if not prompts:
+            return
+        
+        for i, row in enumerate(prompts):
+            if tag in row.image_tags:
+                continue
+            row.image_tags.append(tag)
+            
+            text = row.text
+            try:
+                json_obj = _json.loads(text.strip())
+                if isinstance(json_obj, dict):
+                    json_obj.pop('image', None)
+                    json_obj.pop('images', None)
+                    if len(row.image_tags) == 1:
+                        json_obj['image'] = row.image_tags[0]
+                    elif len(row.image_tags) > 1:
+                        json_obj['images'] = row.image_tags
+                    row.text = _json.dumps(json_obj, ensure_ascii=False, indent=2)
+            except (ValueError, _json.JSONDecodeError):
+                pass
+            
+            self.prompt_table._add_image_cells(i, row)
+            prompt_col = self.prompt_table._col_index("Prompt")
+            item = self.prompt_table.table.item(i, prompt_col)
+            if item:
+                item.setText(row.text)
+                item.setToolTip(row.text)
+        
+        self._sync_to_input(prompts)
+    
     def _handle_library_select(self, tag: str):
-        """Insert selected image tag into prompt input and refresh table."""
-        cursor = self.prompt_input.textCursor()
-        cursor.insertText(f"[{tag}] ")
-        self.prompt_input.setTextCursor(cursor)
-        self._parse_prompts()
+        """Insert selected image tag — format-aware.
+        
+        TEXT mode: Insert [tag] at cursor position in raw text input.
+        JSON mode: Directly update the focused PromptRow's image field.
+        """
+        text = self.prompt_input.toPlainText()
+        if self._detect_json_input(text):
+            self._apply_image_to_focused_row(tag)
+        else:
+            cursor = self.prompt_input.textCursor()
+            cursor.insertText(f"[{tag}] ")
+            self.prompt_input.setTextCursor(cursor)
+            self._parse_prompts()
 
     def _handle_library_use_for_all(self, tag: str):
-        """Prepend [tag] to every parsed prompt line."""
+        """Apply [tag] to every parsed prompt — format-aware."""
         text = self.prompt_input.toPlainText()
         if not text.strip():
             return
-        tag_ref = f"[{tag}]"
-        lines = text.split("\n")
-        new_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                new_lines.append(line)
-            elif tag_ref in line:
-                # Already has this tag — skip
-                new_lines.append(line)
-            else:
-                new_lines.append(f"{tag_ref} {line}")
-        self.prompt_input.setPlainText("\n".join(new_lines))
-        self._parse_prompts()
-        # Toast feedback
+        
+        if self._detect_json_input(text):
+            self._apply_image_to_all_rows(tag)
+        else:
+            tag_ref = f"[{tag}]"
+            lines = text.split("\n")
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped:
+                    new_lines.append(line)
+                elif tag_ref in line:
+                    new_lines.append(line)
+                else:
+                    new_lines.append(f"{tag_ref} {line}")
+            self.prompt_input.setPlainText("\n".join(new_lines))
+            self._parse_prompts()
         main_win = self.window()
         if hasattr(main_win, 'show_toast'):
             main_win.show_toast(f"📋 [{tag}] applied to all prompts", "success")
+
+    def _handle_library_assign_sequential(self, tags: list):
+        """Assign images from a category sequentially: image[i] -> prompt[i].
+        
+        - If prompts >= images: each prompt gets one image, extras cycle.
+        - If images > prompts: prompts are duplicated (round-robin) to match
+          the number of images. E.g. 1 prompt + 5 images → 5 prompts.
+        
+        Replaces any existing [tag] at line start.
+        """
+        if not tags:
+            return
+        text = self.prompt_input.toPlainText()
+        if not text.strip():
+            return
+        
+        import re
+        # Separate non-empty lines (prompts) from blank lines
+        raw_lines = text.split("\n")
+        content_lines = []
+        for line in raw_lines:
+            cleaned = re.sub(r'^\s*\[[^\]]+\]\s*', '', line)
+            if cleaned.strip():
+                content_lines.append(cleaned)
+        
+        if not content_lines:
+            return
+        
+        n_images = len(tags)
+        n_prompts = len(content_lines)
+        
+        # Auto-duplicate: if images > prompts, expand prompts round-robin
+        if n_images > n_prompts:
+            expanded = []
+            for i in range(n_images):
+                expanded.append(content_lines[i % n_prompts])
+            content_lines = expanded
+        
+        # Assign [tag] to each line
+        new_lines = []
+        for i, line in enumerate(content_lines):
+            tag_ref = f"[{tags[i % n_images]}]"
+            new_lines.append(f"{tag_ref} {line}")
+        
+        self.prompt_input.setPlainText("\n".join(new_lines))
+        self._parse_prompts()
+        
+        final_count = len(new_lines)
+        duplicated = final_count - n_prompts if final_count > n_prompts else 0
+        
+        main_win = self.window()
+        if hasattr(main_win, 'show_toast'):
+            msg = f"⇅ {n_images} image(s) → {final_count} prompt(s)"
+            if duplicated > 0:
+                msg += f" (+{duplicated} duplicated)"
+            main_win.show_toast(msg, "success")
     
     # ── Add to Queue (shared concurrency warning + submit) ───────
     

@@ -211,7 +211,7 @@ class ProjectRow(QFrame):
                 border-top: 1px solid {Theme.BORDER};
                 padding: 10px 12px;
                 font-size: 13px;
-                font-family: 'Segoe UI', 'Inter', 'SF Pro Display', sans-serif;
+                font-family: 'SF Pro Display', 'Inter', 'SF Pro Display', sans-serif;
             }}
         """)
         main_layout.addWidget(self._inline_viewer)

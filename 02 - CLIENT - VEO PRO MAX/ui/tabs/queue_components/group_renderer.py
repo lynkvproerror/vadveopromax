@@ -8,19 +8,210 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QFrame, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
+    QSizePolicy,
 )
 from ui.popups import show_confirm
 from PySide6.QtGui import QPixmap, QCursor
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPoint, QTimer
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from config.theme import Theme
 from config.i18n import t
+from core.error_classifier import classify_error, ErrorType
 
 
 class QueueGroupMixin:
     """Mixin providing group rendering, header updates, and group operations."""
+
+    def _bump_group_build_token(self, gw: dict) -> int:
+        """Invalidate older async callbacks for one group and return the new token."""
+        token = int(gw.get('_build_token', 0) or 0) + 1
+        gw['_build_token'] = token
+        return token
+
+    def _is_group_build_token_current(self, group_id: str, gw: dict, token: int) -> bool:
+        """Check whether an async callback still targets the current group generation."""
+        return (
+            self._group_widgets.get(group_id) is gw
+            and int(gw.get('_build_token', 0) or 0) == int(token)
+        )
+
+    def _cancel_group_rebuild(self, group_id: str, gw: dict = None):
+        """Drop pending deferred rebuild work for a group and invalidate stale callbacks."""
+        getattr(self, '_pending_group_rebuilds', {}).pop(group_id, None)
+        if gw is None:
+            gw = self._group_widgets.get(group_id)
+        if gw is not None:
+            self._bump_group_build_token(gw)
+
+    def _schedule_group_children_rebuild(self, gw: dict, group_data: dict, delay_ms: int = 0):
+        """Coalesce expanded-group rebuilds so refresh storms do not stack timers."""
+        group_id = group_data.get('id') or gw.get('group_data', {}).get('id')
+        if not group_id:
+            self._rebuild_group_children(gw, group_data)
+            return
+        pending = getattr(self, '_pending_group_rebuilds', None)
+        if pending is None:
+            self._pending_group_rebuilds = {}
+            pending = self._pending_group_rebuilds
+        token = int(pending.get(group_id, 0) or 0) + 1
+        pending[group_id] = token
+        gw['group_data'] = group_data
+
+        def _run():
+            if getattr(self, '_pending_group_rebuilds', {}).get(group_id) != token:
+                return
+            self._pending_group_rebuilds.pop(group_id, None)
+            if self._group_widgets.get(group_id) is not gw:
+                return
+            if not self._group_expanded.get(group_id, False):
+                return
+            self._rebuild_group_children(gw, gw.get('group_data', group_data))
+
+        QTimer.singleShot(max(0, int(delay_ms or 0)), _run)
+
+    def _analyze_task_completion_state(self, td: dict) -> dict:
+        """Summarize whether a task is truly settled enough to show/clean as completed."""
+        status = str(td.get('status', '') or '').lower()
+        status_text = str(td.get('status_text', '') or '')
+        status_text_lower = status_text.lower()
+        progress = int(td.get('progress', 0) or 0)
+        video_outputs = td.get('video_outputs') or []
+        output_files = [p for p in (td.get('output_files') or []) if p]
+        image_paths = [p for p in (td.get('image_paths') or []) if p]
+        upscale_status = str(td.get('upscale_status', '') or '').lower()
+
+        try:
+            expected_outputs = int(td.get('output_count') or 0)
+        except (TypeError, ValueError):
+            expected_outputs = 0
+
+        # ★ BUG-FIX: Clamp output_count for Video Workflows
+        # VEO/Grok video pipelines yield 1 video per task. If user left the UI slider 
+        # at 4 (default for images), it causes false 'INCOMPLETE' states after upscale.
+        wf = str(
+            td.get('mode')
+            or td.get('workflow')
+            or td.get('workflow_type')
+            or ''
+        ).upper()
+        if wf in ('T2V', 'I2V', 'R2V', 'F2V') and expected_outputs > 1:
+            expected_outputs = 1
+
+        if expected_outputs <= 0:
+            expected_outputs = max(
+                len(video_outputs),
+                len(output_files),
+                len(image_paths),
+                1 if status == 'completed' else 0,
+            )
+
+        retrying_count = 0
+        upscaling_count = 0
+        failed_count = 0
+        pending_count = 0
+        settled_count = 0
+
+        if video_outputs:
+            if expected_outputs > len(video_outputs):
+                pending_count += expected_outputs - len(video_outputs)
+
+            for idx, vo in enumerate(video_outputs):
+                quality = str(vo.get('quality', '') or '').lower()
+                vo_upscale = str(vo.get('upscale_status', '') or '').lower()
+                fallback_file = output_files[idx] if idx < len(output_files) else ''
+                best_file = str(vo.get('best_file', '') or fallback_file or '')
+
+                if quality == 'retrying':
+                    retrying_count += 1
+                    pending_count += 1
+                    continue
+
+                if quality == 'failed' or vo_upscale == 'failed':
+                    failed_count += 1
+                    continue
+
+                if quality in ('', 'pending') or vo_upscale in ('pending', 'retrying'):
+                    pending_count += 1
+                    continue
+
+                if vo_upscale in ('submitting', 'polling'):
+                    upscaling_count += 1
+                    continue
+
+                if not best_file:
+                    pending_count += 1
+                    continue
+
+                settled_count += 1
+        elif status == 'completed':
+            materialized_count = len(output_files) + len(image_paths)
+            if materialized_count <= 0:
+                pending_count = max(expected_outputs, 1)
+            elif materialized_count < expected_outputs:
+                settled_count = materialized_count
+                pending_count = expected_outputs - materialized_count
+            else:
+                settled_count = materialized_count
+
+        has_active_upscale = (
+            upscaling_count > 0
+            or upscale_status in ('submitting', 'polling')
+            or (
+                status_text
+                and ('✅' not in status_text)
+                and ('⚠️' not in status_text)
+                and (
+                    '⬆️' in status_text
+                    or '⬇️' in status_text
+                    or 'upscal' in status_text_lower
+                    or 'polling' in status_text_lower
+                    or 'submitted' in status_text_lower
+                )
+            )
+        )
+        has_failed_outputs = failed_count > 0 or upscale_status == 'failed'
+        has_pending_outputs = pending_count > 0
+        has_retrying_outputs = retrying_count > 0
+        is_fully_completed = (
+            status == 'completed'
+            and progress >= 100
+            and settled_count > 0
+            and not has_active_upscale
+            and not has_failed_outputs
+            and not has_pending_outputs
+            and not has_retrying_outputs
+        )
+
+        return {
+            'status': status,
+            'progress': progress,
+            'expected_outputs': expected_outputs,
+            'retrying_count': retrying_count,
+            'upscaling_count': upscaling_count,
+            'failed_count': failed_count,
+            'pending_count': pending_count,
+            'settled_count': settled_count,
+            'has_active_upscale': has_active_upscale,
+            'has_failed_outputs': has_failed_outputs,
+            'has_pending_outputs': has_pending_outputs,
+            'has_retrying_outputs': has_retrying_outputs,
+            'is_fully_completed': is_fully_completed,
+        }
+
+    def _is_fully_completed_task_data(self, td: dict) -> bool:
+        return self._analyze_task_completion_state(td)['is_fully_completed']
+
+    def _is_partial_failed_task_data(self, td: dict) -> bool:
+        state = self._analyze_task_completion_state(td)
+        return (
+            state['status'] == 'completed'
+            and not state['is_fully_completed']
+            and not state['has_retrying_outputs']
+            and not state['has_active_upscale']
+            and (state['has_failed_outputs'] or state['has_pending_outputs'])
+        )
     
     def _create_group_widget(self, group_data: dict, expanded: bool = True, lazy: bool = False) -> QWidget:
         """Create a collapsible group widget with header + child prompt rows.
@@ -88,19 +279,19 @@ class QueueGroupMixin:
         progress_label.setStyleSheet(f"color: {Theme.BLUE}; font-size: 11px; border: none;")
         h_layout.addWidget(progress_label)
         
-        # Elapsed timer — replaces mode/model labels
-        elapsed = group_data.get('elapsed_seconds', 0)
-        if elapsed > 0:
-            e_int = int(elapsed)
-            if e_int >= 3600:
-                timer_text = f"⏱ {e_int // 3600}h {(e_int % 3600) // 60:02d}m"
-            else:
-                timer_text = f"⏱ {e_int // 60:02d}:{e_int % 60:02d}"
-        else:
-            timer_text = "⏱ --:--"
+        # Group timing: wall-clock elapsed + ETA from observed throughput.
+        elapsed = float(group_data.get('elapsed_seconds', 0) or 0)
+        eta = float(group_data.get('eta_seconds', 0) or 0)
+        elapsed_text = self._format_time_compact(elapsed)
+        timer_text = f"⏱ {elapsed_text}"
+        timer_tooltip = [f"Elapsed: {elapsed_text}"]
+        if eta > 0 and completed < total:
+            eta_text = self._format_time_compact(eta)
+            timer_text = f"{timer_text} • ETA {eta_text}"
+            timer_tooltip.append(f"ETA: {eta_text}")
         timer_label = QLabel(timer_text)
         timer_label.setStyleSheet(f"color: {Theme.SUBTEXT0}; font-size: 11px; border: none;")
-        timer_label.setToolTip(t("queue_extra.group_elapsed_tooltip"))
+        timer_label.setToolTip("\n".join(timer_tooltip))
         h_layout.addWidget(timer_label)
         
         # Header buttons — build list dynamically
@@ -171,11 +362,19 @@ class QueueGroupMixin:
         
         import logging
         _glog = logging.getLogger("veo.tab_queue")
+        should_virtualize = self._should_virtualize_group(group_data.get('tasks', []))
         
         if lazy:
             # Lazy mode: skip child widget creation, defer until expand
             _glog.info(f"[GroupCreate] gid={gid} name='{group_data.get('name', '?')}' LAZY (deferred) expanded=False")
             content.setVisible(False)
+        elif should_virtualize:
+            # Huge groups are rendered through a sliding window, not a full widget tree.
+            _glog.info(
+                f"[GroupCreate] gid={gid} name='{group_data.get('name', '?')}' "
+                f"virtualized total={len(group_data.get('tasks', []))} expanded={expanded}"
+            )
+            content.setVisible(expanded)
         else:
             # ★ R3: Suppress repaints during bulk child creation
             content.setUpdatesEnabled(False)
@@ -206,10 +405,20 @@ class QueueGroupMixin:
             'arrow': arrow, 'name_label': name_label,
             'progress_label': progress_label, 'timer_label': timer_label,
             'group_data': group_data,
+            '_build_token': 0,
             '_lazy_pending': lazy,  # True = children not yet built
+            '_virtualized': False,
+            '_virtual_start': 0,
+            '_virtual_end': 0,
+            '_virtual_total': 0,
+            '_virtual_top_spacer': None,
+            '_virtual_bottom_spacer': None,
             'join_btn': _join_btn_ref,  # For color update after concat
             '_join_done': _join_done,  # Detected from disk
         }
+        if not lazy and should_virtualize:
+            self._group_expanded.setdefault(gid, expanded)
+            self._refresh_virtualized_group(self._group_widgets[gid], group_data, force=True)
         
         def _header_click(event, _gid=gid):
             child = header.childAt(event.pos())
@@ -232,18 +441,19 @@ class QueueGroupMixin:
         gw['progress_label'].setText(f"🔄 {completed}/{total} ({pct}%)")
         gw['name_label'].setText(f"📁 {group_data['name']}")
         
-        # Update elapsed timer
-        elapsed = group_data.get('elapsed_seconds', 0)
-        if elapsed > 0:
-            e_int = int(elapsed)
-            if e_int >= 3600:
-                timer_text = f"⏱ {e_int // 3600}h {(e_int % 3600) // 60:02d}m"
-            else:
-                timer_text = f"⏱ {e_int // 60:02d}:{e_int % 60:02d}"
-        else:
-            timer_text = "⏱ --:--"
+        # Update elapsed timer + ETA
+        elapsed = float(group_data.get('elapsed_seconds', 0) or 0)
+        eta = float(group_data.get('eta_seconds', 0) or 0)
+        elapsed_text = self._format_time_compact(elapsed)
+        timer_text = f"⏱ {elapsed_text}"
+        timer_tooltip = [f"Elapsed: {elapsed_text}"]
+        if eta > 0 and completed < total:
+            eta_text = self._format_time_compact(eta)
+            timer_text = f"{timer_text} • ETA {eta_text}"
+            timer_tooltip.append(f"ETA: {eta_text}")
         if 'timer_label' in gw:
             gw['timer_label'].setText(timer_text)
+            gw['timer_label'].setToolTip("\n".join(timer_tooltip))
         
         # Bug 13: Cache header key — skip CSS rebuild if status+pct unchanged
         status = group_data['status']
@@ -299,18 +509,239 @@ class QueueGroupMixin:
             }}
             QFrame#queueGroupHeader > * {{ border: none; }}
         """)
+
+    def _should_virtualize_group(self, tasks: list) -> bool:
+        """Return True when a group is large enough to need windowed rows."""
+        threshold = int(getattr(self, '_queue_virtualize_threshold', 600) or 600)
+        return len(tasks or []) >= threshold
+
+    def _set_virtual_spacer_height(self, spacer: QWidget, height: int):
+        """Keep a spacer widget at a fixed virtual height."""
+        h = max(0, int(height))
+        spacer.setMinimumHeight(h)
+        spacer.setMaximumHeight(h)
+        spacer.setVisible(h > 0)
+
+    def _ensure_virtualized_group_structure(self, gw: dict):
+        """Create top/bottom spacers used to preserve scroll height."""
+        content = gw['content']
+        layout = content.layout()
+        top = gw.get('_virtual_top_spacer')
+        bottom = gw.get('_virtual_bottom_spacer')
+        if top is None:
+            top = QWidget(content)
+            top.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            top._queue_virtual_spacer = True
+            layout.insertWidget(0, top)
+            gw['_virtual_top_spacer'] = top
+        if bottom is None:
+            bottom = QWidget(content)
+            bottom.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            bottom._queue_virtual_spacer = True
+            layout.addWidget(bottom)
+            gw['_virtual_bottom_spacer'] = bottom
+        return top, bottom
+
+    def _clear_group_materialized_rows(self, gw: dict):
+        """Delete currently materialized task rows while preserving spacers."""
+        content = gw['content']
+        layout = content.layout()
+        content.setUpdatesEnabled(False)
+        try:
+            i = 0
+            while i < layout.count():
+                child = layout.itemAt(i)
+                widget = child.widget() if child else None
+                if widget and getattr(widget, '_queue_virtual_spacer', False):
+                    i += 1
+                    continue
+                if widget and hasattr(widget, '_task_id'):
+                    layout.takeAt(i)
+                    if hasattr(widget, 'thumb_slots'):
+                        for slot in widget.thumb_slots:
+                            self._unregister_shimmer_slot(slot)
+                            self._unregister_upscale_spinner(slot)
+                    self._task_widgets.pop(str(widget._task_id), None)
+                    widget.deleteLater()
+                    continue
+                i += 1
+        finally:
+            content.setUpdatesEnabled(True)
+
+    def _get_virtualized_group_tasks(self, gw: dict, group_data: dict):
+        """Return the task list that should be rendered for a virtualized group."""
+        tasks = list(group_data.get('tasks', []) or [])
+        if not tasks:
+            return []
+        visible_ids = gw.get('_filter_visible_task_ids')
+        if visible_ids is None:
+            return tasks
+        return [td for td in tasks if str(td.get('id')) in visible_ids]
+
+    def _compute_virtual_window(self, gw: dict, total: int):
+        """Compute the row window to materialize around the viewport."""
+        row_h = int(getattr(self, '_queue_virtual_row_height', 61) or 61)
+        buffer_rows = int(getattr(self, '_queue_virtual_buffer', 30) or 30)
+        min_window = int(getattr(self, '_queue_virtual_window', 140) or 140)
+        viewport = getattr(self, '_scroll_area', None)
+        viewport = viewport.viewport() if viewport else None
+        if viewport and gw['content'].isVisible():
+            vp_top = viewport.mapToGlobal(QPoint(0, 0)).y()
+            vp_bottom = viewport.mapToGlobal(QPoint(0, viewport.height())).y()
+            content_top = gw['content'].mapToGlobal(QPoint(0, 0)).y()
+            visible_top = max(0, vp_top - content_top)
+            visible_bottom = max(visible_top, vp_bottom - content_top)
+            first_visible = max(0, int(visible_top // row_h))
+            last_visible = min(total, int(visible_bottom // row_h) + 1)
+            viewport_rows = max(1, int(viewport.height() // row_h) + 2)
+            window = max(min_window, viewport_rows + (buffer_rows * 2))
+            start = max(0, first_visible - buffer_rows)
+            end = min(total, max(start + window, last_visible + buffer_rows))
+            if end - start < window and start > 0:
+                start = max(0, end - window)
+        else:
+            start = 0
+            end = min(total, min_window)
+            first_visible = 0
+            last_visible = end
+        return start, end, first_visible, last_visible
+
+    def _refresh_virtualized_group(self, gw: dict, group_data: dict, *, force: bool = False):
+        """Render only a sliding window of rows for a large expanded group."""
+        import time as _vt
+        group_id = group_data.get('id', '')
+        if not self._group_expanded.get(group_id, False):
+            return
+        tasks = self._get_virtualized_group_tasks(gw, group_data)
+        total = len(tasks)
+        if total == 0:
+            self._clear_group_materialized_rows(gw)
+            top, bottom = self._ensure_virtualized_group_structure(gw)
+            self._set_virtual_spacer_height(top, 0)
+            self._set_virtual_spacer_height(bottom, 0)
+            gw['_virtualized'] = True
+            gw['_virtual_start'] = 0
+            gw['_virtual_end'] = 0
+            gw['_virtual_total'] = 0
+            gw['content'].setVisible(True)
+            return
+
+        start, end, first_visible, last_visible = self._compute_virtual_window(gw, total)
+        current_start = gw.get('_virtual_start')
+        current_end = gw.get('_virtual_end')
+        current_total = gw.get('_virtual_total')
+        top, bottom = self._ensure_virtualized_group_structure(gw)
+
+        # ★ Fast path: window unchanged, same task count — just update existing widgets
+        # This is the hot path during upscale: many status changes but same visible rows
+        window_unchanged = (
+            not force
+            and current_total == total
+            and current_start is not None and current_end is not None
+            and current_start <= first_visible and current_end >= last_visible
+        )
+        if window_unchanged:
+            desired = {str(td['id']): td for td in tasks[current_start:current_end]}
+            for tid, td in desired.items():
+                widget = self._task_widgets.get(tid)
+                if widget:
+                    # ★ Fingerprint: skip update if data unchanged
+                    _new_fp = (td.get('status'), td.get('progress'),
+                               td.get('upscale_status', ''), td.get('status_text', ''))
+                    if getattr(widget, '_data_fingerprint', None) == _new_fp:
+                        continue
+                    widget._data_fingerprint = _new_fp
+                    if self._is_widget_in_viewport(widget):
+                        self._update_task_widget_data(widget, td)
+                    else:
+                        # Off-viewport: cheap status flag only
+                        ns = td.get('status', '')
+                        if getattr(widget, '_task_status', None) != ns:
+                            widget._task_status = ns
+                            widget._needs_thumb_refresh = True
+            gw['content'].setVisible(True)
+            return
+
+        # ★ Full rebuild throttle: max once per 1.5s to survive upscale completion bursts
+        now = _vt.monotonic()
+        if not force and (now - gw.get('_virtual_rebuild_ts', 0)) < 1.5:
+            # Window changed slightly but too soon to rebuild — just update existing rows
+            desired = {str(td['id']): td for td in tasks[current_start or 0:current_end or end]}
+            for tid, td in desired.items():
+                widget = self._task_widgets.get(tid)
+                if widget:
+                    self._update_task_widget_data(widget, td)
+            gw['content'].setVisible(True)
+            return
+
+        # Full rebuild: clear + recreate window
+        gw['_virtual_rebuild_ts'] = now
+        self._clear_group_materialized_rows(gw)
+        layout = gw['content'].layout()
+        from ui.tabs.tab_queue import QueueItem
+        gw['content'].setUpdatesEnabled(False)
+        try:
+            for td in tasks[start:end]:
+                tid = str(td['id'])
+                item = QueueItem(
+                    id=td['id'], prompt=td['prompt'],
+                    status=td['status'], progress=td['progress'],
+                    mode=td.get('mode', 'T2V'),
+                )
+                row = self._create_queue_item_widget(item, task_data=td)
+                row._task_id = tid
+                row._task_status = td.get('status', '')
+                layout.insertWidget(layout.count() - 1, row)
+                self._task_widgets[tid] = row
+                # ★ NO _fade_in_widget here: virtual rows appear instantly;
+                # animation would create QPropertyAnimation that leaks when
+                # rows are destroyed on the next window slide.
+        finally:
+            gw['content'].setUpdatesEnabled(True)
+
+        row_h = int(getattr(self, '_queue_virtual_row_height', 61) or 61)
+        self._set_virtual_spacer_height(top, start * row_h)
+        self._set_virtual_spacer_height(bottom, max(0, (total - end) * row_h))
+        gw['_virtualized'] = True
+        gw['_virtual_start'] = start
+        gw['_virtual_end'] = end
+        gw['_virtual_total'] = total
+        gw['content'].setVisible(True)
+
+    def _refresh_virtualized_groups_in_viewport(self):
+        """Adjust virtualized groups when the queue scroll viewport changes."""
+        if not getattr(self, '_group_widgets', None):
+            return
+        for gid, gw in self._group_widgets.items():
+            if not gw.get('_virtualized'):
+                continue
+            if not self._group_expanded.get(gid, False):
+                continue
+            if not gw['container'].isVisible():
+                continue
+            group_data = gw.get('group_data', {})
+            self._refresh_virtualized_group(gw, group_data, force=False)
     
     def _rebuild_group_children(self, gw: dict, group_data: dict):
         """Differential update: reuse existing row widgets, only create/remove as needed.
-        
-        ★ Anti-freeze: Uses setUpdatesEnabled(false) to batch layout changes.
+
+        ★ Anti-freeze: Two-tier strategy for large groups (>200 tasks):
+          - Off-viewport existing widgets: just set _needs_thumb_refresh=True (skip setStyleSheet etc.)
+          - In-viewport existing widgets: full _update_task_widget_data
+          - New widgets: created in background via QTimer chunks
         """
+        if gw.get('_virtualized') or self._should_virtualize_group(group_data.get('tasks', [])):
+            self._refresh_virtualized_group(gw, group_data, force=False)
+            return
+
         content = gw['content']
         layout = content.layout()
         new_tasks = group_data.get('tasks', [])
         new_task_ids = {str(td['id']) for td in new_tasks}
-        
-        # ★ Anti-freeze: Suppress paint events during bulk layout changes
+        is_large = len(new_tasks) > 200
+        group_id = group_data.get('id') or gw.get('group_data', {}).get('id') or ''
+
+        # Phase 1: Prune stale widgets (fast — must be synchronous)
         content.setUpdatesEnabled(False)
         try:
             existing_ids = set()
@@ -324,18 +755,104 @@ class QueueGroupMixin:
                         if hasattr(widget, 'thumb_slots'):
                             for s in widget.thumb_slots:
                                 self._unregister_shimmer_slot(s)
+                                self._unregister_upscale_spinner(s)
                         widget.deleteLater()
                         continue
                     existing_ids.add(widget._task_id)
                 i += 1
-            
-            from ui.tabs.tab_queue import QueueItem
+        finally:
+            content.setUpdatesEnabled(True)
+
+        # Phase 2: Update existing widgets — fingerprint + viewport culled
+        filter_active = hasattr(self, '_has_active_filters') and self._has_active_filters()
+        visible_task_ids = gw.get('_filter_visible_task_ids', set())
+        from ui.tabs.tab_queue import QueueItem
+        new_only = []  # (idx, td) pairs for widgets that need to be created
+
+        content.setUpdatesEnabled(False)
+        try:
             for idx, td in enumerate(new_tasks):
                 tid = str(td['id'])
                 existing_widget = self._task_widgets.get(tid)
                 if existing_widget and tid in existing_ids:
-                    self._update_task_widget_data(existing_widget, td)
+                    # ★ Fingerprint: skip update if task data unchanged
+                    _new_fp = (
+                        td.get('status'), td.get('progress'),
+                        td.get('upscale_status', ''),
+                        td.get('status_text', ''),
+                    )
+                    _old_fp = getattr(existing_widget, '_data_fingerprint', None)
+                    if _old_fp == _new_fp:
+                        # Data unchanged — skip expensive update entirely
+                        if filter_active:
+                            existing_widget.setVisible(tid in visible_task_ids)
+                        continue
+                    existing_widget._data_fingerprint = _new_fp
+
+                    if is_large:
+                        # ★ Viewport culling: only fully update visible rows
+                        if self._is_widget_in_viewport(existing_widget):
+                            self._update_task_widget_data(existing_widget, td)
+                        else:
+                            # Cheap status-only update (no setStyleSheet / pixmap)
+                            new_status = td.get('status', '')
+                            if getattr(existing_widget, '_task_status', None) != new_status:
+                                existing_widget._task_status = new_status
+                                existing_widget._needs_thumb_refresh = True
+                    else:
+                        self._update_task_widget_data(existing_widget, td)
+                    if filter_active:
+                        existing_widget.setVisible(tid in visible_task_ids)
                 else:
+                    new_only.append((idx, td))
+        finally:
+            content.setUpdatesEnabled(True)
+
+        # Phase 3: Create new widgets — chunked to avoid frame drop
+        if not new_only:
+            return
+
+        if is_large:
+            # Defer new widget creation to next event loop ticks (non-blocking)
+            CHUNK = 25
+            build_token = self._bump_group_build_token(gw)
+
+            def _build_chunk(start, token):
+                if not self._group_expanded.get(group_id, True):
+                    return  # Group was collapsed while building
+                if not self._is_group_build_token_current(group_id, gw, token):
+                    return  # Group was collapsed while building
+                content.setUpdatesEnabled(False)
+                try:
+                    end = min(start + CHUNK, len(new_only))
+                    for i_chunk in range(start, end):
+                        idx, td = new_only[i_chunk]
+                        tid = str(td['id'])
+                        item = QueueItem(
+                            id=td['id'], prompt=td['prompt'],
+                            status=td['status'], progress=td['progress'],
+                            mode=td.get('mode', 'T2V'),
+                        )
+                        row = self._create_queue_item_widget(item, task_data=td)
+                        row._task_id = tid
+                        row._task_status = td['status']
+                        layout.insertWidget(idx, row)
+                        self._task_widgets[tid] = row
+                        if filter_active:
+                            row.setVisible(tid in visible_task_ids)
+                        self._fade_in_widget(row)
+                finally:
+                    content.setUpdatesEnabled(True)
+                if end < len(new_only):
+                    QTimer.singleShot(16, lambda s=end, _token=token: _build_chunk(s, _token))
+
+            QTimer.singleShot(0, lambda _token=build_token: _build_chunk(0, _token))
+        else:
+            # Small group: create synchronously (fast enough)
+            content.setUpdatesEnabled(False)
+            try:
+                for idx, td in new_only:
+                    tid = str(td['id'])
                     item = QueueItem(
                         id=td['id'], prompt=td['prompt'],
                         status=td['status'], progress=td['progress'],
@@ -346,9 +863,11 @@ class QueueGroupMixin:
                     row._task_status = td['status']
                     layout.insertWidget(idx, row)
                     self._task_widgets[tid] = row
+                    if filter_active:
+                        row.setVisible(tid in visible_task_ids)
                     self._fade_in_widget(row)
-        finally:
-            content.setUpdatesEnabled(True)
+            finally:
+                content.setUpdatesEnabled(True)
     
     def _update_task_widget_data(self, widget: QFrame, td: dict):
         """Update an existing task row widget with new data (no destroy/recreate).
@@ -518,41 +1037,43 @@ class QueueGroupMixin:
         ★ Fix: Now checks upscale_status for completed tasks — previously
         showed "✅ COMPLETED" even when upscale was actively in progress.
         """
+        widget._task_snapshot = dict(td)
         status = td.get('status', '')
         progress = td.get('progress', 0)
         video_outputs = td.get('video_outputs', [])
-        upscale_status = td.get('upscale_status', '')
-        
+        state = self._analyze_task_completion_state(td)
+        widget.status_label.setToolTip("")
+
         if progress >= 100:
+            total = state['expected_outputs'] or len(video_outputs) or 1
+
             # ── Priority 1: Per-video retrying ──
-            retrying_count = sum(1 for vo in video_outputs if vo.get('quality') == 'retrying')
-            if retrying_count > 0:
+            if state['retrying_count'] > 0:
                 retry_pct = td.get('retry_progress', -1)
                 retry_txt = td.get('retry_status_text', '')
                 if retry_pct >= 0 and retry_pct < 100:
-                    label = f"♻️ RETRYING {retrying_count}/{len(video_outputs)} • {retry_pct}%"
+                    label = f"♻️ RETRYING {state['retrying_count']}/{total} • {retry_pct}%"
                     if retry_txt:
                         label += f" {retry_txt}"
                 else:
-                    label = f"♻️ RETRYING {retrying_count}/{len(video_outputs)}"
+                    label = f"♻️ RETRYING {state['retrying_count']}/{total}"
                 widget.status_label.setText(label)
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;"
                 )
                 return
-            
+
             # ── Priority 2: Upscale in progress (submitting/polling) ──
-            upscaling_count = sum(
-                1 for vo in video_outputs
-                if vo.get('upscale_status') in ('submitting', 'polling')
-            )
-            if upscaling_count > 0 or upscale_status in ('submitting', 'polling'):
-                total = len(video_outputs) or 1
-                done = sum(1 for vo in video_outputs if vo.get('upscale_status') == 'success')
-                download_quality = td.get('download_quality', '1080p')
-                # Use status_text from engine if available (e.g. "⬆️ Upscaling 1080p...")
+            if state['has_active_upscale']:
+                done = state['settled_count']
                 status_text = td.get('status_text', '')
-                if status_text and ('Upscal' in status_text or '⬆️' in status_text):
+                if status_text and (
+                    '⬆️' in status_text
+                    or '⬇️' in status_text
+                    or 'upscal' in status_text.lower()
+                    or 'polling' in status_text.lower()
+                    or 'submitted' in status_text.lower()
+                ):
                     label = status_text[:18]
                 else:
                     label = f"⬆️ Upscale {done}/{total}"
@@ -560,7 +1081,6 @@ class QueueGroupMixin:
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;"
                 )
-                # Tooltip with per-video details
                 vo_lines = []
                 for vo in video_outputs:
                     us = vo.get('upscale_status', '')
@@ -576,38 +1096,47 @@ class QueueGroupMixin:
                 if vo_lines:
                     widget.status_label.setToolTip("Per-video upscale:\n" + "\n".join(vo_lines))
                 return
-            
-            # ── Priority 3: Upscale failed ──
-            failed_count = sum(
-                1 for vo in video_outputs
-                if vo.get('upscale_status') == 'failed'
-            )
-            if failed_count > 0 or upscale_status == 'failed':
-                total = len(video_outputs) or 1
+
+            # ── Priority 3: Failed / incomplete outputs ──
+            if state['has_failed_outputs']:
                 if total <= 1:
-                    label = "⚠️ UP FAIL"
+                    label = "⚠️ FAIL"
                 else:
-                    label = f"⚠️ {failed_count}/{total} FAIL"
+                    label = f"⚠️ {state['failed_count']}/{total} FAIL"
                 widget.status_label.setText(label)
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.YELLOW}; font-size: 10px; font-weight: bold; border: none;"
                 )
-                # Tooltip with error details
                 fail_details = []
                 for vo in video_outputs:
-                    if vo.get('upscale_status') == 'failed':
-                        fail_details.append(f"Video {vo.get('index', 0)+1}: {vo.get('upscale_error', '?')}")
-                tooltip = "\n".join(fail_details) if fail_details else "Upscale failed"
-                tooltip += "\nRight-click → Re-Upscale"
-                widget.status_label.setToolTip(tooltip)
+                    quality = str(vo.get('quality', '') or '').lower()
+                    vo_upscale = str(vo.get('upscale_status', '') or '').lower()
+                    if quality == 'failed' or vo_upscale == 'failed':
+                        msg = vo.get('upscale_error') or vo.get('error') or 'Failed'
+                        fail_details.append(f"Video {vo.get('index', 0) + 1}: {msg}")
+                widget.status_label.setToolTip(
+                    "\n".join(fail_details) if fail_details else "One or more outputs failed"
+                )
                 return
-            
-            # ── Priority 4: Truly completed ──
-            widget.status_label.setText(t("queue_extra.completed"))
-            widget.status_label.setStyleSheet(
-                f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;"
-            )
-        elif status in ('running', 'waiting_poll'):
+
+            if state['is_fully_completed']:
+                widget.status_label.setText(t("queue_extra.completed"))
+                widget.status_label.setStyleSheet(
+                    f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;"
+                )
+                return
+
+            if state['has_pending_outputs']:
+                widget.status_label.setText("⚠️ INCOMPLETE")
+                widget.status_label.setStyleSheet(
+                    f"color: {Theme.YELLOW}; font-size: 10px; font-weight: bold; border: none;"
+                )
+                widget.status_label.setToolTip(
+                    "Outputs are not fully settled yet, so this row is not treated as completed."
+                )
+                return
+
+        if status in ('running', 'waiting_poll'):
             display = td.get('status_text', '🔥 PROCESSING')
             widget.status_label.setText(display)
             if "⬇️" in display or "Download" in display:
@@ -621,10 +1150,26 @@ class QueueGroupMixin:
             widget.status_label.setStyleSheet(
                 f"color: {color}; font-size: 10px; font-weight: bold; border: none;"
             )
+            tooltip_lines = []
+            for vo in video_outputs:
+                us = vo.get('upscale_status', '')
+                idx = vo.get('index', 0) + 1
+                if us == 'success':
+                    tooltip_lines.append(f"  Video {idx}: ✅ Upscaled")
+                elif us == 'polling':
+                    tooltip_lines.append(f"  Video {idx}: 🔄 Polling")
+                elif us == 'submitting':
+                    tooltip_lines.append(f"  Video {idx}: ⬆️ Submitting")
+                elif us == 'failed':
+                    tooltip_lines.append(f"  Video {idx}: ❌ {vo.get('upscale_error', 'Failed')}")
+                elif us == 'skipped':
+                    tooltip_lines.append(f"  Video {idx}: ⏭ Skipped")
+            if tooltip_lines:
+                widget.status_label.setToolTip("Per-video status:\n" + "\n".join(tooltip_lines))
         elif status == 'failed':
             error_msg = td.get('error', '')
             # Distinct status for prompt policy violations
-            if error_msg and ('Policy Violation' in error_msg or 'UNSAFE' in error_msg.upper()):
+            if error_msg and classify_error(error_msg) == ErrorType.POLICY_VIOLATION:
                 widget.status_label.setText(t("queue_extra.status_policy"))
                 widget.status_label.setStyleSheet(
                     f"color: {Theme.PEACH}; font-size: 10px; font-weight: bold; border: none;"
@@ -636,6 +1181,14 @@ class QueueGroupMixin:
                 )
             if error_msg:
                 widget.status_label.setToolTip(error_msg)
+        elif status == 'completed':
+            widget.status_label.setText("⚠️ INCOMPLETE")
+            widget.status_label.setStyleSheet(
+                f"color: {Theme.YELLOW}; font-size: 10px; font-weight: bold; border: none;"
+            )
+            widget.status_label.setToolTip(
+                "Task reached completed state, but the output set is not fully settled yet."
+            )
         else:
             icons = {'ready': '⏳', 'pending': '⏳', 'waiting': '🔗', 'cancelled': '⛔'}
             icon = icons.get(status, '⏳')
@@ -792,27 +1345,28 @@ class QueueGroupMixin:
                     continue
     
     def _toggle_group(self, group_id: str):
-        """Toggle expand/collapse of a group. Builds children on-demand for lazy groups.
-        
-        ★ Anti-freeze R1: Uses setUpdatesEnabled(false) to batch repaints.
-        ★ Anti-freeze R2: Stops refresh timer during toggle; on-expand catch-up.
-        ★ Anti-freeze R3: Chunked incremental loading — builds widgets in
-          batches of 5, yielding to event loop between batches so UI stays
-          responsive. Arrow + visibility update instantly; heavy work deferred.
-        """
+        """Toggle expand/collapse of a group."""
+        self._set_group_expanded_state(
+            group_id,
+            not self._group_expanded.get(group_id, True),
+        )
+
+    def _set_group_expanded_state(self, group_id: str, expanded: bool, manage_refresh_timer: bool = True, force_refresh: bool = False):
+        """Set expand/collapse state and lazily materialize children if needed."""
         from PySide6.QtCore import QTimer
         
         gw = self._group_widgets.get(group_id)
         if not gw:
             return
-        expanded = not self._group_expanded.get(group_id, True)
+        if self._group_expanded.get(group_id, True) == expanded and not force_refresh:
+            return
         self._group_expanded[group_id] = expanded
         
         content = gw['content']
         
         # ★ R2: Stop 2s refresh timer during toggle
         _timer = getattr(self, '_auto_refresh_timer', None)
-        _timer_was_active = _timer and _timer.isActive()
+        _timer_was_active = bool(manage_refresh_timer and _timer and _timer.isActive())
         if _timer_was_active:
             _timer.stop()
         
@@ -821,6 +1375,7 @@ class QueueGroupMixin:
         
         if not expanded:
             # Collapse: simply hide content — cheap operation
+            self._cancel_group_rebuild(group_id, gw)
             content.setVisible(False)
             if _timer_was_active and _timer:
                 _timer.start()
@@ -833,14 +1388,26 @@ class QueueGroupMixin:
             gw['_lazy_pending'] = False
             group_data = gw.get('group_data', {})
             tasks = group_data.get('tasks', [])
+            if self._should_virtualize_group(tasks):
+                self._refresh_virtualized_group(gw, group_data, force=True)
+                if _timer_was_active and _timer:
+                    _timer.start()
+                return
+            visible_task_ids = gw.get('_filter_visible_task_ids', set())
+            filter_active = hasattr(self, '_has_active_filters') and self._has_active_filters()
             
-            CHUNK_SIZE = 5
+            CHUNK_SIZE = 25  # ★ Perf: was 5 — 5x fewer timer callbacks (200→40 for 1k tasks)
             content_layout = content.layout()
+            build_token = self._bump_group_build_token(gw)
             
-            def _build_chunk(start_idx):
+            def _build_chunk(start_idx, token):
                 """Build CHUNK_SIZE widgets, then schedule next chunk."""
                 # Guard: group may have been collapsed while we were building
                 if not self._group_expanded.get(group_id, False):
+                    if _timer_was_active and _timer:
+                        _timer.start()
+                    return
+                if not self._is_group_build_token_current(group_id, gw, token):
                     if _timer_was_active and _timer:
                         _timer.start()
                     return
@@ -858,6 +1425,8 @@ class QueueGroupMixin:
                         )
                         row = self._create_queue_item_widget(item, task_data=td)
                         row._task_id = str(td['id'])
+                        if filter_active:
+                            row.setVisible(str(td['id']) in visible_task_ids)
                         content_layout.addWidget(row)
                         self._task_widgets[str(td['id'])] = row
                 finally:
@@ -865,7 +1434,7 @@ class QueueGroupMixin:
                 
                 if end_idx < len(tasks):
                     # More chunks to build — schedule next
-                    QTimer.singleShot(0, lambda: _build_chunk(end_idx))
+                    QTimer.singleShot(16, lambda _start=end_idx, _token=token: _build_chunk(_start, _token))  # 1 frame gap — keeps UI responsive
                 else:
                     # All done — restart refresh timer
                     import logging
@@ -878,28 +1447,124 @@ class QueueGroupMixin:
             # Show content first (may be empty / partially filled)
             content.setVisible(True)
             # Start chunked building
-            QTimer.singleShot(0, lambda: _build_chunk(0))
+            QTimer.singleShot(16, lambda _token=build_token: _build_chunk(0, _token))
             return
         
-        # Dirty catch-up: defer rebuild so arrow updates first
+        # Dirty catch-up: prune stale widgets synchronously (+updates), then
+        # build any NEW task widgets in chunks to avoid main-thread freeze.
         if gw.get('_dirty'):
             gw['_dirty'] = False
             content.setVisible(True)
-            
-            def _deferred_rebuild():
+            group_data = gw.get('group_data', {})
+            if gw.get('_virtualized') or self._should_virtualize_group(group_data.get('tasks', [])):
+                QTimer.singleShot(16, lambda _gw=gw, _gd=group_data: self._refresh_virtualized_group(_gw, _gd, force=True))
+                if _timer_was_active and _timer:
+                    _timer.start()
+                return
+            build_token = self._bump_group_build_token(gw)
+
+            def _deferred_rebuild(token):
                 if not self._group_expanded.get(group_id, False):
                     if _timer_was_active and _timer:
                         _timer.start()
                     return
+                if not self._is_group_build_token_current(group_id, gw, token):
+                    if _timer_was_active and _timer:
+                        _timer.start()
+                    return
                 group_data = gw.get('group_data', {})
-                self._rebuild_group_children(gw, group_data)
-                if _timer_was_active and _timer:
-                    _timer.start()
-            
-            QTimer.singleShot(0, _deferred_rebuild)
+                content_layout = content.layout()
+                new_tasks = group_data.get('tasks', [])
+                new_task_ids = {str(td['id']) for td in new_tasks}
+                visible_task_ids = gw.get('_filter_visible_task_ids', set())
+                filter_active = hasattr(self, '_has_active_filters') and self._has_active_filters()
+
+                # Phase 1: Prune stale + update existing (fast, sync)
+                existing_ids = set()
+                content.setUpdatesEnabled(False)
+                try:
+                    i = 0
+                    while i < content_layout.count():
+                        child = content_layout.itemAt(i)
+                        w = child.widget() if child else None
+                        if w and hasattr(w, '_task_id'):
+                            if w._task_id not in new_task_ids:
+                                content_layout.takeAt(i)
+                                if hasattr(w, 'thumb_slots'):
+                                    for s in w.thumb_slots:
+                                        self._unregister_shimmer_slot(s)
+                                w.deleteLater()
+                                continue
+                            else:
+                                existing_ids.add(w._task_id)
+                        i += 1
+                    from ui.tabs.tab_queue import QueueItem
+                    for td in new_tasks:
+                        tid = str(td['id'])
+                        if tid in existing_ids:
+                            ew = self._task_widgets.get(tid)
+                            if ew:
+                                self._update_task_widget_data(ew, td)
+                                if filter_active:
+                                    ew.setVisible(tid in visible_task_ids)
+                finally:
+                    content.setUpdatesEnabled(True)
+
+                # Phase 2: Build NEW widgets in chunks (non-blocking)
+                new_only = [(idx, td) for idx, td in enumerate(new_tasks)
+                            if str(td['id']) not in existing_ids]
+                if not new_only:
+                    if _timer_was_active and _timer:
+                        _timer.start()
+                    return
+
+                from PySide6.QtCore import QTimer as _QTimer
+                CHUNK_SIZE = 25  # ★ Perf: was 5
+
+                def _build_chunk(chunk_start, token):
+                    if not self._group_expanded.get(group_id, False):
+                        if _timer_was_active and _timer:
+                            _timer.start()
+                        return
+                    if not self._is_group_build_token_current(group_id, gw, token):
+                        if _timer_was_active and _timer:
+                            _timer.start()
+                        return
+                    content.setUpdatesEnabled(False)
+                    try:
+                        from ui.tabs.tab_queue import QueueItem as _QI
+                        chunk_end = min(chunk_start + CHUNK_SIZE, len(new_only))
+                        for idx, td in new_only[chunk_start:chunk_end]:
+                            tid = str(td['id'])
+                            item = _QI(
+                                id=td['id'], prompt=td['prompt'],
+                                status=td['status'], progress=td['progress'],
+                                mode=td.get('mode', 'T2V'),
+                            )
+                            row = self._create_queue_item_widget(item, task_data=td)
+                            row._task_id = tid
+                            row._task_status = td['status']
+                            content_layout.insertWidget(idx, row)
+                            self._task_widgets[tid] = row
+                            if filter_active:
+                                row.setVisible(tid in visible_task_ids)
+                            self._fade_in_widget(row)
+                    finally:
+                        content.setUpdatesEnabled(True)
+                    if chunk_end < len(new_only):
+                        _QTimer.singleShot(16, lambda _start=chunk_end, _token=token: _build_chunk(_start, _token))
+                    else:
+                        if _timer_was_active and _timer:
+                            _timer.start()
+
+                _QTimer.singleShot(16, lambda _token=token: _build_chunk(0, _token))
+
+            QTimer.singleShot(16, lambda _token=build_token: _deferred_rebuild(_token))
             return
         
         # Normal expand (children already built, not dirty)
+        if gw.get('_virtualized'):
+            self._refresh_virtualized_group(gw, gw.get('group_data', {}), force=False)
         content.setVisible(True)
         if _timer_was_active and _timer:
             _timer.start()
@@ -1089,15 +1754,17 @@ class QueueGroupMixin:
                 danger=True):
             return
         count = 0
-        if hasattr(self.controller, 'force_retry_task'):
-            # BUG-B9 fix: Iterate over snapshot to avoid mutation during iteration
-            # BUG-B19 fix: Skip replacement tasks (handled by parent's force_retry)
-            for task in list(group.tasks):
-                if task.replace_target:
-                    continue
-                if task.state.value != 'running':
-                    if self.controller.force_retry_task(str(task.id)):
-                        count += 1
+        task_ids = [
+            str(task.id)
+            for task in list(group.tasks)
+            if not task.replace_target and task.state.value != 'running'
+        ]
+        if hasattr(self.controller, 'force_retry_tasks'):
+            count = self.controller.force_retry_tasks(task_ids, label=f"group_force_retry:{group_id}")
+        elif hasattr(self.controller, 'force_retry_task'):
+            for task_id in task_ids:
+                if self.controller.force_retry_task(task_id):
+                    count += 1
         self._refresh_queue_from_controller()
         self._update_stats()
         mw = self.window()
@@ -1115,15 +1782,18 @@ class QueueGroupMixin:
                 "Reset incomplete/failed prompts in this group?\n\nCompleted tasks will be PRESERVED.",
                 danger=True):
             return
+        task_ids = [
+            str(task.id)
+            for task in list(group.tasks)
+            if not task.replace_target
+            and task.state.value not in ('completed', 'running', 'waiting_poll')
+        ]
         count = 0
-        # BUG-B19 fix: list() snapshot + skip replacement tasks
-        for task in list(group.tasks):
-            if task.replace_target:
-                continue
-            if task.state.value in ('completed', 'running', 'waiting_poll'):
-                continue
-            if hasattr(self.controller, 'force_retry_task'):
-                if self.controller.force_retry_task(str(task.id)):
+        if hasattr(self.controller, 'force_retry_tasks'):
+            count = self.controller.force_retry_tasks(task_ids, label=f"group_reset:{group_id}")
+        elif hasattr(self.controller, 'force_retry_task'):
+            for task_id in task_ids:
+                if self.controller.force_retry_task(task_id):
                     count += 1
         self._refresh_queue_from_controller()
         self._update_stats()
@@ -1148,6 +1818,7 @@ class QueueGroupMixin:
         gw['container'].deleteLater()
         self._group_widgets.pop(group_id, None)
         self._group_expanded.pop(group_id, None)
+        getattr(self, '_pending_group_rebuilds', {}).pop(group_id, None)
         # Clean task widgets that belonged to this group
         for tid in list(self._task_widgets.keys()):
             if tid.startswith(group_id):

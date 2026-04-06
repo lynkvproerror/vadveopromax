@@ -410,7 +410,7 @@ class QueueContextMenuMixin:
                 painter.drawPixmap(0, 0, pixmap)
                 painter.fillRect(overlay.rect(), QColor(0, 0, 0, 140))
                 painter.setPen(QColor(color))
-                font = QFont("Segoe UI", 10)
+                font = QFont("SF Pro Display", 10)
                 font.setBold(True)
                 painter.setFont(font)
                 painter.drawText(overlay.rect(), Qt.AlignCenter, icon)

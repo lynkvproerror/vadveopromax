@@ -234,7 +234,7 @@ class LicenseStorage:
     """
     
     LICENSE_FILE = Path.home() / ".veoauto" / "license.dat"
-    SALT = b"veo_license_salt_2026"  # Static salt (machine-bound key generated at runtime)
+    SALT = bytes([0x76,0x65,0x6f,0x5f,0x6c,0x69,0x63,0x65,0x6e,0x73,0x65,0x5f,0x73,0x61,0x6c,0x74,0x5f,0x32,0x30,0x32,0x36])
     # APP_VERSION: imported from canonical AppConstants to avoid mismatches
     try:
         from config.constants import AppConstants as _AC
@@ -247,8 +247,8 @@ class LicenseStorage:
         """Derive HMAC key from machine ID — unique per machine, not hardcoded."""
         import hmac as hmac_lib
         return hmac_lib.new(
-            b"veo_lic_derive_2026",
-            (machine_id + "||HMAC_DERIVE").encode(),
+            bytes([0x76,0x65,0x6f,0x5f,0x6c,0x69,0x63,0x5f,0x64,0x65,0x72,0x69,0x76,0x65,0x5f,0x32,0x30,0x32,0x36]),
+            (machine_id + bytes([0x7c,0x7c,0x48,0x4d,0x41,0x43,0x5f,0x44,0x45,0x52,0x49,0x56,0x45]).decode()).encode(),
             hashlib.sha256
         ).digest()
     
@@ -320,15 +320,15 @@ class LicenseStorage:
             
             # === ANTI-TAMPER ===
             nonce,                        # Random per save
-            "VEO_SIG_V3",                 # Static marker (version-agnostic)
+            bytes([0x56,0x45,0x4f,0x5f,0x53,0x49,0x47,0x5f,0x56,0x33]).decode(),  # Static marker (version-agnostic)
             str(len(str(data_for_len))),  # Data length (excluding meta-fields)
             
             # === OBFUSCATION ===
-            "v3o_l1c_s1g",               # Static marker
+            bytes([0x76,0x33,0x6f,0x5f,0x6c,0x31,0x63,0x5f,0x73,0x31,0x67]).decode(),  # Static marker
         ]
         
         # Join with separator that's unlikely to appear in data
-        payload = "||VEO||".join(sig_parts)
+        payload = bytes([0x7c,0x7c,0x56,0x45,0x4f,0x7c,0x7c]).decode().join(sig_parts)
         
         # Generate HMAC-SHA256
         signature = hmac_lib.new(
@@ -651,17 +651,17 @@ class LicenseClient:
             )
             
             if not is_valid:
-                error_messages = {
-                    "LICENSE_NOT_FOUND": "License key not found",
-                    "LICENSE_DELETED_STALE_BACKUP": "License key deleted from server",
-                    "MACHINE_MISMATCH": "License bound to different machine",
-                    "LICENSE_REVOKED": "License has been revoked",
-                    "CROSS_VALIDATION_FAILED": "Security validation failed",
-                    "LICENSE_EXPIRED": "License expired",
+                _em = {
+                    0x10: "License key not found",
+                    0x11: "License key deleted from server",
+                    0x12: "License bound to different machine",
+                    0x13: "License has been revoked",
+                    0x14: "Security validation failed",
+                    0x15: "License expired",
                 }
                 return LicenseInfo(
                     valid=False,
-                    error=error_messages.get(status, f"Activation failed: {status}")
+                    error=_em.get(status, f"Activation failed: {status}")
                 )
             
             # Extract license data (map both naming conventions)
@@ -808,29 +808,23 @@ class LicenseClient:
             _use = getattr(self, '_use_rest', False)
             _has_rc = hasattr(self, '_rest_client') and self._rest_client is not None
             _has_db = bool(self.db)
-            print(f"[LICENSE-DEBUG] _use_rest={_use}, _has_rest_client={_has_rc}, _has_db={_has_db}")
             
             if _use and _has_rc:
                 try:
                     online_result = self._validate_with_rest(cached.get('key'))
-                    print(f"[LICENSE-DEBUG] REST result: valid={online_result.valid}, error={getattr(online_result, 'error', None)}")
                 except Exception as e:
-                    print(f"[LICENSE-DEBUG] REST exception: {type(e).__name__}: {e}")
                     pass  # Network error → use cache
             elif _has_db:
                 try:
                     online_result = self._validate_online(cached.get('key'))
-                    print(f"[LICENSE-DEBUG] SDK result: valid={online_result.valid}")
                 except Exception as e:
-                    print(f"[LICENSE-DEBUG] SDK exception: {e}")
                     pass
             else:
-                print("[LICENSE-DEBUG] ⚠️ NO online check method available — using cache only!")
+                pass  # No online check method available
             
             if online_result is not None:
                 # If server says invalid → clear local cache!
                 if not online_result.valid:
-                    print(f"[LICENSE-DEBUG] ⛔ Clearing cache — server says invalid")
                     self.storage.clear()
                     self._invalidate_validate_cache()
                 else:
@@ -840,12 +834,11 @@ class LicenseClient:
                     self.storage.save(cached)
                 return online_result
         else:
-            print(f"[LICENSE-DEBUG] Online check skipped — last check {since_last_check:.0f}s ago (interval={ONLINE_CHECK_INTERVAL}s)")
+            pass  # Online check skipped — within interval
         
         # 🔒 OFFLINE GRACE: hard deadline — revoke if no successful online check in N days
         offline_seconds = since_last_check
         if offline_seconds > (self.OFFLINE_GRACE_DAYS * 86400):
-            print(f"[LICENSE-DEBUG] ⛔ Offline grace exceeded: {offline_seconds/86400:.1f} days > {self.OFFLINE_GRACE_DAYS} days")
             self.storage.clear()
             self._invalidate_validate_cache()
             return LicenseInfo(
@@ -892,17 +885,17 @@ class LicenseClient:
         )
         
         if not is_valid:
-            error_messages = {
-                "LICENSE_NOT_FOUND": "License key not found",
-                "LICENSE_DELETED_STALE_BACKUP": "License key deleted from server",
-                "MACHINE_MISMATCH": "License bound to different machine",
-                "LICENSE_REVOKED": "License has been revoked",
-                "CROSS_VALIDATION_FAILED": "Security validation failed",
-                "LICENSE_EXPIRED": "License expired"
+            _em = {
+                0x10: "License key not found",
+                0x11: "License key deleted from server",
+                0x12: "License bound to different machine",
+                0x13: "License has been revoked",
+                0x14: "Security validation failed",
+                0x15: "License expired"
             }
             return LicenseInfo(
                 valid=False, 
-                error=error_messages.get(status, f"Validation failed: {status}")
+                error=_em.get(status, f"Validation failed: {status}")
             )
         
         # Update cache with validated data (SYNC tier/role from server!)
@@ -1000,8 +993,8 @@ class LicenseClient:
     # =====================
     
     # ── Checksum salt (obfuscated, split) ──
-    _CK_P1 = b"V3O_PUB"
-    _CK_P2 = b"_CK_2026"
+    _CK_P1 = bytes([0x56,0x33,0x4f,0x5f,0x50,0x55,0x42])
+    _CK_P2 = bytes([0x5f,0x43,0x4b,0x5f,0x32,0x30,0x32,0x36])
     
     @classmethod
     def _get_checksum_salt(cls) -> bytes:
@@ -1245,8 +1238,7 @@ class LicenseClient:
                 )
                 
         except Exception as e:
-            print(f"[LICENSE-DEBUG] Firebase trial check failed: {e}")
-            # Network error → fall through to local check
+            pass  # Network error → fall through to local check
         
         # ── Step 2: Fallback to local TrialMarkerManager (offline only) ──
         if self.trial_manager:
@@ -1291,17 +1283,15 @@ class LicenseClient:
             role = result.get("role", 1)
             expires_str = result.get("expires", "")
             
-            print(f"[LICENSE] Auto-restore: found key {key[:8]}... tier={tier_code}")
+            pass  # key found
             
             # 🔒 CROSS-VALIDATE: verify key actually exists and is valid in _lic
             if hasattr(rest_client, 'validate_with_crosscheck'):
                 try:
                     is_valid, status, _data = rest_client.validate_with_crosscheck(key, self.machine_id)
                     if not is_valid:
-                        print(f"[LICENSE] Auto-restore BLOCKED: key invalid on server ({status})")
-                        return None
+                        return None  # key invalid on server
                 except Exception as e:
-                    print(f"[LICENSE] Auto-restore cross-validate failed: {e}")
                     return None  # Network error → don't restore blindly
             
             # Restore local cache
@@ -1329,14 +1319,14 @@ class LicenseClient:
                 machine_id=self.machine_id
             )
         except Exception as e:
-            print(f"[LICENSE-DEBUG] Auto-restore failed: {e}")
             return None
     
     def activate_trial(self, trial_key: str) -> LicenseInfo:
         """
         Activate a trial key (TRIAL-XXXX-XXXX-XXXX).
         
-        Trial keys are generated by admin and can only be used once per machine.
+        Server-authoritative: key MUST be validated against Firebase before
+        local markers are created. Offline activation is blocked for new trials.
         """
         # Validate format
         if not trial_key.upper().startswith("TRIAL-"):
@@ -1346,15 +1336,58 @@ class LicenseClient:
         if not self.trial_manager:
             return LicenseInfo(valid=False, error="Trial system not available")
         
-        # Check if already has trial
+        # Check if already has trial locally
         existing = self.trial_manager.get_trial_start()
         if existing:
             return LicenseInfo(valid=False, error="Trial already used on this machine")
         
-        # TODO: Validate trial key against Firebase
-        # For now, accept any TRIAL-XXXX-XXXX-XXXX format
+        # ── SERVER VALIDATION (authoritative) ──
+        # Trial key MUST be verified against Firebase before activation.
+        # This prevents forged keys from activating.
+        rest_client = getattr(self, '_rest_client', None)
+        server_verified = False
         
-        # Start trial with multi-layer protection
+        if rest_client and hasattr(rest_client, 'validate_trial_key'):
+            try:
+                result = rest_client.validate_trial_key(
+                    trial_key.upper(), self.machine_id
+                )
+                if result.get("valid"):
+                    server_verified = True
+                    # Server accepted — burn the key (mark as used)
+                    if hasattr(rest_client, 'burn_trial_key'):
+                        try:
+                            rest_client.burn_trial_key(
+                                trial_key.upper(), self.machine_id
+                            )
+                        except Exception:
+                            pass  # Non-fatal: key already marked on validate
+                else:
+                    # Server explicitly rejected
+                    error = result.get("error", "Trial key invalid or already used")
+                    return LicenseInfo(valid=False, error=error)
+            except ConnectionError:
+                # Network unavailable — block new trial activation
+                return LicenseInfo(
+                    valid=False,
+                    error="Cần kết nối internet để kích hoạt trial. Vui lòng thử lại."
+                )
+            except Exception as e:
+                return LicenseInfo(
+                    valid=False, 
+                    error=f"Trial validation failed: {str(e)}"
+                )
+        else:
+            # No REST client — cannot validate, block activation
+            return LicenseInfo(
+                valid=False,
+                error="Không thể xác thực trial key. Vui lòng kiểm tra kết nối."
+            )
+        
+        if not server_verified:
+            return LicenseInfo(valid=False, error="Trial key not verified by server")
+        
+        # ── LOCAL ACTIVATION (after server approval) ──
         status = self.trial_manager.start_trial()
         
         if status.valid:
@@ -1395,7 +1428,6 @@ class LicenseClient:
                 expected_sig = self._compute_usage_hmac(data)
                 if stored_sig != expected_sig:
                     # TAMPER DETECTED — set count to daily limit
-                    print("[LICENSE] ⚠️ Usage file tampered — resetting to limit")
                     self._usage = UsageStats()
                     self._usage.today_generations = 100  # Assume max reached
                     self._usage.last_reset_date = datetime.now().strftime("%Y-%m-%d")
@@ -1485,7 +1517,7 @@ class LicenseClient:
                     client_name=client_name,
                 )
                 if ok:
-                    print(f"[LICENSE] 📤 Synced usage: daily={self._usage.today_generations}, total={self._usage.total_generations}")
+                    pass  # synced
             
             # Legacy fallback: sync_daily_usage() → _trials/{MID}
             if hasattr(rest_client, 'sync_daily_usage'):
@@ -1521,13 +1553,13 @@ class LicenseClient:
                     
                     # Daily: max(local, server) if same date
                     if s_date == today and s_daily > self._usage.today_generations:
-                        print(f"[LICENSE] 🔄 Server daily higher: {self._usage.today_generations} → {s_daily}")
+                        pass  # server daily higher
                         self._usage.today_generations = s_daily
                         updated = True
                     
                     # Total: always use max
                     if s_total > self._usage.total_generations:
-                        print(f"[LICENSE] 🔄 Server total higher: {self._usage.total_generations} → {s_total}")
+                        pass  # server total higher
                         self._usage.total_generations = s_total
                         updated = True
                     
@@ -1540,7 +1572,7 @@ class LicenseClient:
                         self._save_usage()
                     return  # Done — _usage/ is authoritative
         except Exception as e:
-            print(f"[LICENSE] ⚠️ _usage reconcile failed: {e}")
+            pass  # reconcile failed, non-fatal
         
         # Source 2: Fallback to _trials/ data (if provided)
         if server_trial_data:
@@ -1549,7 +1581,7 @@ class LicenseClient:
                 server_date = server_trial_data.get("daily_date", "")
                 
                 if server_date == today and server_count > self._usage.today_generations:
-                    print(f"[LICENSE] 🔄 Trial server count higher: {self._usage.today_generations} → {server_count}")
+                    pass  # trial server count higher
                     self._usage.today_generations = server_count
                     self._save_usage()
             except Exception:

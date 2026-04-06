@@ -23,6 +23,7 @@ Architecture:
 
 import sys
 import logging
+import threading
 from pathlib import Path
 from typing import Optional, List, Tuple
 from collections import deque
@@ -86,6 +87,10 @@ class _StreamToLogger:
     
     This ensures print() statements from any module are also
     visible in the Dev Console (which hooks into logging).
+    
+    Thread-safe: uses a Lock to prevent concurrent write() calls
+    from multiple threads (e.g., asyncio workers + Python's internal
+    unhandled-exception printer) from corrupting the shared _buffer.
     """
     def __init__(self, logger: logging.Logger, level: int, original_stream):
         self._logger = logger
@@ -93,46 +98,93 @@ class _StreamToLogger:
         self._original = original_stream
         self._buffer = ""
         self._in_log = False  # Recursion guard
+        self._lock = threading.Lock()  # ★ Thread-safety fix
 
     def write(self, text: str):
-        if self._in_log:
-            # Already processing a log call — write to original only
+        # ★ FIX: Use lock to prevent concurrent writes from multiple threads
+        # corrupting _buffer (e.g., Python 3.13's per-thread exception printer
+        # can call write() from many threads simultaneously).
+        # Use non-blocking acquire for recursion guard (same thread re-entering).
+        acquired = self._lock.acquire(blocking=True, timeout=0.05)
+        if not acquired:
+            # Fallback: write directly to original stream to avoid deadlock
             if self._original:
-                self._original.write(text)
+                try:
+                    self._original.write(text)
+                except Exception:
+                    pass
             return
         
-        if self._original:
-            self._original.write(text)
-        
-        if not text or text.isspace():
-            return
-        
-        self._in_log = True
         try:
-            self._buffer += text
-            while "\n" in self._buffer:
-                line, self._buffer = self._buffer.split("\n", 1)
-                if line.strip():
-                    self._logger.log(self._level, line.rstrip())
-        finally:
-            self._in_log = False
-
-    def flush(self):
-        if self._in_log:
+            if self._in_log:
+                # Already processing a log call from THIS thread — write to original only
+                if self._original:
+                    try:
+                        self._original.write(text)
+                    except Exception:
+                        pass
+                return
+            
             if self._original:
-                self._original.flush()
-            return
-        
-        if self._original:
-            self._original.flush()
-        
-        if self._buffer and self._buffer.strip():
+                try:
+                    self._original.write(text)
+                except Exception:
+                    pass
+            
+            if not text or text.isspace():
+                return
+            
             self._in_log = True
             try:
-                self._logger.log(self._level, self._buffer.rstrip())
-                self._buffer = ""
+                self._buffer += text
+                while "\n" in self._buffer:
+                    line, self._buffer = self._buffer.split("\n", 1)
+                    if line.strip():
+                        try:
+                            self._logger.log(self._level, line.rstrip())
+                        except Exception:
+                            pass
             finally:
                 self._in_log = False
+        finally:
+            self._lock.release()
+
+    def flush(self):
+        acquired = self._lock.acquire(blocking=True, timeout=0.05)
+        if not acquired:
+            if self._original:
+                try:
+                    self._original.flush()
+                except Exception:
+                    pass
+            return
+        
+        try:
+            if self._in_log:
+                if self._original:
+                    try:
+                        self._original.flush()
+                    except Exception:
+                        pass
+                return
+            
+            if self._original:
+                try:
+                    self._original.flush()
+                except Exception:
+                    pass
+            
+            if self._buffer and self._buffer.strip():
+                self._in_log = True
+                try:
+                    self._logger.log(self._level, self._buffer.rstrip())
+                    self._buffer = ""
+                except Exception:
+                    pass
+                finally:
+                    self._in_log = False
+        finally:
+            self._lock.release()
 
     def isatty(self):
         return False
@@ -141,6 +193,7 @@ class _StreamToLogger:
         if self._original:
             return self._original.fileno()
         raise AttributeError("No fileno")
+
 
 
 def _install_stream_capture():

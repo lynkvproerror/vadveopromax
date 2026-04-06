@@ -54,7 +54,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 Type: filesandordirs; Name: "{app}\*"
 
 [Files]
-Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "logs\*,sessions\*,browser_profiles\*,config\browser_profiles\*,*.log,*.tmp,*.lock"
+$FILES_SECTION
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -62,7 +62,7 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 var
@@ -74,6 +74,16 @@ var
   BrowseDirButton: TNewButton;
   ExistingInstallDir: string;
 
+function GetFallbackInstallDir(): string;
+begin
+  Result := ExpandConstant('{localappdata}\Programs\{#MyDefaultSubdir}');
+end;
+
+function CleanDir(const Dir: string): string;
+begin
+  Result := RemoveBackslashUnlessRoot(Trim(Dir));
+end;
+
 function IsExistingAppDir(const Dir: string): Boolean;
 begin
   Result :=
@@ -84,16 +94,173 @@ end;
 
 function NormalizeTargetDir(const Dir: string): string;
 begin
-  Result := RemoveBackslashUnlessRoot(Trim(Dir));
+  Result := CleanDir(Dir);
   if Result = '' then
-    Result := ExpandConstant('{localappdata}\Programs\{#MyDefaultSubdir}')
+    Result := GetFallbackInstallDir()
   else if (CompareText(ExtractFileName(Result), '{#MyDefaultSubdir}') <> 0) and (not IsExistingAppDir(Result)) then
     Result := AddBackslash(Result) + '{#MyDefaultSubdir}';
 end;
 
-function GetDefaultInstallDir(Param: string): string;
+function TryUseDetectedDir(const Candidate: string; var InstallDir: string): Boolean;
 begin
-  Result := NormalizeTargetDir(ExpandConstant('{localappdata}\Programs\{#MyDefaultSubdir}'));
+  InstallDir := CleanDir(Candidate);
+  Result := (InstallDir <> '') and DirExists(InstallDir) and IsExistingAppDir(InstallDir);
+end;
+
+function ExtractExecutablePath(const CommandValue: string): string;
+var
+  CommandText: string;
+  QuotePos: Integer;
+  ExePos: Integer;
+begin
+  Result := '';
+  CommandText := Trim(CommandValue);
+  if CommandText = '' then
+    Exit;
+
+  if Copy(CommandText, 1, 1) = '"' then
+  begin
+    Delete(CommandText, 1, 1);
+    QuotePos := Pos('"', CommandText);
+    if QuotePos > 0 then
+      Result := Copy(CommandText, 1, QuotePos - 1);
+    Exit;
+  end;
+
+  ExePos := Pos('.exe', Lowercase(CommandText));
+  if ExePos > 0 then
+    Result := Copy(CommandText, 1, ExePos + 3);
+end;
+
+function TryGetInstallDirFromCommandValue(
+  RootKey: Integer;
+  const SubKey: string;
+  const ValueName: string;
+  var InstallDir: string
+): Boolean;
+var
+  CommandValue: string;
+  ExecutablePath: string;
+begin
+  Result := False;
+  if not RegQueryStringValue(RootKey, SubKey, ValueName, CommandValue) then
+    Exit;
+
+  ExecutablePath := ExtractExecutablePath(CommandValue);
+  if ExecutablePath = '' then
+    Exit;
+
+  Result := TryUseDetectedDir(ExtractFileDir(ExecutablePath), InstallDir);
+end;
+
+function TryGetInstallDirFromUninstallKey(RootKey: Integer; const SubKey: string; var InstallDir: string): Boolean;
+var
+  ValueText: string;
+begin
+  Result := False;
+
+  if RegQueryStringValue(RootKey, SubKey, 'Inno Setup: App Path', ValueText) and
+     TryUseDetectedDir(ValueText, InstallDir) then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  if RegQueryStringValue(RootKey, SubKey, 'InstallLocation', ValueText) and
+     TryUseDetectedDir(ValueText, InstallDir) then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  if TryGetInstallDirFromCommandValue(RootKey, SubKey, 'QuietUninstallString', InstallDir) then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  Result := TryGetInstallDirFromCommandValue(RootKey, SubKey, 'UninstallString', InstallDir);
+end;
+
+function TryGetInstallDirFromRegistry(var InstallDir: string): Boolean;
+begin
+  Result :=
+    TryGetInstallDirFromUninstallKey(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1', InstallDir) or
+    TryGetInstallDirFromUninstallKey(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}_is1', InstallDir) or
+    TryGetInstallDirFromUninstallKey(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1', InstallDir) or
+    TryGetInstallDirFromUninstallKey(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}_is1', InstallDir) or
+    TryGetInstallDirFromUninstallKey(HKLM, 'Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1', InstallDir) or
+    TryGetInstallDirFromUninstallKey(HKLM, 'Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppName}_is1', InstallDir);
+end;
+
+function TryGetInstallDirFromSetupHint(var InstallDir: string): Boolean;
+var
+  HintPath: string;
+  HintValue: AnsiString;
+begin
+  Result := False;
+  HintPath := ExpandConstant('{srcexe}') + '.appdir';
+  if not FileExists(HintPath) then
+    Exit;
+
+  if LoadStringFromFile(HintPath, HintValue) then
+    Result := TryUseDetectedDir(String(HintValue), InstallDir);
+end;
+
+function TryGetKnownInstallDir(var InstallDir: string): Boolean;
+begin
+  Result :=
+    TryUseDetectedDir(ExpandConstant('{localappdata}\Programs\{#MyDefaultSubdir}'), InstallDir) or
+    TryUseDetectedDir(ExpandConstant('{autopf}\{#MyDefaultSubdir}'), InstallDir) or
+    TryUseDetectedDir(ExpandConstant('{pf}\{#MyDefaultSubdir}'), InstallDir);
+end;
+
+function DetectExistingInstallDir(): string;
+var
+  CandidateDir: string;
+begin
+  Result := '';
+
+  if TryUseDetectedDir(ExpandConstant('{param:CURRENTAPPDIR|}'), CandidateDir) then
+  begin
+    Result := CandidateDir;
+    Exit;
+  end;
+
+  if TryUseDetectedDir(ExpandConstant('{param:APPDIR|}'), CandidateDir) then
+  begin
+    Result := CandidateDir;
+    Exit;
+  end;
+
+  if TryGetInstallDirFromSetupHint(CandidateDir) then
+  begin
+    Result := CandidateDir;
+    Exit;
+  end;
+
+  if TryGetInstallDirFromRegistry(CandidateDir) then
+  begin
+    Result := CandidateDir;
+    Exit;
+  end;
+
+  if TryGetKnownInstallDir(CandidateDir) then
+  begin
+    Result := CandidateDir;
+    Exit;
+  end;
+end;
+
+function GetDefaultInstallDir(Param: string): string;
+var
+  DetectedDir: string;
+begin
+  DetectedDir := DetectExistingInstallDir();
+  if DetectedDir <> '' then
+    Result := DetectedDir
+  else
+    Result := NormalizeTargetDir(GetFallbackInstallDir());
 end;
 
 function GetPreferredInstallDir(): string;
@@ -101,7 +268,7 @@ begin
   if ExistingInstallDir <> '' then
     Result := NormalizeTargetDir(ExistingInstallDir)
   else
-    Result := NormalizeTargetDir(ExpandConstant('{localappdata}\Programs\{#MyDefaultSubdir}'));
+    Result := GetDefaultInstallDir('');
 end;
 
 procedure SyncInstallDirToWizard();
@@ -161,7 +328,7 @@ end;
 
 procedure UseDefaultInstallDir(Sender: TObject);
 begin
-  InstallDirEdit.Text := NormalizeTargetDir(ExpandConstant('{localappdata}\Programs\{#MyDefaultSubdir}'));
+  InstallDirEdit.Text := NormalizeTargetDir(GetFallbackInstallDir());
 end;
 
 procedure UseCurrentInstallDir(Sender: TObject);
@@ -183,7 +350,8 @@ end;
 
 procedure InitializeWizard();
 begin
-  ExistingInstallDir := NormalizeTargetDir(WizardForm.DirEdit.Text);
+  if not TryUseDetectedDir(WizardForm.DirEdit.Text, ExistingInstallDir) then
+    ExistingInstallDir := DetectExistingInstallDir();
 
   InstallLocationPage :=
     CreateCustomPage(
@@ -206,9 +374,14 @@ begin
   InstallDirHint.Width := InstallLocationPage.SurfaceWidth;
   InstallDirHint.Height := ScaleY(28);
   InstallDirHint.WordWrap := True;
-  InstallDirHint.Caption :=
-    'Recommended: use the default folder. You can also paste a full path directly, ' +
-    'or browse only if needed.';
+  if ExistingInstallDir <> '' then
+    InstallDirHint.Caption :=
+      'Detected current install folder: ' + ExistingInstallDir + #13#10 +
+      'You can keep it, paste a different path, or browse if needed.'
+  else
+    InstallDirHint.Caption :=
+      'No current install folder was detected. Recommended: use the default folder, ' +
+      'paste a full path, or browse only if needed.';
 
   DefaultDirButton := TNewButton.Create(WizardForm);
   DefaultDirButton.Parent := InstallLocationPage.Surface;

@@ -92,8 +92,9 @@ class DedupChecker:
         """Run all 3 dedup layers."""
         # Layer 1: Exact match in current batch
         normalized = self._normalize(topic)
+        topic_hash = self._topic_hash(topic)
         for existing in self._batch_topics:
-            if self._normalize(existing) == normalized:
+            if self._normalize(existing) == normalized or self._topic_hash(existing) == topic_hash:
                 return DedupResult(
                     status="block",
                     reason="Exact duplicate in current batch",
@@ -172,6 +173,13 @@ class DedupChecker:
         intersection = words_a & words_b
         union = words_a | words_b
         return len(intersection) / len(union)
+
+    @staticmethod
+    def _topic_hash(text: str) -> str:
+        """Normalized hash for near-exact dedup. Strips punctuation, lowercases, sorts words."""
+        import hashlib
+        words = sorted(re.findall(r'\w+', text.lower()))
+        return hashlib.md5(" ".join(words).encode()).hexdigest()[:12]
 
 
 # ── Context Manager ────────────────────────────────────────────
@@ -613,7 +621,13 @@ class ProjectBuilder:
             result.steps_completed = 3
 
             # ── Step 3b: Validate & Auto-Fix ──
-            self._validate_prompts(result.prompts)
+            from core.prompt_validator import validate_prompts
+            validate_prompts(
+                result.prompts,
+                expected_count=getattr(template, 'scene_count', 0),
+                prompt_format=prompt_format,
+                rules_loader=self.rules_loader,
+            )
             has_violations = any(not p.valid for p in result.prompts)
             if has_violations and self.client:
                 log.info(f"[Builder] Validation found violations — auto-fixing")
@@ -727,6 +741,7 @@ class ProjectBuilder:
         prompt_format: str = "text",
         step_config: Optional[Dict] = None,
         per_topic_template: bool = False,
+        max_concurrent: int = 1,
     ) -> List[TopicResult]:
         """Process multiple topics sequentially with fresh context per topic.
         
@@ -734,6 +749,12 @@ class ProjectBuilder:
         Fix #4: skip_research/skip_bible → skip those pipeline steps.
         """
         results = []
+        if max_concurrent > 1 and len(topics) > 1:
+            return await self._process_batch_concurrent(
+                topics, template, api_key, output_base, skip_seo,
+                skip_research, skip_bible, model, matrix_config,
+                prompt_format, step_config, per_topic_template, max_concurrent,
+            )
         for i, topic in enumerate(topics):
             if self._cancelled:
                 break
@@ -766,7 +787,11 @@ class ProjectBuilder:
                 topic_name = topic.split("\t")[0].strip()
                 # Remove Windows-illegal chars: \ / : * ? " < > |
                 safe_name = re.sub(r'[\\/:*?"<>|\t\n\r]', '', topic_name)
-                safe_name = re.sub(r'\s+', ' ', safe_name)[:50].strip()
+                safe_name = re.sub(r'\s+', ' ', safe_name).strip()
+                if len(safe_name) > 50:
+                    import hashlib
+                    suffix = hashlib.sha1(topic_name.encode()).hexdigest()[:6]
+                    safe_name = f"{safe_name[:50]}_{suffix}"
                 output_dir = str(Path(output_base) / safe_name)
 
             # Fix #2: Per-topic template detection
@@ -790,6 +815,58 @@ class ProjectBuilder:
             results.append(result)
 
         return results
+
+    # ── Concurrent Batch Processing ─────────────────────────────
+
+    async def _process_batch_concurrent(
+        self, topics, template, api_key, output_base, skip_seo,
+        skip_research, skip_bible, model, matrix_config,
+        prompt_format, step_config, per_topic_template, max_concurrent,
+    ) -> List[TopicResult]:
+        """Process batch with bounded concurrency via asyncio.Semaphore."""
+        import asyncio
+        sem = asyncio.Semaphore(max_concurrent)
+        slots = [None] * len(topics)
+
+        async def _run(idx, raw):
+            if self._cancelled:
+                return
+            raw = raw.strip()
+            if "\t" in raw:
+                parts = [p.strip() for p in raw.split("\t") if p.strip()]
+                raw = max(parts, key=len) if parts else raw
+            if not raw:
+                return
+            dd = self.dedup.check_all(raw)
+            if dd.status == "block":
+                slots[idx] = TopicResult(topic=raw, status="error", error=f"Blocked: {dd.reason}")
+                return
+            od = ""
+            if output_base:
+                tn = raw.split("\t")[0].strip()
+                sn = re.sub(r'[\\/:\*?"<>|\t\n\r]', '', tn)
+                sn = re.sub(r'\s+', ' ', sn).strip()
+                if len(sn) > 50:
+                    import hashlib
+                    sn = f"{sn[:50]}_{hashlib.sha1(tn.encode()).hexdigest()[:6]}"
+                od = str(Path(output_base) / sn)
+            tt = template
+            if per_topic_template and self.scanner:
+                tname = raw.split("\t")[0].strip() if "\t" in raw else raw
+                m = self.scanner.detect_mode(tname)
+                if m:
+                    tt = m[0].template
+            async with sem:
+                log.info(f"[Builder] {idx+1}/{len(topics)} (parallel x{max_concurrent}): {raw[:50]}")
+                slots[idx] = await self.process_topic(
+                    raw, tt, api_key, od, skip_seo,
+                    skip_research=skip_research, skip_bible=skip_bible,
+                    model=model, matrix_config=matrix_config,
+                    prompt_format=prompt_format, step_config=step_config,
+                )
+
+        await asyncio.gather(*[_run(i, t) for i, t in enumerate(topics)], return_exceptions=True)
+        return [r for r in slots if r is not None]
 
     # ── Semi-Manual Mode ───────────────────────────────────────
 
@@ -860,10 +937,13 @@ class ProjectBuilder:
         return prompts
 
     def _try_parse_json_prompts(self, raw: str, template) -> Optional[List[PromptRow]]:
-        """Try parsing AI output as JSON array into PromptRow list.
+        """Try parsing AI output as JSON prompt object(s) into PromptRow list.
         
-        Supports both old format (scene_number, prompt_en) and 
-        new format (scene_index, prompt_text, + 15 metadata fields).
+        Supports legacy and current formats such as:
+        - scene_number + prompt_en
+        - scene_index + prompt_text
+        - prompt / text fallback keys from imported JSON prompts
+        - nested analysis JSON that needs synthesized prompt_text fallback
         """
         try:
             # Strip markdown fences if AI wrapped in ```json ... ```
@@ -878,6 +958,9 @@ class ProjectBuilder:
             text = BatchParser._sanitize_json_text(text)
 
             data = json.loads(text)
+            if isinstance(data, dict):
+                data = [data]
+
             if not isinstance(data, list):
                 return None
 
@@ -885,10 +968,14 @@ class ProjectBuilder:
             for i, item in enumerate(data):
                 if not isinstance(item, dict):
                     continue
+
+                item = BatchParser._unwrap_single_key_scene(item)
                 
                 # Support both old and new field names
                 scene_idx = item.get('scene_index', item.get('scene_number', i + 1))
-                prompt_text = item.get('prompt_text', item.get('prompt_en', ''))
+                prompt_text, _ = BatchParser._extract_prompt_from_scene(item)
+                if not prompt_text:
+                    continue
                 
                 # Build a normalized JSON object with all schema fields
                 normalized = {
@@ -995,9 +1082,54 @@ class ProjectBuilder:
                 for d in dialogues:
                     lines.append(f"  Narration: \"{d.strip()}\"")
             else:
-                lines.append(f"  Narration: (Scene {p.index} narration)")
+                _cue = self._extract_dubbing_cue(p.prompt, p.index)
+                lines.append(f"  Narration: {_cue}")
             lines.append("")
         return "\n".join(lines)
+
+    def _extract_dubbing_cue(self, prompt_text: str, scene_idx: int) -> str:
+        """Extract narration cue from prompt when regex dialogue fails.
+
+        Priority: audio_cue > tone + setting > prompt_text summary.
+        """
+        try:
+            scene = json.loads(prompt_text)
+            if isinstance(scene, dict):
+                # Priority 1: explicit audio cue
+                audio = scene.get("audio_cue", "").strip()
+                if audio and len(audio) > 5:
+                    return f'"{audio}"'
+
+                # Priority 2: tone + setting combination
+                tone = scene.get("tone", "").strip()
+                setting = scene.get("setting", "").strip()
+                if tone and setting:
+                    return f"[{tone}] {setting[:60]}"
+                if setting:
+                    return f"[Scene {scene_idx}] {setting[:80]}"
+
+                # Priority 3: characters doing something
+                chars = scene.get("characters", [])
+                actions = scene.get("character_actions", {})
+                if chars and actions:
+                    parts = []
+                    for c in chars[:2]:
+                        act = actions.get(c, "")
+                        if act:
+                            parts.append(f"{c}: {act[:40]}")
+                    if parts:
+                        return f"[Action] {'; '.join(parts)}"
+
+                # Priority 4: prompt_text first 80 chars
+                pt = scene.get("prompt_text", "")
+                if pt:
+                    return f"[Visual] {pt[:80]}..."
+        except (json.JSONDecodeError, ValueError, AttributeError):
+            pass
+
+        # Final fallback: raw prompt summary
+        clean = prompt_text.replace("\n", " ")[:80]
+        return f"[Scene {scene_idx}] {clean}..."
 
     def _save_outputs(self, result: TopicResult, output_dir: str,
                        prompt_format: str = "text") -> None:
@@ -1224,9 +1356,9 @@ class ProjectBuilder:
         if content.endswith("```"):
             content = "\n".join(content.split("\n")[:-1])
 
-        # Save to templates directory
+        # Save to user-writable directory (not bundled — may be read-only in packaged builds)
         safe_name = re.sub(r'[^\w\s-]', '', category).replace(" ", "_")
-        templates_dir = self._bundled_path() / "02_Universal" / "Templates"
+        templates_dir = self._user_data_path() / "Templates"
         templates_dir.mkdir(parents=True, exist_ok=True)
         output_path = templates_dir / f"{safe_name}.md"
 
@@ -1302,9 +1434,9 @@ class ProjectBuilder:
         if content.endswith("```"):
             content = "\n".join(content.split("\n")[:-1])
 
-        # Determine output directory
+        # Save to user-writable directory (not bundled — may be read-only in packaged builds)
         subdir = "02_Universal" if rule_type == "universal" else "03_Advanced"
-        target_dir = self._bundled_path() / subdir
+        target_dir = self._user_data_path() / subdir
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # Auto-number based on existing files

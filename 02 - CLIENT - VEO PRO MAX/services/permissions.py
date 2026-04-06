@@ -176,12 +176,16 @@ class PermissionsSystem:
     def set_role_from_tier(self, tier: LicenseTier):
         """Set role from license tier.
         
-        All paid tiers → PREMIUM. TESTER is set via Firebase _role field only.
+        All paid tiers -> PREMIUM. TESTER is set via Firebase _role field only.
         """
+        # FIX P2: Tamper = force TRIAL regardless of tier
+        if self._tamper_detected:
+            self._current_role = Role.TRIAL
+            return
         if tier == LicenseTier.TRIAL:
             self._current_role = Role.TRIAL
         else:
-            # All paid tiers (1M, 3M, 6M, 1Y, LIFETIME) → PREMIUM
+            # All paid tiers (1M, 3M, 6M, 1Y, LIFETIME) -> PREMIUM
             self._current_role = Role.PREMIUM
     
     def has_feature(self, feature: Feature) -> bool:

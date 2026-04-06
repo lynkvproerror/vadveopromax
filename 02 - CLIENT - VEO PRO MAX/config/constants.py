@@ -350,7 +350,7 @@ def get_timeout_tier(attempt: int = 0) -> dict:
 class AppConstants:
     """Application-wide constants."""
     APP_NAME = "VEO Pro Max"
-    APP_VERSION = "2.3.10"
+    APP_VERSION = "2.3.11"
     
     # Auto-update (GitHub public repo)
     GITHUB_REPO = "lynkvproerror/vadveopromax"

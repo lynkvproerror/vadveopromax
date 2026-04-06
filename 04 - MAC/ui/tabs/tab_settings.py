@@ -651,7 +651,7 @@ class TabSettings(
         self._pb_baseurl_edit.setStyleSheet(
             f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
             f"border: none; border-radius: 4px; "
-            f"font-family: Consolas, monospace; font-size: 12px; font-weight: bold; padding: 4px 8px;"
+            f"font-family: Menlo, monospace; font-size: 12px; font-weight: bold; padding: 4px 8px;"
         )
         # Load saved or default base URL
         saved_url = getattr(s, 'pb_ai_base_url', '') or ''
@@ -688,7 +688,7 @@ class TabSettings(
         self._pb_keys_edit.setStyleSheet(
             f"background-color: {Theme.SURFACE1}; color: {Theme.TEXT}; "
             f"border: none; border-radius: 4px; "
-            f"font-family: Consolas, monospace; font-size: 12px; font-weight: bold;"
+            f"font-family: Menlo, monospace; font-size: 12px; font-weight: bold;"
         )
         # Set placeholder based on provider
         hint = self._PROVIDER_KEY_HINTS.get(current_provider, "API key...")

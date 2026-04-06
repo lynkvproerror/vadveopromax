@@ -77,18 +77,20 @@ class Theme:
     INPUT_FONT_SIZE = 12         # Font size (px)
     
     # === TYPOGRAPHY ===
-    # Font family names
-    FONT_FAMILY_HEADING = "Segoe UI"  # Fallback to system fonts
-    FONT_FAMILY_BODY = "Segoe UI"
-    FONT_FAMILY_MONO = "Consolas"
+    # Font family names — macOS system fonts
+    # "SF Pro Display" = macOS system UI font (replaces Segoe UI)
+    # "Menlo" = macOS monospace (replaces Consolas)
+    FONT_FAMILY_HEADING = "SF Pro Display"
+    FONT_FAMILY_BODY = "SF Pro Display"
+    FONT_FAMILY_MONO = "Menlo"
     
     # Font tuples (family, size) - CTk format
-    FONT_HEADING = ("Segoe UI", 16)
-    FONT_SUBHEADING = ("Segoe UI", 14)
-    FONT_BODY = ("Segoe UI", 13)
-    FONT_SMALL = ("Segoe UI", 11)
-    FONT_MONO = ("Consolas", 12)
-    FONT_BUTTON = ("Segoe UI", 13)
+    FONT_HEADING = ("SF Pro Display", 16)
+    FONT_SUBHEADING = ("SF Pro Display", 14)
+    FONT_BODY = ("SF Pro Display", 13)
+    FONT_SMALL = ("SF Pro Display", 11)
+    FONT_MONO = ("Menlo", 12)
+    FONT_BUTTON = ("SF Pro Display", 13)
     
     # === SIDEBAR ===
     SIDEBAR_WIDTH = 254          # Form sidebars (Video, Image, Project Builder)

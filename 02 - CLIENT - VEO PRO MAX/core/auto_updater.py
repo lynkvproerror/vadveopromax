@@ -470,6 +470,7 @@ class AutoUpdater(QObject):
         self._download_worker = UpdateDownloadWorker(
             url=url, sha256=sha, filename=filename
         )
+        self._active_download_type = info.update_type
         self._download_worker.progress.connect(self.download_progress.emit)
         self._download_worker.finished.connect(self._on_download_complete)
         self._download_worker.error.connect(self.download_error.emit)
@@ -1019,6 +1020,7 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
                 return
 
             app_dir = self._get_app_dir()
+            self._write_installer_appdir_hint(str(installer_file))
             exe_path = os.path.join(app_dir, os.path.basename(sys.executable))
             ps1_path = os.path.join(tempfile.gettempdir(), "veo_installer_updater.ps1")
             json_path = os.path.join(tempfile.gettempdir(), "veo_installer_paths.json")
@@ -1070,6 +1072,7 @@ $args = @(
     '/SUPPRESSMSGBOXES',
     '/NORESTART',
     "/DIR=$($cfg.appDir)",
+    "/CURRENTAPPDIR=$($cfg.appDir)",
     "/LOG=$setupLog"
 )
 
@@ -1082,6 +1085,9 @@ if ($setup.ExitCode -ne 0) {{
 
 if (Test-Path $cfg.installerPath) {{
     Remove-Item -Path $cfg.installerPath -Force -ErrorAction SilentlyContinue
+}}
+if (Test-Path "$($cfg.installerPath).appdir") {{
+    Remove-Item -Path "$($cfg.installerPath).appdir" -Force -ErrorAction SilentlyContinue
 }}
 Remove-Item -Path $jsonPath -Force -ErrorAction SilentlyContinue
 
@@ -1164,6 +1170,8 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             persistent_zip = updates_dir / Path(zip_path).name
             shutil.copy2(zip_path, str(persistent_zip))
             log.info(f"Copied update payload to persistent location: {persistent_zip}")
+            if update_type == "installer":
+                self._write_installer_appdir_hint(str(persistent_zip))
             
             # ★ R17-4+R12-1: Clear old pending AFTER copy succeeds, but skip
             # deleting old ZIP if it's the same path (same-version re-defer)
@@ -1173,6 +1181,7 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
                     old_zip = old_data.get("package_path") or old_data.get("zip_path", "")
                     # Only delete old ZIP if path differs from new (avoids deleting our fresh copy)
                     if old_zip and old_zip != str(persistent_zip) and Path(old_zip).exists():
+                        self._cleanup_package_hint(old_zip)
                         Path(old_zip).unlink(missing_ok=True)
                     PENDING_UPDATE_FILE.unlink()
             except Exception:
@@ -1180,6 +1189,7 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
             
             # Clean up original temp file
             try:
+                self._cleanup_package_hint(zip_path)
                 os.unlink(zip_path)
                 parent = os.path.dirname(zip_path)
                 if parent and os.path.basename(parent).startswith("veo_update_"):
@@ -1221,6 +1231,7 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
                         data = json.loads(PENDING_UPDATE_FILE.read_text(encoding='utf-8'))
                         zip_path = data.get("package_path") or data.get("zip_path", "")
                         if zip_path and Path(zip_path).exists():
+                            AutoUpdater._cleanup_package_hint(zip_path)
                             Path(zip_path).unlink(missing_ok=True)
                     except Exception:
                         pass
@@ -1331,12 +1342,39 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
     def _on_download_complete(self, path: str):
         """Handle download completion."""
         log.info(f"Update downloaded: {path}")
+        try:
+            if getattr(self, "_active_download_type", "") == "installer":
+                self._write_installer_appdir_hint(path)
+        except Exception as e:
+            log.warning(f"Failed to write installer app-dir hint: {e}")
         self.download_complete.emit(path)
-    
+
+    @staticmethod
+    def _get_installer_appdir_hint_path(package_path: str) -> Path:
+        """Return the sidecar path used to store the source app directory."""
+        return Path(f"{package_path}.appdir")
+
+    @classmethod
+    def _cleanup_package_hint(cls, package_path: str):
+        """Remove the app-dir sidecar associated with a downloaded payload."""
+        try:
+            cls._get_installer_appdir_hint_path(package_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    @classmethod
+    def _write_installer_appdir_hint(cls, installer_path: str):
+        """Persist the current app dir beside the installer for manual launches."""
+        app_dir = cls._get_app_dir()
+        hint_path = cls._get_installer_appdir_hint_path(installer_path)
+        hint_path.write_text(app_dir, encoding="utf-8")
+        log.info(f"Wrote installer app-dir hint: {hint_path} -> {app_dir}")
+
     @staticmethod
     def _cleanup_zip(zip_path: str):
         """★ R10-4: Clean up ZIP file and its parent veo_update_* dir."""
         try:
+            AutoUpdater._cleanup_package_hint(zip_path)
             if os.path.exists(zip_path):
                 parent = os.path.dirname(zip_path)
                 if parent and os.path.basename(parent).startswith("veo_update_"):

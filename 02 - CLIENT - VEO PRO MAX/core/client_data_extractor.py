@@ -35,6 +35,7 @@ MIN_GOOD_LENGTH = MIN_VALID_XCD  # Shared constant (50)
 # Files needed for Chrome Variations Service (copy from default profile)
 VARIATIONS_FILES = [
     "Local State",
+    "Variations",
 ]
 
 

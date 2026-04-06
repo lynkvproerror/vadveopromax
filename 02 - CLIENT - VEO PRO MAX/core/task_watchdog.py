@@ -147,25 +147,38 @@ class TaskWatchdog:
     # ─── Detection ────────────────────────────────────────────────
     
     def _is_stuck(self, task, now: datetime, timeout_sec: float) -> bool:
-        """Check if a task has exceeded its timeout."""
-        if not task.started_at:
+        """Check if a task has exceeded its per-phase timeout.
+        
+        Uses watchdog_reset_at (set at pipeline phase transitions) if
+        available, otherwise falls back to started_at.
+        
+        This prevents false-positive stuck detection when early phases
+        (e.g. submit with 429 retries) consume part of the timeout budget.
+        Without this, a task that spent 5 min on submit retries only has
+        10 min left for polling — below MAX_POLL_TIME (10 min), causing
+        the watchdog to kill legitimately-running tasks.
+        """
+        ref_time = getattr(task, 'watchdog_reset_at', None) or task.started_at
+        if not ref_time:
             return False
         
-        elapsed = (now - task.started_at).total_seconds()
+        elapsed = (now - ref_time).total_seconds()
         return elapsed > timeout_sec
     
     # ─── Recovery ─────────────────────────────────────────────────
     
     def _recover(self, task, reason: str, timeout: float):
         """Force re-queue a stuck task and release its slot."""
-        from core.dispatcher import TaskState
+        from core.dispatcher import TaskState, TaskStage
         
+        # Use ref_time for accurate elapsed reporting
+        ref_time = getattr(task, 'watchdog_reset_at', None) or task.started_at
         elapsed = 0
-        if task.started_at:
-            elapsed = (datetime.now() - task.started_at).total_seconds()
+        if ref_time:
+            elapsed = (datetime.now() - ref_time).total_seconds()
         
         log.warning(
-            f"🐕 [Watchdog] {reason}: task {task.id} "
+            f"[Watchdog] {reason}: task {task.id} "
             f"stuck for {elapsed:.0f}s (limit {timeout}s). "
             f"Account: {task.assigned_account or 'unknown'}. "
             f"Re-queuing."
@@ -178,11 +191,22 @@ class TaskWatchdog:
         # Save assigned_account BEFORE requeue clears it (for worker release below).
         assigned_account = task.assigned_account
         
-        # Clear partial results so UI doesn't show stale thumbnails on READY
-        task.output_uris = []
-        task.thumbnail_paths = []
-        task.video_outputs = []
-        task.operation_name = None
+        # Preserve checkpoint data for submitted/generated/downloaded tasks so
+        # resume logic can continue from the last good stage instead of
+        # completing with empty outputs after watchdog recovery.
+        preserve_checkpoint = getattr(task, 'stage', None) in {
+            TaskStage.SUBMITTED,
+            TaskStage.GENERATED,
+            TaskStage.DOWNLOADED_720,
+            TaskStage.UPSCALING,
+            TaskStage.UPSCALED,
+        }
+        if not preserve_checkpoint:
+            # Clear partial results so UI doesn't show stale thumbnails on READY
+            task.output_uris = []
+            task.thumbnail_paths = []
+            task.video_outputs = []
+            task.operation_name = None
         
         # Re-queue in dispatcher — handles state transition + counter decrement
         self._dispatcher.requeue_task(task)

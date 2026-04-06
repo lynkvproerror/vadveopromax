@@ -590,12 +590,13 @@ class Engine:
         self._browser_recovery_locks: Dict[str, asyncio.Lock] = {}   # Per-account browser recovery dedup
         self._browser_recovery_epoch: Dict[str, int] = {}             # Tracks recovery generation
         self._account_rate_locks: Dict[str, asyncio.Lock] = {}  # Bug 13: per-account rate limiter
-        # ── RC2 fix: Global cross-account submit throttle ──
-        # Google detects coordinated submissions from same IP across accounts.
-        # This lock ensures minimum 10s gap between ANY two submits.
-        self._global_submit_lock = asyncio.Lock()
-        self._global_last_submit_ts: float = 0.0
-        self._GLOBAL_MIN_SUBMIT_GAP: float = 10.0  # seconds between any two submits (video)
+        # ── RC2 fix: Per-account submit throttle ──
+        # Anti-detect: minimum gap between submits on the SAME account.
+        # Different accounts submit independently (no cross-account gate).
+        # Google's rate limiting is per-account/per-cookie, not per-IP.
+        self._per_account_submit_locks: Dict[str, asyncio.Lock] = {}
+        self._per_account_last_submit_ts: Dict[str, float] = {}
+        self._GLOBAL_MIN_SUBMIT_GAP: float = 10.0  # seconds between submits (same account, video)
         self._GLOBAL_MIN_SUBMIT_GAP_T2I: float = 3.0  # T2I images are lighter — smaller gap OK
         # (Removed: _submitted_tasks queue — scheduler now owns full lifecycle directly)
         # Risk 7 fix: Max 2 concurrent API calls per account (any type: submit, poll, upload, upscale)
@@ -1198,6 +1199,16 @@ class Engine:
         """Clear cooldown on successful API call (reset backoff counter)."""
         self._account_cooldowns.pop(email, None)
         self._account_cooldown_backoff.pop(email, None)
+        # ★ Slow reset: decay 1 oldest 429 entry per success (gradual recovery)
+        # Instead of clearing all 429 history on first success, we remove only
+        # the oldest entry. This means 3 recent 429s need 3 successes to clear,
+        # preventing the "success → reset → immediate 429" cycle.
+        if hasattr(self, '_account_429_window'):
+            window = self._account_429_window.get(email, [])
+            if window:
+                window.pop(0)  # Remove oldest entry
+                if not window:
+                    self._account_429_window.pop(email, None)
         # Cancel timer and wake waiters
         old_timer = self._cooldown_timers.pop(email, None)
         if old_timer:
@@ -3537,6 +3548,10 @@ class Engine:
                     account.release_workers(worker_count)
                     worker_count = 0
                     await self.wait_for_cooldown(account.email)
+                    # ★ Staggered resume: random jitter to avoid thundering herd
+                    jitter = random.uniform(0.5, 5.0)
+                    log.debug(f"[{fid}] Post-cooldown jitter: {jitter:.1f}s")
+                    await asyncio.sleep(jitter)
                     continue
                 
                 # Bug 2 fix: Pause if profile reset in progress for this account
@@ -3555,6 +3570,18 @@ class Engine:
                     if not task:
                         account.release_workers(worker_count)
                         worker_count = 0
+                        
+                        # ★ Orphan rescue: if queue empty but READY tasks
+                        # exist in _all_tasks, re-enqueue them. Prevents
+                        # starvation after 429 requeue storms drain the
+                        # PriorityQueue with stale entries.
+                        if (self._dispatcher.ready_count == 0
+                                and self._dispatcher.running_count == 0):
+                            rescued = self._dispatcher.rescue_orphaned_tasks()
+                            if rescued > 0:
+                                self._task_available.set()
+                                continue  # Immediately retry
+                        
                         # Bug 14: Wait for task notification instead of busy-polling
                         self._task_available.clear()
                         try:
@@ -3642,6 +3669,10 @@ class Engine:
                             worker_count += extra
                         else:
                             # Not enough capacity — requeue task, wait with backoff
+                            # ★ BUG-B19 fix: notify=False prevents thundering herd.
+                            # Without this, requeue_task() wakes ALL idle foremen
+                            # who each grab the same task, fail capacity, requeue
+                            # → infinite READY→RUNNING loop at ~10x/sec.
                             # Throttle log: only emit once per 30s per task to avoid spam
                             _cap_key = f"_cap_log_{task.id}"
                             _now = time.monotonic()
@@ -3653,7 +3684,7 @@ class Engine:
                                     f"output_count={output_count} "
                                     f"(need {output_count}, have {account.session.available_workers + 1})"
                                 )
-                            self._dispatcher.requeue_task(task)
+                            self._dispatcher.requeue_task(task, notify=False)
                             account.release_workers(worker_count)
                             worker_count = 0
                             # 15s base + random jitter prevents all workers retrying simultaneously
@@ -3739,14 +3770,24 @@ class Engine:
                             f"RESUMING from stage {task.stage.value} → concurrent pipeline"
                         )
                         task.state = TaskState.WAITING_POLL
-                        # ★ Fire-and-forget: pipeline runs concurrently
+                        # ★ Partial worker release: free extra slots, keep 1 as pipeline slot
+                        # Each task acquired output_count workers (e.g. 4). Pipeline only needs
+                        # 1 slot to track concurrency. Release (output_count-1) so foremen
+                        # can pick new tasks. Pipeline finally releases the remaining 1.
+                        # max_workers=20 → max 20 concurrent pipelines (not 5).
+                        _release = worker_count - 1
+                        if _release > 0:
+                            account.release_workers(_release)
+                            _cap_evt = self._workers_available.get(account.email)
+                            if _cap_evt:
+                                _cap_evt.set()  # Wake foremen waiting for capacity
                         t = asyncio.create_task(
-                            self._foreman_dispatch_workers(task, account, worker_count,
+                            self._foreman_dispatch_workers(task, account, 1,
                                                           supervisor=supervisor)
                         )
                         active_pipelines.add(t)
                         t.add_done_callback(active_pipelines.discard)
-                        worker_count = 0  # Ownership transferred to pipeline
+                        worker_count = 0
                         continue
                     
                     # Bug 13: Per-account rate limiter — serialize requests per account
@@ -3896,6 +3937,10 @@ class Engine:
                             # Layer 4: Cooldown — exponential backoff (30→180s)
                             # set_account_cooldown() was triggered by 403 handler below
                             await self.wait_for_cooldown(account.email)
+                            # ★ Staggered resume after cooldown
+                            jitter = random.uniform(0.5, 5.0)
+                            log.debug(f"[{fid}] Post-cooldown jitter: {jitter:.1f}s")
+                            await asyncio.sleep(jitter)
                             # Layer 5: Circuit Breaker — extension health
                             await self._wait_for_circuit(account.email)
                             # Re-check cooldown AFTER circuit wake — CircuitBreaker
@@ -3990,32 +4035,35 @@ class Engine:
                                 result = None  # No result — task was never attempted
                                 break  # Exit retry loop — task is safely back in queue
                             
-                            # ── RC2: Global cross-account submit gate ──
-                            # Wait for minimum gap since LAST submit (any account).
-                            # Prevents coordinated bot detection across accounts on same IP.
-                            async with self._global_submit_lock:
+                            # ── RC2: Per-account submit gate ──
+                            # Minimum gap between submits on SAME account (anti-detect).
+                            # Different accounts submit independently.
+                            _acct_lock = self._per_account_submit_locks.setdefault(
+                                account.email, asyncio.Lock()
+                            )
+                            async with _acct_lock:
                                 now = time.time()
-                                elapsed = now - self._global_last_submit_ts
+                                elapsed = now - self._per_account_last_submit_ts.get(account.email, 0)
                                 gap = self._GLOBAL_MIN_SUBMIT_GAP
                                 if elapsed < gap:
                                     wait_time = gap - elapsed
                                     log.info(
-                                        f"[GlobalGate:{account.email}] Waiting {wait_time:.1f}s "
-                                        f"(global inter-submit spacing)"
+                                        f"[SubmitGate:{account.email}] Waiting {wait_time:.1f}s "
+                                        f"(per-account inter-submit spacing)"
                                     )
                                     await asyncio.sleep(wait_time)
-                                # Re-check cooldown after global wait
+                                # Re-check cooldown after wait
                                 if self.is_account_on_cooldown(account.email):
                                     log.info(
                                         f"[Foreman:{account.email}] Task {task.id}: cooldown detected "
-                                        f"after global gate — requeueing"
+                                        f"after submit gate — requeueing"
                                     )
                                     self._dispatcher.requeue_task(task)
                                     account.release_workers(worker_count)
                                     worker_count = 0
                                     result = None
                                     break
-                                self._global_last_submit_ts = time.time()
+                                self._per_account_last_submit_ts[account.email] = time.time()
                             
                             # Step 6: Anti-Detect Spam — adaptive delay (SERIALIZED per account)
                             if getattr(self._settings, 'anti_detect_enabled', True) if self._settings else getattr(self, '_anti_detect_enabled', True):
@@ -4339,19 +4387,77 @@ class Engine:
                             # Old: 2, 4, 8, 16, 30  →  New: 5, 10, 20, 40, 60
                             backoff = min(5 * (2 ** attempt), 60)
                             
-                            # ★ Fix 2B: Extended pause on persistent 429 (quota exhaustion)
+                            # ★ Fix 2B: Sliding window 429 tracking (quota exhaustion)
+                            # Tracks ALL 429 timestamps in a 60s window per account.
+                            # Unlike the old consecutive counter, this catches 429s from
+                            # different tasks and doesn't reset on a single success.
                             error_str = result.error or ""
                             if "429" in error_str or "exhausted" in error_str.lower():
-                                consecutive_429 = getattr(task, '_consecutive_429', 0) + 1
-                                task._consecutive_429 = consecutive_429
-                                if consecutive_429 >= 3:
-                                    backoff = 120  # 2min for quota reset
+                                import time as _time
+                                if not hasattr(self, '_account_429_window'):
+                                    self._account_429_window = {}
+                                now = _time.monotonic()
+                                window = self._account_429_window.setdefault(account.email, [])
+                                window.append(now)
+                                # Prune entries older than 60s
+                                window[:] = [t for t in window if now - t < 60]
+                                recent_429_count = len(window)
+                                
+                                # ★ Tiered response based on 429 density in 60s window:
+                                # 1 hit  → soft per-task backoff (10s), others can try
+                                # 2 hits → account cooldown (60s)
+                                # 3+ hits → hard cooldown + requeue + extended pause
+                                if recent_429_count >= 3:
+                                    # Quota severely exhausted — requeue + extended pause
+                                    cooldown_secs = min(30 * recent_429_count, 120)
+                                    self.set_account_cooldown(
+                                        account.email,
+                                        f"429/quota_exhausted (window={recent_429_count}/60s)"
+                                    )
                                     log.warning(
                                         f"[Foreman:{account.email}] Task {task.id}: "
-                                        f"{consecutive_429}x consecutive 429 → extended pause {backoff}s"
+                                        f"429 x{recent_429_count} in 60s → account cooldown {cooldown_secs}s"
+                                    )
+                                    backoff = 120  # 2min for quota reset
+                                    # ★ BUG-B19 fix: Release workers during extended 429 pause.
+                                    if worker_count > 0:
+                                        log.info(
+                                            f"[Foreman:{account.email}] Task {task.id}: "
+                                            f"releasing {worker_count} worker(s) for 429 extended pause"
+                                        )
+                                        account.release_workers(worker_count)
+                                        worker_count = 0
+                                    # Requeue task so another foreman can try after quota resets
+                                    self._dispatcher.requeue_task(task, notify=False)
+                                    log.warning(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"{recent_429_count}x 429 in window → requeued + pause {backoff}s"
+                                    )
+                                    await self._interruptible_sleep(backoff)
+                                    result = None  # Signal: task was requeued
+                                    break  # Exit retry loop — task is back in queue
+                                elif recent_429_count >= 2:
+                                    # Quota likely exhausted — account cooldown
+                                    cooldown_secs = min(30 * recent_429_count, 120)
+                                    self.set_account_cooldown(
+                                        account.email,
+                                        f"429/quota_exhausted (window={recent_429_count}/60s)"
+                                    )
+                                    log.warning(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"429 x{recent_429_count} in 60s → account cooldown {cooldown_secs}s"
+                                    )
+                                else:
+                                    # First 429 in window — soft per-task backoff only
+                                    backoff = 10
+                                    log.info(
+                                        f"[Foreman:{account.email}] Task {task.id}: "
+                                        f"429 (first in 60s window) → per-task backoff {backoff}s, "
+                                        f"other prompts can still submit"
                                     )
                             else:
-                                task._consecutive_429 = 0
+                                # Non-429 error → no window changes (timestamps auto-expire)
+                                pass
                             
                             # ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
                             # TIERED 403 RECOVERY STATE MACHINE
@@ -4542,14 +4648,24 @@ class Engine:
                                 f"→ concurrent pipeline (first={result.operation_name[:12]}...)"
                             )
                             # ★ CONCURRENT PIPELINE: fire-and-forget
-                            # Foreman immediately loops back to pick next task
+                            # ★ Partial worker release: keep 1 slot, release the rest
+                            # Submit done — pipeline only polls/downloads/upscales.
+                            # Release (output_count-1) workers so foreman can pick new tasks.
+                            # Pipeline finally releases the remaining 1 worker.
+                            # max_workers=20 → max 20 concurrent pipelines (not 5).
+                            _release = worker_count - 1
+                            if _release > 0:
+                                account.release_workers(_release)
+                                _cap_evt = self._workers_available.get(account.email)
+                                if _cap_evt:
+                                    _cap_evt.set()  # Wake foremen waiting for capacity
                             t = asyncio.create_task(
-                                self._foreman_dispatch_workers(task, account, worker_count,
+                                self._foreman_dispatch_workers(task, account, 1,
                                                               supervisor=supervisor)
                             )
                             active_pipelines.add(t)
                             t.add_done_callback(active_pipelines.discard)
-                            worker_count = 0  # Ownership transferred to pipeline
+                            worker_count = 0
                         else:
                             # Sync operation (T2I/I2I) — launch download+upscale pipeline
                             if result.output_uris:
@@ -4868,9 +4984,17 @@ class Engine:
                     if self._stop_event.is_set():
                         error_msg = "Stopped during timeout retry wait"
                     else:
-                        # Re-submit this single video via force_retry_video
                         retried = self._dispatcher.force_retry_video(task.id, video_index)
                         if retried:
+                            # ★ BUG-2 FIX: Propagate timeout retry counter to replacement task
+                            # Without this, each new task starts with timeout_retries=0
+                            # → infinite retry chain (2 retries × N levels = unlimited)
+                            for rep_id, (oid, vidx) in self._dispatcher._replace_target_map.items():
+                                if oid == task.id and vidx == video_index:
+                                    rep_task = self._dispatcher._all_tasks.get(rep_id)
+                                    if rep_task:
+                                        setattr(rep_task, '_timeout_retry_0', timeout_retries + 1)
+                                    break
                             log.info(
                                 f"{log_prefix} ♻️ force_retry_video issued for timeout retry "
                                 f"#{timeout_retries + 1}/2"
@@ -5644,9 +5768,12 @@ class Engine:
                     account.release_workers(worker_count)
                     worker_count = 0
                     return
-                async with self._global_submit_lock:
+                _acct_lock = self._per_account_submit_locks.setdefault(
+                    account.email, asyncio.Lock()
+                )
+                async with _acct_lock:
                     now = time.time()
-                    elapsed = now - self._global_last_submit_ts
+                    elapsed = now - self._per_account_last_submit_ts.get(account.email, 0)
                     gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I
                     if elapsed < gap:
                         await asyncio.sleep(gap - elapsed)
@@ -5655,7 +5782,7 @@ class Engine:
                         account.release_workers(worker_count)
                         worker_count = 0
                         return
-                    self._global_last_submit_ts = time.time()
+                    self._per_account_last_submit_ts[account.email] = time.time()
                 
                 _settings = self._settings
                 _anti_detect = getattr(_settings, 'anti_detect_enabled', True) if _settings else True
@@ -5878,13 +6005,16 @@ class Engine:
                                 account.release_workers(worker_count)
                                 worker_count = 0
                                 return
-                            async with self._global_submit_lock:
+                            _acct_lock = self._per_account_submit_locks.setdefault(
+                                account.email, asyncio.Lock()
+                            )
+                            async with _acct_lock:
                                 now = time.time()
-                                elapsed = now - self._global_last_submit_ts
+                                elapsed = now - self._per_account_last_submit_ts.get(account.email, 0)
                                 gap = self._GLOBAL_MIN_SUBMIT_GAP_T2I
                                 if elapsed < gap:
                                     await asyncio.sleep(gap - elapsed)
-                                self._global_last_submit_ts = time.time()
+                                self._per_account_last_submit_ts[account.email] = time.time()
                             await self._burst_controller_t2i.wait(account.email)
                         
                         try:

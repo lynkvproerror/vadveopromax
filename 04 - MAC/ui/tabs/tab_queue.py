@@ -13,18 +13,20 @@ from typing import Optional, List, Dict
 import sys
 import time
 import time as _time
+import logging  # ★ R5: Module-level (was inside _refresh_queue_from_controller)
 from pathlib import Path
+from datetime import datetime as _dt  # ★ R5: Module-level (was inside _refresh_groups)
 from dataclasses import dataclass, field
 from collections import OrderedDict
 
 from PySide6.QtWidgets import (
     QWidget, QFrame, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
-    QScrollArea, QLineEdit, QComboBox,
+    QScrollArea, QLineEdit, QComboBox, QSizePolicy,  # ★ R5: QSizePolicy moved here
+    QGraphicsOpacityEffect,
 )
 from ui.popups import show_confirm
 from PySide6.QtCore import Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QPixmap, QCursor
-from PySide6.QtWidgets import QGraphicsOpacityEffect
 
 try:
     from PySide6.QtGui import QDesktopServices
@@ -151,6 +153,7 @@ class TabQueue(
         
         self._setup_ui()
         self._register_controller_callbacks()
+        self._init_micro_thumb_system()  # ★ Perf: background micro-thumbnail pre-generation
         # Load existing queue data on startup (deferred to ensure UI ready)
         if controller:
             QTimer.singleShot(100, self._refresh_queue_from_controller)
@@ -217,15 +220,20 @@ class TabQueue(
                 return  # Skip — too soon since last update for this task
             self._progress_last_ts[task_id] = now
         
+        # ★ R6: Single get_all_tasks_dict() call — reuse for both prompt update + thumb effect
+        live_task = None
+        if self.controller and hasattr(self.controller, '_dispatcher'):
+            _all_tasks = self.controller._dispatcher.get_all_tasks_dict()
+            live_task = _all_tasks.get(task_id)
+        elif self.controller and hasattr(self.controller, 'dispatcher'):
+            _all_tasks = self.controller.dispatcher.get_all_tasks_dict()
+            live_task = _all_tasks.get(task_id)
+        
         # ★ Detect prompt enhance/fix → refresh prompt labels
         is_prompt_change = status_text and (
             "✨" in status_text or "🔧" in status_text
         )
         if is_prompt_change and hasattr(widget, '_scene_label'):
-            # Re-read live prompt from dispatcher
-            live_task = None
-            if self.controller and hasattr(self.controller, '_dispatcher'):
-                live_task = self.controller._dispatcher.get_all_tasks_dict().get(task_id)
             if live_task and live_task.prompt:
                 new_prompt = live_task.prompt
                 dot_pos = new_prompt.find(". ")
@@ -262,12 +270,10 @@ class TabQueue(
         if hasattr(widget, 'thumb_slots'):
             # BUG-A3 fix: Get live task status (not stale from widget creation)
             task_status = getattr(widget, '_task_status', 'running')
-            live_task = None  # Init for use in slot refresh below
-            if self.controller and hasattr(self.controller, 'dispatcher'):
-                live_task = self.controller.dispatcher.get_all_tasks_dict().get(task_id)
-                if live_task:
-                    task_status = live_task.state.value
-                    widget._task_status = task_status  # Update cached status
+            # ★ R6: Reuse live_task from single dict call above
+            if live_task:
+                task_status = live_task.state.value
+                widget._task_status = task_status  # Update cached status
             for vi_idx, slot in enumerate(widget.thumb_slots):
                 try:
                     # ⚡ FIX: Refresh _video_info from live dispatcher data
@@ -302,15 +308,45 @@ class TabQueue(
                 if progress >= 100:
                     # Check if any videos are retrying (via thumb_slots metadata)
                     retrying_count = 0
+                    upscaling_count = 0
+                    upscale_failed_count = 0
+                    total_slots = 0
+                    upscale_done = 0
                     if hasattr(widget, 'thumb_slots'):
+                        total_slots = len(widget.thumb_slots)
                         for slot in widget.thumb_slots:
                             vi = getattr(slot, '_video_info', None)
-                            if vi and vi.get('quality') == 'retrying':
-                                retrying_count += 1
+                            if vi:
+                                if vi.get('quality') == 'retrying':
+                                    retrying_count += 1
+                                us = vi.get('upscale_status', '')
+                                if us in ('submitting', 'polling'):
+                                    upscaling_count += 1
+                                elif us == 'failed':
+                                    upscale_failed_count += 1
+                                elif us == 'success':
+                                    upscale_done += 1
+                    
                     if retrying_count > 0:
-                        total = len(widget.thumb_slots) if hasattr(widget, 'thumb_slots') else '?'
+                        total = total_slots or '?'
                         widget.status_label.setText(t("queue_extra.retrying").replace("{count}", str(retrying_count)).replace("{total}", str(total)))
                         widget.status_label.setStyleSheet(f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;")
+                    elif upscaling_count > 0:
+                        # ★ R2 Fix: Show upscale progress instead of COMPLETED
+                        if status_text and ('Upscal' in status_text or '⬆️' in status_text):
+                            label = status_text[:18]
+                        else:
+                            label = f"⬆️ Upscale {upscale_done}/{total_slots}"
+                        widget.status_label.setText(label)
+                        widget.status_label.setStyleSheet(f"color: {Theme.PURPLE}; font-size: 10px; font-weight: bold; border: none;")
+                    elif upscale_failed_count > 0:
+                        # ★ R2 Fix: Show upscale failure
+                        if total_slots <= 1:
+                            label = "⚠️ UP FAIL"
+                        else:
+                            label = f"⚠️ {upscale_failed_count}/{total_slots} FAIL"
+                        widget.status_label.setText(label)
+                        widget.status_label.setStyleSheet(f"color: {Theme.YELLOW}; font-size: 10px; font-weight: bold; border: none;")
                     else:
                         widget.status_label.setText(t("queue_extra.completed"))
                         widget.status_label.setStyleSheet(f"color: {Theme.GREEN}; font-size: 10px; font-weight: bold; border: none;")
@@ -424,6 +460,52 @@ class TabQueue(
                     self._auto_refresh_timer.stop()
         # Check post-queue action every tick (handles upscale-only completion)
         self._check_post_queue_action()
+    
+    def _on_scroll_viewport_changed(self):
+        """★ Perf: Refresh thumbnails for rows that just scrolled into view.
+        
+        Called 150ms after scroll stops (debounced). Iterates task widgets
+        and loads thumbnails only for newly-visible rows that were previously
+        skipped by viewport culling.
+        """
+        if not self.isVisible():
+            return
+        if getattr(self, '_pause_refresh_for_menu', False):
+            return
+        
+        for tid, widget in self._task_widgets.items():
+            try:
+                if not _is_widget_alive(widget):
+                    continue
+                if not self._is_widget_in_viewport(widget):
+                    continue
+                # Check if this widget needs a deferred thumb refresh
+                if getattr(widget, '_needs_thumb_refresh', False):
+                    widget._needs_thumb_refresh = False
+                    if hasattr(widget, 'thumb_slots'):
+                        # Get live data from controller
+                        td = self._get_live_task_data(tid)
+                        if td:
+                            self._update_thumb_slot_data(widget, td)
+            except RuntimeError:
+                continue
+    
+    def _get_live_task_data(self, task_id: str) -> dict:
+        """★ R2: O(1) lookup from cached task data index (built during _refresh_groups)."""
+        idx = getattr(self, '_task_data_index', None)
+        if idx:
+            return idx.get(task_id)
+        # Fallback: full scan (only if _task_data_index not yet built)
+        if not self.controller or not hasattr(self.controller, 'get_queue_groups'):
+            return None
+        try:
+            for group in self.controller.get_queue_groups():
+                for td in group.get('tasks', []):
+                    if str(td.get('id', '')) == task_id:
+                        return td
+        except Exception:
+            pass
+        return None
     
     def _tick_input_pulse(self):
         """BUG-A8 fix: Animate input thumbnails border (I2V/R2V modes)."""
@@ -563,6 +645,18 @@ class TabQueue(
         # Update header button icon
         if hasattr(self, '_toggle_all_btn'):
             self._toggle_all_btn.setText("▼" if new_state else "▶")
+    
+    def _has_active_filters(self) -> bool:
+        """★ P2: Check if any filter is active (non-default)."""
+        if self.project_filter.currentIndex() != 0:
+            return True
+        if self.status_filter.currentIndex() != 0:
+            return True
+        if self.mode_filter.currentIndex() != 0:
+            return True
+        if self.search_input.text().strip():
+            return True
+        return False
     
     def _apply_filters(self):
         """Apply all filters to queue view."""
@@ -770,6 +864,16 @@ class TabQueue(
         scroll.setWidget(self.queue_container)
         container_layout.addWidget(scroll, stretch=1)
         
+        # ★ Perf: Scroll-triggered viewport-aware loading
+        self._scroll_area = scroll
+        self._scroll_refresh_timer = QTimer(self)
+        self._scroll_refresh_timer.setSingleShot(True)
+        self._scroll_refresh_timer.setInterval(150)  # 150ms debounce
+        self._scroll_refresh_timer.timeout.connect(self._on_scroll_viewport_changed)
+        scroll.verticalScrollBar().valueChanged.connect(
+            lambda _: self._scroll_refresh_timer.start() if not self._scroll_refresh_timer.isActive() else None
+        )
+        
         return container
     
     def _create_stats_bar(self) -> QWidget:
@@ -821,6 +925,28 @@ class TabQueue(
         }
         cfg = status_config.get(item.status, status_config["pending"])
         
+        # ★ R3: Override border color for completed tasks with active upscale
+        border_color = cfg['color']
+        if item.status == "completed" and task_data:
+            video_outputs = task_data.get('video_outputs', [])
+            us = task_data.get('upscale_status', '')
+            has_upscaling = any(
+                vo.get('upscale_status') in ('submitting', 'polling')
+                for vo in video_outputs
+            ) or us in ('submitting', 'polling')
+            has_upscale_fail = any(
+                vo.get('upscale_status') == 'failed'
+                for vo in video_outputs
+            ) or us == 'failed'
+            has_retrying = any(
+                vo.get('quality') == 'retrying'
+                for vo in video_outputs
+            )
+            if has_retrying or has_upscaling:
+                border_color = Theme.PURPLE
+            elif has_upscale_fail:
+                border_color = Theme.YELLOW
+        
         # Mode icons
         mode_icons = {
             "T2V": "📹", "I2V": "🎬", "R2V": "🧪", 
@@ -834,7 +960,7 @@ class TabQueue(
             QFrame#queueItemRow {{
                 background-color: {cfg['bg']};
                 border-bottom: 1px solid {Theme.SURFACE0};
-                border-left: 3px solid {cfg['color']};
+                border-left: 3px solid {border_color};
             }}
             QFrame#queueItemRow:hover {{
                 background-color: {Theme.SURFACE2};
@@ -882,7 +1008,7 @@ class TabQueue(
         prompt_widget = QWidget()
         prompt_widget.setStyleSheet("border: none; background: transparent;")
         prompt_widget.setMinimumWidth(0)
-        from PySide6.QtWidgets import QSizePolicy
+        # ★ R5: QSizePolicy now imported at module level
         prompt_widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         prompt_layout_v = QVBoxLayout(prompt_widget)
         prompt_layout_v.setContentsMargins(0, 2, 0, 2)
@@ -982,6 +1108,45 @@ class TabQueue(
             )
             status_label.setStyleSheet(f"""
                 color: {Theme.PURPLE if hasattr(Theme, 'PURPLE') else Theme.BLUE};
+                font-size: 10px;
+                font-weight: bold;
+                border: none;
+            """)
+            widget.status_label = status_label
+            layout.addWidget(status_label)
+        elif item.status == "completed" and (
+            upscale_status in ('submitting', 'polling')
+            or any(vo.get('upscale_status') in ('submitting', 'polling') for vo in video_outputs)
+        ):
+            # ★ R3: Upscale actively in progress
+            total_count = len(video_outputs) or 1
+            done_count = sum(1 for vo in video_outputs if vo.get('upscale_status') == 'success')
+            us_text = task_data.get('status_text', '') if task_data else ''
+            if us_text and ('Upscal' in us_text or '⬆️' in us_text):
+                label_text = us_text[:18]
+            else:
+                label_text = f"⬆️ Upscale {done_count}/{total_count}"
+            
+            status_label = QLabel(label_text)
+            status_label.setFixedWidth(120)
+            status_label.setAlignment(Qt.AlignCenter)
+            # Per-video tooltip
+            vo_lines = []
+            for vo in video_outputs:
+                us = vo.get('upscale_status', '')
+                idx = vo.get('index', 0) + 1
+                if us == 'success':
+                    vo_lines.append(f"  Video {idx}: ✅ Done")
+                elif us == 'polling':
+                    vo_lines.append(f"  Video {idx}: 🔄 Polling")
+                elif us == 'submitting':
+                    vo_lines.append(f"  Video {idx}: ⬆️ Submitting")
+                elif us == 'failed':
+                    vo_lines.append(f"  Video {idx}: ❌ {vo.get('upscale_error', 'Failed')}")
+            if vo_lines:
+                status_label.setToolTip("Per-video upscale:\n" + "\n".join(vo_lines))
+            status_label.setStyleSheet(f"""
+                color: {Theme.PURPLE};
                 font-size: 10px;
                 font-weight: bold;
                 border: none;
@@ -1220,7 +1385,7 @@ class TabQueue(
         te = QTextEdit()
         te.setReadOnly(True)
         te.setPlainText(dump_text)
-        te.setStyleSheet(f"background: {Theme.CRUST}; color: {Theme.TEXT}; font-family: Consolas; font-size: 12px;")
+        te.setStyleSheet(f"background: {Theme.CRUST}; color: {Theme.TEXT}; font-family: Menlo; font-size: 12px;")
         lay.addWidget(te)
         bb = QDialogButtonBox(QDialogButtonBox.Ok)
         bb.accepted.connect(dlg.accept)
@@ -1268,7 +1433,7 @@ class TabQueue(
         # Try group-based data first (preferred)
         if hasattr(self.controller, 'get_queue_groups'):
             groups_data = self.controller.get_queue_groups()
-            import logging
+            # ★ R5: logging now imported at module level
             _qlog = logging.getLogger("veo.tab_queue")
             total_tasks = sum(len(g.get('tasks', [])) for g in groups_data)
             _qlog.debug(f"[QueueRefresh] {len(groups_data)} groups, {total_tasks} total tasks, existing_groups={list(self._group_widgets.keys())}")
@@ -1278,7 +1443,9 @@ class TabQueue(
             self._refresh_flat_items()
         
         self._update_stats()
-        self._apply_filters()
+        # ★ P2: Skip filter application when all filters at default (no-op)
+        if self._has_active_filters():
+            self._apply_filters()
         self._update_button_states()
     
     def _refresh_groups(self, groups_data: list):
@@ -1292,9 +1459,14 @@ class TabQueue(
             gw['container'].deleteLater()
         
         # Update or create groups
-        self._queue_items.clear()
+        # ★ P1: Don't clear — prune stale items after loop instead
+        # self._queue_items.clear()  # REMOVED — causes 200+ re-allocations
         self._item_widgets.clear()
         all_task_ids = set()
+        # ★ R1: Build dict index for O(1) QueueItem lookup (replaces O(N) list scan)
+        qi_index = {str(qi.id): qi for qi in self._queue_items}
+        # ★ R2: Build task data index for O(1) _get_live_task_data
+        task_data_index = {}
         
         # Lazy-load: skip child widget creation for large queues on first load
         total_tasks = sum(len(g.get('tasks', [])) for g in groups_data)
@@ -1312,8 +1484,13 @@ class TabQueue(
                 if gw.get('_lazy_pending'):
                     # Skip child rebuild — not yet materialized
                     pass
+                elif not self._group_expanded.get(gid, True):
+                    # ★ Anti-freeze R2: Skip child rebuild for collapsed groups
+                    # Children are hidden — no point updating stylesheets/pixmaps
+                    gw['_dirty'] = True  # Mark for catch-up on expand
                 else:
-                    # Differential rebuild children
+                    # Differential rebuild children (group is expanded)
+                    gw['_dirty'] = False
                     self._rebuild_group_children(gw, g)
             else:
                 # Create new group
@@ -1330,26 +1507,43 @@ class TabQueue(
                 )
             
             # Track items for stats + collect all task IDs
+            # ★ R1: Build dict index for O(1) lookup (replaces O(N) linear scan)
             for td in g.get('tasks', []):
-                all_task_ids.add(str(td['id']))
-                item = QueueItem(
-                    id=td['id'], prompt=td['prompt'],
-                    status=td['status'], progress=td['progress'],
-                    mode=td.get('mode', 'T2V'),
-                )
-                self._queue_items.append(item)
+                tid_str = str(td['id'])
+                all_task_ids.add(tid_str)
+                # ★ R2: Build task data index for O(1) _get_live_task_data
+                task_data_index[tid_str] = td
+                # ★ R1: O(1) dict lookup instead of O(N) list scan
+                existing_qi = qi_index.get(tid_str)
+                if existing_qi:
+                    # Update in-place (no new allocation)
+                    existing_qi.status = td['status']
+                    existing_qi.progress = td['progress']
+                else:
+                    item = QueueItem(
+                        id=td['id'], prompt=td['prompt'],
+                        status=td['status'], progress=td['progress'],
+                        mode=td.get('mode', 'T2V'),
+                    )
+                    self._queue_items.append(item)
+                    qi_index[tid_str] = item  # Keep index in sync
         
-        # Prune stale entries from _task_widgets and _smooth_progress
+        # ★ R2: Store task data index for O(1) lookups in _get_live_task_data
+        self._task_data_index = task_data_index
+        
+        # Prune stale entries from _task_widgets, _smooth_progress, and _queue_items
         stale_tids = [tid for tid in self._task_widgets if tid not in all_task_ids]
         for tid in stale_tids:
             self._task_widgets.pop(tid, None)
             self._smooth_progress.pop(tid, None)
+        # ★ R1: Prune stale QueueItems
+        self._queue_items = [qi for qi in self._queue_items if str(qi.id) in all_task_ids]
         
         # BUG-T2 fix: Compute total elapsed as wall-clock span
         # (earliest start → latest end across ALL groups)
         # instead of summing individual groups (which double-counts
         # concurrent execution)
-        from datetime import datetime as _dt
+        # ★ R5: _dt (datetime) now imported at module level
         _now_ts = _dt.now()
         all_starts = []
         all_ends = []
@@ -1457,11 +1651,24 @@ class TabQueue(
         self.queue_layout.insertWidget(self.queue_layout.count() - 1, widget)
     
     def _update_stats(self):
-        """Update statistics bar."""
-        pending = sum(1 for i in self._queue_items if i.status in ("pending", "ready", "waiting"))
-        processing = sum(1 for i in self._queue_items if i.status in ("running", "waiting_poll"))
-        completed = sum(1 for i in self._queue_items if i.status == "completed")
-        failed = sum(1 for i in self._queue_items if i.status in ("failed", "cancelled"))
+        """Update statistics bar.
+        
+        ★ R3: Single-pass counter (was 4 separate iterations).
+        """
+        pending = processing = completed = failed = 0
+        _pending_set = {"pending", "ready", "waiting"}
+        _proc_set = {"running", "waiting_poll"}
+        _fail_set = {"failed", "cancelled"}
+        for i in self._queue_items:
+            s = i.status
+            if s in _pending_set:
+                pending += 1
+            elif s in _proc_set:
+                processing += 1
+            elif s == "completed":
+                completed += 1
+            elif s in _fail_set:
+                failed += 1
         
         self.stats_label.setText(t("queue_extra.stats").replace("{pending}", str(pending)).replace("{processing}", str(processing)).replace("{completed}", str(completed)).replace("{failed}", str(failed)))
         

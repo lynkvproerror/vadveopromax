@@ -15,6 +15,7 @@ import asyncio
 import threading
 import logging
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -132,6 +133,9 @@ class Task:
     image_uris_account: Optional[str] = None  # Email of account that uploaded image_uris
     image_paths: List[str] = field(default_factory=list)  # Local paths from [tag] resolution
     
+    # Voice reference (R2V only)
+    voice_id: str = ""  # R2V: voice mediaId (e.g. "aoede"), "" = no voice
+    
     # Continuation
     parent_task_id: Optional[str] = None
     continuation_frame_uri: Optional[str] = None
@@ -153,6 +157,7 @@ class Task:
     retry_attempts: int = 0        # Track retries for UI display
     chain_retry_count: int = 0     # Auto-retry count for chain root (engine-level)
     dl_retry_generation_count: int = 0  # Download failure re-generation attempts (max from settings)
+    server_internal_errors: int = 0  # Debug: count of transient INTERNAL (code 13) server poll errors → auto-retried
     retry_original_indices: List[int] = field(default_factory=list)  # Original video indices for variant letter naming
     
     # Results
@@ -176,6 +181,7 @@ class Task:
     # Metadata
     created_at: datetime = field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
+    watchdog_reset_at: Optional[datetime] = None  # Reset at phase transitions; watchdog measures from max(started_at, this)
     completed_at: Optional[datetime] = None
     assigned_account: Optional[str] = None
     excluded_accounts: set = field(default_factory=set)  # Smart Recovery: accounts that failed this task
@@ -204,11 +210,12 @@ class Task:
                 log.debug(f"[UpscaleStatus] Task {self.id}: fallback to _upscale_status='{self._upscale_status}' (no video_outputs)")
             return self._upscale_status
         statuses = [vo.upscale_status for vo in self.video_outputs]
-        if all(s == "success" for s in statuses):
+        success_like = {"success", "completed"}
+        if all(s in success_like for s in statuses):
             return "success"
         if any(s == "failed" for s in statuses):
             return "failed"
-        if any(s in ("submitting", "polling") for s in statuses):
+        if any(s in ("submitting", "polling", "pending", "retrying") for s in statuses):
             return "submitting"  # Still in progress
         if all(s in ("", "skipped") for s in statuses):
             return ""
@@ -300,6 +307,13 @@ class Dispatcher:
         self._lock = threading.Lock()  # threading.Lock for sync submit_task_group
         self._max_concurrent = max_concurrent
         self._running_count = 0
+        # Pre-submit reservation tracking.
+        # Keep this window at 1/account so submit pacing follows the anti-detect
+        # delay sequentially instead of letting multiple foremen queue up and
+        # fire nearly together after sleeping in parallel.
+        self._claimed_task_ids: set[str] = set()
+        self._per_account_claimed: Dict[str, int] = {}
+        self._max_pre_submit_claims_per_account: int = 1
         
         # PA3: Per-account running task counter for fair-share balancing
         # Prevents accounts with more workers from monopolizing the queue
@@ -391,6 +405,64 @@ class Dispatcher:
             # Clean up zero entries
             if self._per_account_running[email] == 0:
                 self._per_account_running.pop(email, None)
+
+    def _increment_account_claimed(self, email: Optional[str]):
+        """Track accounts currently holding a pre-submit reservation."""
+        if not email:
+            return
+        self._per_account_claimed[email] = self._per_account_claimed.get(email, 0) + 1
+
+    def _decrement_account_claimed(self, email: Optional[str]):
+        """Release a pre-submit reservation for an account."""
+        if email and email in self._per_account_claimed:
+            self._per_account_claimed[email] = max(
+                0, self._per_account_claimed[email] - 1
+            )
+            if self._per_account_claimed[email] == 0:
+                self._per_account_claimed.pop(email, None)
+
+    def _get_pre_submit_claim_limit(self, email: Optional[str]) -> int:
+        """Return how many not-yet-submitted tasks an account may overlap."""
+        limit = max(1, self._max_pre_submit_claims_per_account)
+        if email and self._get_max_workers_fn:
+            try:
+                max_workers = int(self._get_max_workers_fn(email) or 0)
+            except Exception:
+                max_workers = 0
+            if max_workers > 0:
+                limit = min(limit, max_workers)
+        return max(1, limit)
+
+    def _claim_task(self, task: 'Task', account_email: Optional[str]):
+        """Reserve a task before the real submit phase starts."""
+        self._claimed_task_ids.add(task.id)
+        task._submit_started = False
+        task._claimed_account = account_email
+        self._increment_account_claimed(account_email)
+
+    def _release_task_claim(self, task: Optional['Task']) -> bool:
+        """Release a task's pre-submit reservation if it still exists."""
+        if not task or task.id not in self._claimed_task_ids:
+            return False
+        self._claimed_task_ids.discard(task.id)
+        claimed_email = getattr(task, '_claimed_account', None)
+        self._decrement_account_claimed(claimed_email)
+        task._claimed_account = None
+        task._submit_started = True
+        return True
+
+    def mark_submit_started(self, task_id: str, notify: bool = True) -> bool:
+        """Release the reservation once the task enters real submit/pipeline."""
+        task = self._all_tasks.get(task_id)
+        released = self._release_task_claim(task)
+        if released:
+            log.debug(
+                f"[Dispatcher] 🚀 Task {task_id} submit started "
+                f"(account={getattr(task, 'assigned_account', None)})"
+            )
+            if notify and self._on_task_ready:
+                self._on_task_ready(task)
+        return released
     
     def collect_chain_descendants(self, root_id: str) -> list:
         """Public wrapper for chain descendant collection.
@@ -410,6 +482,8 @@ class Dispatcher:
         
         Returns True if submitted successfully.
         """
+        if not getattr(task, 'prompt_index', None):
+            task.prompt_index = self._extract_prompt_index(task.id)
         if task.id in self._all_tasks:
             # C2: Task already tracked — re-queue to ready if state allows
             existing = self._all_tasks[task.id]
@@ -453,6 +527,7 @@ class Dispatcher:
         Clears assigned_account so any foreman can pick it up.
         """
         if task.state == TaskState.READY:
+            self._release_task_claim(task)
             self._queued_task_ids.discard(task.id)  # Allow re-enqueue
             self._enqueue_task(task, priority=0)  # Requeue = high priority
             self._running_count = max(0, self._running_count - 1)
@@ -511,6 +586,13 @@ class Dispatcher:
         Dedup guard: Skips tasks that are already RUNNING (stale duplicates
         left in queue from journal restore, force retry, or re-submit).
         """
+        if (
+            account_email
+            and self._per_account_claimed.get(account_email, 0)
+            >= self._get_pre_submit_claim_limit(account_email)
+        ):
+            return None
+
         # Smart Recovery: Credit check — suspended accounts cannot pick tasks
         if account_email and self._credit_window:
             if not self._credit_window.can_accept_task(account_email):
@@ -573,7 +655,9 @@ class Dispatcher:
         
         while True:
             try:
-                priority, counter, task = self._ready_queue.get_nowait()
+                item = self._ready_queue.get_nowait()
+                priority, group_key, prompt_idx, counter, task = \
+                    self._unpack_ready_queue_item(item)
                 self._queued_task_ids.discard(task.id)
                 
                 # Defense-in-depth: skip stale duplicates (batch-counted)
@@ -587,11 +671,12 @@ class Dispatcher:
                 # Smart Recovery: skip tasks that excluded this account
                 excluded = getattr(task, 'excluded_accounts', set())
                 if account_email and account_email in excluded:
-                    deferred.append((priority, counter, task))
+                    deferred.append((priority, group_key, prompt_idx, counter, task))
                     continue  # Try next task
                 
                 task.state = TaskState.RUNNING
                 task._counter_decremented = False  # Reset flag for new run
+                self._claim_task(task, account_email)
                 task.started_at = datetime.now()
                 self._running_count += 1
                 
@@ -610,14 +695,14 @@ class Dispatcher:
                     )
                 
                 log.info(
-                    f"[Dispatcher] 📋 Task {task.id} READY → RUNNING "
+                    f"[Dispatcher] 📋 Task {task.id} READY → RESERVED "
                     f"(account={account_email}, running_count={self._running_count})"
                 )
                 
                 # Put deferred items back before returning
                 for item in deferred:
                     self._ready_queue.put_nowait(item)
-                    self._queued_task_ids.add(item[2].id)
+                    self._queued_task_ids.add(item[4].id)
                 if deferred:
                     log.debug(
                         f"[Dispatcher] Deferred {len(deferred)} tasks "
@@ -636,7 +721,7 @@ class Dispatcher:
                 # Put deferred items back
                 for item in deferred:
                     self._ready_queue.put_nowait(item)
-                    self._queued_task_ids.add(item[2].id)
+                    self._queued_task_ids.add(item[4].id)
                 if deferred:
                     log.debug(
                         f"[Dispatcher] Deferred {len(deferred)} tasks "
@@ -679,9 +764,10 @@ class Dispatcher:
         Returns:
             Dict with audit results for DevConsole/StatusAggregator.
         """
-        # ★ Tasks with _counter_decremented=True are still RUNNING (doing I/O)
-        # but their running_count was already decremented at 30% submit.
-        # Exclude them from "actual" to avoid audit reverting the early-decrement.
+        # ★ Tasks with _counter_decremented=True may still be RUNNING/WAITING_POLL
+        # (e.g. early-submit handoff or background upscale handoff), but their
+        # dispatcher running counters were already released. Exclude them from
+        # "actual" to avoid audit reverting the intentional early-decrement.
         actual_running = sum(
             1 for t in self._all_tasks.values()
             if t.state in (TaskState.RUNNING, TaskState.WAITING_POLL)
@@ -950,6 +1036,7 @@ class Dispatcher:
         task = self._all_tasks.get(task_id)
         if not task:
             return
+        released_claim = self._release_task_claim(task)
         
         task.state = TaskState.COMPLETED
         task.completed_at = datetime.now()
@@ -961,8 +1048,6 @@ class Dispatcher:
         if not getattr(task, '_counter_decremented', False):
             self._running_count = max(0, self._running_count - 1)
             self._decrement_account_running(task.assigned_account)
-        else:
-            task._counter_decremented = False  # Reset flag
         log.info(
             f"[Dispatcher] ✅ Task {task_id} → COMPLETED "
             f"(account={task.assigned_account}, outputs={len(output_uris)}, "
@@ -1025,12 +1110,15 @@ class Dispatcher:
         emit_event(EventType.TASK_COMPLETED, {
             "task_id": task_id, "outputs": len(output_uris),
         }, source="dispatcher")
+        if released_claim and self._on_task_ready:
+            self._on_task_ready(task)
     
     def fail_task(self, task_id: str, error: str):
         """Mark a task as failed. C1: Cascade-fail waiting children."""
         task = self._all_tasks.get(task_id)
         if not task:
             return
+        released_claim = self._release_task_claim(task)
         
         task.state = TaskState.FAILED
         # Bug #1 fix: include progress in error for diagnostic display
@@ -1043,8 +1131,6 @@ class Dispatcher:
         if not getattr(task, '_counter_decremented', False):
             self._running_count = max(0, self._running_count - 1)
             self._decrement_account_running(task.assigned_account)
-        else:
-            task._counter_decremented = False  # Reset flag
         log.warning(
             f"[Dispatcher] ❌ Task {task_id} → FAILED "
             f"(account={task.assigned_account}, error={error[:80]}, "
@@ -1056,6 +1142,8 @@ class Dispatcher:
         emit_event(EventType.TASK_FAILED, {
             "task_id": task_id, "error": error,
         }, source="dispatcher")
+        if released_claim and self._on_task_ready:
+            self._on_task_ready(task)
         
         # BUG-B13 fix: If this is a replacement task, reset parent's video quality
         # AUTO RE-RETRY: If replacement fails with PUBLIC_ERROR_MINOR, auto re-retry
@@ -1135,6 +1223,7 @@ class Dispatcher:
         task = self._all_tasks.get(task_id)
         if not task:
             return False
+        released_claim = self._release_task_claim(task)
         
         if task.state in (TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED):
             return False  # Already terminal
@@ -1152,8 +1241,6 @@ class Dispatcher:
             if not getattr(task, '_counter_decremented', False):
                 self._running_count = max(0, self._running_count - 1)
                 self._decrement_account_running(task.assigned_account)
-            else:
-                task._counter_decremented = False  # Reset flag
         
         log.info(f"[Dispatcher] Cancelled task {task_id} (was {prev_state})")
         
@@ -1173,6 +1260,8 @@ class Dispatcher:
         emit_event(EventType.QUEUE_UPDATED, {
             "action": "cancel", "task_id": task_id,
         }, source="dispatcher")
+        if released_claim and self._on_task_ready:
+            self._on_task_ready(task)
         return True
     
     def remove_task(self, task_id: str) -> bool:
@@ -1198,6 +1287,7 @@ class Dispatcher:
         for orphan_id in orphan_ids:
             orphan = self._all_tasks.get(orphan_id)
             if orphan:
+                self._release_task_claim(orphan)
                 if orphan.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
                     self._running_count = max(0, self._running_count - 1)
                     self._decrement_account_running(orphan.assigned_account)
@@ -1446,6 +1536,7 @@ class Dispatcher:
             download_quality=source.download_quality,
             output_folder=source.output_folder,
             project_name=source.project_name,
+            prompt_index=source.prompt_index,
             extract_point_ms=source.extract_point_ms,
         )
         
@@ -1501,9 +1592,76 @@ class Dispatcher:
                 f"(already in queue)"
             )
             return
+        prompt_index = self._normalize_task_prompt_index(task)
+        group_key = self._get_task_queue_group_key(task)
         self._queued_task_ids.add(task.id)
         self._queue_counter += 1
-        self._ready_queue.put_nowait((priority, self._queue_counter, task))
+        self._ready_queue.put_nowait(
+            (priority, group_key, prompt_index, self._queue_counter, task)
+        )
+
+    def _unpack_ready_queue_item(self, item) -> tuple[int, str, int, int, Task]:
+        """Normalize legacy and current ready-queue tuple shapes."""
+        if len(item) == 5:
+            priority, group_key, prompt_index, counter, task = item
+            return priority, group_key, prompt_index, counter, task
+
+        if len(item) == 3:
+            priority, counter, task = item
+            group_key = self._get_task_queue_group_key(task)
+            prompt_index = self._normalize_task_prompt_index(task)
+            return priority, group_key, prompt_index, counter, task
+
+        raise ValueError(f"Unsupported ready queue item shape: {item!r}")
+
+    def _normalize_task_prompt_index(self, task: Task) -> int:
+        """Return a stable prompt index for queue ordering and naming."""
+        try:
+            prompt_index = int(getattr(task, 'prompt_index', 0) or 0)
+        except Exception:
+            prompt_index = 0
+        if prompt_index <= 0:
+            prompt_index = self._extract_prompt_index(task.id)
+            task.prompt_index = prompt_index
+        return prompt_index
+
+    def _get_task_queue_group_key(self, task: Task) -> str:
+        """Resolve a stable batch/group key so prompt_index ordering stays local to its group."""
+        cached = getattr(task, '_queue_group_key', '')
+        if cached:
+            return cached
+
+        task_id = getattr(task, 'id', '') or ''
+        if task_id.startswith('group_') and '_task_' in task_id:
+            cached = task_id.rsplit('_task_', 1)[0]
+            task._queue_group_key = cached
+            return cached
+
+        parent_id = getattr(task, 'parent_task_id', None)
+        if parent_id:
+            parent = self._all_tasks.get(parent_id)
+            if parent:
+                cached = self._get_task_queue_group_key(parent)
+                task._queue_group_key = cached
+                return cached
+
+        replace_target = getattr(task, 'replace_target', None)
+        if replace_target:
+            original_id = replace_target[0]
+            original = self._all_tasks.get(original_id)
+            if original:
+                cached = self._get_task_queue_group_key(original)
+                task._queue_group_key = cached
+                return cached
+
+        for group_id, group in self._task_groups.items():
+            if any(t.id == task_id for t in group.tasks):
+                task._queue_group_key = group_id
+                return group_id
+
+        cached = f"zz_{task.created_at.strftime('%Y%m%d_%H%M%S_%f')}_{task_id}"
+        task._queue_group_key = cached
+        return cached
     
     def set_callbacks(
         self,
@@ -1557,7 +1715,7 @@ class Dispatcher:
             and t.assigned_account == email
         ]
     
-    def retry_task(self, task_id: str, force: bool = False) -> bool:
+    def retry_task(self, task_id: str, force: bool = False, log_details: bool = True) -> bool:
         """Retry a task by resetting state and re-queuing.
         
         Unified entry point for both checkpoint-resume retry and full regeneration.
@@ -1574,10 +1732,11 @@ class Dispatcher:
         task = self._all_tasks.get(task_id)
         if not task:
             return False
+        self._release_task_claim(task)
         
         if force:
             # Full regeneration — delegates to _force_reset_and_retry()
-            return self._force_reset_and_retry(task_id)
+            return self._force_reset_and_retry(task_id, log_details=log_details)
         
         # Checkpoint-resume retry — only works for FAILED/CANCELLED tasks
         if task.state not in (TaskState.FAILED, TaskState.CANCELLED):
@@ -1614,6 +1773,7 @@ class Dispatcher:
                         f"[Dispatcher] Retry child {task_id}: "
                         f"frame source set → {best_video}"
                     )
+                self._release_task_claim(task)
                 task.state = TaskState.READY
                 task.error = None
                 task.progress = 0
@@ -1657,6 +1817,7 @@ class Dispatcher:
                 return True
         
         # ── Standard (non-continuation) retry ──
+        self._release_task_claim(task)
         task.state = TaskState.READY
         task.error = None
         task.progress = 0
@@ -1726,6 +1887,7 @@ class Dispatcher:
                 self._parent_to_children[pid].append(child.id)
         
         # Reset root to READY
+        self._release_task_claim(root)
         root.state = TaskState.READY
         root.error = None
         root.progress = 0
@@ -1806,6 +1968,7 @@ class Dispatcher:
             return False
         prev_state = task.state
         prev_account = task.assigned_account
+        released_claim = self._release_task_claim(task)
         task.state = TaskState.READY
         task.error = None
         # Reset progress and status text so UI shows clean "READY" state
@@ -1827,8 +1990,6 @@ class Dispatcher:
             if not getattr(task, '_counter_decremented', False):
                 self._running_count = max(0, self._running_count - 1)
                 self._decrement_account_running(task.assigned_account)
-            else:
-                task._counter_decremented = False  # Reset flag
         
         # Clear account binding so any foreman can pick this task
         task.assigned_account = None
@@ -1847,8 +2008,13 @@ class Dispatcher:
         # ★ BUG-B19 fix: Skip notification on capacity requeue (notify=False)
         # to prevent thundering herd — 12+ foremen simultaneously grabbing
         # the same task, failing capacity, requeueing → infinite loop.
+        # ★ FIX thundering herd: notify=False MUST suppress _on_task_ready even
+        # when released_claim=True.  The old elif branch always fired a wakeup,
+        # causing every idle foreman to race for the same re-queued task, detect
+        # cooldown/capacity, re-requeue, and loop (→ 40+ RESERVATIONs in 2min).
         if notify and self._on_task_ready:
             self._on_task_ready(task)
+        # (no elif: notify=False means "silent requeue" — don't wake foremen)
         return True
     
     def migrate_tasks(self, from_account: str) -> int:
@@ -1924,7 +2090,7 @@ class Dispatcher:
     
     def retry_all_failed(self) -> int:
         """Retry all failed tasks. Returns count retried."""
-        count = 0
+        task_ids: List[str] = []
         for task in list(self._all_tasks.values()):
             if task.state == TaskState.FAILED:
                 if self.retry_task(task.id):
@@ -1970,11 +2136,39 @@ class Dispatcher:
             log.info(f"[Dispatcher] ♻️ force_retry_all_failed_videos: retried {retried} video(s)")
         return retried
     
-    def force_retry_task(self, task_id: str) -> bool:
+    def force_retry_task(self, task_id: str, log_details: bool = True) -> bool:
         """Backward-compatible wrapper. Use retry_task(task_id, force=True) instead."""
-        return self.retry_task(task_id, force=True)
+        return self.retry_task(task_id, force=True, log_details=log_details)
+
+    def force_retry_tasks(self, task_ids: List[str], label: str = "batch") -> int:
+        """Force retry many tasks while emitting one summary log."""
+        ordered_ids = [task_id for task_id in dict.fromkeys(task_ids) if task_id]
+        if not ordered_ids:
+            return 0
+
+        retried = 0
+        ready = 0
+        waiting = 0
+        skipped = 0
+
+        for task_id in ordered_ids:
+            if self.force_retry_task(task_id, log_details=False):
+                retried += 1
+                task = self._all_tasks.get(task_id)
+                if task and task.state == TaskState.READY:
+                    ready += 1
+                elif task and task.state == TaskState.WAITING:
+                    waiting += 1
+            else:
+                skipped += 1
+
+        log.info(
+            f"[ForceRetry] {label}: retried {retried}/{len(ordered_ids)} task(s) "
+            f"(ready={ready}, waiting={waiting}, skipped={skipped})"
+        )
+        return retried
     
-    def _force_reset_and_retry(self, task_id: str) -> bool:
+    def _force_reset_and_retry(self, task_id: str, log_details: bool = True) -> bool:
         """Full reset + retry: deletes all outputs and regenerates from scratch.
         
         Accepts ANY state including COMPLETED and RUNNING.
@@ -1988,6 +2182,10 @@ class Dispatcher:
         task = self._all_tasks.get(task_id)
         if not task:
             return False
+
+        def _info(message: str):
+            if log_details:
+                log.info(message)
         
         # ── Decrement running counters if task was actively running ──
         prev_state = task.state
@@ -1996,12 +2194,11 @@ class Dispatcher:
             if not getattr(task, '_counter_decremented', False):
                 self._running_count = max(0, self._running_count - 1)
                 self._decrement_account_running(task.assigned_account)
-                log.info(f"[ForceRetry] Decremented running counters for {task_id} "
-                         f"(was {prev_state.value}, running_count={self._running_count})")
+                _info(f"[ForceRetry] Decremented running counters for {task_id} "
+                      f"(was {prev_state.value}, running_count={self._running_count})")
             else:
-                task._counter_decremented = False  # Reset flag
-                log.info(f"[ForceRetry] Skipped decrement for {task_id} "
-                         f"(already decremented by engine)")
+                _info(f"[ForceRetry] Skipped decrement for {task_id} "
+                      f"(already decremented by engine)")
         
         # ── Cancel in-flight upscale jobs (prevent orphan corruption) ──
         if self._on_cancel_upscale:
@@ -2022,6 +2219,7 @@ class Dispatcher:
         for orphan_id in orphan_ids:
             orphan = self._all_tasks.get(orphan_id)
             if orphan:
+                self._release_task_claim(orphan)
                 if orphan.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
                     # Guard: skip if engine already decremented
                     if not getattr(orphan, '_counter_decremented', False):
@@ -2032,10 +2230,10 @@ class Dispatcher:
                 # Remove from group
                 for group in self._task_groups.values():
                     group.tasks = [t for t in group.tasks if t.id != orphan_id]
-                log.info(f"[ForceRetry] Cancelled orphan replacement {orphan_id}")
+                _info(f"[ForceRetry] Cancelled orphan replacement {orphan_id}")
             self._replace_target_map.pop(orphan_id, None)
         if orphan_ids:
-            log.info(f"[ForceRetry] Cleaned {len(orphan_ids)} replacement task(s) for {task_id}")
+            _info(f"[ForceRetry] Cleaned {len(orphan_ids)} replacement task(s) for {task_id}")
         
         # ── Identify continuation children (before deleting outputs) ──
         children_ids = [
@@ -2043,7 +2241,7 @@ class Dispatcher:
             if t.parent_task_id == task_id
         ]
         has_children = bool(children_ids)
-        log.info(f"[ForceRetry] Task {task_id}: found {len(children_ids)} children: {children_ids}")
+        _info(f"[ForceRetry] Task {task_id}: found {len(children_ids)} children: {children_ids}")
         
         # ── DELETE ALL OUTPUT FILES ──
         # Always delete video files — even if children exist.
@@ -2127,7 +2325,7 @@ class Dispatcher:
                 if best_video:
                     task._pending_frame_source = best_video
                     task.state = TaskState.READY
-                    log.info(
+                    _info(
                         f"[ForceRetry] Child {task_id}: parent COMPLETED → "
                         f"frame recovery from {best_video}"
                     )
@@ -2159,8 +2357,8 @@ class Dispatcher:
         # prompt_index intentionally preserved for correct file naming (NNN_*)
         # image_paths intentionally preserved (local source files, not generated data)
         # parent_task_id intentionally preserved (structural relationship)
-        log.info(f"[ForceRetry] Task {task_id}: state={task.state.value}, "
-                 f"prompt_index={task.prompt_index} preserved, all generated data purged")
+        _info(f"[ForceRetry] Task {task_id}: state={task.state.value}, "
+              f"prompt_index={task.prompt_index} preserved, all generated data purged")
         
         # ── Account handling ──
         if task.parent_task_id:
@@ -2168,8 +2366,8 @@ class Dispatcher:
             parent = self._all_tasks.get(task.parent_task_id)
             if parent and parent.assigned_account:
                 task.required_account = parent.assigned_account
-                log.info(f"[ForceRetry] Child {task_id}: preserving account affinity "
-                         f"→ {parent.assigned_account}")
+                _info(f"[ForceRetry] Child {task_id}: preserving account affinity "
+                      f"→ {parent.assigned_account}")
             else:
                 task.assigned_account = None
                 task.required_account = None
@@ -2273,11 +2471,11 @@ class Dispatcher:
                     if desc_id not in self._parent_to_children[pid]:
                         self._parent_to_children[pid].append(desc_id)
                 
-                log.info(f"[ForceRetry] Descendant {desc_id} fully purged + reset to WAITING"
-                         f" (parent={child.parent_task_id})")
+                _info(f"[ForceRetry] Descendant {desc_id} fully purged + reset to WAITING"
+                      f" (parent={child.parent_task_id})")
             
-            log.info(f"[ForceRetry] Purged & re-registered chain links for "
-                     f"{len(all_descendants)} descendants of {task_id}")
+            _info(f"[ForceRetry] Purged & re-registered chain links for "
+                  f"{len(all_descendants)} descendants of {task_id}")
         
         # Re-queue or register dependency
         if task.state == TaskState.READY:
@@ -2285,8 +2483,8 @@ class Dispatcher:
             self._enqueue_task(task, priority=0)  # High priority: force retry runs before normal tasks
             if self._on_task_ready:
                 self._on_task_ready(task)
-            log.info(f"[ForceRetry] Task {task_id} fully purged and re-queued"
-                     f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
+            _info(f"[ForceRetry] Task {task_id} fully purged and re-queued"
+                  f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
         else:
             # WAITING child: register in parent→child map (will be activated
             # when parent completes via _resolve_dependencies)
@@ -2297,8 +2495,8 @@ class Dispatcher:
                 if task_id not in self._parent_to_children[pid]:
                     self._parent_to_children[pid].append(task_id)
             self._waiting_tasks[task_id] = task
-            log.info(f"[ForceRetry] Task {task_id} fully purged → WAITING for parent {pid}"
-                     f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
+            _info(f"[ForceRetry] Task {task_id} fully purged → WAITING for parent {pid}"
+                  f"{' (+ ' + str(len(children_ids)) + ' children → WAITING)' if has_children else ''}")
         return True
     
     def force_retry_video(self, task_id: str, video_index: int) -> bool:
@@ -2478,7 +2676,7 @@ class Dispatcher:
         top-to-bottom (first group first), ensuring Start All processes
         from the beginning of the queue downward.
         """
-        count = 0
+        task_ids: List[str] = []
         # Iterate groups in chronological order for correct queue ordering
         sorted_groups = sorted(
             self._task_groups.values(),
@@ -2491,9 +2689,8 @@ class Dispatcher:
                     # BUG-B16 fix: Skip replacement tasks (they'll be cleaned by parent's retry)
                     if task.replace_target:
                         continue
-                    if self.force_retry_task(task.id):
-                        count += 1
-        return count
+                    task_ids.append(task.id)
+        return self.force_retry_tasks(task_ids, label="reset_all_tasks")
     
     def clear_all(self) -> int:
         """Clear ALL task groups and tasks (queue reset).
@@ -2509,6 +2706,7 @@ class Dispatcher:
         # Cancel all running tasks FIRST — engine workers hold task references
         for task in self._all_tasks.values():
             if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                self._release_task_claim(task)
                 task.state = TaskState.CANCELLED
                 self._running_count = max(0, self._running_count - 1)
         
@@ -2518,11 +2716,13 @@ class Dispatcher:
         # Drain the ready queue
         while not self._ready_queue.empty():
             try:
-                self._ready_queue.get_nowait()  # Discard (priority, counter, task)
+                self._ready_queue.get_nowait()  # Discard queue entry
             except Exception:
                 break
         self._running_count = 0  # Reset to 0 since everything is cleared
         self._per_account_running.clear()  # PA3: Reset per-account counters
+        self._claimed_task_ids.clear()
+        self._per_account_claimed.clear()
         log.info(f"[Dispatcher] Cleared all: {count} tasks removed")
         return count
     
@@ -2554,12 +2754,117 @@ class Dispatcher:
             "groups": sm.serialize_queue(self._task_groups),
             "task_count": len(self._all_tasks),
         }
+
+    def _task_has_valid_output_files(self, task: Optional[Task]) -> bool:
+        """Return True when task still has at least one local output file."""
+        if not task:
+            return False
+        for vo in task.video_outputs:
+            for path in (vo.file_upscaled, vo.file_720p):
+                if path and os.path.isfile(path):
+                    return True
+        for path in task.output_uris:
+            if path and os.path.isfile(path):
+                return True
+        return False
+
+    def _best_existing_output_file(self, task: Optional[Task]) -> Optional[str]:
+        """Return the best existing local video path for continuation recovery."""
+        if not task:
+            return None
+        for vo in task.video_outputs:
+            best = vo.best_file
+            if best and os.path.isfile(best):
+                return best
+        for path in task.output_uris:
+            if path and os.path.isfile(path):
+                return path
+        return None
+
+    def _clear_generated_runtime_data(self, task: Task, *, preserve_error: bool = False):
+        """Reset generated/runtime state while preserving prompt/config structure."""
+        task.output_uris.clear()
+        task.thumbnail_paths.clear()
+        task.operation_name = None
+        task.operation_names.clear()
+        task.scene_ids.clear()
+        task.video_outputs.clear()
+        task.upscale_status = ""
+        task.upscale_error = ""
+        task.upscale_media_ids.clear()
+        task.image_upload_status = ""
+        task.continuation_frame_uri = None
+        task.continuation_frame_local_path = None
+        task.image_uris.clear()
+        task.image_uris_account = None
+        if hasattr(task, 'image_slots') and task.image_slots is not None:
+            task.image_slots.clear()
+        if hasattr(task, '_pending_frame_source'):
+            task._pending_frame_source = None
+        task.stage = TaskStage.INIT
+        task.progress = 0
+        if not preserve_error:
+            task.error = None
+        task.retry_attempts = 0
+        task.chain_retry_count = 0
+        task.dl_retry_generation_count = 0
+        task.server_internal_errors = 0
+        task.status_text = ""
+        task.started_at = None
+        task.completed_at = None
+        task.assigned_account = None
+        task.required_account = None
+        task.excluded_accounts = set()
+        task._counter_decremented = False
+
+    def _register_waiting_dependency(self, task: Task):
+        """Track a waiting continuation task against its parent."""
+        self._waiting_tasks[task.id] = task
+        pid = task.parent_task_id
+        if not pid:
+            return
+        if pid not in self._parent_to_children:
+            self._parent_to_children[pid] = []
+        if task.id not in self._parent_to_children[pid]:
+            self._parent_to_children[pid].append(task.id)
+
+    def _unregister_waiting_dependency(self, task: Task):
+        """Remove a task from waiting/dependency tracking after promotion."""
+        self._waiting_tasks.pop(task.id, None)
+        pid = task.parent_task_id
+        if not pid:
+            return
+        children = self._parent_to_children.get(pid)
+        if not children:
+            return
+        self._parent_to_children[pid] = [cid for cid in children if cid != task.id]
+        if not self._parent_to_children[pid]:
+            del self._parent_to_children[pid]
+
+    def _promote_waiting_restart_child_if_ready(self, task: Task) -> bool:
+        """Promote a reset continuation child if its parent output still exists."""
+        if task.state != TaskState.WAITING or not task.parent_task_id:
+            return False
+        parent = self._all_tasks.get(task.parent_task_id)
+        if not parent or parent.state != TaskState.COMPLETED:
+            return False
+        best_video = self._best_existing_output_file(parent)
+        if not best_video:
+            return False
+        task._pending_frame_source = best_video
+        task.state = TaskState.READY
+        task.progress = 0
+        self._unregister_waiting_dependency(task)
+        self._enqueue_task(task)
+        return True
     
     def import_state(self, data: dict) -> int:
         """Import tasks from saved session data.
         
-        Completed/failed tasks kept as history.
-        Pending/ready tasks re-queued.
+        Incomplete tasks are reset to a clean startup state.
+        Completed tasks are preserved only if at least one local output file exists.
+        Failed tasks stay FAILED for manual retry, but their stale runtime/display
+        artifacts are purged.
         
         Returns:
             Number of tasks restored
@@ -2567,6 +2872,12 @@ class Dispatcher:
         groups_data = data.get("groups", [])
         count = 0
         skipped = 0
+        reset_ready = 0
+        reset_waiting = 0
+        repaired_completed = 0
+        cleaned_failed = 0
+        promoted_children = 0
+        restart_waiting_children: List[str] = []
         
         for gd in groups_data:
             group = TaskGroup(
@@ -2720,51 +3031,58 @@ class Dispatcher:
                 
                 self._all_tasks[task.id] = task
                 
-                # Re-queue incomplete tasks (PENDING, READY, RUNNING, WAITING_POLL)
-                # Tasks that were RUNNING/WAITING_POLL when app closed are
-                # interrupted — they must restart from READY state.
-                if task.state in (
-                    TaskState.PENDING, TaskState.READY,
-                    TaskState.RUNNING, TaskState.WAITING_POLL,
-                ):
-                    task.state = TaskState.READY
-                    task.progress = 0
-                    task.operation_name = None
-                    task.assigned_account = None
-                    task.retry_attempts = 0
-                    # I2V image loss fix: clear stale media IDs on session restore.
-                    # MediaIds from the previous session are expired — force re-upload
-                    # from local files when available.
-                    if task.image_paths:
-                        task.image_uris = []
-                        task.image_uris_account = None
-                        task.image_upload_status = ""
-                    self._enqueue_task(task)
-                
-                # Handle WAITING continuation tasks:
-                # - If frame_uri already resolved → ready to run
-                # - If still waiting on parent → rebuild dependency map
-                elif task.state == TaskState.WAITING:
-                    if task.continuation_frame_uri:
-                        # Frame already resolved before app closed → safe to run
+                needs_restart_reset = task.state in (
+                    TaskState.PENDING,
+                    TaskState.READY,
+                    TaskState.RUNNING,
+                    TaskState.WAITING_POLL,
+                    TaskState.WAITING,
+                )
+                invalid_completed = (
+                    task.state == TaskState.COMPLETED
+                    and not self._task_has_valid_output_files(task)
+                )
+
+                if needs_restart_reset or invalid_completed:
+                    self._clear_generated_runtime_data(task)
+                    if task.parent_task_id:
+                        task.state = TaskState.WAITING
+                        self._register_waiting_dependency(task)
+                        restart_waiting_children.append(task.id)
+                        reset_waiting += 1
+                    else:
                         task.state = TaskState.READY
-                        task.progress = 0
                         self._enqueue_task(task)
-                    elif task.parent_task_id:
-                        # Still depends on parent → rebuild dependency tracking
-                        self._waiting_tasks[task.id] = task
-                        pid = task.parent_task_id
-                        if pid not in self._parent_to_children:
-                            self._parent_to_children[pid] = []
-                        self._parent_to_children[pid].append(task.id)
+                        reset_ready += 1
+                    if invalid_completed:
+                        repaired_completed += 1
+
+                elif task.state == TaskState.FAILED:
+                    # Keep FAILED for manual retry, but clear stale runtime/display data.
+                    self._clear_generated_runtime_data(task, preserve_error=True)
+                    task.state = TaskState.FAILED
+                    cleaned_failed += 1
                 
                 count += 1
             
             self._task_groups[group.id] = group
+
+        for task_id in restart_waiting_children:
+            task = self._waiting_tasks.get(task_id)
+            if task and self._promote_waiting_restart_child_if_ready(task):
+                promoted_children += 1
+                reset_waiting = max(0, reset_waiting - 1)
+                reset_ready += 1
         
         if count > 0:
             extra = f" ({skipped} already loaded)" if skipped else ""
             log.info(f"[Dispatcher] Restored {count} tasks from {len(groups_data)} groups{extra}")
         elif skipped > 0:
             log.debug(f"[Dispatcher] All {skipped} tasks already loaded — skipped duplicate restore")
+        if any((reset_ready, reset_waiting, repaired_completed, cleaned_failed, promoted_children)):
+            log.info(
+                f"[Dispatcher] Restart reset summary: ready={reset_ready}, "
+                f"waiting={reset_waiting}, repaired_completed={repaired_completed}, "
+                f"cleaned_failed={cleaned_failed}, promoted_children={promoted_children}"
+            )
         return count

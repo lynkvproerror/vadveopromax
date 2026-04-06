@@ -88,7 +88,7 @@ class AccountSession:
     
     # === LP Worker Pool (soft cap within shared pool) ===
     active_workers_lp: int = 0    # Number of LP ops workers currently processing
-    max_workers_lp: int = 8       # LP soft cap (LP can use max 8 of the 20 total)
+    max_workers_lp: int = 20      # LP soft cap = full pool (pacing handled by submit gate)
     
     # === Upscale Worker Pool ===
     active_upscale_workers: int = 0   # Number of inline upscale slots in use (affects ops capacity)
@@ -241,7 +241,7 @@ class AccountSession:
     def acquire_workers_lp(self, n: int = 1) -> bool:
         """Acquire n LP workers. Checks both LP cap and total pool.
         
-        LP soft cap: active_workers_lp + n ≤ max_workers_lp (8)
+        LP soft cap: active_workers_lp + n ≤ max_workers_lp
         Total cap:   Fast + LP + upscale ≤ max_workers (20)
         """
         if self.active_workers_lp + n > self.effective_lp_capacity:
@@ -427,7 +427,7 @@ class AccountSession:
             session.max_workers = data["max_slots"] * 4
         else:
             session.max_workers = 20
-        session.max_workers_lp = data.get("max_workers_lp", 8)
+        session.max_workers_lp = data.get("max_workers_lp", session.max_workers)
         # Bug #10 fix: Always reset active_workers on load (crash recovery)
         session.active_workers = 0
         session.active_workers_lp = 0

@@ -306,6 +306,8 @@ class TabSettings(
         # Tester sections: only for tester role
         for section in self._tester_sections:
             section.setVisible(is_tester)
+        for widget in getattr(self, '_tester_only_widgets', []):
+            widget.setVisible(is_tester)
     
     def refresh_role_state(self):
         """Re-evaluate audience visibility and trial guards after license change.
@@ -488,14 +490,22 @@ class TabSettings(
         # Provider-Model registry (7 providers)
         self._PROVIDER_MODELS = {
             "Google": [
+                # Gemma 3: 14,400 RPD, 30 RPM (highest free quota)
+                "gemma-3-27b-it",
+                "gemma-3-12b-it",
+                "gemma-3-4b-it",
+                "gemma-3-2b-it",
+                "gemma-3-1b-it",
+                # Gemma 4: 1,500 RPD, 15 RPM, Unlimited TPM
+                "gemma-4-31b-it",
+                "gemma-4-26b-it",
+                # Gemini Flash: 20-500 RPD
                 "gemini-3.1-flash-lite-preview",
                 "gemini-3-flash-preview",
                 "gemini-3.1-pro-preview",
                 "gemini-2.5-flash",
                 "gemini-2.5-pro",
-                "gemini-2.0-flash",
                 "gemini-2.5-flash-lite",
-                "gemini-2.0-flash-lite",
             ],
             "OpenAI": [
                 "gpt-4o",
@@ -625,7 +635,7 @@ class TabSettings(
         self._pb_model_combo.addItems(models_list)
 
         # Set current model
-        current_model = getattr(s, 'pb_ai_model', 'gemini-2.0-flash')
+        current_model = getattr(s, 'pb_ai_model', 'gemma-3-27b-it')
         idx = self._pb_model_combo.findText(current_model)
         if idx >= 0:
             self._pb_model_combo.setCurrentIndex(idx)
@@ -1104,17 +1114,12 @@ class TabSettings(
 
             # ── Output Settings ──
             s.output_folder = self.output_folder_entry.text()
-            # B1 fix: lookup output toggles by matching the actual dict keys
-            for key, toggle in self.output_toggles.items():
-                k_lower = key.lower()
-                if "timestamp" in k_lower:
-                    s.include_timestamp = toggle.isChecked()
-                elif "quality" in k_lower:
-                    s.include_quality = toggle.isChecked()
-                elif "auto" in k_lower and "start" in k_lower:
-                    s.auto_start_queue = toggle.isChecked()
-                elif "pause" in k_lower:
-                    s.pause_on_error = toggle.isChecked()
+            # B1 fix: positional index (i18n-safe — keys are translated labels)
+            _TOGGLE_ATTRS = ['include_timestamp', 'include_quality', 'auto_start_queue',
+                             'pause_on_error', 'download_non_watermark']
+            for idx, (key, toggle) in enumerate(self.output_toggles.items()):
+                if idx < len(_TOGGLE_ATTRS):
+                    setattr(s, _TOGGLE_ATTRS[idx], toggle.isChecked())
 
             # ── Continuation ──
             if hasattr(self, 'cont_switch'):
@@ -1285,13 +1290,12 @@ class TabSettings(
             if "Image Quality" in self.setting_combos:
                 self.setting_combos["Image Quality"].setCurrentText("1k")
 
-            # ── Output Toggles ──
+            # ── Output Toggles ── (positional defaults, i18n-safe)
             if hasattr(self, 'output_toggles'):
-                for key, toggle in self.output_toggles.items():
-                    if "timestamp" in key.lower() or "quality" in key.lower() or "Pause" in key:
-                        toggle.setChecked(True)
-                    else:
-                        toggle.setChecked(False)
+                _RESET_DEFAULTS = [True, True, False, True, False]
+                for idx, (key, toggle) in enumerate(self.output_toggles.items()):
+                    if idx < len(_RESET_DEFAULTS):
+                        toggle.setChecked(_RESET_DEFAULTS[idx])
 
             # ── Continuation ──
             if hasattr(self, 'cont_switch'):
@@ -1307,11 +1311,11 @@ class TabSettings(
             if hasattr(self, 'anti_detect_delay_max'):
                 self.anti_detect_delay_max.setValue(8.0)
 
-            # ── Enhancer Toggles ──
+            # ── Enhancer Toggles ── (aligned to AppSettings: all False by default)
             if hasattr(self, '_enhance_context_toggle'):
-                self._enhance_context_toggle.setToggled(True)
+                self._enhance_context_toggle.setToggled(False)
             if hasattr(self, '_enhance_library_toggle'):
-                self._enhance_library_toggle.setToggled(True)
+                self._enhance_library_toggle.setToggled(False)
             if hasattr(self, '_enhance_auto_toggle'):
                 self._enhance_auto_toggle.setToggled(False)
 
@@ -1341,13 +1345,13 @@ class TabSettings(
             if hasattr(self, 'hide_all_switch'):
                 self.hide_all_switch.setToggled(True)
 
-            # ── Gemini AI ──
+            # ── Gemini AI ── (aligned to AppSettings defaults)
             if hasattr(self, 'gemini_enable_switch'):
-                self.gemini_enable_switch.setToggled(False)
+                self.gemini_enable_switch.setToggled(True)   # settings.py L39: True
             if hasattr(self, 'gemini_auto_enhance'):
-                self.gemini_auto_enhance.setToggled(False)
+                self.gemini_auto_enhance.setToggled(False)   # settings.py L40: False
             if hasattr(self, 'gemini_auto_fix'):
-                self.gemini_auto_fix.setToggled(False)
+                self.gemini_auto_fix.setToggled(True)        # settings.py L41: True
 
             # ── Project Builder AI ──
             if hasattr(self, '_pb_src_account'):
@@ -1355,7 +1359,7 @@ class TabSettings(
             if hasattr(self, '_pb_provider_combo'):
                 self._pb_provider_combo.setCurrentIndex(0)  # Google
             if hasattr(self, '_pb_model_combo'):
-                self._pb_model_combo.setCurrentText('gemini-2.0-flash')
+                self._pb_model_combo.setCurrentText('gemini-3.1-flash-lite-preview')  # settings.py L52
             if hasattr(self, '_pb_keys_edit'):
                 self._pb_keys_edit.clear()
             if hasattr(self, '_pb_provider_row_widget'):
@@ -1382,7 +1386,7 @@ class TabSettings(
             if hasattr(self, 'auto_retry_dl_switch'):
                 self.auto_retry_dl_switch.setToggled(True)
             if hasattr(self, 'dl_retry_max'):
-                self.dl_retry_max.setValue(3)
+                self.dl_retry_max.setValue(5)   # settings.py L108: 5
             if hasattr(self, 'prewarm_switch'):
                 self.prewarm_switch.setToggled(True)
             if hasattr(self, 'prewarm_threshold'):
@@ -1393,15 +1397,32 @@ class TabSettings(
                 self.auto_update_toggle.setToggled(True)
 
 
-            # ── Language ──
+            # ── Language ── (aligned to AppSettings: Tiếng Việt)
             if hasattr(self, 'lang_menu'):
-                self.lang_menu.setCurrentText("English")
+                self.lang_menu.setCurrentText("Tiếng Việt")  # settings.py L121
         finally:
             # Allow auto-save signals again
             self._initializing = False
 
         # Persist all reset values to disk in one write
         self._on_save()
+
+        # Hot-apply side effects that _on_save() doesn't trigger:
+        # Browser visibility — re-hide/show running browsers
+        try:
+            self._save_browser_visibility_settings()
+        except Exception:
+            pass
+        # Auto-update checker — start/stop based on toggle
+        try:
+            self._save_update_settings()
+        except Exception:
+            pass
+        # Language hot-reload
+        try:
+            self._save_ui_settings()
+        except Exception:
+            pass
 
     def _on_export(self):
         """Export config to file."""
@@ -1416,7 +1437,7 @@ class TabSettings(
                 json.dump(settings, f, indent=2)
 
     def _on_import(self):
-        """Import config from file and persist."""
+        """Import config from file and persist (transactional)."""
         from PySide6.QtWidgets import QFileDialog
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Import Config", "", "JSON Files (*.json)"
@@ -1425,9 +1446,13 @@ class TabSettings(
             import json
             with open(file_path, 'r') as f:
                 settings = json.load(f)
-            # Apply settings to widgets
-            self._apply_imported_settings(settings)
-            # Persist via Save button logic
+            # B4 fix: guard prevents autosave cascade during widget updates
+            self._initializing = True
+            try:
+                self._apply_imported_settings(settings)
+            finally:
+                self._initializing = False
+            # Persist all imported values in one write
             self._on_save()
 
     def _apply_imported_settings(self, settings: dict):
@@ -1448,19 +1473,12 @@ class TabSettings(
         # Output Settings
         if "output_folder" in settings:
             self.output_folder_entry.setText(settings["output_folder"])
-        # B1 fix: match output toggles by substring (i18n-safe)
-        _import_map = {
-            "include_timestamp": "timestamp",
-            "include_quality": "quality",
-            "auto_start_queue": "auto",
-            "pause_on_error": "pause",
-        }
-        for setting_key, substr in _import_map.items():
-            if setting_key in settings:
-                for tkey, toggle in self.output_toggles.items():
-                    if substr in tkey.lower():
-                        toggle.setChecked(bool(settings[setting_key]))
-                        break
+        # B1 fix: positional index for output toggles (i18n-safe)
+        _TOGGLE_ATTRS = ['include_timestamp', 'include_quality', 'auto_start_queue',
+                         'pause_on_error', 'download_non_watermark']
+        for idx, (tkey, toggle) in enumerate(self.output_toggles.items()):
+            if idx < len(_TOGGLE_ATTRS) and _TOGGLE_ATTRS[idx] in settings:
+                toggle.setChecked(bool(settings[_TOGGLE_ATTRS[idx]]))
         # Continuation
         if "continuation_enabled" in settings and hasattr(self, 'cont_switch'):
             self.cont_switch.setToggled(bool(settings["continuation_enabled"]))
@@ -1550,6 +1568,51 @@ class TabSettings(
             self.prewarm_switch.setToggled(bool(settings["prewarm_enabled"]))
         if "prewarm_idle_threshold" in settings and hasattr(self, 'prewarm_threshold'):
             self.prewarm_threshold.setValue(int(settings["prewarm_idle_threshold"]))
+        # Memory Management (missing fields coverage)
+        if "auto_clear_tasks_max" in settings and hasattr(self, '_auto_clear_combo'):
+            val = int(settings["auto_clear_tasks_max"])
+            for i in range(self._auto_clear_combo.count()):
+                if self._auto_clear_combo.itemData(i) == val:
+                    self._auto_clear_combo.setCurrentIndex(i)
+                    break
+        if "prune_age_minutes" in settings and hasattr(self, '_prune_age_combo'):
+            val = int(settings["prune_age_minutes"])
+            for i in range(self._prune_age_combo.count()):
+                if self._prune_age_combo.itemData(i) == val:
+                    self._prune_age_combo.setCurrentIndex(i)
+                    break
+        if "log_buffer_max" in settings and hasattr(self, '_log_buffer_combo'):
+            val = int(settings["log_buffer_max"])
+            for i in range(self._log_buffer_combo.count()):
+                if self._log_buffer_combo.itemData(i) == val:
+                    self._log_buffer_combo.setCurrentIndex(i)
+                    break
+        if "gemini_log_max_blocks" in settings and hasattr(self, '_gemini_log_combo'):
+            val = int(settings["gemini_log_max_blocks"])
+            for i in range(self._gemini_log_combo.count()):
+                if self._gemini_log_combo.itemData(i) == val:
+                    self._gemini_log_combo.setCurrentIndex(i)
+                    break
+        # Hide Emails
+        if "hide_emails" in settings:
+            self._emails_hidden = bool(settings["hide_emails"])
+        # Project Builder AI
+        if "pb_ai_source" in settings and hasattr(self, '_pb_src_custom'):
+            self._pb_src_custom.setChecked(settings["pb_ai_source"] == "custom")
+            if hasattr(self, '_pb_src_account'):
+                self._pb_src_account.setChecked(settings["pb_ai_source"] != "custom")
+        if "pb_ai_provider" in settings and hasattr(self, '_pb_provider_combo'):
+            idx = self._pb_provider_combo.findData(settings["pb_ai_provider"])
+            if idx >= 0:
+                self._pb_provider_combo.setCurrentIndex(idx)
+        if "pb_ai_model" in settings and hasattr(self, '_pb_model_combo'):
+            self._pb_model_combo.setCurrentText(str(settings["pb_ai_model"]))
+        if "pb_ai_base_url" in settings and hasattr(self, '_pb_baseurl_edit'):
+            self._pb_baseurl_edit.setText(str(settings["pb_ai_base_url"]))
+        if "pb_ai_custom_keys" in settings and hasattr(self, '_pb_keys_edit'):
+            keys = settings["pb_ai_custom_keys"]
+            if isinstance(keys, list):
+                self._pb_keys_edit.setPlainText("\n".join(keys))
 
     # ── Helpers ──
 
@@ -1561,18 +1624,13 @@ class TabSettings(
 
     def get_settings(self) -> dict:
         """Get current settings — used for export and signal emission."""
-        # B1 fix: lookup output toggles by substring matching (i18n-safe)
-        _ot_ts = _ot_q = _ot_as = _ot_pe = False
-        for key, toggle in self.output_toggles.items():
-            k_lower = key.lower()
-            if "timestamp" in k_lower:
-                _ot_ts = toggle.isChecked()
-            elif "quality" in k_lower:
-                _ot_q = toggle.isChecked()
-            elif "auto" in k_lower and "start" in k_lower:
-                _ot_as = toggle.isChecked()
-            elif "pause" in k_lower:
-                _ot_pe = toggle.isChecked()
+        # B1 fix: positional index for output toggles (i18n-safe)
+        _TOGGLE_ATTRS = ['include_timestamp', 'include_quality', 'auto_start_queue',
+                         'pause_on_error', 'download_non_watermark']
+        _toggle_vals = {}
+        for idx, (key, toggle) in enumerate(self.output_toggles.items()):
+            if idx < len(_TOGGLE_ATTRS):
+                _toggle_vals[_TOGGLE_ATTRS[idx]] = toggle.isChecked()
         result = {
             "aspect_ratio": self.setting_combos.get("Aspect Ratio").currentText() if "Aspect Ratio" in self.setting_combos else "",
             "download_quality": self.setting_combos.get("Download Quality").currentText() if "Download Quality" in self.setting_combos else "",
@@ -1581,10 +1639,11 @@ class TabSettings(
             "image_ai_model": self.setting_combos.get("Image AI Model").currentText() if "Image AI Model" in self.setting_combos else "",
             "image_quality": self.setting_combos.get("Image Quality").currentText() if "Image Quality" in self.setting_combos else "",
             "output_folder": self.output_folder_entry.text(),
-            "include_timestamp": _ot_ts,
-            "include_quality": _ot_q,
-            "auto_start_queue": _ot_as,
-            "pause_on_error": _ot_pe,
+            "include_timestamp": _toggle_vals.get('include_timestamp', False),
+            "include_quality": _toggle_vals.get('include_quality', False),
+            "auto_start_queue": _toggle_vals.get('auto_start_queue', False),
+            "pause_on_error": _toggle_vals.get('pause_on_error', False),
+            "download_non_watermark": _toggle_vals.get('download_non_watermark', False),
             "continuation_enabled": self.cont_switch.isToggled(),
             "extract_point_ms": self._parse_extract_point(self.extract_menu.currentText()),
             # Enhancer Image (3-toggle system)
@@ -1632,4 +1691,26 @@ class TabSettings(
         if hasattr(self, '_restore_sub_toggles'):
             for attr_name, toggle in self._restore_sub_toggles.items():
                 result[attr_name] = toggle.isToggled()
+        # Memory Management (missing from original export)
+        if hasattr(self, '_auto_clear_combo'):
+            result["auto_clear_tasks_max"] = self._auto_clear_combo.currentData() or 0
+        if hasattr(self, '_prune_age_combo'):
+            result["prune_age_minutes"] = self._prune_age_combo.currentData() or 0
+        if hasattr(self, '_log_buffer_combo'):
+            result["log_buffer_max"] = self._log_buffer_combo.currentData() or 20000
+        if hasattr(self, '_gemini_log_combo'):
+            result["gemini_log_max_blocks"] = self._gemini_log_combo.currentData() or 2000
+        # Hide Emails
+        result["hide_emails"] = getattr(self, '_emails_hidden', False)
+        # Project Builder AI
+        if hasattr(self, '_pb_src_custom'):
+            result["pb_ai_source"] = "custom" if self._pb_src_custom.isChecked() else "account"
+        if hasattr(self, '_pb_provider_combo'):
+            result["pb_ai_provider"] = self._pb_provider_combo.currentData() or "Google"
+        if hasattr(self, '_pb_model_combo'):
+            result["pb_ai_model"] = self._pb_model_combo.currentText().strip()
+        if hasattr(self, '_pb_baseurl_edit'):
+            result["pb_ai_base_url"] = self._pb_baseurl_edit.text().strip()
+        if hasattr(self, '_pb_keys_edit'):
+            result["pb_ai_custom_keys"] = [k.strip() for k in self._pb_keys_edit.toPlainText().strip().split("\n") if k.strip()]
         return result

@@ -137,15 +137,25 @@ class AccountSupervisor:
                 except Exception:
                     pass
                 # Quick poll — up to 15s for xcd to appear
-                import time as _time
-                from config.constants import MIN_VALID_XCD
-                _start = _time.monotonic()
-                while _time.monotonic() - _start < 15.0:
-                    hdrs = self.account.get_browser_headers() if hasattr(self.account, 'get_browser_headers') else {}
-                    if len((hdrs.get('x-client-data', '') or '')) >= MIN_VALID_XCD:
-                        log.info(f"[Supervisor:{self.email}] ✅ x-client-data ready ({len(hdrs.get('x-client-data',''))} chars)")
-                        break
-                    await asyncio.sleep(1.0)
+                # ★ BUT: When extension bridge is CONNECTED, Chrome auto-injects
+                # real x-client-data into fetch() calls. The cached xcd (8 chars)
+                # is irrelevant. Skip this poll to avoid blocking foremen 15s.
+                _extension_will_inject = bridge and bridge.is_connected(self.account.email)
+                if _extension_will_inject:
+                    log.info(
+                        f"[Supervisor:{self.email}] Extension connected — "
+                        f"skipping xcd poll (Chrome auto-injects real xcd into fetch)"
+                    )
+                else:
+                    import time as _time
+                    from config.constants import MIN_VALID_XCD
+                    _start = _time.monotonic()
+                    while _time.monotonic() - _start < 15.0:
+                        hdrs = self.account.get_browser_headers() if hasattr(self.account, 'get_browser_headers') else {}
+                        if len((hdrs.get('x-client-data', '') or '')) >= MIN_VALID_XCD:
+                            log.info(f"[Supervisor:{self.email}] ✅ x-client-data ready ({len(hdrs.get('x-client-data',''))} chars)")
+                            break
+                        await asyncio.sleep(1.0)
             
             await self.engine._check_app_availability(self.account)
             
@@ -169,19 +179,24 @@ class AccountSupervisor:
             # grecaptcha.execute works but server rejects the token.
             probe_ok = await self._probe_submit()
             if not probe_ok:
+                # ★ FIX: Don't unblock foremen when probe fails.
+                # Previously this was just a warning → foremen ran with broken reCAPTCHA.
                 log.warning(
-                    f"[Supervisor:{self.email}] ⚠️ Probe submit failed — "
-                    f"foreman-0 will proceed cautiously, others wait"
+                    f"[Supervisor:{self.email}] Startup probe failed — "
+                    f"NOT unblocking foremen, cooldown 60s"
                 )
+                await asyncio.sleep(0)  # yield to let engine loop pick up
+                self.engine.set_account_cooldown(self.email, "startup_probe_failed")
+                return
             
             await self.engine._pre_upload_all_images(self.account)
             log.info(f"[Supervisor:{self.email}] ✅ Startup complete — unblocking foremen")
+            self._startup_done.set()  # Only unblock on success
         except asyncio.CancelledError:
             raise
         except Exception as e:
             log.error(f"[Supervisor:{self.email}] Startup error (continuing): {e}")
-        finally:
-            self._startup_done.set()  # Always unblock foremen
+            self._startup_done.set()  # Unblock on error so foremen can try
         
         # ── Phase 2: Error processing loop ────────
         
@@ -247,10 +262,14 @@ class AccountSupervisor:
             if account._browser_session and account._browser_session.is_ready:
                 trpc_client = TRPCClient(account._browser_session._page)
             
-            # Extension bridge fallback for extension-only accounts
+            # Extension bridge — available as independent fallback
+            # ★ FIX: Always compute bridge availability independently of trpc_client.
+            # When Playwright disconnects but _SyncPageAsyncWrapper still reports
+            # is_ready=True, TRPC will fail with "Page not on labs.google domain".
+            # Bridge must be ready as fallback, not mutually exclusive.
             bridge = getattr(account, 'extension_bridge', None)
-            use_bridge = (
-                not trpc_client and bridge
+            bridge_available = (
+                bridge is not None
                 and bridge.is_connected(email)
             )
             
@@ -264,16 +283,28 @@ class AccountSupervisor:
             if not project_id:
                 for attempt in range(2):
                     try:
-                        if trpc_client:
+                        # ★ Attempt 0: prefer TRPC (page-based)
+                        # ★ Attempt 1: fall back to Extension bridge relay
+                        #   This handles the case where Playwright disconnected
+                        #   but the wrapper still reports is_ready (stale page).
+                        use_trpc = trpc_client and (attempt == 0 or not bridge_available)
+                        use_bridge_now = bridge_available and not use_trpc
+                        
+                        if use_trpc:
+                            fresh_token = await account.ensure_valid_token()
                             project_id = await account.project_manager.get_or_create_project(
                                 email=email,
-                                access_token=account.get_access_token(),
+                                access_token=fresh_token,
                                 api_client=self.engine._api_client,
                                 trpc_client=trpc_client,
                                 title="My Video Project",
                             )
-                        elif use_bridge:
+                        elif use_bridge_now:
                             # Extension bridge path: create project via TRPC relay
+                            log.info(
+                                f"[Supervisor:{email}] 🔄 Falling back to Extension bridge "
+                                f"for project creation (attempt {attempt + 1})"
+                            )
                             result = await bridge.relay_fetch(
                                 email=email,
                                 url="https://labs.google/fx/api/trpc/project.createProject",
@@ -308,14 +339,14 @@ class AccountSupervisor:
                         if attempt == 0:
                             log.warning(
                                 f"[Supervisor:{email}] ⚠️ Project creation failed — "
-                                f"retrying in 3s..."
+                                f"retrying in 3s (will try bridge fallback)..."
                             )
                             await asyncio.sleep(3)
                     except Exception as e:
                         if attempt == 0:
                             log.warning(
                                 f"[Supervisor:{email}] ⚠️ Project creation error: {e} — "
-                                f"retrying in 3s..."
+                                f"retrying in 3s (will try bridge fallback)..."
                             )
                             await asyncio.sleep(3)
                         else:
@@ -330,8 +361,11 @@ class AccountSupervisor:
             else:
                 log.error(
                     f"[Supervisor:{email}] ❌ No projectId after 2 attempts — "
-                    f"account may not function correctly"
+                    f"marking account NOT READY (foremen will idle)"
                 )
+                # ★ FIX 401: Mark account sick so foremen idle instead of
+                # spamming 401s. Recovery loop will clear this when session heals.
+                self.engine._mark_account_sick(email)
                 return
         
         # Project ready — tab stays on main flow page.
@@ -1532,10 +1566,11 @@ class Engine:
         if account._browser_session and account._browser_session.is_ready:
             trpc_client = TRPCClient(account._browser_session._page)
         
-        # Extension bridge fallback for extension-only accounts
+        # Extension bridge — available as independent fallback
+        # ★ FIX: Always compute bridge availability independently of trpc_client.
         bridge = getattr(account, 'extension_bridge', None)
-        use_bridge = (
-            not trpc_client and bridge
+        bridge_available = (
+            bridge is not None
             and bridge.is_connected(email)
         )
         
@@ -1552,7 +1587,11 @@ class Engine:
                 if self._stop_event.is_set():
                     break
                 try:
-                    if trpc_client:
+                    # ★ Same TRPC → bridge fallback pattern as Supervisor
+                    use_trpc = trpc_client and (attempt == 0 or not bridge_available)
+                    use_bridge_now = bridge_available and not use_trpc
+                    
+                    if use_trpc:
                         project_id = await account.project_manager.get_or_create_project(
                             email=email,
                             access_token=account.get_access_token(),
@@ -1560,8 +1599,12 @@ class Engine:
                             trpc_client=trpc_client,
                             title=title,
                         )
-                    elif use_bridge:
+                    elif use_bridge_now:
                         # Extension bridge path: create project via TRPC relay
+                        log.info(
+                            f"[Engine:{email}] 🔄 Falling back to Extension bridge "
+                            f"for project creation (attempt {attempt + 1})"
+                        )
                         result = await bridge.relay_fetch(
                             email=email,
                             url="https://labs.google/fx/api/trpc/project.createProject",
@@ -1606,8 +1649,11 @@ class Engine:
             account.set_project_id(project_id)
         else:
             log.warning(
-                f"⚠️ No projectId for {email} — generation requests may fail"
+                f"⚠️ No projectId for {email} — marking account NOT READY"
             )
+            # ★ FIX 401: Mark account sick to stop foremen from submitting.
+            # Without this, every foreman keeps trying → 401 retry storm.
+            self._mark_account_sick(email)
     
     async def _check_app_availability(self, account):
         """Fix 3: checkAppAvailability — HAR-verified startup signal.
@@ -2406,10 +2452,24 @@ class Engine:
                 log.debug(f"[TabKeepalive] {email}: API heartbeat skipped (no browser page)")
                 return
             
-            log.info(
-                f"[TabKeepalive] {email}: API heartbeat OK "
-                f"(auth={result.get('auth')}, ack={result.get('ack')}, credits={result.get('credits')})"
-            )
+            auth_status = result.get('auth')
+            ack_status = result.get('ack')
+            credits_status = result.get('credits')
+            
+            # ★ FIX 401: Escalate degraded session to WARNING
+            # auth=200 but ack=401/credits=401 means session cookies are
+            # insufficient for TRPC endpoints → project.createProject will fail.
+            if ack_status == 401 or credits_status == 401:
+                log.warning(
+                    f"[TabKeepalive] {email}: ⚠️ Session NOT READY "
+                    f"(auth={auth_status}, ack={ack_status}, credits={credits_status}) "
+                    f"— account may need re-login"
+                )
+            else:
+                log.info(
+                    f"[TabKeepalive] {email}: API heartbeat OK "
+                    f"(auth={auth_status}, ack={ack_status}, credits={credits_status})"
+                )
         except Exception as e:
             log.debug(f"[TabKeepalive] {email}: API heartbeat failed: {e}")
     
@@ -2599,6 +2659,10 @@ class Engine:
         last = self._last_successful_submit.get(email, 0)
         idle_secs = time.time() - last if last else 0
         if idle_secs < threshold_secs:
+            log.debug(
+                f"[PreWarm] {email}: SKIP (idle={idle_secs:.0f}s < threshold={threshold_secs}s, "
+                f"last_submit_ts={last})"
+            )
             return  # Not idle enough
     
         # BUG-32: Skip prewarm during stop (soft recovery + reCAPTCHA = 20+s)
@@ -2890,6 +2954,7 @@ class Engine:
         total_accounts = len(self._account_manager._accounts)
         ready_tasks = self._dispatcher.ready_count
         log.info(f"Engine starting: {total_accounts} accounts, {ready_tasks} ready tasks in queue")
+        log.info(f"[Engine] DEBUG: _running={self._running}, _stop_event.is_set()={self._stop_event.is_set()}")
         
         if total_accounts == 0:
             log.error("No accounts in pool — did sync_profiles_to_runtime() succeed?")
@@ -2898,17 +2963,20 @@ class Engine:
         
         # Register accounts in RecaptchaPool so background refill loop works.
         # Without this, pool._fetchers is empty → no tokens ever pre-fetched.
-        if self._recaptcha_pool:
-            for account in self._account_manager._accounts:
-                if account.is_enabled:
-                    self._recaptcha_pool.register_account(
-                        account.email,
-                        fetch_fn=lambda email, acc=account: acc.refresh_recaptcha(),
-                    )
-            log.info(
-                f"[RecaptchaPool] Registered {len(self._recaptcha_pool._fetchers)} "
-                f"accounts for background token pre-fetch"
-            )
+        try:
+            if self._recaptcha_pool:
+                for account in self._account_manager._accounts:
+                    if account.is_enabled:
+                        self._recaptcha_pool.register_account(
+                            account.email,
+                            fetch_fn=lambda email, acc=account: acc.refresh_recaptcha(),
+                        )
+                log.info(
+                    f"[RecaptchaPool] Registered {len(self._recaptcha_pool._fetchers)} "
+                    f"accounts for background token pre-fetch"
+                )
+        except Exception as e:
+            log.error(f"[Engine] CRASH in RecaptchaPool registration: {e}", exc_info=True)
         
         if ready_tasks == 0:
             log.warning("Ready queue is EMPTY — workers will idle until tasks are submitted")
@@ -2917,59 +2985,68 @@ class Engine:
         # On session restore, tasks saved with stage=UPSCALING are in the ready queue.
         # Without this, 12 workers grab them simultaneously, each enqueues to UpscaleQueue
         # in <1s — a burst. Instead, route them directly here before workers start.
-        if ready_tasks > 0:
-            from core.upscale_queue import UpscaleJob
-            
-            # Drain entire ready queue
-            drained = []
-            while not self._dispatcher._ready_queue.empty():
-                try:
-                    item = self._dispatcher._ready_queue.get_nowait()
-                    drained.append(item)
-                except Exception:
-                    break
-            
-            upscale_routed = 0
-            for priority, counter, task in drained:
-                if (task.stage == TaskStage.UPSCALING
-                        and task.download_quality != "720p"):
-                    # Collect media_ids from saved video_outputs
-                    media_ids = [vo.media_id for vo in task.video_outputs if vo.media_id]
-                    output_uris = [vo.file_720p for vo in task.video_outputs if vo.file_720p]
-                    
-                    if media_ids:
-                        # Determine account email from task
-                        acct_email = task.assigned_account or ""
-                        if not acct_email and self._account_manager._accounts:
-                            acct_email = self._account_manager._accounts[0].email
-                        
-                        self._upscale_queue.enqueue(UpscaleJob(
-                            task_id=task.id,
-                            account_email=acct_email,
-                            original_account=acct_email,  # DD6
-                            media_ids=list(media_ids),
-                            output_uris=list(output_uris),
-                            target_quality=task.download_quality,
-                            aspect_ratio=task.aspect_ratio,
-                        ))
-                        task.upscale_media_ids = list(media_ids)
-                        self._dispatcher.update_progress(
-                            task.id, 88,
-                            f"⬆️ Resuming upscale {task.download_quality} (queued)"
-                        )
-                        upscale_routed += 1
-                        continue  # Don't put back in ready queue
-                
-                # Non-upscaling task → put back
-                self._dispatcher._ready_queue.put_nowait((priority, counter, task))
-            
-            if upscale_routed > 0:
-                log.info(
-                    f"[Engine] Pre-filter: {upscale_routed} UPSCALING tasks → UpscaleQueue "
-                    f"(bypassed worker pipeline), {self._dispatcher.ready_count} tasks remain in queue"
-                )
-        
+        log.info(f"[Engine] DEBUG: Pre-filter starting (ready_tasks={ready_tasks})")
         try:
+            if ready_tasks > 0:
+                from core.upscale_queue import UpscaleJob
+                
+                # Drain entire ready queue
+                drained = []
+                while not self._dispatcher._ready_queue.empty():
+                    try:
+                        item = self._dispatcher._ready_queue.get_nowait()
+                        drained.append(item)
+                    except Exception:
+                        break
+                
+                upscale_routed = 0
+                for item in drained:
+                    # Use dispatcher helper for safe unpacking (handles 3-tuple and 5-tuple)
+                    _, _, _, _, task = self._dispatcher._unpack_ready_queue_item(item)
+                    
+                    if (task.stage == TaskStage.UPSCALING
+                            and task.download_quality != "720p"):
+                        # Collect media_ids from saved video_outputs
+                        media_ids = [vo.media_id for vo in task.video_outputs if vo.media_id]
+                        output_uris = [vo.file_720p for vo in task.video_outputs if vo.file_720p]
+                        
+                        if media_ids:
+                            # Determine account email from task
+                            acct_email = task.assigned_account or ""
+                            if not acct_email and self._account_manager._accounts:
+                                acct_email = self._account_manager._accounts[0].email
+                            
+                            self._upscale_queue.enqueue(UpscaleJob(
+                                task_id=task.id,
+                                account_email=acct_email,
+                                original_account=acct_email,  # DD6
+                                media_ids=list(media_ids),
+                                output_uris=list(output_uris),
+                                target_quality=task.download_quality,
+                                aspect_ratio=task.aspect_ratio,
+                            ))
+                            task.upscale_media_ids = list(media_ids)
+                            self._dispatcher.update_progress(
+                                task.id, 88,
+                                f"⬆️ Resuming upscale {task.download_quality} (queued)"
+                            )
+                            upscale_routed += 1
+                            continue  # Don't put back in ready queue
+                    
+                    # Non-upscaling task → put back (preserve original item format)
+                    self._dispatcher._ready_queue.put_nowait(item)
+                
+                if upscale_routed > 0:
+                    log.info(
+                        f"[Engine] Pre-filter: {upscale_routed} UPSCALING tasks → UpscaleQueue "
+                        f"(bypassed worker pipeline), {self._dispatcher.ready_count} tasks remain in queue"
+                    )
+        except Exception as e:
+            log.error(f"[Engine] ❌ CRASH in pre-filter: {e}", exc_info=True)
+        
+        log.info(f"[Engine] DEBUG: Pre-filter done. About to enter TaskGroup (ready={self._dispatcher.ready_count})")
+        try:
+            log.info(f"[Engine] Entering TaskGroup (ready={self._dispatcher.ready_count})")
             async with asyncio.TaskGroup() as tg:
                 self._task_group = tg  # Store reference for hot-reload
                 
@@ -2979,6 +3056,10 @@ class Engine:
                 #   - Increase: idle coroutines start acquiring workers → process tasks
                 #   - Decrease: excess coroutines fail acquire_workers() → idle safely
                 
+                log.info(
+                    f"[Engine] Spawning supervisors for {len(self._account_manager._accounts)} accounts "
+                    f"(active_emails={self._active_account_emails})"
+                )
                 for account in self._account_manager._accounts:
                     if not account.is_enabled:
                         log.info(f"Account {account.email}: skipped (disabled)")
@@ -3053,7 +3134,10 @@ class Engine:
                     break
             
             if items:
-                counts = [getattr(item[2], 'output_count', 2) or 2 for item in items]
+                counts = [
+                    getattr(self._dispatcher._unpack_ready_queue_item(item)[-1], 'output_count', 2) or 2
+                    for item in items
+                ]
                 # Put items back
                 for item in items:
                     self._dispatcher._ready_queue.put_nowait(item)
@@ -3099,13 +3183,13 @@ class Engine:
         - Rate lock ensures only 1 submit at a time per account (anti-detect)
         """
         if account.email in self._active_account_emails:
-            log.debug(f"[Foreman:{account.email}] Already active, skipping")
+            log.info(f"[Foreman:{account.email}] Already active, skipping spawn")
             return
         
-        # Supervisor (CHỦ) — one-time startup + error handling
         supervisor = AccountSupervisor(account, self)
         self._supervisors[account.email] = supervisor
         tg.create_task(supervisor.run())
+        log.info(f"[Engine] ✅ Supervisor task created for {account.email}")
         
         # Wire LP worker release callback → wakes foremen waiting for LP slots
         def _lp_released_cb(email: str):
@@ -3354,7 +3438,7 @@ class Engine:
                             browser_year=cached.get('x-browser-year', ''),
                         )
                         xcd = cached.get('x-client-data', '')
-                        if len(xcd) >= 20:
+                        if len(xcd) >= MIN_VALID_XCD:
                             log.info(f"Hot-reload: {account.email} headers populated (xcd={len(xcd)})")
                     
                     # Ensure bridge ref is set on account
@@ -3864,7 +3948,10 @@ class Engine:
                             f"[Foreman:{account.email}] Task {task.id}: "
                             f"RESUMING from stage {task.stage.value} → concurrent pipeline"
                         )
+                        # ★ FIX: Release pre-submit claim so other foremen can pick tasks
+                        self._dispatcher.mark_submit_started(task.id)
                         task.state = TaskState.WAITING_POLL
+                        task.watchdog_reset_at = datetime.now()  # ★ Reset watchdog timer for resume
                         # ★ Partial worker release: free extra slots, keep 1 as pipeline slot
                         # Each task acquired output_count workers (e.g. 4). Pipeline only needs
                         # 1 slot to track concurrency. Release (output_count-1) so foremen
@@ -4004,6 +4091,8 @@ class Engine:
                     # concurrency limit — simple and race-free.
                     _wt_dispatch = (task.workflow_type or "").upper()
                     if _wt_dispatch in ("T2I", "I2I"):
+                        # ★ FIX: Release pre-submit claim so other foremen can pick tasks
+                        self._dispatcher.mark_submit_started(task.id)
                         log.info(
                             f"[Foreman:{account.email}] Task {task.id}: "
                             f"🎨 T2I worker dispatch ({worker_count} workers)"
@@ -4021,6 +4110,10 @@ class Engine:
                             )
                         worker_count = 0  # Released inside _run_t2i_submit_pipeline_bg
                         continue  # ← Foreman picks next task
+                    
+                    # ★ FIX: Release pre-submit claim BEFORE retry loop
+                    # so other foremen can pick tasks while this one submits
+                    self._dispatcher.mark_submit_started(task.id)
                     
                     for attempt in range(max_retries + 1):
                         # BUG-13: Exit retry loop on stop (prevents 900s block)
@@ -4300,6 +4393,7 @@ class Engine:
                                         image_uris=task.image_uris,
                                         batch_id=getattr(task, '_batch_id', ''),        # F12: same batchId across batch
                                         session_id=getattr(task, '_session_id', ''),    # F12: same sessionId across batch
+                                        voice_id=getattr(task, 'voice_id', ''),         # R2V voice reference
                                     )
                                     
                                     # ── Debug: log request body structure ──
@@ -4648,27 +4742,35 @@ class Engine:
                             # ╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝╝
                             error_lower = (result.error or "").lower()
                             recaptcha_fail = "recaptcha" in error_lower
+                            auth_fail = "401" in (result.error or "") or "unauthenticated" in error_lower
                             acct_email = account.email
                             
-                            if recaptcha_fail or "403" in (result.error or ""):
+                            if recaptcha_fail or "403" in (result.error or "") or auth_fail:
                                 # M1 fix: Record error for adaptive delay backoff
-                                status = 403 if "403" in (result.error or "") else 500
+                                if auth_fail:
+                                    status = 401
+                                elif "403" in (result.error or ""):
+                                    status = 403
+                                else:
+                                    status = 500
                                 self._burst_controller.record_error(account.email, status)
                                 
-                                # Circuit breaker: track consecutive 403 for this account
+                                # Circuit breaker: track consecutive errors for this account
                                 self.record_circuit_403(account.email)
                                 
                                 # Layer 4: Cooldown — apply to ALL workers on this account
-                                self.set_account_cooldown(account.email, f"403/{result.error}")
-                                # RC4: Queue Status — 403 notification
+                                cooldown_label = f"{status}/{result.error}"
+                                self.set_account_cooldown(account.email, cooldown_label)
+                                # RC4: Queue Status notification
                                 self._dispatcher.update_progress(
                                     task.id, task.progress,
-                                    f"⛔ 403 recover"
+                                    f"⛔ {status} recover"
                                 )
                                 
                                 # ═══ SMART RECOVERY — replaces Phase 0-3 state machine ═══
                                 # Diagnose error → try targeted remedies → verify health
                                 # If all remedies fail → suspend account + migrate tasks
+                                # Routes: 403 → RECAPTCHA_403, 401 → AUTH_EXPIRED, etc.
                                 consecutive_403 = self._circuit_consecutive_403.get(acct_email, 0)
                                 
                                 # Build context for error classifier
@@ -4722,7 +4824,7 @@ class Engine:
                                     f"backoff={backoff}s)"
                                 )
                             else:
-                                # Non-reCAPTCHA, non-403 errors: refresh headers (lightweight — no tab reload)
+                                # Non-reCAPTCHA, non-403, non-401 errors: refresh headers (lightweight — no tab reload)
                                 if account.extension_bridge:
                                     try:
                                         await account.extension_bridge.refresh_headers_lightweight(
@@ -4801,6 +4903,7 @@ class Engine:
                             task.scene_ids = list(result.scene_ids)
                             task.stage = TaskStage.SUBMITTED  # ★ Checkpoint: prompt submitted
                             task.state = TaskState.WAITING_POLL
+                            task.watchdog_reset_at = datetime.now()  # ★ Reset watchdog timer for poll phase
                             self._dispatcher.update_progress(
                                 task.id, 20,
                                 f"✅ Submitted, polling..."
@@ -5110,9 +5213,11 @@ class Engine:
                     _cap_evt.set()
             # ★ Fix M1: Force prewarm for NEXT task by backdating last_submit.
             # Video pipeline took minutes — session context (reCAPTCHA,
-            # headers, cookies) has gone stale. Setting to 0 guarantees
-            # _maybe_prewarm() triggers before the next submit.
-            self._last_successful_submit[account.email] = 0
+            # headers, cookies) has gone stale.
+            # ★ FIX: Use epoch 1 (not 0!) — 0 is falsy, causes
+            # idle_secs = 0 in _maybe_prewarm(), bypassing prewarm.
+            # Epoch 1 is truthy → idle_secs ≈ 1.7B secs → always triggers.
+            self._last_successful_submit[account.email] = 1
             log.info(
                 f"[Fix-M1:{account.email}] Task {task.id}: pipeline done "
                 f"— forced prewarm for next task"
@@ -6120,13 +6225,14 @@ class Engine:
                         f"image {img_idx+1}/{_oc} failed: {error}"
                     )
                     
-                    if "403" in str(error) or "recaptcha" in error_lower:
+                    if "403" in str(error) or "recaptcha" in error_lower or "401" in str(error) or "unauthenticated" in error_lower:
+                        _err_st = 401 if ("401" in str(error) or "unauthenticated" in error_lower) else (status_code or 403)
                         self._burst_controller_t2i.record_error(
-                            account.email, status_code or 403
+                            account.email, _err_st
                         )
                         self.record_circuit_403(account.email)
                         self.set_account_cooldown(
-                            account.email, f"403/{error}"
+                            account.email, f"{_err_st}/{error}"
                         )
                     
                     if status_code == 400 or "invalid argument" in error_lower:
@@ -6276,10 +6382,11 @@ class Engine:
                                     if attempt < max_retries:
                                         await asyncio.sleep(8)
                                         continue
-                                elif "403" in str(err_r) or "recaptcha" in err_r_lower:
-                                    self._burst_controller_t2i.record_error(account.email, sc_r or 403)
+                                elif "403" in str(err_r) or "recaptcha" in err_r_lower or "401" in str(err_r) or "unauthenticated" in err_r_lower:
+                                    _err_status = 401 if ("401" in str(err_r) or "unauthenticated" in err_r_lower) else (sc_r or 403)
+                                    self._burst_controller_t2i.record_error(account.email, _err_status)
                                     self.record_circuit_403(account.email)
-                                    self.set_account_cooldown(account.email, f"403/{err_r}")
+                                    self.set_account_cooldown(account.email, f"{_err_status}/{err_r}")
                                     
                                     ext_br = getattr(account, 'extension_bridge', None)
                                     recovery_ctx = {
@@ -7412,6 +7519,7 @@ class Engine:
                         task.video_outputs.append(vo)
                     
                     task.stage = TaskStage.GENERATED  # ★ Checkpoint: poll complete
+                    task.watchdog_reset_at = datetime.now()  # ★ Reset watchdog timer for download/upscale phase
                     
                     # Always save media_ids early — needed for re-upscale
                     # even if upscale block is skipped (720p or token failure)
@@ -9062,7 +9170,7 @@ class Engine:
                             sem = self._get_api_semaphore(account.email)
                             async with sem:
                                 resp = await self._api_client.upscale_video(
-                                    access_token=account.get_access_token() or "",
+                                    access_token=await account.ensure_valid_token() or "",
                                     recaptcha_token=recaptcha_token,
                                     video_media_id=media_id,
                                     project_id=getattr(account, 'project_id', '') or task.project_id or "",
@@ -9090,10 +9198,14 @@ class Engine:
                     if "already exists" in error_lower or "409" in error_msg_raw:
                         log.info(
                             f"Upscale {video_label}: HTTP 409 — entity already exists. "
-                            f"Server accepted upscale, skipping to poll."
+                            f"Treating as idempotent (data may be None)."
                         )
                         # Mark resp as "success" so we fall through to poll
                         resp.success = True
+                        # ★ RC3 FIX: 409 responses typically have no data payload.
+                        # Set empty operations list to prevent NoneType crash at L9291.
+                        if resp.data is None:
+                            resp.data = {"operations": []}
                         break
                     
                     log.warning(
@@ -9264,7 +9376,7 @@ class Engine:
                             sem = self._get_api_semaphore(account.email)
                             async with sem:
                                 resp2 = await self._api_client.upscale_video(
-                                    access_token=account.get_access_token() or "",
+                                    access_token=await account.ensure_valid_token() or "",
                                     recaptcha_token=recaptcha_token,
                                     video_media_id=media_id,
                                     project_id=getattr(account, 'project_id', '') or task.project_id or "",
@@ -9373,7 +9485,7 @@ class Engine:
             sem = self._get_api_semaphore(account.email)
             async with sem:
                 poll_resp = await self._api_client.check_status(
-                    access_token=account.get_access_token() or "",
+                    access_token=await account.ensure_valid_token() or "",
                     recaptcha_token="",
                     operations=[{
                         "operation": {"name": op_name},
@@ -10202,8 +10314,8 @@ class Engine:
                                     def _gen_image_thumb(_src, _dst):
                                         from PIL import Image
                                         with Image.open(str(_src)) as img:
-                                            ratio = 80 / img.width
-                                            new_size = (80, max(1, int(img.height * ratio)))
+                                            ratio = 200 / img.width
+                                            new_size = (200, max(1, int(img.height * ratio)))
                                             thumb = img.resize(new_size, Image.LANCZOS)
                                             if thumb.mode in ('RGBA', 'P'):
                                                 thumb = thumb.convert('RGB')
@@ -10226,7 +10338,7 @@ class Engine:
                                                 def _run_ffmpeg(_ss=ss_val):
                                                     return subprocess.run(
                                                         [_ffmpeg_bin, '-y', '-ss', _ss, '-i', str(filepath),
-                                                         '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                                                         '-vframes', '1', '-vf', 'scale=120:-1', '-q:v', '5',
                                                          str(thumb_path)],
                                                         capture_output=True, timeout=10,
                                                         creationflags=(subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS) if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
@@ -10254,8 +10366,8 @@ class Engine:
                                             cap.release()
                                             if ret and frame is not None:
                                                 img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                                                ratio = 80 / img.width
-                                                new_size = (80, max(1, int(img.height * ratio)))
+                                                ratio = 120 / img.width
+                                                new_size = (120, max(1, int(img.height * ratio)))
                                                 thumb = img.resize(new_size, Image.LANCZOS)
                                                 thumb.save(str(_dst), 'JPEG', quality=85)
                                                 return True
@@ -10452,8 +10564,8 @@ class Engine:
                 # Image: resize using PIL
                 from PIL import Image
                 with Image.open(source) as img:
-                    ratio = 80 / img.width
-                    new_size = (80, max(1, int(img.height * ratio)))
+                    ratio = 200 / img.width
+                    new_size = (200, max(1, int(img.height * ratio)))
                     thumb_img = img.resize(new_size, Image.LANCZOS)
                     if thumb_img.mode in ('RGBA', 'P'):
                         thumb_img = thumb_img.convert('RGB')
@@ -10470,7 +10582,7 @@ class Engine:
                         try:
                             subprocess.run(
                                 [_ffmpeg_bin, '-y', '-ss', ss_val, '-i', str(source),
-                                 '-vframes', '1', '-vf', 'scale=80:-1', '-q:v', '5',
+                                 '-vframes', '1', '-vf', 'scale=120:-1', '-q:v', '5',
                                  str(thumb_path)],
                                 capture_output=True, timeout=10,
                                 creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
@@ -10491,8 +10603,8 @@ class Engine:
                         if ret and frame is not None:
                             from PIL import Image
                             img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                            ratio = 80 / img.width
-                            new_size = (80, max(1, int(img.height * ratio)))
+                            ratio = 120 / img.width
+                            new_size = (120, max(1, int(img.height * ratio)))
                             thumb_img = img.resize(new_size, Image.LANCZOS)
                             thumb_img.save(str(thumb_path), 'JPEG', quality=85)
                     except (ImportError, Exception) as e:

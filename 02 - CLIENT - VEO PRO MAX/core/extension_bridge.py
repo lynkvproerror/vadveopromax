@@ -6,7 +6,7 @@ Extension intercepts real x-browser-* headers + reCAPTCHA tokens from VEO web,
 sends them to this server, which then feeds them to AccountManager.
 
 Protocol:
-  Extension → App:
+  Extension -> App:
     {"action": "register", "email": "...", "tabId": 123}
     {"action": "headers_update", "email": "...", "headers": {...}, "accessToken": "..."}
     {"action": "recaptcha_token", "requestId": "...", "token": "...", "error": null}
@@ -14,7 +14,7 @@ Protocol:
     {"action": "tab_closed", "email": "...", "tabId": 123}
     {"action": "pong"}
 
-  App → Extension:
+  App -> Extension:
     {"action": "request_recaptcha", "requestId": "...", "email": "..."}
     {"action": "request_headers", "email": "..."}
     {"action": "request_access_token", "requestId": "...", "email": "..."}
@@ -42,7 +42,7 @@ from datetime import datetime
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.constants import MIN_VALID_XCD, MIN_VALID_XCD_IMAGE
+from config.constants import MIN_VALID_XCD
 
 try:
     import websockets
@@ -61,9 +61,9 @@ class ExtensionConnection:
     """State for a single Extension WebSocket connection."""
     ws: Any  # websockets.WebSocketServerProtocol
     registered_emails: list = field(default_factory=list)
-    headers: Dict[str, Dict[str, str]] = field(default_factory=dict)  # email → headers
-    headers_updated_at: Dict[str, datetime] = field(default_factory=dict)  # email → timestamp
-    access_tokens: Dict[str, str] = field(default_factory=dict)  # email → token
+    headers: Dict[str, Dict[str, str]] = field(default_factory=dict)  # email -> headers
+    headers_updated_at: Dict[str, datetime] = field(default_factory=dict)  # email -> timestamp
+    access_tokens: Dict[str, str] = field(default_factory=dict)  # email -> token
     connected_at: datetime = field(default_factory=datetime.now)
     last_activity: float = field(default_factory=time.time)  # For zombie detection
 
@@ -91,53 +91,54 @@ class ExtensionBridge:
         self._port = port
         self._server = None  # websockets server
         self._connections: list[ExtensionConnection] = []
-        self._pending_requests: Dict[str, asyncio.Future] = {}  # requestId → Future
-        self._pending_request_conns: Dict[str, ExtensionConnection] = {}  # GAP #9: requestId → connection owner
-        self._recaptcha_locks: Dict[str, asyncio.Lock] = {}  # email → Lock (serialize per-account)
+        self._primary_conn_by_email: Dict[str, ExtensionConnection] = {}  # email -> owner connection
+        self._pending_requests: Dict[str, asyncio.Future] = {}  # requestId -> Future
+        self._pending_request_conns: Dict[str, ExtensionConnection] = {}  # GAP #9: requestId -> connection owner
+        self._recaptcha_locks: Dict[str, asyncio.Lock] = {}  # email -> Lock (serialize per-account)
         self._heartbeat_task: Optional[asyncio.Task] = None  # Fix 5: heartbeat loop
         self._watchdog_task: Optional[asyncio.Task] = None    # Auto-restart watchdog
         self._restart_count: int = 0                          # Consecutive restart attempts
         self._MAX_RESTARTS = 5                                # Max consecutive restarts before giving up
         self._stopping = False                                # True when stop() is called
         self._preserved_headers: Dict[str, Dict[str, str]] = {}  # Survive disconnects
-        self._headers_debounce_timers: Dict[str, asyncio.TimerHandle] = {}  # email → pending timer
-        self._headers_debounce_latest: Dict[str, tuple] = {}  # email → (headers, access_token)
-        self._connection_events: Dict[str, asyncio.Event] = {}  # email → Event for wait_for_extension()
+        self._headers_debounce_timers: Dict[str, asyncio.TimerHandle] = {}  # email -> pending timer
+        self._headers_debounce_latest: Dict[str, tuple] = {}  # email -> (headers, access_token)
+        self._connection_events: Dict[str, asyncio.Event] = {}  # email -> Event for wait_for_extension()
 
         # Content heartbeat tracking
-        self._content_heartbeats: Dict[str, float] = {}  # email → last heartbeat timestamp
-        self._recaptcha_readiness: Dict[str, bool] = {}  # email → True if reCAPTCHA is warm
+        self._content_heartbeats: Dict[str, float] = {}  # email -> last heartbeat timestamp
+        self._recaptcha_readiness: Dict[str, bool] = {}  # email -> True if reCAPTCHA is warm
 
         # Short token tracking: auto-reload tab after repeated garbage tokens
-        self._short_token_counts: Dict[str, int] = {}  # email → consecutive short token count
+        self._short_token_counts: Dict[str, int] = {}  # email -> consecutive short token count
         self._SHORT_TOKEN_RELOAD_THRESHOLD = 3
 
         # Rate-limit stale header debug logs (prevent log spam)
-        self._stale_log_times: Dict[str, float] = {}  # email → last log timestamp
+        self._stale_log_times: Dict[str, float] = {}  # email -> last log timestamp
         _STALE_LOG_INTERVAL = 60  # Log stale headers at most once per 60s per email
 
         # Frozen tab escalation tracking
-        self._frozen_tab_counts: Dict[str, int] = {}  # email → consecutive frozen events
-        self._frozen_tab_first_at: Dict[str, float] = {}  # email → timestamp of first frozen event in window
-        self._FROZEN_ESCALATION_THRESHOLD = 3  # After N consecutive frozen events → escalate
+        self._frozen_tab_counts: Dict[str, int] = {}  # email -> consecutive frozen events
+        self._frozen_tab_first_at: Dict[str, float] = {}  # email -> timestamp of first frozen event in window
+        self._FROZEN_ESCALATION_THRESHOLD = 3  # After N consecutive frozen events -> escalate
         self._FROZEN_WINDOW = 300  # 5 min window for counting frozen events
-        self._refresh_cooldown_times: Dict[str, float] = {}  # email → last refresh trigger timestamp (centralized)
+        self._refresh_cooldown_times: Dict[str, float] = {}  # email -> last refresh trigger timestamp (centralized)
 
         # Tab reload grace period: when extension reloads a tab, suspend zombie
         # detection for that email to avoid false-positive disconnects
-        self._reload_grace: Dict[str, float] = {}  # email → grace expiry timestamp
+        self._reload_grace: Dict[str, float] = {}  # email -> grace expiry timestamp
 
         # Round-trip timing: track when each request was sent
-        self._pending_request_times: Dict[str, float] = {}  # requestId → time.time() when sent
-        self._pending_request_actions: Dict[str, str] = {}  # requestId → action name
-        self._pending_request_emails: Dict[str, str] = {}  # requestId → email
+        self._pending_request_times: Dict[str, float] = {}  # requestId -> time.time() when sent
+        self._pending_request_actions: Dict[str, str] = {}  # requestId -> action name
+        self._pending_request_emails: Dict[str, str] = {}  # requestId -> email
 
         # ★ Fix J+N1: Per-account submit throttle — prevent freeze from too many
         # concurrent pending submits on a single WebSocket connection.
         # 4 = 1 foreman batch. Extension processes sequentially on 1 Tab JS thread,
         # so >4 just queues without throughput gain while choking event loop.
         self._MAX_CONCURRENT_SUBMITS = 4
-        self._submit_semaphores: Dict[str, asyncio.Semaphore] = {}  # email → Semaphore
+        self._submit_semaphores: Dict[str, asyncio.Semaphore] = {}  # email -> Semaphore
 
         # ── Debug message log (ring buffer for DevConsole) ──
         self._message_log: deque = deque(maxlen=500)  # {dir, action, email, ts, payload_preview}
@@ -148,8 +149,8 @@ class ExtensionBridge:
 
         # ── Fix B: Request dedup for check_recaptcha_ready ──
         # Prevents N foremen × M checks = N*M concurrent WebSocket requests
-        self._check_ready_inflight: Dict[str, asyncio.Task] = {}  # email → running Task
-        self._check_ready_cache: Dict[str, tuple] = {}  # email → (result: bool, timestamp)
+        self._check_ready_inflight: Dict[str, asyncio.Task] = {}  # email -> running Task
+        self._check_ready_cache: Dict[str, tuple] = {}  # email -> (result: bool, timestamp)
 
         # Callbacks (set by AccountManager/AppController)
         self.on_headers_update: Optional[Callable] = None    # (email, headers, access_token)
@@ -170,7 +171,7 @@ class ExtensionBridge:
         # Browser close cooldown: prevent infinite restart loops
         # When auto-close fires or all connections for an account drop,
         # block browser restart for BROWSER_CLOSE_COOLDOWN_SECONDS.
-        self._browser_close_cooldown: Dict[str, float] = {}  # email → timestamp
+        self._browser_close_cooldown: Dict[str, float] = {}  # email -> timestamp
         self.BROWSER_CLOSE_COOLDOWN_SECONDS = 300  # 5 minutes
 
         # ★ Tab-dead tracking: set when extension declares tab truly dead.
@@ -258,12 +259,11 @@ class ExtensionBridge:
             return (False, "extension_disconnected")
         
         # Check 2: x-client-data length check
-        # When extension is connected, Chrome auto-injects real x-client-data
-        # in page-context fetch(). Python-side stub (8 chars) is sufficient.
+        # Require the same minimum for every submit path. A connected extension
+        # does not magically upgrade a short Variations enrollment.
         headers = self.get_cached_headers(email, max_age_seconds=0)  # any age OK
         xcd = (headers or {}).get('x-client-data', '') or ''
-        _min_xcd = MIN_VALID_XCD_IMAGE if self.is_connected(email) else MIN_VALID_XCD
-        if len(xcd) < _min_xcd:
+        if len(xcd) < MIN_VALID_XCD:
             return (False, f"xcd_short ({len(xcd)} chars)")
         
         # Check 3: reCAPTCHA warm? (from content heartbeat)
@@ -283,7 +283,7 @@ class ExtensionBridge:
         """
         VEO_URL = "https://labs.google/fx/vi/tools/flow"
         log.warning(
-            f"[ExtensionBridge] 🔄 Hard navigation for {email} → {VEO_URL} "
+            f"[ExtensionBridge] 🔄 Hard navigation for {email} -> {VEO_URL} "
             f"(reCAPTCHA recovery)"
         )
         result = await self.navigate_to_url(email, VEO_URL, timeout=35.0)
@@ -393,8 +393,67 @@ class ExtensionBridge:
             emails.update(conn.registered_emails)
         return list(emails)
 
-    async def assign_email(self, email: str) -> bool:
+    async def _claim_email_on_connection(self, conn: ExtensionConnection, email: str):
+        """Claim email ownership on conn, superseding any older connections.
+        
+        ★ De-duplication: When a new connection registers the same email,
+        the old connection(s) lose that email. If an old connection has no
+        remaining emails after removal, it is fully disconnected.
+        This prevents ghost connections from accumulating.
+        
+        ★ FIX: Migrate pending requests (submit_prompt, reCAPTCHA) from old
+        connection to new connection before disconnecting. Without this,
+        in-flight fetch() calls get killed with HTTP 0 when the MV3 service
+        worker creates a new WebSocket during an active request.
+        """
+        if email not in conn.registered_emails:
+            conn.registered_emails.append(email)
+
+        # Supersede old connections holding this email
+        for other in list(self._connections):
+            if other is conn:
+                continue
+            if email in other.registered_emails:
+                # ★ Migrate pending requests from old connection → new connection
+                # The new service worker instance will deliver responses on the
+                # new WebSocket, so futures must be associated with it.
+                migrated = 0
+                for req_id, owner_conn in list(self._pending_request_conns.items()):
+                    if owner_conn is other:
+                        self._pending_request_conns[req_id] = conn
+                        migrated += 1
+                if migrated:
+                    log.info(
+                        f"[ExtensionBridge] 🔀 Migrated {migrated} pending request(s) "
+                        f"from old→new connection for {email}"
+                    )
+                
+                other.registered_emails = [e for e in other.registered_emails if e != email]
+                other.headers.pop(email, None)
+                other.headers_updated_at.pop(email, None)
+                other.access_tokens.pop(email, None)
+                log.info(f"[ExtensionBridge] 🔁 Superseded old connection for {email}")
+                # ★ FIX: Do NOT call _disconnect() when superseding!
+                # _disconnect() calls ws.close() which sends a WebSocket close frame
+                # to the Offscreen Document → triggers onclose → immediate reconnect
+                # → new WS → register → supersede → close → INFINITE LOOP.
+                # Instead: lightweight cleanup — remove from tracking, let the old
+                # WS die naturally via ping timeout or when _handle_connection exits.
+                if not other.registered_emails:
+                    # Remove from tracking (but DO NOT close WebSocket — avoids
+                    # triggering offscreen.onclose → reconnect → supersede storm)
+                    if other in self._connections:
+                        self._connections.remove(other)
+                    log.debug(f"[ExtensionBridge] Removed superseded connection (no ws.close — avoiding reconnect storm)")
+
+        self._primary_conn_by_email[email] = conn
+
+    async def assign_email(self, email: str, profile_path: str = "") -> bool:
         """Tell an unregistered extension connection which email it belongs to.
+        
+        ★ Identity binding: sends profile_path alongside email so the extension
+        can verify it's running in the correct browser instance before assigning
+        the email to a tab.
         
         Finds the first connection that hasn't registered any emails yet,
         sends an assign_email message, and registers the email locally.
@@ -404,6 +463,7 @@ class ExtensionBridge:
         
         Args:
             email: Account email to assign to a connection.
+            profile_path: Browser profile directory name (for identity verification).
             
         Returns:
             True if assignment was sent, False if no unregistered connection.
@@ -413,33 +473,44 @@ class ExtensionBridge:
             return True
         
         # Find an unregistered connection
-        for conn in self._connections:
-            if not conn.registered_emails:
-                try:
-                    await self._ws_send(conn, {
-                        'action': 'assign_email',
-                        'email': email,
-                    })
-                    conn.registered_emails.append(email)
-                    log.info(f"[ExtensionBridge] 📧 Assigned email to extension: {email}")
-                    # ★ Clear dead-tab flag — browser reconnected, account alive again
-                    self.clear_tab_dead(email)
-                    if self.on_extension_connect:
-                        try:
-                            self.on_extension_connect(email)
-                        except Exception:
-                            pass
-                    # Signal waiters (wait_for_extension)
-                    event = self._connection_events.get(email)
-                    if event:
-                        event.set()
-                    return True
-                except Exception as e:
-                    log.error(f"[ExtensionBridge] Failed to assign email: {e}")
-                    return False
+        unregistered = [c for c in self._connections if not c.registered_emails]
+        if not unregistered:
+            log.debug(
+                f"[ExtensionBridge] No unregistered connection available for {email} "
+                f"(total: {len(self._connections)} conn(s), all registered)"
+            )
+            return False
         
-        log.debug(f"[ExtensionBridge] No unregistered connection available for {email}")
-        return False
+        conn = unregistered[0]
+        if len(unregistered) > 1:
+            log.warning(
+                f"[ExtensionBridge] ⚠️ {len(unregistered)} unregistered connections — "
+                f"assigning {email} to first, but binding may be wrong"
+            )
+        
+        try:
+            await self._ws_send(conn, {
+                'action': 'assign_email',
+                'email': email,
+                'profilePath': profile_path,  # ★ Identity hint for extension verification
+            })
+            await self._claim_email_on_connection(conn, email)
+            log.info(f"[ExtensionBridge] 📧 Assigned email to extension: {email}")
+            # ★ Clear dead-tab flag — browser reconnected, account alive again
+            self.clear_tab_dead(email)
+            if self.on_extension_connect:
+                try:
+                    self.on_extension_connect(email)
+                except Exception:
+                    pass
+            # Signal waiters (wait_for_extension)
+            event = self._connection_events.get(email)
+            if event:
+                event.set()
+            return True
+        except Exception as e:
+            log.error(f"[ExtensionBridge] Failed to assign email: {e}")
+            return False
 
     def get_cached_headers(self, email: str, max_age_seconds: int = 180) -> Optional[Dict[str, str]]:
         """Get latest cached headers for an email (from auto-push).
@@ -482,6 +553,66 @@ class ExtensionBridge:
             if email in conn.access_tokens:
                 return conn.access_tokens[email]
         return None
+
+    def _get_header_timestamp(self, email: str) -> Optional[datetime]:
+        """Get the timestamp of the most recent headers_update for an email.
+        
+        Used by refresh_headers_lightweight() delivery confirmation (FIX M1).
+        Returns None if no headers have been received yet.
+        """
+        latest = None
+        for conn in self._connections:
+            ts = conn.headers_updated_at.get(email)
+            if ts and (latest is None or ts > latest):
+                latest = ts
+        return latest
+
+    def get_delivery_status(self, email: str, max_age_seconds: int = 300) -> Dict[str, Any]:
+        """Describe whether headers have actually been delivered into the app.
+
+        This is intentionally app-centric, not browser-centric:
+        - `connected` means the app currently has a live WS registration
+        - `headers_ready` means fresh headers are already in bridge cache
+        - `headers_any` means the app has some cached/preserved headers, even if stale
+        """
+        live_headers = None
+        latest_header_time: Optional[datetime] = None
+        registered = False
+        access_token_cached = False
+
+        for conn in self._connections:
+            if email in conn.registered_emails:
+                registered = True
+            if email in conn.headers and conn.headers[email]:
+                live_headers = conn.headers[email]
+            if email in conn.headers_updated_at:
+                ts = conn.headers_updated_at[email]
+                if latest_header_time is None or ts > latest_header_time:
+                    latest_header_time = ts
+            if email in conn.access_tokens and conn.access_tokens[email]:
+                access_token_cached = True
+
+        preserved_headers = self._preserved_headers.get(email) or {}
+        headers_ready = bool(self.get_cached_headers(email, max_age_seconds=max_age_seconds))
+        headers_any = bool(live_headers or preserved_headers)
+        connected = self.is_connected(email)
+
+        last_headers_age_seconds: Optional[float] = None
+        if latest_header_time is not None:
+            last_headers_age_seconds = max(
+                0.0, (datetime.now() - latest_header_time).total_seconds()
+            )
+
+        return {
+            "connected": connected,
+            "registered": registered,
+            "headers_ready": headers_ready,
+            "headers_any": headers_any,
+            "live_headers": bool(live_headers),
+            "preserved_headers": bool(preserved_headers),
+            "last_headers_age_seconds": last_headers_age_seconds,
+            "access_token_cached": access_token_cached,
+        }
 
     def invalidate_cached_headers(self, email: str):
         """Clear all cached headers + reCAPTCHA readiness for an account.
@@ -553,13 +684,13 @@ class ExtensionBridge:
         if removed:
             log.info(f"[ExtensionBridge] 🗑️ Cleaned up {removed} per-email entries for {email}")
 
-    # Port fallback list: try primary → backup1 → backup2
+    # Port fallback list: try primary -> backup1 -> backup2
     FALLBACK_PORTS = [8765, 8766, 8767]
     
     async def start(self):
         """Start WebSocket server (non-blocking, runs in background).
         
-        Auto port fallback: tries ports 8765 → 8766 → 8767.
+        Auto port fallback: tries ports 8765 -> 8766 -> 8767.
         If primary port is occupied (e.g. another instance), falls back automatically.
         """
         if not websockets:
@@ -667,14 +798,14 @@ class ExtensionBridge:
     async def request_recaptcha(self, email: str, timeout: float = 35.0, attempt: int = 0) -> Optional[str]:
         """Request reCAPTCHA token from Extension for a specific email.
 
-        Sends request to Extension → Extension calls grecaptcha.execute()
-        on the real VEO page → returns fresh token.
+        Sends request to Extension -> Extension calls grecaptcha.execute()
+        on the real VEO page -> returns fresh token.
         
         Auto-simulates activity if tab has been idle >60s to prevent
         cold-start failures.
         
-        ★ Progressive timeout: attempt 0 → 15s reCAPTCHA execute,
-        attempt 1 → 25s, attempt 2+ → 35s (forwarded to Extension).
+        ★ Progressive timeout: attempt 0 -> 15s reCAPTCHA execute,
+        attempt 1 -> 25s, attempt 2+ -> 35s (forwarded to Extension).
 
         Args:
             email: Account email to get token for
@@ -910,8 +1041,8 @@ class ExtensionBridge:
         labs.google page. Token is used immediately (<100ms), all browser
         headers (x-client-data, x-browser-*) are auto-added by Chrome.
         
-        ★ Progressive timeout: attempt 0 → 15s reCAPTCHA + 20s fetch,
-        attempt 1 → 25s + 30s, attempt 2+ → 35s + 40s.
+        ★ Progressive timeout: attempt 0 -> 15s reCAPTCHA + 20s fetch,
+        attempt 1 -> 25s + 30s, attempt 2+ -> 35s + 40s.
 
         Args:
             email: Account email to submit for
@@ -1283,20 +1414,20 @@ class ExtensionBridge:
             if success:
                 log.debug(
                     f"[ExtensionBridge] ✅ relay_fetch for {email}: "
-                    f"HTTP {status} → {url[:80]}"
+                    f"HTTP {status} -> {url[:80]}"
                 )
             else:
                 error = result.get('error', '')
                 log.warning(
                     f"[ExtensionBridge] ❌ relay_fetch for {email}: "
-                    f"HTTP {status} — {error} → {url[:80]}"
+                    f"HTTP {status} — {error} -> {url[:80]}"
                 )
             return result
             
         except asyncio.TimeoutError:
             log.error(
                 f"[ExtensionBridge] relay_fetch timed out for {email} "
-                f"({timeout}s) → {url[:80]}"
+                f"({timeout}s) -> {url[:80]}"
             )
             return None
         finally:
@@ -1309,7 +1440,7 @@ class ExtensionBridge:
         
         Called when consecutive short tokens (330 chars) indicate the
         grecaptcha Enterprise widget is partially initialized.
-        Sends refresh_headers to extension → chrome.tabs.reload → wait for re-init.
+        Sends refresh_headers to extension -> chrome.tabs.reload -> wait for re-init.
         """
         try:
             conn = self._find_connection(email)
@@ -1565,8 +1696,8 @@ class ExtensionBridge:
     async def refresh_headers(self, email: str = None, timeout: float = 15.0) -> int:
         """Trigger VEO tab reload to capture fresh headers.
 
-        Sends refresh_headers to Extension → Extension reloads matching VEO tabs
-        → webRequest captures fresh headers → auto-pushed via headers_update.
+        Sends refresh_headers to Extension -> Extension reloads matching VEO tabs
+        -> webRequest captures fresh headers -> auto-pushed via headers_update.
 
         Args:
             email: Optional email to refresh only matching tabs. None = all tabs.
@@ -1579,7 +1710,10 @@ class ExtensionBridge:
             log.warning("[ExtensionBridge] No Extension connected for refresh")
             return 0
 
-        conn = self._connections[0]  # Any connection
+        conn = self._find_connection(email) if email else self._connections[0]
+        if not conn:
+            log.warning(f"[ExtensionBridge] No registered Extension connection for refresh ({email})")
+            return 0
         request_id = str(uuid.uuid4())
         future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
@@ -1593,7 +1727,17 @@ class ExtensionBridge:
 
             result = await asyncio.wait_for(future, timeout=timeout)
             tabs_reloaded = result.get('tabsReloaded', 0)
-            log.info(f"[ExtensionBridge] 🔄 Refreshed headers: {tabs_reloaded} tab(s) reloaded")
+            if tabs_reloaded > 0:
+                log.info(f"[ExtensionBridge] 🔄 Refreshed headers: {tabs_reloaded} tab(s) reloaded")
+            else:
+                # Diagnose: 0 tabs reloaded usually means email→tab binding is stale
+                is_connected = self.is_connected(email) if email else bool(self._connections)
+                owner = self._primary_conn_by_email.get(email) if email else None
+                log.warning(
+                    f"[ExtensionBridge] ⚠️ Header refresh: 0 tab(s) reloaded for {email or 'all'} "
+                    f"(connected={is_connected}, has_owner={'yes' if owner else 'no'}) "
+                    f"— extension may have no VEO tab bound to this email"
+                )
             return tabs_reloaded
         except asyncio.TimeoutError:
             log.warning(f"[ExtensionBridge] Header refresh timed out ({timeout}s) — non-fatal, CDP may capture headers directly")
@@ -1632,7 +1776,25 @@ class ExtensionBridge:
             result = await asyncio.wait_for(future, timeout=timeout)
             success = result.get('success', False)
             if success:
-                log.debug(f"[ExtensionBridge] 🔄 Lightweight header refresh OK for {email}")
+                # ★ FIX M1: Verify headers were actually delivered to bridge cache
+                # Before this fix, we returned True on ACK without confirming
+                # the fresh headers had arrived. Now poll up to 3s for delivery proof.
+                _before_ts = self._get_header_timestamp(email)
+                for _poll in range(6):  # 6 × 0.5s = 3s
+                    await asyncio.sleep(0.5)
+                    _after_ts = self._get_header_timestamp(email)
+                    if _after_ts and _after_ts != _before_ts:
+                        log.debug(
+                            f"[ExtensionBridge] 🔄 Lightweight refresh confirmed for {email} "
+                            f"(headers delivered after {(_poll + 1) * 0.5:.1f}s)"
+                        )
+                        return True
+                # Headers didn't arrive within 3s — still report success
+                # since the fetch happened, but log a warning
+                log.debug(
+                    f"[ExtensionBridge] 🔄 Lightweight refresh ACK for {email} "
+                    f"(delivery unconfirmed — headers may arrive async)"
+                )
                 return True
             else:
                 # Fall back to full reload
@@ -1768,8 +1930,9 @@ class ExtensionBridge:
         if action == 'register':
             email = msg.get('email', '')
             ext_version = msg.get('version', '')
-            if email and email not in conn.registered_emails:
-                conn.registered_emails.append(email)
+            if email:
+                # ★ Use _claim_email_on_connection for de-dup
+                await self._claim_email_on_connection(conn, email)
                 log.info(f"[ExtensionBridge] 📧 Extension registered: {email} (v{ext_version})")
                 
                 # ★ Reset frozen/refresh tracking — new browser session starts fresh
@@ -1846,7 +2009,11 @@ class ExtensionBridge:
                     else:
                         log.debug(f"[ExtensionBridge] Non-Bearer token ignored for {email}: {access_token[:20]}...")
 
-                # Debounce: coalesce rapid updates (2s window per email)
+                first_delivery = not bool(old_headers)
+
+                # Debounce: coalesce rapid updates, but do not delay the first
+                # header delivery after startup/reconnect. The first payload is
+                # what flips the app from yellow/orange to green.
                 # Store latest data and schedule callback
                 self._headers_debounce_latest[email] = (headers, access_token)
                 
@@ -1867,9 +2034,11 @@ class ExtensionBridge:
                 
                 try:
                     loop = asyncio.get_running_loop()
-                    # ★ Fix N3: 5s debounce (was 2s) — headers rarely change mid-batch,
-                    # reduces GUI thread callback pressure during heavy T2I load.
-                    self._headers_debounce_timers[email] = loop.call_later(5.0, _fire_debounced)
+                    # Keep the first delivery near-immediate so startup/reconnect
+                    # status turns ready fast; retain heavier debounce for steady
+                    # state refresh traffic.
+                    debounce_s = 0.25 if first_delivery else 5.0
+                    self._headers_debounce_timers[email] = loop.call_later(debounce_s, _fire_debounced)
                 except RuntimeError:
                     # No event loop — fire immediately
                     _fire_debounced()
@@ -1971,7 +2140,7 @@ class ExtensionBridge:
 
             # ★ Suppress FIRST — don't count false positives from in-progress refresh.
             # After refresh_headers() reloads the tab, the old heartbeat timestamp
-            # is stale → extension detects "frozen" → fires ANOTHER recovery.
+            # is stale -> extension detects "frozen" -> fires ANOTHER recovery.
             # If _trigger_refresh cooldown is still active, this frozen event
             # is a false positive from the reload, not a new freeze.
             last_refresh = self._refresh_cooldown_times.get(email, 0)
@@ -1994,7 +2163,7 @@ class ExtensionBridge:
             count = self._frozen_tab_counts[email]
 
             if count >= self._FROZEN_ESCALATION_THRESHOLD:
-                # Escalated: multiple frozen events → tab is truly dead
+                # Escalated: multiple frozen events -> tab is truly dead
                 log.warning(
                     f"[ExtensionBridge] 💀 Tab DEAD for {email} "
                     f"({count} frozen events in {self._FROZEN_WINDOW}s) — browser restart needed"
@@ -2170,6 +2339,11 @@ class ExtensionBridge:
                     self._preserved_headers[email] = headers.copy()
                     log.debug(f"[ExtensionBridge] Preserved {len(headers)} headers for {email} on disconnect")
             
+            # ★ Clean up owner map — only if this conn IS the owner
+            for email in list(conn.registered_emails):
+                if self._primary_conn_by_email.get(email) is conn:
+                    self._primary_conn_by_email.pop(email, None)
+            
             self._connections.remove(conn)
 
             for email in conn.registered_emails:
@@ -2210,11 +2384,22 @@ class ExtensionBridge:
     def _find_connection(self, email: str) -> Optional[ExtensionConnection]:
         """Find the Extension connection handling this email.
         
-        Only returns connections that have registered this email.
-        Prefers the most recently active connection (freshest heartbeat).
+        ★ Prefers the _primary_conn_by_email owner (O(1) fast path).
+        Falls back to scanning all connections if owner is stale/dead.
         Does NOT fall back to unregistered connections — those may be
         background/popup contexts that cannot route reCAPTCHA checks.
         """
+        # Fast path: use owner connection
+        owner = self._primary_conn_by_email.get(email)
+        if (owner and owner in self._connections
+                and self._is_ws_open(owner.ws)
+                and email in owner.registered_emails):
+            if (time.time() - owner.last_activity) <= 120:
+                return owner
+            # Owner stale — evict and fall through to scan
+            self._primary_conn_by_email.pop(email, None)
+
+        # Slow path: scan all connections
         best_conn = None
         best_time = 0.0
         now = time.time()
@@ -2227,6 +2412,10 @@ class ExtensionBridge:
                 if conn.last_activity > best_time:
                     best_conn = conn
                     best_time = conn.last_activity
+
+        # Promote best to owner
+        if best_conn:
+            self._primary_conn_by_email[email] = best_conn
         return best_conn
 
     async def _ws_send(self, conn: ExtensionConnection, data: dict):
@@ -2274,7 +2463,7 @@ class ExtensionBridge:
     async def check_tab_alive(self, email: str, timeout: float = 5.0) -> bool:
         """Check if the VEO tab for this email is still alive (not discarded/frozen).
         
-        Sends a lightweight ping via Extension → content.js.
+        Sends a lightweight ping via Extension -> content.js.
         Returns False if tab is discarded/dead/unresponsive.
         """
         conn = self._find_connection(email)
@@ -2389,7 +2578,7 @@ class ExtensionBridge:
                 
                 # Fix #1: Sweep stale pending requests (>60s)
                 # When extension is reinstalled, _pending_request_conns mapping
-                # may be missing → futures leak until timeout. This sweep catches them.
+                # may be missing -> futures leak until timeout. This sweep catches them.
                 stale_reqs = [
                     rid for rid, t in self._pending_request_times.items()
                     if time.time() - t > 60

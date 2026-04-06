@@ -52,7 +52,13 @@ class CredentialsManager:
             Fernet-compatible 32-byte key (base64 encoded)
         """
         # Combine machine-specific data
-        machine_id = f"{platform.node()}:{os.getlogin()}:veo_pro_max_salt_2024"
+        # os.getlogin() crashes on macOS when launched via .app bundle (no TTY)
+        # Safe fallback: USER env var → getpass.getuser() → 'unknown'
+        try:
+            username = os.environ.get("USER") or os.environ.get("LOGNAME") or __import__("getpass").getuser()
+        except Exception:
+            username = "unknown"
+        machine_id = f"{platform.node()}:{username}:veo_pro_max_salt_2024"
         
         # Create SHA256 hash
         hash_bytes = hashlib.sha256(machine_id.encode()).digest()

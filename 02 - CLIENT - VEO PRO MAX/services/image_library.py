@@ -452,6 +452,35 @@ class ImageLibrary:
             self._categories.append(category)
             self._save_index()
     
+    def remove_category(self, category: str) -> int:
+        """Remove a category and move its images to 'All'.
+        
+        Default categories (All, Characters, Backgrounds, Objects, Styles)
+        cannot be removed.
+        
+        Args:
+            category: Category name to remove
+            
+        Returns:
+            Number of images moved to 'All'
+        """
+        if category in self.DEFAULT_CATEGORIES:
+            return 0
+        if category not in self._categories:
+            return 0
+        
+        # Move all images from this category to "All"
+        moved = 0
+        for img in self._images:
+            if img.category == category:
+                img.category = "All"
+                moved += 1
+        
+        self._categories.remove(category)
+        self._save_index()
+        self._notify_change()
+        return moved
+    
     def get_categories(self) -> List[str]:
         """Get all categories."""
         return self._categories.copy()

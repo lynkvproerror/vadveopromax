@@ -56,7 +56,6 @@ class QueueAnimationMixin:
             try:
                 # ★ Fix L2: Skip hidden slots (collapsed group)
                 if not slot.isVisible():
-                    alive.append(slot)
                     continue
                 # BUG-A4: Don't skip slots with pixmaps if they're in retrying state
                 has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
@@ -555,8 +554,14 @@ class QueueAnimationMixin:
     
     # ── Phase 3: Polish Effects ──────────────────────────────────
     
-    def _fade_in_widget(self, widget: QWidget):
-        """Animate fade-in: opacity 0 → 1 over 300ms (OutCubic easing)."""
+    def _fade_in_widget(self, widget: QWidget, skip_if_virtual: bool = False):
+        """Animate fade-in: opacity 0 → 1 over 300ms (OutCubic easing).
+        
+        ★ Anti-leak: skip_if_virtual=True bypasses animation for virtual-window rows
+        to prevent QPropertyAnimation accumulation during rapid virtual rebuilds.
+        """
+        if skip_if_virtual:
+            return  # Virtual window rows appear instantly — no animation needed
         effect = QGraphicsOpacityEffect(widget)
         effect.setOpacity(0.0)
         widget.setGraphicsEffect(effect)
@@ -568,7 +573,7 @@ class QueueAnimationMixin:
         # Remove effect after animation to avoid rendering overhead
         anim.finished.connect(lambda: widget.setGraphicsEffect(None))
         anim.start()
-        widget._fade_anim = anim  # prevent GC
+        widget._fade_anim = anim  # prevent GC until anim finishes
     
     def _tick_upscale_spinner(self):
         """Animate upscale overlay: pulse border between bright/dim purple.
@@ -591,7 +596,6 @@ class QueueAnimationMixin:
             try:
                 # ★ Fix L2: Skip hidden slots (collapsed group)
                 if not slot.isVisible():
-                    alive.append(slot)
                     continue
                 # Only pulse slots still in upscale phase
                 bc_name = getattr(slot, '_border_color_name', '')
@@ -606,7 +610,6 @@ class QueueAnimationMixin:
                 
                 if not is_active:
                     # Queued/waiting — static solid purple, no animation
-                    alive.append(slot)  # Keep tracking but don't pulse
                     continue
                 
                 has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
@@ -646,6 +649,17 @@ class QueueAnimationMixin:
             self._upscale_spinner_slots.append(slot)
         if not self._upscale_spinner_timer.isActive():
             self._upscale_spinner_timer.start()
+    
+    def _unregister_upscale_spinner(self, slot: QLabel):
+        """Remove a slot from upscale spinner animation.
+        
+        ★ Anti-leak: Must be called when destroying any slot that may be in
+        the spinner list, otherwise _tick_upscale_spinner iterates dead refs.
+        """
+        try:
+            self._upscale_spinner_slots.remove(slot)
+        except ValueError:
+            pass
     
     def _name_label_style(self, pct: int) -> str:
         """Generate name label stylesheet with progress gradient fill."""

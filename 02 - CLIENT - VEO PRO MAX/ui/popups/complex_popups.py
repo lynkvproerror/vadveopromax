@@ -579,9 +579,11 @@ class ImageManagerPopup(BasePopup):
         parent: Optional[QWidget] = None,
         on_select: Optional[Callable[[str], None]] = None,
         on_use_for_all: Optional[Callable[[str], None]] = None,
+        on_assign_sequential: Optional[Callable[[list], None]] = None,
     ):
         self._on_select = on_select
         self._on_use_for_all = on_use_for_all
+        self._on_assign_sequential = on_assign_sequential
         self._selected_category = "All"
         self._library = None
         self._cat_buttons: Dict[str, QPushButton] = {}
@@ -592,15 +594,53 @@ class ImageManagerPopup(BasePopup):
         self.setModal(False)
         # Use native title bar instead of custom header
         self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+        # Clear WA_TranslucentBackground from BasePopup (not needed with native title bar,
+        # and it can interfere with OLE drag-drop on Windows)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.header.hide()  # Hide redundant custom header
         self.footer.hide()  # Hide redundant Close button
         # Allow resizing
         self.setMinimumSize(600, 400)
         self.setMaximumSize(1200, 800)
         
+        # ★ Register OLE IDropTarget for this top-level window on Windows.
+        # CRITICAL: setWindowFlags() above DESTROYED the old HWND and created
+        # a new one. We must force the new HWND to materialize BEFORE calling
+        # setAcceptDrops(True), otherwise OLE RegisterDragDrop() is never called.
+        self.setAttribute(Qt.WA_NativeWindow, True)  # Force native window creation
+        self.winId()  # Materialize the HWND immediately
+        self.setAcceptDrops(True)
+        
         # Load library and populate
         self._init_library()
         self._reload_grid()
+    
+    def dragEnterEvent(self, event):
+        """Accept drags so OLE shows drop cursor over this popup."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Keep accepting during drag movement."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event):
+        """Forward drops to _DroppableGridWidget — import images to library."""
+        if event.mimeData().hasUrls():
+            files = []
+            for url in event.mimeData().urls():
+                if url.isLocalFile():
+                    files.append(url.toLocalFile())
+            if files:
+                self._add_files_to_library(files)
+                event.acceptProposedAction()
+                return
+        event.ignore()
     
     def _init_library(self):
         """Initialize ImageLibrary connection."""
@@ -666,9 +706,13 @@ class ImageManagerPopup(BasePopup):
     
     def _rebuild_category_buttons(self):
         """Rebuild category buttons from library."""
-        # Clear existing
-        for btn in self._cat_buttons.values():
-            btn.deleteLater()
+        # Clear ALL existing widgets from the category layout
+        # (includes row_widget wrappers that hold ↕ sequential buttons)
+        while self._cat_layout.count():
+            child = self._cat_layout.takeAt(0)
+            w = child.widget()
+            if w:
+                w.deleteLater()
         self._cat_buttons.clear()
         
         # Default categories + dynamic from library
@@ -698,8 +742,47 @@ class ImageManagerPopup(BasePopup):
                 }}
             """)
             btn.clicked.connect(lambda c, n=name: self._select_category(n))
-            self._cat_layout.addWidget(btn)
             self._cat_buttons[name] = btn
+            
+            # Determine which action buttons to show
+            is_default = name in ("All", "Characters", "Backgrounds", "Objects", "Styles")
+            needs_row = (name != "All") and (self._on_assign_sequential or not is_default)
+            
+            if needs_row:
+                # Row: [category btn] [⇅ sequential] [✕ delete (custom only)]
+                row_widget = QWidget()
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(2)
+                row_layout.addWidget(btn, stretch=1)
+                
+                if self._on_assign_sequential:
+                    seq_btn = QPushButton("⇅")
+                    seq_btn.setFixedSize(28, 28)
+                    seq_btn.setToolTip(f"Assign all '{name}' images to prompts sequentially\n(image 1→prompt 1, image 2→prompt 2, ...)")
+                    seq_btn.setStyleSheet(
+                        f"QPushButton {{ background: {Theme.PEACH}; color: {Theme.CRUST}; "
+                        f"border: none; border-radius: 4px; font-size: 14px; font-weight: bold; }}"
+                        f"QPushButton:hover {{ background: #FBCFB0; }}"
+                    )
+                    seq_btn.clicked.connect(lambda checked=None, n=name: self._on_assign_category_sequential(n))
+                    row_layout.addWidget(seq_btn)
+                
+                if not is_default:
+                    del_btn = QPushButton("✕")
+                    del_btn.setFixedSize(28, 28)
+                    del_btn.setToolTip(f"Delete category '{name}'\n(images will be moved to 'All')")
+                    del_btn.setStyleSheet(
+                        f"QPushButton {{ background: {Theme.RED}; color: #ffffff; "
+                        f"border: none; border-radius: 4px; font-size: 13px; font-weight: bold; }}"
+                        f"QPushButton:hover {{ background: #EBA0AC; }}"
+                    )
+                    del_btn.clicked.connect(lambda checked=None, n=name: self._on_delete_category(n))
+                    row_layout.addWidget(del_btn)
+                
+                self._cat_layout.addWidget(row_widget)
+            else:
+                self._cat_layout.addWidget(btn)
     
     def _create_grid_area(self) -> QWidget:
         """Create image grid area with toolbar."""
@@ -748,7 +831,9 @@ class ImageManagerPopup(BasePopup):
         self._grid_scroll = QScrollArea()
         self._grid_scroll.setStyleSheet(f"background-color: {Theme.SURFACE0};")
         self._grid_scroll.setWidgetResizable(True)
-        self._grid_scroll.setAcceptDrops(True)
+        # NOTE: Do NOT setAcceptDrops on QScrollArea — it creates a dead zone.
+        # External file drops are handled by ImageManagerPopup.dropEvent() (top-level)
+        # and _DroppableGridWidget.dropEvent() (grid content widget).
         
         self._grid_widget = _DroppableGridWidget(self)
         self._grid_layout = QGridLayout(self._grid_widget)
@@ -869,7 +954,7 @@ class ImageManagerPopup(BasePopup):
             f"QPushButton:hover {{ background: #B8F0B2; }}"
         )
         select_btn.setToolTip("Select this image")
-        select_btn.clicked.connect(lambda _, t=tag_text: self._on_image_select(t))
+        select_btn.clicked.connect(lambda checked=None, t=tag_text: self._on_image_select(t))
         btn_row.addWidget(select_btn)
         
         # Use for All Prompts button
@@ -881,7 +966,7 @@ class ImageManagerPopup(BasePopup):
                 f"QPushButton:hover {{ background: #B4BEFE; }}"
             )
             all_btn.setToolTip("Use for ALL parsed prompts")
-            all_btn.clicked.connect(lambda _, t=tag_text: self._on_image_use_for_all(t))
+            all_btn.clicked.connect(lambda checked=None, t=tag_text: self._on_image_use_for_all(t))
             btn_row.addWidget(all_btn)
         
         # Edit tags button
@@ -892,7 +977,7 @@ class ImageManagerPopup(BasePopup):
             f"QPushButton:hover {{ background: #89B4FA; }}"
         )
         edit_btn.setToolTip("Edit tags / Move category")
-        edit_btn.clicked.connect(lambda _, iid=img.id, itags=img.tags, icat=img.category: self._on_edit_image(iid, itags, icat))
+        edit_btn.clicked.connect(lambda checked=None, iid=img.id, itags=img.tags, icat=img.category: self._on_edit_image(iid, itags, icat))
         btn_row.addWidget(edit_btn)
         
         # Delete button
@@ -903,7 +988,7 @@ class ImageManagerPopup(BasePopup):
             f"QPushButton:hover {{ background: #EBA0AC; }}"
         )
         del_btn.setToolTip("Delete from library")
-        del_btn.clicked.connect(lambda _, iid=img.id: self._on_delete_image(iid))
+        del_btn.clicked.connect(lambda checked=None, iid=img.id: self._on_delete_image(iid))
         btn_row.addWidget(del_btn)
         
         card.card_layout.addLayout(btn_row)
@@ -914,6 +999,20 @@ class ImageManagerPopup(BasePopup):
         """Handle category selection."""
         self._selected_category = name
         self._reload_grid()
+    
+    def _on_assign_category_sequential(self, category: str):
+        """Collect all images from category in order and call on_assign_sequential callback.
+        
+        Image[0] → Prompt[0], Image[1] → Prompt[1], etc.
+        """
+        if not self._library or not self._on_assign_sequential:
+            return
+        images = self._library.get_images(category=category)
+        if not images:
+            return
+        # Primary tag = first tag, fallback = filename stem
+        tags = [img.tags[0] if img.tags else Path(img.path).stem for img in images]
+        self._on_assign_sequential(tags)
     
     def _on_search(self, text: str):
         """Handle search input change."""
@@ -1070,6 +1169,30 @@ class ImageManagerPopup(BasePopup):
             self._library.add_category(result.strip())
             self._reload_grid()
     
+    def _on_delete_category(self, category: str):
+        """Delete a user-created category after confirmation."""
+        from ui.popups import show_confirm
+        
+        img_count = len(self._library.get_images(category=category)) if self._library else 0
+        msg = f"Xoá category '{category}'?"
+        if img_count > 0:
+            msg += f"\n\n{img_count} ảnh trong category này sẽ được chuyển về 'All'."
+        
+        if not show_confirm(
+            self,
+            f"🗑️ Delete Category",
+            msg,
+            danger=True,
+        ):
+            return
+        
+        if self._library:
+            self._library.remove_category(category)
+            # Reset selection if we deleted the active category
+            if self._selected_category == category:
+                self._selected_category = "All"
+            self._reload_grid()
+    
     def _on_edit_image(self, image_id: str, current_tags: list, current_cat: str):
         """Edit tags and category for an image."""
         from PySide6.QtWidgets import QInputDialog, QDialog, QDialogButtonBox, QComboBox
@@ -1186,8 +1309,11 @@ class _DroppableCategoryButton(QPushButton):
         self._popup = popup
         self.setAcceptDrops(True)
     
+    IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff'}
+    
     def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat(self.MIME_LIBRARY_IMAGE_ID):
+        mime = event.mimeData()
+        if mime.hasFormat(self.MIME_LIBRARY_IMAGE_ID):
             event.acceptProposedAction()
             # Visual feedback: highlight
             self.setStyleSheet(self.styleSheet().replace(
@@ -1197,6 +1323,31 @@ class _DroppableCategoryButton(QPushButton):
                 f"background-color: {Theme.SURFACE2}",
                 f"background-color: {Theme.GREEN}"
             ))
+        elif mime.hasUrls():
+            # Accept Explorer file drops — import into this category
+            for url in mime.urls():
+                if url.isLocalFile():
+                    ext = Path(url.toLocalFile()).suffix.lower()
+                    if ext in self.IMAGE_EXTS:
+                        event.acceptProposedAction()
+                        self.setStyleSheet(self.styleSheet().replace(
+                            f"background-color: transparent",
+                            f"background-color: {Theme.BLUE}"
+                        ).replace(
+                            f"background-color: {Theme.SURFACE2}",
+                            f"background-color: {Theme.BLUE}"
+                        ))
+                        return
+            # Non-image file URLs — let parent handle
+            event.ignore()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Keep accepting during drag movement."""
+        mime = event.mimeData()
+        if mime.hasFormat(self.MIME_LIBRARY_IMAGE_ID) or mime.hasUrls():
+            event.acceptProposedAction()
         else:
             event.ignore()
     
@@ -1205,10 +1356,25 @@ class _DroppableCategoryButton(QPushButton):
         self._popup._rebuild_category_buttons()
     
     def dropEvent(self, event):
-        if event.mimeData().hasFormat(self.MIME_LIBRARY_IMAGE_ID):
-            image_id = bytes(event.mimeData().data(self.MIME_LIBRARY_IMAGE_ID)).decode('utf-8')
+        mime = event.mimeData()
+        if mime.hasFormat(self.MIME_LIBRARY_IMAGE_ID):
+            # Internal: move image between categories
+            image_id = bytes(mime.data(self.MIME_LIBRARY_IMAGE_ID)).decode('utf-8')
             self._popup._move_image_to_category(image_id, self._category_name)
             event.acceptProposedAction()
+        elif mime.hasUrls():
+            # External: import Explorer files into this category
+            files = [url.toLocalFile() for url in mime.urls()
+                     if url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in self.IMAGE_EXTS]
+            if files:
+                # Temporarily select this category so imports go here
+                old_cat = self._popup._selected_category
+                self._popup._selected_category = self._category_name
+                self._popup._add_files_to_library(files)
+                self._popup._selected_category = old_cat
+                event.acceptProposedAction()
+            else:
+                event.ignore()
         else:
             event.ignore()
 
@@ -1380,6 +1546,13 @@ class _DroppableGridWidget(QWidget):
                         event.acceptProposedAction()
                         return
         event.ignore()
+    
+    def dragMoveEvent(self, event):
+        """Must accept during movement, otherwise Qt reverts to no-drop cursor."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
     
     def dropEvent(self, event):
         if event.mimeData().hasUrls():

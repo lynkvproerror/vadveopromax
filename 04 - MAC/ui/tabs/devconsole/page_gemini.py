@@ -99,7 +99,7 @@ class GeminiApiPage(QWidget):
             QTextEdit {{
                 background-color: {Theme.MANTLE};
                 color: {Theme.SUBTEXT0};
-                font-family: 'Cascadia Code', 'Consolas', monospace;
+                font-family: 'Menlo', 'SF Mono', monospace;
                 font-size: 11px;
                 border: 1px solid {Theme.SURFACE0};
                 border-radius: 6px;

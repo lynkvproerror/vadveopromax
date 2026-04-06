@@ -151,7 +151,9 @@ class QueueThumbnailMixin:
             return self._pixmap_cache[cache_key]
         
         # ── Tier 1: Try micro-thumbnail for grid display (size=40) ──
-        if size <= 40:
+        # Skip micro-thumb for static image sources — scale direct for sharper quality
+        _is_img_src = Path(path).suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp', '.bmp'}
+        if size <= 40 and not _is_img_src:
             micro = _micro_thumb_path(path)
             if micro.exists():
                 pixmap = QPixmap(str(micro))
@@ -248,8 +250,14 @@ class QueueThumbnailMixin:
         slot._border_color_name = bc_name
         
         if thumbnail_path and self._cached_file_exists(thumbnail_path):
-            # Has real thumbnail — show it
-            pix = self._get_cached_pixmap(thumbnail_path, 40)
+            # ★ T2I/I2I fix: For static image outputs, render from best_file (sharp)
+            # instead of thumbnail_path (80px JPEG). Video thumbnails keep existing behavior.
+            _display_src = thumbnail_path
+            if video_path and self._cached_file_exists(video_path):
+                _vp_ext = Path(video_path).suffix.lower()
+                if _vp_ext in {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff', '.tif'}:
+                    _display_src = video_path  # Use full 1K+ image — NOT tiny thumb
+            pix = self._get_cached_pixmap(_display_src, 40)
             if not pix.isNull():
                 slot.setPixmap(pix)
                 slot.setStyleSheet(
@@ -263,9 +271,15 @@ class QueueThumbnailMixin:
                     slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
                     slot.mousePressEvent = lambda e, p=preview_path: self._open_media(p) if e.button() == Qt.MouseButton.LeftButton else None
                 
-                # ★ Hover → zoom tooltip
+                # ★ Hover → zoom tooltip: prefer hi-res source over small thumbnail
+                # thumbnail_path is ~150px; video_path is the full 1K image → sharp zoom
+                _zoom_src = thumbnail_path
+                if video_path and self._cached_file_exists(video_path):
+                    _vp_ext = Path(video_path).suffix.lower()
+                    if _vp_ext in {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff', '.tif'}:
+                        _zoom_src = video_path  # Use full 1K image for crisp zoom
                 from ui.popups.media_preview import attach_hover_zoom
-                attach_hover_zoom(slot, thumbnail_path)
+                attach_hover_zoom(slot, _zoom_src)
                 
                 # Per-video right-click context menu (for completed videos)
                 if video_info:
@@ -335,16 +349,14 @@ class QueueThumbnailMixin:
             """)
             return slot
         
-        # Default: pending/empty
-        slot.setStyleSheet(f"""
-            QLabel {{
-                background-color: {Theme.SURFACE0};
-                border: 1px solid {Theme.SURFACE1};
-                border-radius: 4px;
-                color: {Theme.SUBTEXT0};
-                font-size: 10px;
-            }}
-        """)
+        # ★ Fix: pending/ready/waiting — fully transparent (no gray placeholder box).
+        # Tasks that haven't started generating must NOT show a gray SURFACE0 square.
+        if status in ("pending", "ready", "waiting"):
+            slot.setStyleSheet("QLabel { background: transparent; border: none; }")
+            return slot
+        
+        # Default: any unrecognized status — also transparent
+        slot.setStyleSheet("QLabel { background: transparent; border: none; }")
         return slot
     
     def _attach_slot_context_menu(self, slot: QLabel, video_info: dict):
@@ -497,11 +509,16 @@ class QueueThumbnailMixin:
             if video and self._cached_file_exists(video):
                 slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
                 slot.mousePressEvent = lambda e, p=video: self._open_media(p) if e.button() == Qt.MouseButton.LeftButton else None
-            # ★ Hover-zoom on updated thumbnail
-            thumb = thumbnails[vi] if vi < len(thumbnails) else None
-            if thumb and self._cached_file_exists(thumb):
+            # ★ Hover-zoom on updated thumbnail: prefer hi-res source (actual 1K image)
+            thumb_for_hover = thumbnails[vi] if vi < len(thumbnails) else None
+            if thumb_for_hover and self._cached_file_exists(thumb_for_hover):
                 from ui.popups.media_preview import attach_hover_zoom
-                attach_hover_zoom(slot, thumb)
+                _zoom_src = thumb_for_hover
+                if video and self._cached_file_exists(video):
+                    _v_ext = Path(video).suffix.lower()
+                    if _v_ext in {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff', '.tif'}:
+                        _zoom_src = video  # Use full 1K image — not the tiny thumbnail
+                attach_hover_zoom(slot, _zoom_src)
             # Copy context menu policy for red thumbnails
             slot.setContextMenuPolicy(new_slot.contextMenuPolicy())
             new_slot.deleteLater()

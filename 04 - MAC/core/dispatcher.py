@@ -644,6 +644,30 @@ class Dispatcher:
                     )
                 return None
     
+    # ── Orphan Rescue ─────────────────────────────────────────
+    
+    def rescue_orphaned_tasks(self) -> int:
+        """Rescue READY tasks that somehow left _ready_queue without transitioning.
+        
+        Safety net for the PriorityQueue drain issue: stale entries consumed
+        during get_next_task() reduce the queue without corresponding task state
+        transitions, eventually starving foremen.
+        
+        Returns number of rescued tasks.
+        """
+        rescued = 0
+        for task_id, task in self._all_tasks.items():
+            if task.state == TaskState.READY and task_id not in self._queued_task_ids:
+                self._enqueue_task(task, priority=0)
+                rescued += 1
+        
+        if rescued > 0:
+            log.warning(
+                f"[Dispatcher] 🚑 Rescued {rescued} orphaned READY task(s) "
+                f"back into queue (queue_size={self._ready_queue.qsize()})"
+            )
+        return rescued
+    
     # ── Counter Audit ──────────────────────────────────────────
     
     def audit_counters(self) -> dict:
@@ -1751,7 +1775,7 @@ class Dispatcher:
             for d in descendants
         )
     
-    def requeue_task(self, task) -> bool:
+    def requeue_task(self, task, notify=True) -> bool:
         """Re-queue a running task without incrementing retry count.
         
         Used by network error handler / cooldown requeue: task goes back to queue
@@ -1759,6 +1783,12 @@ class Dispatcher:
         
         Important: Decrements running counters and clears assigned_account
         so the task is eligible for any account's foreman to pick up.
+        
+        Args:
+            task: Task to requeue
+            notify: If True, wake sleeping foremen via _on_task_ready callback.
+                    Set to False for capacity requeue to prevent thundering herd
+                    (all idle foremen grabbing the same task simultaneously).
         """
         if not task:
             return False
@@ -1802,7 +1832,10 @@ class Dispatcher:
         # ★ Fix 3: Wake sleeping foremen so they pick up the requeued task.
         # Without this, foremen blocked on _task_available.wait() never
         # learn that a requeued READY task exists → system stalls.
-        if self._on_task_ready:
+        # ★ BUG-B19 fix: Skip notification on capacity requeue (notify=False)
+        # to prevent thundering herd — 12+ foremen simultaneously grabbing
+        # the same task, failing capacity, requeueing → infinite loop.
+        if notify and self._on_task_ready:
             self._on_task_ready(task)
         return True
     
@@ -2237,9 +2270,15 @@ class Dispatcher:
         - Same prompt, aspect_ratio, model, workflow_type
         - Stores _replace_target = (original_task_id, video_index) for linking
         
+        BUG-FIX: Retry depth capped at MAX_VIDEO_RETRY_DEPTH to prevent
+        infinite retry chains and prompt_index overflow.
+        
         Returns True if retry was initiated, False if invalid index/task.
         """
         import os
+        import re
+        MAX_VIDEO_RETRY_DEPTH = 3  # Max re-retry levels before giving up
+        
         task = self._all_tasks.get(task_id)
         if not task:
             log.warning(f"[ForceRetryVideo] Task {task_id} not found")
@@ -2248,6 +2287,17 @@ class Dispatcher:
         if video_index < 0 or video_index >= len(task.video_outputs):
             log.warning(f"[ForceRetryVideo] Invalid video_index {video_index} "
                         f"(task has {len(task.video_outputs)} videos)")
+            return False
+        
+        # ── BUG-FIX: Compute retry depth to prevent infinite chains ──
+        # Count how many _retry_v segments are in the task ID
+        retry_depth = len(re.findall(r'_retry_v\d+_', task_id))
+        if retry_depth >= MAX_VIDEO_RETRY_DEPTH:
+            log.warning(
+                f"[ForceRetryVideo] Task {task_id}: retry depth {retry_depth} "
+                f">= max {MAX_VIDEO_RETRY_DEPTH} — refusing to create another retry "
+                f"(infinite chain prevention)"
+            )
             return False
         
         vo = task.video_outputs[video_index]
@@ -2312,13 +2362,18 @@ class Dispatcher:
         
         # ── 3. Create replacement 1-video task ──
         from datetime import datetime
-        # Microsecond-precision ID prevents collision when retrying rapidly
-        replacement_id = f"{task_id}_retry_v{video_index}_{datetime.now().strftime('%H%M%S%f')}"
         
-        # Use unique prompt_index (9000+) to avoid overwriting original files
-        # Original task might be prompt_index=0 → files: 001a_*.mp4
-        # Replacement uses 9000+idx → files: 9001_*.mp4 (no collision)
-        retry_prompt_index = 9000 + (task.prompt_index or 0) * 10 + video_index
+        # BUG-FIX: Strip existing _retry_v* suffixes before appending new one
+        # to prevent ever-growing IDs like task_retry_v0_..._retry_v0_..._retry_v0
+        base_task_id = re.sub(r'(_retry_v\d+_\d+)+$', '', task_id)
+        replacement_id = f"{base_task_id}_retry_v{video_index}_{datetime.now().strftime('%H%M%S%f')}"
+        
+        # BUG-FIX: Use FLAT prompt_index offset to avoid compounding
+        # Old formula: 9000 + (task.prompt_index or 0) * 10 + video_index
+        #   → On retry of retry: 9000 + 9000*10 + idx = 99000+ (overflow!)
+        # New formula: 9000 + video_index (always bounded 9000..9003)
+        # Base task's original prompt_index is NOT factored in.
+        retry_prompt_index = 9000 + video_index
         
         replacement = Task(
             id=replacement_id,

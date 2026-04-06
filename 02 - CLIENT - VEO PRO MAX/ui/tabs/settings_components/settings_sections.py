@@ -24,6 +24,23 @@ from config.i18n import t
 class SettingsSectionsMixin:
     """Default, output, continuation, worker, session, notification, UI sections."""
 
+    def _is_tester_user(self) -> bool:
+        """Return True only for tester/admin users."""
+        try:
+            if self.controller and hasattr(self.controller, '_license_client'):
+                lc = self.controller._license_client
+                return hasattr(lc, 'can_see_dev_console') and lc.can_see_dev_console()
+        except Exception:
+            pass
+        return False
+
+    def _register_tester_only_widget(self, widget: QWidget):
+        """Track tester-only rows so visibility refresh stays consistent."""
+        if not hasattr(self, '_tester_only_widgets'):
+            self._tester_only_widgets = []
+        self._tester_only_widgets.append(widget)
+        widget.setVisible(self._is_tester_user())
+
     def _create_defaults_section(self) -> QWidget:
         """Create Default Settings section — split into Video + Image sub-sections."""
         section, layout = self._create_section(t("settings.sections.defaults"))
@@ -239,7 +256,9 @@ class SettingsSectionsMixin:
 
         # Log Buffer Size (RAM)
         _lbm = getattr(_s, 'log_buffer_max', 20000) if _s else 20000
-        lb_row = QHBoxLayout()
+        lb_widget = QWidget()
+        lb_row = QHBoxLayout(lb_widget)
+        lb_row.setContentsMargins(0, 0, 0, 0)
         lb_label = QLabel(t("settings.output_toggles.log_buffer_size"))
         lb_label.setFixedWidth(220)
         lb_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
@@ -257,11 +276,14 @@ class SettingsSectionsMixin:
         self._log_buffer_combo.currentIndexChanged.connect(self._save_output_settings)
         lb_row.addWidget(self._log_buffer_combo)
         lb_row.addStretch()
-        layout.addLayout(lb_row)
+        layout.addWidget(lb_widget)
+        self._register_tester_only_widget(lb_widget)
 
         # Gemini Log Lines
         _glm = getattr(_s, 'gemini_log_max_blocks', 2000) if _s else 2000
-        gl_row = QHBoxLayout()
+        gl_widget = QWidget()
+        gl_row = QHBoxLayout(gl_widget)
+        gl_row.setContentsMargins(0, 0, 0, 0)
         gl_label = QLabel(t("settings.output_toggles.gemini_log_lines"))
         gl_label.setFixedWidth(220)
         gl_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
@@ -279,7 +301,8 @@ class SettingsSectionsMixin:
         self._gemini_log_combo.currentIndexChanged.connect(self._save_output_settings)
         gl_row.addWidget(self._gemini_log_combo)
         gl_row.addStretch()
-        layout.addLayout(gl_row)
+        layout.addWidget(gl_widget)
+        self._register_tester_only_widget(gl_widget)
 
         # Wire folder save
         self.output_folder_entry.textChanged.connect(self._save_output_settings)
@@ -309,6 +332,12 @@ class SettingsSectionsMixin:
             # Image: Quality
             settings.default_image_quality = self.setting_combos["Image Quality"].currentText()
             settings.save()
+            # P2 fix: emit signal so sidebars refresh in real-time (not just on Save All)
+            if hasattr(self, 'settings_changed') and hasattr(self, 'get_settings'):
+                try:
+                    self.settings_changed.emit(self.get_settings())
+                except Exception:
+                    pass
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save default settings: {e}')
 
@@ -427,7 +456,9 @@ class SettingsSectionsMixin:
 
         # Log Buffer Size (RAM)
         _lbm = getattr(_s, 'log_buffer_max', 20000) if _s else 20000
-        lb_row = QHBoxLayout()
+        lb_widget = QWidget()
+        lb_row = QHBoxLayout(lb_widget)
+        lb_row.setContentsMargins(0, 0, 0, 0)
         lb_label = QLabel(t("settings.output_toggles.log_buffer_size"))
         lb_label.setFixedWidth(220)
         lb_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
@@ -445,11 +476,14 @@ class SettingsSectionsMixin:
         self._log_buffer_combo.currentIndexChanged.connect(self._save_output_settings)
         lb_row.addWidget(self._log_buffer_combo)
         lb_row.addStretch()
-        layout.addLayout(lb_row)
+        layout.addWidget(lb_widget)
+        self._register_tester_only_widget(lb_widget)
 
         # Gemini Log Lines
         _glm = getattr(_s, 'gemini_log_max_blocks', 2000) if _s else 2000
-        gl_row = QHBoxLayout()
+        gl_widget = QWidget()
+        gl_row = QHBoxLayout(gl_widget)
+        gl_row.setContentsMargins(0, 0, 0, 0)
         gl_label = QLabel(t("settings.output_toggles.gemini_log_lines"))
         gl_label.setFixedWidth(220)
         gl_label.setStyleSheet(f"color: {Theme.TEXT}; margin-left: 12px;")
@@ -467,7 +501,8 @@ class SettingsSectionsMixin:
         self._gemini_log_combo.currentIndexChanged.connect(self._save_output_settings)
         gl_row.addWidget(self._gemini_log_combo)
         gl_row.addStretch()
-        layout.addLayout(gl_row)
+        layout.addWidget(gl_widget)
+        self._register_tester_only_widget(gl_widget)
 
         # Wire folder save
         self.output_folder_entry.textChanged.connect(self._save_output_settings)
@@ -508,6 +543,12 @@ class SettingsSectionsMixin:
             if hasattr(self, '_gemini_log_combo'):
                 settings.gemini_log_max_blocks = self._gemini_log_combo.currentData() or 2000
             settings.save()
+            # P2 fix: emit signal so sidebars refresh in real-time
+            if hasattr(self, 'settings_changed') and hasattr(self, 'get_settings'):
+                try:
+                    self.settings_changed.emit(self.get_settings())
+                except Exception:
+                    pass
         except Exception as e:
             logging.getLogger('settings').error(f'Failed to save output settings: {e}')
 
@@ -761,7 +802,6 @@ class SettingsSectionsMixin:
                 ("Prompt Input",    "restore_prompt_input",       _g('restore_prompt_input')),
                 ("Parsed Prompts",  "restore_parsed_prompts",     _g('restore_parsed_prompts')),
                 ("Prompt Images",   "restore_prompt_images",      _g('restore_prompt_images')),
-                ("Project Builder", "restore_project_builder",    _g('restore_project_builder')),
             ]),
         ]
 
@@ -1447,6 +1487,7 @@ class SettingsSectionsMixin:
             except Exception:
                 pass
     
+    
     def _on_ext_update_applied(self):
         """Extension hot-updated — update version label + reload on running browsers."""
         self._update_now_btn.setVisible(False)
@@ -1500,102 +1541,83 @@ class SettingsSectionsMixin:
             # Restore button text matching the update type
             if info.update_type == "full":
                 self._update_now_btn.setText(
-                    f"⬇️ Retry Full Update (v{info.version})"
+                    f"Retry Full Update (v{info.version})"
                 )
             elif info.update_type == "ext_only":
                 self._update_now_btn.setText(
-                    f"⬇️ Retry Extension (v{info.ext_version})"
+                    f"Retry Extension (v{info.ext_version})"
                 )
             else:
                 self._update_now_btn.setText(t("settings.update_sub.update_now"))
-        self._update_status_label.setText(f"❌ {error[:80]}")
+        self._update_status_label.setText(f"Error: {error[:80]}")
         self._update_status_label.setStyleSheet(
             f"color: {Theme.RED}; font-size: 12px; margin-left: 12px;"
         )
 
     def _on_update_applied(self):
-        """Update applied — app will restart."""
+        """Update applied - app will restart."""
         self._update_status_label.setText(
-            f"🔄 {t('settings.update_sub.restarting')}"
+            f"{t('settings.update_sub.restarting')}"
         )
 
     # REMOVED: _create_post_queue_section and _save_post_queue_settings
     # Post-Queue Action is now exclusively managed in Queue tab (tab_queue.py)
 
 
-    # ── Browser Visibility Section ─────────────────────────────────
+    # -- Browser Visibility Section --
 
     def _create_browser_visibility_section(self) -> QWidget:
-        """Create Browser Visibility section — Smart-Hide + Hide All toggles.
-
-        Smart-Hide: Hide browsers after launch & successful submit.
-                    Show errored account's browser on 403 Phase 2 hard restart.
-                    Re-hide after 3 consecutive successful prompts.
-        Hide All:   Hide ALL browsers after startup. Only show when
-                    adding account or clicking show button in Actions.
-                    Mutually exclusive with Smart-Hide.
-        """
+        """Create Browser Visibility section."""
         section, layout = self._create_section(t("settings.sections.browser"))
 
-        # Load saved values
         from config.settings import get_settings
         s = get_settings()
         saved_smart_hide = getattr(s, 'smart_hide_enabled', True)
         saved_hide_all = getattr(s, 'hide_all_browsers', False)
 
-        # Smart-Hide toggle
         self.smart_hide_switch = self._create_enable_row(
             t("settings.browser_sub.smart_hide"), checked=saved_smart_hide
         )
         layout.addLayout(self.smart_hide_switch._row_layout)
 
-        # Hide All Browsers toggle
         self.hide_all_switch = self._create_enable_row(
             t("settings.browser_sub.hide_all"), checked=saved_hide_all
         )
         layout.addLayout(self.hide_all_switch._row_layout)
 
-        # Auto-save on toggle change — with mutual exclusion
         self.smart_hide_switch.toggled_signal.connect(self._save_browser_visibility_settings)
         self.hide_all_switch.toggled_signal.connect(self._save_browser_visibility_settings)
 
         return section
 
     def _save_browser_visibility_settings(self, *args):
-        """Persist browser visibility toggles with mutual exclusion.
-        
-        - Hide All ON → Smart-Hide OFF
-        - Smart-Hide ON → Hide All OFF
-        Hot-apply: immediately hide/show all running browsers.
-        """
+        """Persist browser visibility toggles with mutual exclusion + hot-apply."""
         if getattr(self, '_initializing', False):
             return
         from config.settings import get_settings, save_settings
         settings = get_settings()
-        
+
         new_smart_hide = self.smart_hide_switch.isToggled()
         new_hide_all = self.hide_all_switch.isToggled()
-        
+
         old_smart_hide = settings.smart_hide_enabled
         old_hide_all = getattr(settings, 'hide_all_browsers', False)
-        
-        # Mutual exclusion: if Hide All just turned ON, turn off Smart-Hide
+
         if new_hide_all and not old_hide_all:
             new_smart_hide = False
             self.smart_hide_switch.blockSignals(True)
             self.smart_hide_switch.setToggled(False)
             self.smart_hide_switch.blockSignals(False)
-        # If Smart-Hide just turned ON, turn off Hide All
         elif new_smart_hide and not old_smart_hide:
             new_hide_all = False
             self.hide_all_switch.blockSignals(True)
             self.hide_all_switch.setToggled(False)
             self.hide_all_switch.blockSignals(False)
-        
+
         settings.smart_hide_enabled = new_smart_hide
         settings.hide_all_browsers = new_hide_all
         save_settings()
-        
+
         # Hot-apply: hide or show all running debug browsers
         if self.controller:
             pc = getattr(self.controller, '_profiles_controller', None)
@@ -1604,10 +1626,8 @@ class SettingsSectionsMixin:
                     try:
                         if new_hide_all or new_smart_hide:
                             pc.hide_debug_browser(email)
-                        elif not old_smart_hide and not new_smart_hide and not new_hide_all:
-                            # Both off → show all
+                        else:
+                            # P1-D FIX: Both toggles OFF -> show all browsers
                             pc.show_debug_browser(email)
                     except Exception:
                         pass
-
-

@@ -465,15 +465,13 @@ def _ensure_developer_mode(profile_path: str):
 # This causes reCAPTCHA to get a very low trust score → 403.
 # Fix: copy seed data from user's real Chrome profile into automation profile.
 
-_VARIATIONS_KEYS = [
-    "variations_compressed_seed",
-    "variations_seed_signature",
-    "variations_country_code",
-    "variations_permanent_consistency_country",
-    "variations_seed_date",
-    "variations_crash_streak",
-    "variations_safe_seed_date",
-]
+def _extract_variations_keys(local_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Return all top-level Chrome Variations keys from Local State."""
+    return {
+        key: value
+        for key, value in local_state.items()
+        if isinstance(key, str) and key.startswith("variations_")
+    }
 
 
 def _find_user_chrome_local_state() -> Optional[Path]:
@@ -516,11 +514,10 @@ def _copy_variations_seed(profile_path: str):
         with open(source, "r", encoding="utf-8") as f:
             source_data = json.load(f)
         
-        # Extract Variations keys
-        seed_data = {}
-        for key in _VARIATIONS_KEYS:
-            if key in source_data:
-                seed_data[key] = source_data[key]
+        # Extract every top-level Variations key. Newer Chrome builds add
+        # extra metadata beyond the original seed/signature pair, and copying
+        # only a hardcoded subset leaves managed profiles half-enrolled.
+        seed_data = _extract_variations_keys(source_data)
         
         if not seed_data:
             log.warning("[ChromeManager] ⚠️ No Variations seed found in user Chrome")
@@ -535,10 +532,10 @@ def _copy_variations_seed(profile_path: str):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 target_data = {}
         
-        # Check if seed already copied (same signature = skip)
-        old_sig = target_data.get("variations_seed_signature", "")
-        new_sig = seed_data.get("variations_seed_signature", "")
-        if old_sig and old_sig == new_sig:
+        # Skip only when the target already has the full source payload.
+        # Earlier builds copied only a subset of variations_* keys, so the
+        # signature may match while critical metadata is still missing.
+        if seed_data and all(target_data.get(key) == value for key, value in seed_data.items()):
             log.debug(f"[ChromeManager] Variations seed already up-to-date for {Path(profile_path).name}")
             return
         
@@ -877,6 +874,12 @@ def _find_orphan_chrome(profile_path: str) -> Optional[Dict[str, Any]]:
             
             # Check if this Chrome uses our profile path
             if profile_name not in cmdline_str:
+                continue
+            
+            # Skip child processes (GPU, renderer, utility, etc.)
+            # Only the main browser process has --remote-debugging-port
+            # AND no --type= flag.
+            if any(arg.startswith('--type=') for arg in cmdline):
                 continue
             
             # Extract --remote-debugging-port=NNNN
@@ -1236,12 +1239,15 @@ def kill_chrome(profile_path: str) -> bool:
         try:
             proc = psutil.Process(pid)
             if "chrome" in proc.name().lower():
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except psutil.TimeoutExpired:
-                    proc.kill()
-                log.info(f"[ChromeManager] 🔒 Chrome PID={pid} terminated")
+                # Kill entire process tree: children first, then parent
+                children = proc.children(recursive=True)
+                for child in children:
+                    try:
+                        child.kill()  # SIGKILL — immediate, no wait
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                proc.kill()  # Kill parent
+                log.info(f"[ChromeManager] 🔒 Chrome PID={pid} + {len(children)} child(ren) killed")
         except psutil.NoSuchProcess:
             log.info(f"[ChromeManager] Chrome PID={pid} already dead")
     except ImportError:
@@ -1257,11 +1263,45 @@ def kill_chrome(profile_path: str) -> bool:
 
 
 def kill_all_managed_chromes(profiles_dir: str):
-    """Kill all Chrome processes managed by us (scan for PID files)."""
+    """Kill all Chrome processes managed by us (scan for PID files).
+    
+    Collects all PIDs first, then batch-kills them all with process
+    tree traversal. Uses SIGKILL — no graceful terminate+wait.
+    """
     profiles_path = Path(profiles_dir)
     if not profiles_path.exists():
         return
 
+    try:
+        import psutil
+    except ImportError:
+        psutil = None
+
+    killed = 0
     for pid_file in profiles_path.rglob(PID_FILE_NAME):
         profile_path = str(pid_file.parent)
-        kill_chrome(profile_path)
+        info = _load_pid_file(profile_path)
+        if not info:
+            continue
+        pid = info["pid"]
+        try:
+            if psutil:
+                proc = psutil.Process(pid)
+                if "chrome" in proc.name().lower():
+                    children = proc.children(recursive=True)
+                    for child in children:
+                        try:
+                            child.kill()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                    proc.kill()
+                    killed += 1
+            else:
+                os.kill(pid, 9)
+                killed += 1
+        except Exception:
+            pass
+        _remove_pid_file(profile_path)
+
+    if killed:
+        log.info(f"[ChromeManager] 🔒 Killed {killed} managed Chrome process(es)")

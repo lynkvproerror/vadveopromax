@@ -476,6 +476,11 @@ class TabProject(QWidget):
         # Pipeline ↔ Queue bidirectional tracking
         # Maps group_id → {"project_idx": int, "stage": str, "prompt_count": int}
         self._active_group_ids: dict = {}
+        self._pipeline_auto_restore_enabled = True
+        self._pipeline_persist_epoch = 0
+        # Queue bridge (extracted queue-polling + session persistence logic)
+        from ui.pipeline_queue_bridge import PipelineQueueBridge
+        self._queue_bridge = PipelineQueueBridge()
         self._pipeline_queue_signal.connect(self._on_pipeline_queue_check)
 
         self._setup_ui()
@@ -484,6 +489,7 @@ class TabProject(QWidget):
         # Register queue callback for pipeline tracking (deferred until controller ready)
         if self.controller:
             self._register_queue_callback()
+            self._queue_bridge.set_controller(self.controller)
         
         # Auto-restore pipeline state from last session (deferred so UI is ready)
         from PySide6.QtCore import QTimer
@@ -3540,6 +3546,12 @@ class TabProject(QWidget):
         
         Supports both single-group and multi-group modes.
         """
+        if not self._pipeline:
+            if hasattr(self, '_queue_poll_timer') and self._queue_poll_timer:
+                self._queue_poll_timer.stop()
+            self._queue_poll_multi_groups = None
+            return
+
         if not self.controller or not hasattr(self.controller, 'get_group_status'):
             return
         
@@ -3614,6 +3626,12 @@ class TabProject(QWidget):
     
     def _check_multi_group_progress(self):
         """Poll ALL groups in multi-group mode. Advance when ALL complete."""
+        if not self._pipeline:
+            if hasattr(self, '_queue_poll_timer') and self._queue_poll_timer:
+                self._queue_poll_timer.stop()
+            self._queue_poll_multi_groups = None
+            return
+
         stage_name = self._queue_poll_stage
         groups = self._queue_poll_multi_groups
         
@@ -3972,11 +3990,15 @@ class TabProject(QWidget):
             get_event_manager().unsubscribe(EventType.TASK_COMPLETED, self._late_completion_cb)
             self._late_completion_cb = None
             log.info("[Pipeline] ★ Unsubscribed from late TASK_COMPLETED")
+        self._late_completion_group_id = None
+        self._late_completion_stage = None
     
     from PySide6.QtCore import Slot
     @Slot()
     def _update_thumbnails_safe(self):
         """Thread-safe wrapper to refresh thumbnails from event callback."""
+        if not self._pipeline:
+            return
         stage = getattr(self, '_late_completion_stage', None)
         if stage:
             self._update_thumbnails(stage)
@@ -3989,6 +4011,8 @@ class TabProject(QWidget):
         Prevents main-thread freeze from destroying/creating hundreds of widgets
         every 2-4s when queue tasks complete in rapid succession.
         """
+        if not self._pipeline:
+            return
         import time
         now = time.monotonic()
         last = getattr(self, '_thumb_last_rebuild', 0.0)
@@ -4006,6 +4030,9 @@ class TabProject(QWidget):
     
     def _deferred_thumb_rebuild(self, stage_name: str):
         """Execute deferred thumbnail rebuild after throttle window expires."""
+        if not self._pipeline:
+            self._thumb_deferred = False
+            return
         import time
         self._thumb_last_rebuild = time.monotonic()
         self._thumb_deferred = False
@@ -4023,6 +4050,8 @@ class TabProject(QWidget):
         import threading
         if not self._pipeline:
             return
+        self._pipeline_auto_restore_enabled = True
+        persist_epoch = getattr(self, '_pipeline_persist_epoch', 0)
         
         # Snapshot data on main thread (fast dict copy)
         try:
@@ -4053,6 +4082,9 @@ class TabProject(QWidget):
         def _write():
             import json as _json
             from pathlib import Path
+            if persist_epoch != getattr(self, '_pipeline_persist_epoch', 0):
+                log.debug("[Pipeline] Async session save skipped: stale epoch")
+                return
             project_dir = Path(output_folder) / folder_name
             project_dir.mkdir(parents=True, exist_ok=True)
             session_path = project_dir / "_pipeline_session.json"
@@ -4062,6 +4094,12 @@ class TabProject(QWidget):
                     encoding='utf-8'
                 )
                 log.info(f"[Pipeline] Session saved (async) → {session_path}")
+                # Update session registry
+                try:
+                    from core.session_registry import SessionRegistry
+                    SessionRegistry().update(str(project_dir), topic=topic_slug)
+                except Exception:
+                    pass
             except Exception as e:
                 log.warning(f"[Pipeline] Async session save failed: {e}")
         
@@ -4072,6 +4110,12 @@ class TabProject(QWidget):
         # ★ Persist video_paths/image_paths populated during queue polling.
         # Without this, restart loses all video results and re-queues everything.
         self._save_session_to_disk()
+        # Emit event for subscribers
+        try:
+            from core.pipeline_events import pipeline_bus, Events
+            pipeline_bus.emit(Events.GROUP_COMPLETED, stage_name=stage_name, status=status)
+        except Exception:
+            pass
         
         completed = status["completed"]
         failed = status["failed"]
@@ -4186,6 +4230,7 @@ class TabProject(QWidget):
         """
         import os, json as _json
         from pathlib import Path
+        self._pipeline_auto_restore_enabled = True
         
         output_folder = ""
         if hasattr(self, '_setup_matrix') and hasattr(self._setup_matrix, 'output_folder'):
@@ -4416,6 +4461,10 @@ class TabProject(QWidget):
         """Show saved stage data in viewer for review/editing.
         Uses _format_result() for consistent formatted display.
         """
+        if not self._pipeline:
+            self._clear_pipeline_visual_state()
+            return
+
         # Toggle viewer visibility: hide for card-based stages, show for others
         card_stages = {"scene_breakdown", "character_gen", "scene_image_gen", "video_gen", "concat"}
         if stage_name in card_stages:
@@ -4470,6 +4519,37 @@ class TabProject(QWidget):
                 f"\U0001f4cb {stage_name.replace('_', ' ')}\nNo saved data. Click '▶️ Start' to run."
             )
     
+    def _clear_pipeline_visual_state(self):
+        """Clear all viewer-side pipeline UI state, including caches that can repopulate stale data."""
+        self._thumb_current_stage = None
+        self._thumb_data_fingerprint = None
+        self._thumb_last_rebuild = 0.0
+        self._thumb_deferred = False
+        self._pipeline_prompt_table = None
+        self._pipeline_groups = {}
+        self._stage_dot_busy = False
+
+        if hasattr(self, '_version_debounce_timer') and self._version_debounce_timer:
+            try:
+                self._version_debounce_timer.stop()
+            except Exception:
+                pass
+        self._version_pending_index = -1
+
+        self._stage_viewer.setMinimumHeight(120)
+        self._stage_viewer.setMaximumHeight(16777215)
+        self._stage_viewer.setVisible(True)
+        self._set_viewer_text("", reset_scroll=True)
+        self._stage_viewer.setPlaceholderText("Stage results will appear here for review...")
+
+        while self._thumb_layout.count() > 1:
+            item = self._thumb_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._thumb_scroll.setVisible(False)
+        self._thumb_scroll.setMinimumHeight(0)
+        self._thumb_scroll.setMaximumHeight(100)
+
 
     def _update_nav_buttons(self, stage_name: str):
         """No-op: Back/Next buttons removed. Stage dots handle navigation."""
@@ -4528,11 +4608,33 @@ class TabProject(QWidget):
     def _reset_pipeline_viewer(self):
         """Reset pipeline viewer to initial state — clear all data and UI."""
         from core.production_pipeline import STAGE_ORDER
+        deleted_resume_files = self._delete_pipeline_resume_files()
+        self._pipeline_auto_restore_enabled = False
+        self._pipeline_persist_epoch = getattr(self, '_pipeline_persist_epoch', 0) + 1
+        if hasattr(self, '_queue_bridge'):
+            self._queue_bridge.reset()
+
+        if hasattr(self, '_queue_poll_timer') and self._queue_poll_timer:
+            try:
+                self._queue_poll_timer.stop()
+            except Exception:
+                pass
+        self._queue_poll_multi_groups = None
+        self._queue_poll_prev_completed = -1
+        self._queue_submitted_for_stage = False
+        self._populated_tasks = set()
+        if self.controller and hasattr(self.controller, 'set_pipeline_queue_active'):
+            self.controller.set_pipeline_queue_active(False)
+        if self.controller and hasattr(self.controller, 'set_pipeline_mode_active'):
+            self.controller.set_pipeline_mode_active(False)
         
         # Reset pipeline object
         self._pipeline = None
         self._pipeline_current_stage = None
         self._pipeline_project_name = ''
+        self._active_group_ids.clear()
+        self._queue_poll_group_id = None
+        self._queue_poll_stage = None
         
         # Reset all stage dots to default grey
         for sn, dot in self._stage_dots.items():
@@ -4551,23 +4653,12 @@ class TabProject(QWidget):
                 }}
             """)
         
-        # Reset viewer text
-        self._stage_viewer.setMinimumHeight(120)
-        self._stage_viewer.setMaximumHeight(16777215)
-        self._stage_viewer.setVisible(True)
-        self._set_viewer_text("", reset_scroll=True)
-        self._stage_viewer.setPlaceholderText("Stage results will appear here for review...")
+        # Reset viewer/caches before any delayed callbacks can repopulate them
+        self._clear_pipeline_visual_state()
         
         # Reset buttons + invalidate any running thread
         self._generation_id = getattr(self, '_generation_id', 0) + 1
         self._sync_buttons("idle")
-        
-        # Clear thumbnails
-        while self._thumb_layout.count() > 1:
-            item = self._thumb_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        self._thumb_scroll.setVisible(False)
         
         # Clear batch state
         self._batch_topics = []
@@ -4576,7 +4667,58 @@ class TabProject(QWidget):
         self._queue_awaiting_completion = False
         self._unsubscribe_late_completion()  # Clean up event listener
         
+        if deleted_resume_files:
+            deleted_names = ", ".join(path.name for path in deleted_resume_files)
+            log.info(f"[Pipeline] Deleted resume files on reset: {deleted_names}")
         log.info("[Pipeline] Viewer reset to initial state")
+        # Clear session registry so auto-restore won't revive this project
+        try:
+            from core.session_registry import SessionRegistry
+            SessionRegistry().clear()
+        except Exception:
+            pass
+        # Emit reset event and clear bus
+        try:
+            from core.pipeline_events import pipeline_bus, Events
+            pipeline_bus.emit(Events.PIPELINE_RESET)
+            pipeline_bus.clear()
+        except Exception:
+            pass
+
+    def _get_pipeline_project_dir(self) -> Optional[Path]:
+        """Return the current pipeline project directory, if it can be resolved."""
+        if not self._pipeline:
+            return None
+        output_folder = ""
+        if hasattr(self, '_setup_matrix') and hasattr(self._setup_matrix, 'output_folder'):
+            output_folder = self._setup_matrix.output_folder.text().strip()
+        if not output_folder:
+            return None
+        config = self._setup_matrix.get_config() if self._setup_matrix else {}
+        topic_slug = self._get_sanitized_project_name(config)
+        if not topic_slug:
+            topic_slug = "Production"
+        project_index = getattr(self._pipeline.state, '_project_index', 0)
+        total_projects = getattr(self._pipeline.state, '_total_projects', 1)
+        folder_name = f"{project_index + 1:03d} - {topic_slug}" if total_projects > 1 else topic_slug
+        return Path(output_folder) / folder_name
+
+    def _delete_pipeline_resume_files(self) -> List[Path]:
+        """Delete resume files so Reset cannot be undone by auto-restore."""
+        deleted: List[Path] = []
+        project_dir = self._get_pipeline_project_dir()
+        if not project_dir:
+            return deleted
+        for name in ("_pipeline_session.json", "_pipeline_state.json"):
+            path = project_dir / name
+            if not path.exists():
+                continue
+            try:
+                path.unlink()
+                deleted.append(path)
+            except OSError as e:
+                log.warning(f"[Pipeline] Failed to delete {path.name} during reset: {e}")
+        return deleted
     
     def _restore_dot_color(self, stage_name: str):
         """Restore a stage dot to its real status color (green/red/grey)."""
@@ -4606,6 +4748,7 @@ class TabProject(QWidget):
         """
         import json as _json
         from pathlib import Path
+        self._pipeline_auto_restore_enabled = True
         
         if not self._pipeline:
             return
@@ -4641,6 +4784,21 @@ class TabProject(QWidget):
                 encoding='utf-8'
             )
             log.info(f"[Pipeline] Session saved → {session_path}")
+            # Update session registry for reliable auto-restore
+            try:
+                from core.session_registry import SessionRegistry
+                from core.production_pipeline import StageStatus
+                completed = sum(
+                    1 for sr in self._pipeline.state.stages.values()
+                    if sr.status in (StageStatus.CONFIRMED, StageStatus.SKIPPED)
+                )
+                SessionRegistry().update(
+                    str(project_dir),
+                    topic=getattr(self._pipeline.state, 'topic', '')[:100],
+                    stages_completed=completed,
+                )
+            except Exception:
+                pass
         except Exception as e:
             log.warning(f"[Pipeline] Session save failed: {e}")
     
@@ -4692,36 +4850,69 @@ class TabProject(QWidget):
         """
         import json as _json
         from pathlib import Path
+        if not getattr(self, '_pipeline_auto_restore_enabled', True):
+            log.info("[Pipeline] Auto-restore skipped: disabled by prior reset")
+            return
+        main_window = self.window()
+        app_settings = getattr(main_window, 'settings', None)
+        if app_settings:
+            if not getattr(app_settings, 'restore_tabs_on_startup', True):
+                log.info("[Pipeline] Auto-restore skipped: restore_tabs_on_startup=False")
+                return
+            if not getattr(app_settings, 'restore_project_builder', True):
+                log.info("[Pipeline] Auto-restore skipped: restore_project_builder=False")
+                return
         
         # Skip if pipeline already has data (user started a new project)
         if self._pipeline and self._pipeline_current_stage:
             return
         
-        # Get output folder from setup matrix
-        output_folder = ""
-        if hasattr(self, '_setup_matrix') and hasattr(self._setup_matrix, 'output_folder'):
-            output_folder = self._setup_matrix.output_folder.text().strip()
-        
-        if not output_folder or not Path(output_folder).is_dir():
-            return
-        
-        # Find most recent _pipeline_state.json across all project subfolders
+        # ── Priority 0: Session Registry (deterministic) ──
         best_file = None
         best_mtime = 0
-        
-        root = Path(output_folder)
-        for state_file in root.rglob("_pipeline_state.json"):
-            try:
-                mtime = state_file.stat().st_mtime
-                if mtime > best_mtime:
-                    best_mtime = mtime
-                    best_file = state_file
-            except OSError:
-                continue
+        # Check if we have an explicit last-project record
+        try:
+            from core.session_registry import SessionRegistry
+            entry = SessionRegistry().get_last_project()
+            if entry and entry.is_valid():
+                # Use session file from registry
+                restore_file = entry.session_path
+                if not restore_file.exists():
+                    restore_file = entry.state_path
+                if restore_file.exists():
+                    log.info(
+                        f"[Pipeline] Registry restore: {entry.topic or restore_file.parent.name} "
+                        f"({entry.stages_completed} stages)"
+                    )
+                    best_file = restore_file
+                    best_mtime = restore_file.stat().st_mtime
+        except Exception as e:
+            log.debug(f"[Pipeline] Registry lookup failed: {e}")
+
+        # ── Fallback: rglob scan (legacy) ──
+        if not best_file:
+            # Get output folder from setup matrix
+            output_folder = ""
+            if hasattr(self, '_setup_matrix') and hasattr(self._setup_matrix, 'output_folder'):
+                output_folder = self._setup_matrix.output_folder.text().strip()
+
+            if not output_folder or not Path(output_folder).is_dir():
+                return
+
+            # Find most recent _pipeline_state.json across all project subfolders
+            root = Path(output_folder)
+            for state_file in root.rglob("_pipeline_state.json"):
+                try:
+                    mtime = state_file.stat().st_mtime
+                    if mtime > best_mtime:
+                        best_mtime = mtime
+                        best_file = state_file
+                except OSError:
+                    continue
         
         if not best_file:
             return
-        
+
         # Check if state file is recent (within last 7 days)
         import time
         age_days = (time.time() - best_mtime) / 86400
@@ -5048,6 +5239,8 @@ class TabProject(QWidget):
                 break
         
         self._pipeline_current_stage = current_stage
+        self._pipeline_auto_restore_enabled = True
+        self._pipeline_persist_epoch = getattr(self, '_pipeline_persist_epoch', 0) + 1
         
         # Restore stage dot colors
         for sn in STAGE_ORDER:
@@ -5211,51 +5404,29 @@ class TabProject(QWidget):
         Returns:
             (api_key, model_name, base_url, provider) or raises ValueError.
         """
-        from config.settings import get_settings
-        s = get_settings()
+        from services.ai_client_factory import get_ai_config
+        cfg = get_ai_config()
 
-        source = getattr(s, 'pb_ai_source', 'account')
-        model = getattr(s, 'pb_ai_model', 'gemini-2.5-flash')
-        base_url = getattr(s, 'pb_ai_base_url', '') or ''
-        provider = getattr(s, 'pb_ai_provider', 'Google')
+        api_key = cfg.get("api_key", "")
+        model = cfg.get("model", "gemini-2.5-flash")
+        base_url = cfg.get("base_url", "")
+        provider = cfg.get("provider", "Google")
 
-        if source == 'custom':
-            # Use custom API keys from Settings
-            keys = getattr(s, 'pb_ai_custom_keys', [])
-            if not keys:
+        # If no key found, provide a helpful error
+        if not api_key:
+            source = cfg.get("source", "account")
+            if source == "custom":
                 raise ValueError(
                     "Chưa có Custom API key!\n"
                     "Vào Settings → AI Prompt Processing → Project Builder để nhập key."
                 )
-            # Smart rotation: pick first available key via KeyQuotaManager
-            api_key = None
-            try:
-                from services.key_quota_manager import get_quota_manager
-                api_key = get_quota_manager().get_available_key(keys)
-            except Exception:
-                pass
-            if not api_key:
-                api_key = keys[0].strip()  # Fallback (auto-unblock in 60s)
-            if not api_key:
-                raise ValueError("Custom API key trống!")
-            return api_key, model, base_url, provider
-        else:
-            # Use key from Profile (GeminiKeyManager)
-            try:
-                from services.gemini_key_manager import GeminiKeyManager
-                mgr = GeminiKeyManager()
-                all_keys = mgr._load_all()
-                if all_keys:
-                    first = next(iter(all_keys))
-                    api_key = mgr.get_key(first)
-                    if api_key:
-                        return api_key, model, base_url, provider
-            except Exception:
-                pass
-            raise ValueError(
-                "Chưa có Gemini API key!\n"
-                "Vào Settings → AI Prompt Processing để paste key."
-            )
+            else:
+                raise ValueError(
+                    "Chưa có Gemini API key!\n"
+                    "Vào Settings → AI Prompt Processing để paste key."
+                )
+
+        return api_key, model, base_url, provider
 
     # ── Phase-Aware Status (replaces old status panel) ─────────
 
@@ -6031,6 +6202,9 @@ class TabProject(QWidget):
         can resume pipeline-queue interaction.
         """
         state = {}
+        state["pipeline_auto_restore_enabled"] = bool(
+            getattr(self, '_pipeline_auto_restore_enabled', True)
+        )
         # Topic input text
         if hasattr(self, '_topic_input'):
             state["topic_text"] = self._topic_input.toPlainText()
@@ -6086,6 +6260,9 @@ class TabProject(QWidget):
         """
         if not data:
             return
+        self._pipeline_auto_restore_enabled = bool(
+            data.get("pipeline_auto_restore_enabled", True)
+        )
         # Check granular setting
         if restore_options and not getattr(restore_options, 'restore_project_builder', True):
             return

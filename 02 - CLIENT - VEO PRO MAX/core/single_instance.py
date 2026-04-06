@@ -6,6 +6,11 @@ Uses Windows Named Mutex (primary) with lock file fallback.
 
 Security: Prevents users from opening multiple windows to bypass
 worker/account limits enforced by license tier.
+
+Extended:
+- kill_zombie_veo_instances(): Kill background VEO processes with no visible window
+  (zombie = previous run that crashed / didn't shut down port cleanly)
+- restore_existing_veo_window(): Bring real running VEO window to foreground
 """
 
 import sys
@@ -21,6 +26,221 @@ _LOCK_FILE = os.path.join(_LOCK_DIR, ".instance.lock")
 # Windows Mutex name (Global = cross-session)
 _MUTEX_NAME = "Global\\VEOProMaxSingleInstance"
 
+# Window title prefix used to identify real VEO windows
+_WINDOW_TITLE_PREFIX = "VEO PRO MAX"
+
+# Known compiled exe names (case-insensitive match)
+_EXE_NAMES = {"veo_pro_max.exe", "veo pro max.exe", "veopromax.exe"}
+
+
+# ── Win32 Helpers ────────────────────────────────────────────────
+
+def _find_hwnd_by_title_prefix(prefix: str) -> list:
+    """Enumerate all top-level windows whose title starts with `prefix`.
+
+    Returns list of (hwnd, pid) tuples for matching windows.
+    """
+    results = []
+    if sys.platform != "win32":
+        return results
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        user32 = ctypes.windll.user32
+
+        EnumWindowsProc = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+        matches = []
+
+        def _cb(hwnd, _lparam):
+            try:
+                length = user32.GetWindowTextLengthW(hwnd) + 1
+                buf = ctypes.create_unicode_buffer(length)
+                user32.GetWindowTextW(hwnd, buf, length)
+                title = buf.value
+                if title.upper().startswith(prefix.upper()):
+                    pid = wt.DWORD(0)
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    matches.append((hwnd, pid.value))
+            except Exception:
+                pass
+            return True  # Continue enumeration
+
+        proc = EnumWindowsProc(_cb)
+        user32.EnumWindows(proc, 0)
+        return matches
+    except Exception as e:
+        log.debug(f"[SingleInstance] _find_hwnd_by_title_prefix error: {e}")
+        return []
+
+
+def _find_veo_pids_by_exe() -> list:
+    """Find all PIDs running a VEO Pro Max executable (excluding current PID).
+
+    Uses Win32 CreateToolhelp32Snapshot — works in compiled (Nuitka) builds.
+    Returns list of int PIDs.
+    """
+    if sys.platform != "win32":
+        return []
+    current_pid = os.getpid()
+    results = []
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        kernel32 = ctypes.windll.kernel32
+        TH32CS_SNAPPROCESS = 0x00000002
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [
+                ("dwSize",             wt.DWORD),
+                ("cntUsage",           wt.DWORD),
+                ("th32ProcessID",      wt.DWORD),
+                ("th32DefaultHeapID",  ctypes.POINTER(ctypes.c_ulong)),
+                ("th32ModuleID",       wt.DWORD),
+                ("cntThreads",         wt.DWORD),
+                ("th32ParentProcessID", wt.DWORD),
+                ("pcPriClassBase",     ctypes.c_long),
+                ("dwFlags",            wt.DWORD),
+                ("szExeFile",          ctypes.c_wchar * 260),
+            ]
+
+        snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        INVALID = ctypes.c_void_p(-1).value
+        if snap == INVALID:
+            return results
+
+        try:
+            pe = PROCESSENTRY32W()
+            pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            if kernel32.Process32FirstW(snap, ctypes.byref(pe)):
+                while True:
+                    exe_lower = pe.szExeFile.lower()
+                    is_veo = any(exe_lower == name for name in _EXE_NAMES)
+                    if is_veo and pe.th32ProcessID != current_pid:
+                        results.append(pe.th32ProcessID)
+                    if not kernel32.Process32NextW(snap, ctypes.byref(pe)):
+                        break
+        finally:
+            kernel32.CloseHandle(snap)
+    except Exception as e:
+        log.debug(f"[SingleInstance] _find_veo_pids_by_exe error: {e}")
+    return results
+
+
+def kill_zombie_veo_instances() -> int:
+    """Kill VEO Pro Max background processes that have NO visible window.
+
+    'Zombie' = a previous run that crashed or didn't fully shut down.
+    These processes lock the WebSocket port and Named Mutex, blocking
+    a fresh startup from getting correct extension/browser connections.
+
+    Strategy:
+      1. Enumerate all VEO Pro Max windows by title → {PIDs with real windows}
+      2. Enumerate all VEO Pro Max exe processes → all VEO PIDs
+      3. PIDs in step 2 but NOT in step 1 = zombies → TerminateProcess
+
+    Returns: number of zombie processes killed.
+    """
+    if sys.platform != "win32":
+        return 0
+
+    current_pid = os.getpid()
+
+    # Step 1: PIDs that have a visible VEO window
+    window_pids = {pid for (_hwnd, pid) in _find_hwnd_by_title_prefix(_WINDOW_TITLE_PREFIX)}
+
+    # Step 2: All VEO Pro Max exe PIDs (compiled mode)
+    veo_pids = _find_veo_pids_by_exe()
+
+    # Step 2b: Also check lock file PID as fallback (dev mode / python.exe)
+    try:
+        if os.path.exists(_LOCK_FILE):
+            with open(_LOCK_FILE, "r") as f:
+                file_pid = int(f.read().strip())
+            if file_pid != current_pid and file_pid not in window_pids:
+                if file_pid not in veo_pids:
+                    veo_pids.append(file_pid)
+    except Exception:
+        pass
+
+    killed = 0
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_TERMINATE = 0x0001
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+        for pid in veo_pids:
+            if pid == current_pid:
+                continue  # Never kill ourselves
+            if pid in window_pids:
+                continue  # Has visible window — leave it alone
+
+            # Zombie: VEO process but no visible window → kill
+            log.info(f"[SingleInstance] 🧟 Killing zombie VEO Pro Max PID={pid} (no window)")
+            handle = kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+            if handle:
+                try:
+                    success = kernel32.TerminateProcess(handle, 0)
+                    if success:
+                        killed += 1
+                        log.info(f"[SingleInstance] ✅ Killed zombie PID={pid}")
+                    else:
+                        log.warning(f"[SingleInstance] ⚠️ Failed to terminate PID={pid}")
+                finally:
+                    kernel32.CloseHandle(handle)
+            else:
+                log.debug(f"[SingleInstance] Could not open PID={pid} (already dead?)")
+
+    except Exception as e:
+        log.warning(f"[SingleInstance] kill_zombie_veo_instances error: {e}")
+
+    if killed:
+        log.info(f"[SingleInstance] Killed {killed} zombie VEO instance(s)")
+    return killed
+
+
+def restore_existing_veo_window() -> bool:
+    """Bring the existing VEO Pro Max window to the foreground.
+
+    Called when mutex conflict is detected and a real instance is running.
+    Uses Win32 ShowWindow + SetForegroundWindow.
+
+    Returns True if a window was found and brought to front.
+    """
+    if sys.platform != "win32":
+        return False
+
+    windows = _find_hwnd_by_title_prefix(_WINDOW_TITLE_PREFIX)
+    if not windows:
+        log.info("[SingleInstance] restore_existing_veo_window: no window found")
+        return False
+
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        user32 = ctypes.windll.user32
+
+        hwnd, pid = windows[0]
+        SW_RESTORE = 9
+        SW_SHOW    = 5
+
+        # Restore if minimized, then bring to front
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        user32.SetForegroundWindow(hwnd)
+        user32.BringWindowToTop(hwnd)
+        user32.SetActiveWindow(hwnd)
+
+        log.info(f"[SingleInstance] ✅ Restored existing VEO window HWND={hwnd} PID={pid}")
+        return True
+    except Exception as e:
+        log.warning(f"[SingleInstance] restore_existing_veo_window error: {e}")
+        return False
+
+
+# ════════════════════════════════════════════════════════════════
+#  SingleInstanceLock
+# ════════════════════════════════════════════════════════════════
 
 class SingleInstanceLock:
     """Ensures only one instance of VEO Pro Max can run at a time.
@@ -32,7 +252,13 @@ class SingleInstanceLock:
     Layer 2: Lock file with PID (~/.veoauto/.instance.lock)
       - Fallback when ctypes/Win32 unavailable
       - Stale lock detection via PID check
+    
+    NOTE: The global instance is stored in _global_lock for cleanup
+    from any code path (especially os._exit which skips finally blocks).
     """
+    
+    # Module-level reference for cleanup from anywhere
+    _global_lock = None
     
     def __init__(self):
         self._mutex_handle = None
@@ -50,13 +276,18 @@ class SingleInstanceLock:
             try:
                 result = self._acquire_mutex()
                 if result is not None:
+                    if result:
+                        SingleInstanceLock._global_lock = self
                     return result
                 # Fall through to Layer 2 if mutex failed
             except Exception as e:
                 log.debug(f"Mutex acquire failed, falling back to lock file: {e}")
         
         # Layer 2: Lock file with PID
-        return self._acquire_lockfile()
+        result = self._acquire_lockfile()
+        if result:
+            SingleInstanceLock._global_lock = self
+        return result
     
     def release(self):
         """Release the single-instance lock."""
@@ -221,3 +452,23 @@ def show_already_running_dialog():
     print(f"  {title}")
     print(f"  {message}")
     print(f"{'='*50}\n")
+
+
+def release_global():
+    """Release the global SingleInstance lock.
+    
+    Call this before os._exit() to ensure the mutex is freed.
+    Safe to call multiple times or when no lock is held.
+    """
+    lock = SingleInstanceLock._global_lock
+    if lock:
+        try:
+            lock.release()
+        except Exception:
+            pass
+        SingleInstanceLock._global_lock = None
+
+
+# Register atexit handler as safety net (works for normal exit, not os._exit)
+import atexit
+atexit.register(release_global)

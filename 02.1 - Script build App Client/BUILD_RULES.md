@@ -1,6 +1,17 @@
 # Build Rules — VEO Pro Max Client
 # ==================================
 
+> [!IMPORTANT]
+> `BUILD_RULES.md` là tài liệu policy/rule nền.
+> Tài liệu thao tác DUY NHẤT cho release `v2.3.11` là:
+> `02.1 - Script build App Client/RELEASE_RUNBOOK_v2.3.11.md`
+>
+> Runbook này bao trọn:
+> - ZIP app + extension trong `03 - Final App Client`
+> - Installer `.exe` trong `03.1-Installer`
+>
+> Khi cần thao tác release/build/package, ưu tiên mở runbook đó trước.
+
 ## 🔑 Git & Repository Info
 
 | Item | Value |
@@ -102,6 +113,12 @@ KHÔNG BAO GIỜ đề cập thông tin về Admin app trong file này.
 | Thêm feature mới cần cả app + extension | `2.3.2` → `2.4.0` | `2.3.1` → `2.4.0` |
 | Chỉ update BUILD_RULES, CHANGELOG | Giữ nguyên | Giữ nguyên |
 
+### 2d.1. Release target hiện tại: v2.3.11
+
+- Release debug hiện tại chốt `APP_VERSION = 2.3.11`
+- Extension release hiện tại chốt `manifest.json version = 2.3.11`
+- Dù App và Extension vẫn độc lập về nguyên tắc, release window này đang chủ động đồng bộ cả hai lên `2.3.11`
+
 ### 2e. Granular Update Modes
 
 | Mode | Trigger | Artifact | Restart? |
@@ -153,6 +170,29 @@ Mỗi GitHub Release v{VER} upload:
 6. Tạo GitHub Release trên vadveopromax (PUBLIC) + upload cả 2 ZIPs
 7. Verify: version.json + download URLs chính xác
 ```
+
+### 3a. Pre-build workflow cho giai đoạn debug
+
+> Xem checklist thao tác chi tiết trong `RELEASE_RUNBOOK_v2.3.11.md`.
+
+Trong lúc CHƯA xác nhận build release cuối:
+
+```powershell
+# Check source/version/changelog/output hiện tại, không compile
+python build_release.py --preflight --plain-extension
+
+# Archive ZIP/setup cũ để tránh publish nhầm asset
+python build_release.py --archive-assets --preflight --plain-extension
+```
+
+Khi cần đóng gói trên output có sẵn nhưng CHƯA push/publish:
+
+```powershell
+python build_release.py --plain-extension --package-only --skip-compile
+```
+
+> ⚠️ `--package-only` chỉ tạo asset package/ZIP và cập nhật SHA local.
+> KHÔNG push git, KHÔNG tạo GitHub Release, KHÔNG publish `version.json`.
 
 ### 3b. Post-Release Verify (BẮT BUỘC)
 
@@ -211,7 +251,7 @@ VEO_Pro_Max/
 ├── config/
 ├── assets/
 ├── data/          (chỉ chứa .enc, 0 file .md)
-├── extension/     (obfuscated JS)
+├── extension/     (obfuscated JS hoặc plaintext JS theo release mode)
 ├── ui/
 └── [DLLs, .pyd files - hidden attribute]
 ```
@@ -219,6 +259,16 @@ VEO_Pro_Max/
 - Build script tự tạo ZIP đúng cấu trúc tại step [7]
 - KHÔNG dùng GitHub archive URL (cấu trúc sai, có `main.dist/` wrapper)
 - LUÔN dùng GitHub Release asset URL
+
+### 4a. Extension payload mode
+
+> Cách chạy cụ thể cho cả ZIP `03` và installer `03.1` được mô tả tập trung trong `RELEASE_RUNBOOK_v2.3.11.md`.
+
+- Mặc định release pipeline vẫn có thể dùng extension obfuscated
+- Riêng release/debug window `v2.3.11`, extension được phép ship dạng plaintext bằng cờ:
+  `python build_release.py --plain-extension`
+- Cờ này CHỈ ảnh hưởng thư mục `extension/`
+- KHÔNG ảnh hưởng step mã hóa `data/`, tức `data/` vẫn phải giữ `.enc` như Rule #5
 
 ---
 

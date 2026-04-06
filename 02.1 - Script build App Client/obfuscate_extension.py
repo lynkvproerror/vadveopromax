@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
-Extension Obfuscation Script v2.0
+Extension Obfuscation Script v3.0
 ==================================
 
-Minifies and obfuscates the Chrome extension JS files
-before deploying to the release folder (03).
+Obfuscates Chrome extension JS files using javascript-obfuscator (npm).
+MV3-safe: no eval, no self-defending, no domain-lock.
+
+Prerequisites:
+    npm install -g javascript-obfuscator
 
 Features:
-- Remove comments (// and /* */)  
-- Remove console.log/console.debug statements (safe nested-paren handling)
-- Minify whitespace
-- Encode selected string literals (safe: only standalone strings, not inside templates)
+- Variable/function renaming → _0x1a2b3c
+- String encoding (base64)
+- Control flow flattening (light)
+- Dead code injection (light)
+- Console log removal
+- NO eval (MV3 CSP safe)
+- NO self-defending (Service Worker safe)
 
 Usage:
     python obfuscate_extension.py                    # Obfuscate → folder 03
@@ -18,9 +24,11 @@ Usage:
     python obfuscate_extension.py --output <dir>     # Custom output
 """
 
-import re
+import json
 import shutil
+import subprocess
 import argparse
+import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
@@ -29,187 +37,127 @@ PROJECT_ROOT = BASE_DIR / "02 - CLIENT - VEO PRO MAX"
 EXTENSION_SRC = PROJECT_ROOT / "extension"
 DEFAULT_OUTPUT = BASE_DIR / "03 - Final App Client" / "main.dist" / "extension"
 
+# Files that run in Service Worker context (NO window object)
+SERVICE_WORKER_FILES = {"background.js"}
 
-def _remove_console_statements(code: str) -> str:
+# MV3-safe obfuscation config for BROWSER context (content.js, popup.js, stealth.js)
+# These files run in page/popup context where `window` is available.
+BROWSER_CONFIG = {
+    # ── Core transforms ──
+    "compact": True,
+    "simplify": True,
+    "renameGlobals": False,          # Don't rename globals (chrome.*, etc.)
+    "renameProperties": False,       # Don't rename object properties
+    "identifierNamesGenerator": "hexadecimal",  # _0x1a2b3c style
+
+    # ── String protection ──
+    "stringArray": True,
+    "stringArrayThreshold": 0.75,
+    "stringArrayEncoding": ["base64"],   # Safe for MV3 (no eval)
+    "stringArrayRotate": True,
+    "stringArrayShuffle": True,
+    "stringArrayWrappersCount": 2,
+    "stringArrayWrappersChainedCalls": True,
+    "stringArrayWrappersType": "variable",  # 'function' may use eval
+
+    # ── Control flow ──
+    "controlFlowFlattening": True,
+    "controlFlowFlatteningThreshold": 0.5,  # Light (50% of blocks)
+    "deadCodeInjection": True,
+    "deadCodeInjectionThreshold": 0.2,      # Light (20%)
+
+    # ── Console removal ──
+    "disableConsoleOutput": True,
+
+    # ── Safety: MV3 compatible ──
+    "selfDefending": False,          # MUST be false for Service Worker
+    "debugProtection": False,        # Can freeze dev tools
+    "domainLock": [],                # Extension has no domain
+    "target": "browser",
+
+    # ── Numbers ──
+    "numbersToExpressions": True,
+    "transformObjectKeys": False,    # Keep object keys readable for API calls
+    "unicodeEscapeSequence": False,  # Keep strings compact
+}
+
+# Service Worker config (background.js) — NO window, NO eval, NO console disable
+# Service Workers use `self` / `globalThis` instead of `window`.
+# Key differences from BROWSER_CONFIG:
+#   - target = "browser-no-eval" (avoids window-dependent injection)
+#   - disableConsoleOutput = False (console.disable wrapper uses window)
+#   - selfDefending = False (already false, but critical here)
+#   - controlFlowFlattening = lighter (reduce Service Worker boot time)
+SERVICE_WORKER_CONFIG = {
+    **BROWSER_CONFIG,
+    "target": "browser-no-eval",        # Avoids window-dependent global references
+    "disableConsoleOutput": False,       # Console disable uses window → crash in SW
+    "controlFlowFlatteningThreshold": 0.3,  # Lighter for faster SW boot
+    "deadCodeInjectionThreshold": 0.1,      # Lighter for SW
+}
+
+
+def _find_obfuscator() -> str:
+    """Find javascript-obfuscator CLI."""
+    # Check global npm
+    result = shutil.which("javascript-obfuscator")
+    if result:
+        return result
+
+    # Check common Windows npm global path
+    npm_global = Path.home() / "AppData" / "Roaming" / "npm" / "javascript-obfuscator.cmd"
+    if npm_global.exists():
+        return str(npm_global)
+
+    raise FileNotFoundError(
+        "javascript-obfuscator not found!\n"
+        "Install: npm install -g javascript-obfuscator"
+    )
+
+
+def obfuscate_js_file(input_path: Path, output_path: Path, config: dict) -> dict:
+    """Obfuscate a single JS file using javascript-obfuscator CLI.
+
+    Returns dict with stats: {original_size, new_size, ratio}.
     """
-    Safely remove console.log/debug/info/warn statements,
-    handling nested parentheses correctly.
-    """
-    pattern = re.compile(r'console\.(log|debug|info|warn)\s*\(')
-    result = []
-    i = 0
-    while i < len(code):
-        m = pattern.search(code, i)
-        if not m:
-            result.append(code[i:])
-            break
-        
-        # Append everything before the match
-        result.append(code[i:m.start()])
-        
-        # Find matching closing paren (handle nesting)
-        depth = 0
-        j = m.end() - 1  # Position of the opening '('
-        in_string = None
-        escaped = False
-        
-        while j < len(code):
-            ch = code[j]
-            
-            if escaped:
-                escaped = False
-                j += 1
-                continue
-            
-            if ch == '\\':
-                escaped = True
-                j += 1
-                continue
-            
-            if in_string:
-                if ch == in_string:
-                    in_string = None
-            elif ch in ("'", '"', '`'):
-                in_string = ch
-            elif ch == '(':
-                depth += 1
-            elif ch == ')':
-                depth -= 1
-                if depth == 0:
-                    # Skip past the closing paren and optional semicolon/whitespace
-                    j += 1
-                    while j < len(code) and code[j] in (' ', '\t'):
-                        j += 1
-                    if j < len(code) and code[j] == ';':
-                        j += 1
-                    # Also skip trailing newline
-                    if j < len(code) and code[j] == '\r':
-                        j += 1
-                    if j < len(code) and code[j] == '\n':
-                        j += 1
-                    break
-            j += 1
-        
-        i = j
-    
-    return ''.join(result)
+    cli = _find_obfuscator()
+    original_size = input_path.stat().st_size
 
+    # Write config to temp file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+        json.dump(config, f)
+        config_path = f.name
 
-def _remove_comments(code: str) -> str:
-    """
-    Remove JS comments (// and /* */) while respecting string literals.
-    Does NOT remove // or /* that appear inside '...' or "..." or `...`.
-    """
-    result = []
-    i = 0
-    length = len(code)
-    
-    while i < length:
-        ch = code[i]
-        
-        # Handle string literals — pass through without modification
-        if ch in ("'", '"', '`'):
-            quote = ch
-            result.append(ch)
-            i += 1
-            while i < length:
-                c = code[i]
-                if c == '\\' and i + 1 < length:
-                    result.append(c)
-                    result.append(code[i + 1])
-                    i += 2
-                    continue
-                result.append(c)
-                i += 1
-                if c == quote:
-                    break
-            continue
-        
-        # Handle multi-line comments /* ... */
-        if ch == '/' and i + 1 < length and code[i + 1] == '*':
-            # Skip until */
-            j = code.find('*/', i + 2)
-            if j != -1:
-                i = j + 2
-            else:
-                i = length  # Unclosed comment, skip rest
-            continue
-        
-        # Handle single-line comments // (but not URLs like https://)
-        if ch == '/' and i + 1 < length and code[i + 1] == '/':
-            # Check if preceded by ':' (URL protocol like https://)
-            if i > 0 and code[i - 1] == ':':
-                result.append(ch)
-                i += 1
-                continue
-            # Skip until end of line
-            while i < length and code[i] != '\n':
-                i += 1
-            continue
-        
-        result.append(ch)
-        i += 1
-    
-    return ''.join(result)
+    try:
+        # Run: javascript-obfuscator input.js --output output.js --config config.json
+        cmd = [
+            cli,
+            str(input_path),
+            "--output", str(output_path),
+            "--config", config_path,
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+        )
 
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            raise RuntimeError(f"Obfuscation failed for {input_path.name}: {stderr}")
 
-def minify_js(source: str) -> str:
-    """Minify JavaScript: remove comments, whitespace, console.log."""
-    code = source
+        new_size = output_path.stat().st_size
+        ratio = (1 - new_size / original_size) * 100 if original_size > 0 else 0
 
-    # 1. Remove comments (string-aware — won't touch /* inside strings)
-    code = _remove_comments(code)
-
-    # 2. Remove console.log/debug/info/warn statements (safe paren matching)
-    code = _remove_console_statements(code)
-
-    # 3. Remove excessive whitespace
-    lines = []
-    for line in code.split('\n'):
-        stripped = line.strip()
-        if stripped:
-            lines.append(stripped)
-    code = '\n'.join(lines)
-
-    # 4. Collapse multiple newlines
-    code = re.sub(r'\n{2,}', '\n', code)
-
-    return code
-
-
-def obfuscate_js(source: str, filename: str = "") -> str:
-    """Apply additional obfuscation to JavaScript source."""
-    code = minify_js(source)
-
-    # 1. Encode ONLY standalone debug/sensitive strings
-    #    Safe: only match strings that are a complete value (after : or = or , or ()
-    #    Skip strings inside template literals or complex expressions
-    SENSITIVE_KEYWORDS = ['debug', 'error', 'warn', 'log ', 'info', 'status',
-                          'tab_logout', 'login_redirect', 'email_not_found']
-    
-    def encode_debug_string(match):
-        quote = match.group(0)[0]  # ' or "
-        s = match.group(1)
-        # Only encode if it contains sensitive keywords
-        if any(kw in s.lower() for kw in SENSITIVE_KEYWORDS):
-            # Don't encode if it looks like a URL, CSS selector, or object key pattern
-            if s.startswith('http') or s.startswith('.') or s.startswith('#'):
-                return match.group(0)
-            # Don't encode if it contains template syntax or complex chars
-            if '${' in s or '\\n' in s or '{' in s or '}' in s:
-                return match.group(0)
-            hex_chars = ','.join(f'0x{ord(c):02x}' for c in s)
-            return f'String.fromCharCode({hex_chars})'
-        return match.group(0)
-
-    # Only match complete string values (preceded by : ,  = ( or start of line)
-    # This avoids breaking object literals and template strings
-    code = re.sub(r"(?<=[:,=(\s])'([^']{10,80})'", encode_debug_string, code)
-    
-    # 2. Add header comment only (no IIFE wrapper — files already have their own structure)
-    header = "/* VEO Pro Max Extension v2.2.2 - Protected */\n"
-    
-    return header + code
+        return {
+            "original_size": original_size,
+            "new_size": new_size,
+            "ratio": ratio,
+        }
+    finally:
+        Path(config_path).unlink(missing_ok=True)
 
 
 def process_extension(output_dir: Path, preview_only: bool = False):
@@ -218,39 +166,77 @@ def process_extension(output_dir: Path, preview_only: bool = False):
         print(f"❌ Extension source not found: {EXTENSION_SRC}")
         return False
 
+    # Verify javascript-obfuscator is available
+    try:
+        cli = _find_obfuscator()
+        # Get version
+        ver_result = subprocess.run(
+            [cli, "--version"], capture_output=True, text=True, timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+        )
+        version = ver_result.stdout.strip() if ver_result.returncode == 0 else "unknown"
+        print(f"  🔧 javascript-obfuscator v{version}")
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        return False
+
     if not preview_only:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    js_files = list(EXTENSION_SRC.glob("*.js"))
-    other_files = [f for f in EXTENSION_SRC.iterdir() if f.suffix != '.js']
+    js_files = sorted(EXTENSION_SRC.glob("*.js"))
+    other_files = [f for f in sorted(EXTENSION_SRC.iterdir()) if f.suffix != '.js']
 
     print(f"\n📦 Processing extension ({len(js_files)} JS files, {len(other_files)} other files)")
 
+    total_original = 0
+    total_new = 0
+
     for js_file in js_files:
-        source = js_file.read_text(encoding='utf-8')
-        original_size = len(source)
+        if preview_only:
+            original_size = js_file.stat().st_size
+            print(f"  🔒 {js_file.name}: {original_size:,} bytes → [preview]")
+            continue
 
-        obfuscated = obfuscate_js(source, filename=js_file.name)
-        new_size = len(obfuscated)
+        out_file = output_dir / js_file.name
+        try:
+            # Select config based on file context
+            if js_file.name in SERVICE_WORKER_FILES:
+                config = SERVICE_WORKER_CONFIG
+                ctx_label = "SW"
+            else:
+                config = BROWSER_CONFIG
+                ctx_label = "BR"
+            
+            stats = obfuscate_js_file(js_file, out_file, config)
+            total_original += stats["original_size"]
+            total_new += stats["new_size"]
 
-        ratio = (1 - new_size / original_size) * 100 if original_size > 0 else 0
-        print(f"  🔒 {js_file.name}: {original_size:,} → {new_size:,} bytes ({ratio:.0f}% reduction)")
-
-        if not preview_only:
-            (output_dir / js_file.name).write_text(obfuscated, encoding='utf-8')
+            # Size may INCREASE with obfuscation (dead code + string array)
+            direction = "↓" if stats["ratio"] > 0 else "↑"
+            abs_ratio = abs(stats["ratio"])
+            print(f"  🔒 [{ctx_label}] {js_file.name}: {stats['original_size']:,} → {stats['new_size']:,} bytes ({direction}{abs_ratio:.0f}%)")
+        except Exception as e:
+            print(f"  ❌ {js_file.name}: {e}")
+            # Fallback: copy original
+            shutil.copy2(js_file, out_file)
+            print(f"  ⚠️ {js_file.name}: copied original as fallback")
 
     # Copy non-JS files as-is (manifest.json, HTML, icons)
     for other_file in other_files:
         print(f"  📄 {other_file.name}: copied as-is")
-        if not preview_only:
-            if other_file.is_file():
-                shutil.copy2(other_file, output_dir / other_file.name)
+        if not preview_only and other_file.is_file():
+            shutil.copy2(other_file, output_dir / other_file.name)
 
+    if not preview_only and total_original > 0:
+        overall = (total_new / total_original) * 100
+        print(f"\n  📊 Total JS: {total_original:,} → {total_new:,} bytes ({overall:.0f}% of original)")
+
+    print(f"  [OK] Extension deployed to: {output_dir}")
     return True
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Obfuscate Chrome extension JS")
+    parser = argparse.ArgumentParser(description="Obfuscate Chrome extension JS (v3.0)")
     parser.add_argument("--check", action="store_true", help="Preview only, no output")
     parser.add_argument("--output", type=str, help="Custom output directory")
     args = parser.parse_args()
@@ -258,7 +244,8 @@ def main():
     output = Path(args.output) if args.output else DEFAULT_OUTPUT
 
     print("=" * 50)
-    print("  VEO Extension Obfuscator v2.0")
+    print("  VEO Extension Obfuscator v3.0")
+    print("  Engine: javascript-obfuscator (npm)")
     print("=" * 50)
     print(f"  Source: {EXTENSION_SRC}")
     print(f"  Output: {output}")
@@ -269,7 +256,7 @@ def main():
         if args.check:
             print("\n✅ Preview complete (no files written)")
         else:
-            print(f"\n✅ Extension deployed to: {output}")
+            print(f"\n✅ Extension obfuscated and deployed to: {output}")
     else:
         print("\n❌ Failed!")
 

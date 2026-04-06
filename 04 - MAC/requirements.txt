@@ -1,8 +1,9 @@
-# VEO Pro Max - Dependencies
-# Version: 2.3.1
+# VEO Pro Max - Dependencies (macOS)
+# Version: 2.3.9
 
 # UI Framework
-PySide6>=6.5.0
+# ★ 6.6.0+ required for stable Apple Silicon (M1/M2/M3) support
+PySide6>=6.6.0
 
 # Browser Automation
 playwright>=1.40.0
@@ -22,7 +23,9 @@ websockets>=12.0
 # Image Processing (upscaler, thumbnail, pipeline)
 Pillow>=10.0.0
 numpy>=1.24.0
-opencv-python>=4.8.0
+# ★ MUST use headless variant on macOS — opencv-python loads its own
+#   Qt framework which conflicts with PySide6 → segfault on startup
+opencv-python-headless>=4.8.0
 
 # Process Management (Chrome lifecycle, system monitoring)
 psutil>=5.9.0

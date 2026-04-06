@@ -1,7 +1,7 @@
 """
 VEO Pro Max - Gemini API Client
 
-REST client for Google Gemini 2.0 Flash API.
+REST client for Google Gemini/Gemma API (generativelanguage.googleapis.com).
 Used by PromptEnhancer (Phase 3) and ProjectBuilder (Phase 6).
 """
 
@@ -54,17 +54,18 @@ class GeminiClient:
     """
 
     BASE = "https://generativelanguage.googleapis.com/v1beta"
-    MODEL = "models/gemini-2.5-flash"  # Default
-    MODEL_FLASH = "models/gemini-2.0-flash"  # Fallback
+    MODEL = "models/gemma-3-27b-it"  # Default (14,400 RPD free tier)
+    MODEL_FLASH = "models/gemini-2.5-flash"  # Fallback
     MODEL_PRO = "models/gemini-2.5-pro"  # Highest quality (paid)
     DEFAULT_TIMEOUT = 30  # seconds
     
     # Model alias registry
     _MODEL_ALIASES = {
         "flash": "models/gemini-2.5-flash",
-        "flash-2.0": "models/gemini-2.0-flash",
         "pro": "models/gemini-2.5-pro",
         "flash-lite": "models/gemini-2.5-flash-lite",
+        "gemma-27b": "models/gemma-3-27b-it",
+        "gemma-4": "models/gemma-4-31b-it",
     }
 
     # ── System Prompts (class-level constants) ─────────────────────

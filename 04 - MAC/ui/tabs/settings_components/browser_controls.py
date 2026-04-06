@@ -404,7 +404,7 @@ class SettingsBrowserControlsMixin:
                 color: {Theme.TEXT};
                 border: 1px solid {Theme.BORDER};
                 border-radius: 6px;
-                font-family: 'Consolas', 'Courier New', monospace;
+                font-family: 'Menlo', 'Courier New', monospace;
                 font-size: 12px;
                 padding: 8px;
             }}

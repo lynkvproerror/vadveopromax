@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QSlider, QApplication, QStyle
 )
-from PySide6.QtCore import Qt, Slot, QUrl, QTimer
+from PySide6.QtCore import Qt, Slot, QUrl, QTimer, QCoreApplication
 from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
 
 # Multimedia imports — gracefully degrade if not available
@@ -37,6 +37,8 @@ from config.theme import Theme
 from ui.popups.popups import BasePopup
 
 log = logging.getLogger("video_player")
+_QT_RUNTIME_DLL_HANDLES = []
+_QT_RUNTIME_DLL_PATHS = set()
 
 # ── Debug flag ──
 # Enable with: set VEO_DEBUG_VIDEO=1 (Windows) or export VEO_DEBUG_VIDEO=1 (Linux/Mac)
@@ -48,6 +50,71 @@ def _dbg(msg: str):
         log.info(f"[VideoDBG] {msg}")
     else:
         log.debug(f"[VideoDBG] {msg}")
+
+
+def _qt_multimedia_plugin_snapshot() -> str:
+    """Return a concise snapshot of Qt library/plugin paths for diagnostics."""
+    try:
+        paths = [str(p) for p in QCoreApplication.libraryPaths()]
+    except Exception:
+        paths = []
+
+    plugin_hits = []
+    for path in paths:
+        multimedia_dir = Path(path) / "multimedia"
+        if multimedia_dir.exists():
+            names = sorted(p.name for p in multimedia_dir.iterdir() if p.is_file())
+            plugin_hits.append(f"{multimedia_dir} => {', '.join(names) if names else '(empty)'}")
+
+    if not paths:
+        return "libraryPaths=(unavailable)"
+    if plugin_hits:
+        return f"libraryPaths={paths} | multimedia={plugin_hits}"
+    return f"libraryPaths={paths} | multimedia=(not found)"
+
+
+def _ensure_qt_multimedia_runtime():
+    """Register DLL/plugin paths for compiled builds before player creation."""
+    if not (getattr(sys, "frozen", False) or "__compiled__" in dir()):
+        return
+
+    base_dir = Path(sys.executable).resolve().parent
+    qt_root = base_dir / "PySide6"
+    qt_plugin_root = qt_root / "qt-plugins"
+    multimedia_root = qt_plugin_root / "multimedia"
+
+    if qt_plugin_root.exists():
+        existing = [p for p in os.environ.get("QT_PLUGIN_PATH", "").split(os.pathsep) if p]
+        qt_plugin_root_str = str(qt_plugin_root)
+        if qt_plugin_root_str not in existing:
+            os.environ["QT_PLUGIN_PATH"] = (
+                os.pathsep.join([qt_plugin_root_str, *existing])
+                if existing else qt_plugin_root_str
+            )
+
+    if os.name == "nt" and hasattr(os, "add_dll_directory"):
+        for path in (base_dir, qt_root, qt_plugin_root, multimedia_root):
+            if not path.exists():
+                continue
+
+            path_str = str(path)
+            if path_str in _QT_RUNTIME_DLL_PATHS:
+                continue
+
+            try:
+                handle = os.add_dll_directory(path_str)
+                _QT_RUNTIME_DLL_HANDLES.append(handle)
+                _QT_RUNTIME_DLL_PATHS.add(path_str)
+            except OSError as exc:
+                log.warning("[VideoPlayer] Failed to add DLL directory %s: %s", path_str, exc)
+
+    app = QCoreApplication.instance()
+    if app and qt_plugin_root.exists():
+        paths = [str(p) for p in app.libraryPaths()]
+        qt_plugin_root_str = str(qt_plugin_root)
+        if qt_plugin_root_str not in paths:
+            app.addLibraryPath(qt_plugin_root_str)
+            _dbg(f"_ensure_qt_multimedia_runtime: added library path {qt_plugin_root_str}")
 
 
 class VideoPlayerPopup(BasePopup):
@@ -74,9 +141,12 @@ class VideoPlayerPopup(BasePopup):
         self._player = None
         self._audio = None
         self._is_seeking = False  # True while user drags slider
+
+        _ensure_qt_multimedia_runtime()
         
         _dbg(f"__init__: path={video_path}, title={video_title}")
         _dbg(f"__init__: QtMultimedia available = {_HAS_MULTIMEDIA}")
+        _dbg(f"__init__: Qt plugin snapshot = {_qt_multimedia_plugin_snapshot()}")
         
         # Check file existence early
         if video_path:
@@ -149,12 +219,12 @@ class VideoPlayerPopup(BasePopup):
         self.content_layout.addWidget(self._video_widget, stretch=1)
         
         # Audio output
-        self._audio = QAudioOutput()
+        self._audio = QAudioOutput(self)
         self._audio.setVolume(0.7)
         _dbg(f"_create_player: audio output created, volume=0.7")
         
         # Media player
-        self._player = QMediaPlayer()
+        self._player = QMediaPlayer(self)
         self._player.setAudioOutput(self._audio)
         self._player.setVideoOutput(self._video_widget)
         
@@ -168,6 +238,7 @@ class VideoPlayerPopup(BasePopup):
         # Set source
         url = QUrl.fromLocalFile(str(Path(self._video_path).resolve()))
         _dbg(f"_create_player: setting source URL = {url.toString()}")
+        _dbg(f"_create_player: Qt plugin snapshot = {_qt_multimedia_plugin_snapshot()}")
         self._player.setSource(url)
     
     def _create_placeholder(self):
@@ -536,14 +607,14 @@ class VideoPlayerPopup(BasePopup):
         if status == QMediaPlayer.MediaStatus.InvalidMedia:
             err = self._player.errorString() if self._player else "unknown"
             log.error(f"[VideoPlayer] InvalidMedia: {err}")
-            _dbg(f"InvalidMedia error: {err}")
+            _dbg(f"InvalidMedia error: {err} | {_qt_multimedia_plugin_snapshot()}")
     
     @Slot()
     def _on_media_error(self, error, message=""):
         """Handle media player errors."""
         err_str = self._player.errorString() if self._player else str(error)
         log.error(f"[VideoPlayer] Media error: {error} — {err_str} — {message}")
-        _dbg(f"_on_media_error: code={error}, msg={err_str}, detail={message}")
+        _dbg(f"_on_media_error: code={error}, msg={err_str}, detail={message} | {_qt_multimedia_plugin_snapshot()}")
     
     # ── Actions ──
     
@@ -569,24 +640,30 @@ class VideoPlayerPopup(BasePopup):
             clipboard.setText(self._video_path)
             _dbg(f"_on_copy_path: copied {self._video_path}")
     
-    def _on_close(self):
-        """Clean up player before closing."""
-        _dbg("_on_close: cleaning up")
+    def _safe_cleanup(self):
+        """Single cleanup point — guarded against double-call.
+        
+        Prevents 'killTimer: Timers cannot be stopped from another thread'
+        crash caused by _on_close() → close() → closeEvent() double cleanup.
+        """
+        if getattr(self, '_cleaned_up', False):
+            return
+        self._cleaned_up = True
+        _dbg("_safe_cleanup: cleaning up player")
         if self._player:
             self._player.stop()
             self._player.setSource(QUrl())  # Release file handle
         if hasattr(self, '_debug_timer'):
             self._debug_timer.stop()
+    
+    def _on_close(self):
+        """Clean up player before closing."""
+        self._safe_cleanup()
         super()._on_close()
     
     def closeEvent(self, event):
         """Ensure player is stopped when dialog is closed."""
-        _dbg("closeEvent: stopping player")
-        if self._player:
-            self._player.stop()
-            self._player.setSource(QUrl())
-        if hasattr(self, '_debug_timer'):
-            self._debug_timer.stop()
+        self._safe_cleanup()
         super().closeEvent(event)
     
     # ── Helpers ──

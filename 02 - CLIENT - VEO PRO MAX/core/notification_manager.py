@@ -57,14 +57,18 @@ class NotificationManager:
         try:
             from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
             from PySide6.QtCore import QUrl, QTimer
+            from PySide6.QtWidgets import QApplication
             
-            self._player = QMediaPlayer()
-            self._audio_output = QAudioOutput()
+            # ★ FIX: Parent all Qt objects to QApplication so their internal
+            # timers are destroyed on the GUI thread (prevents killTimer crash)
+            app = QApplication.instance()
+            self._player = QMediaPlayer(app)
+            self._audio_output = QAudioOutput(app)
             self._audio_output.setVolume(0.7)
             self._player.setAudioOutput(self._audio_output)
             
             # Timer to stop playback after duration
-            self._stop_timer = QTimer()
+            self._stop_timer = QTimer(app)
             self._stop_timer.setSingleShot(True)
             self._stop_timer.timeout.connect(self.stop)
             

@@ -113,12 +113,18 @@ class AdaptiveBurstController:
         
         Call this before each API request to pace requests.
         """
+        import time as _time
         delay = self._get_delay(email)
         jitter = random.uniform(-delay * 0.3, delay * 0.3)
         actual_wait = max(self._min * 0.5, delay + jitter)
         
-        log.debug(f"[AdaptiveBurst] {email}: waiting {actual_wait:.1f}s (base={delay:.1f}s)")
+        _t0 = _time.monotonic()
+        print(f"[BURST-DIAG] {email[:20]}: sleep START {actual_wait:.1f}s (base={delay:.1f}s)", flush=True)
+        log.info(f"[AdaptiveBurst] {email}: waiting {actual_wait:.1f}s (base={delay:.1f}s)")
         await asyncio.sleep(actual_wait)
+        _elapsed = _time.monotonic() - _t0
+        print(f"[BURST-DIAG] {email[:20]}: sleep DONE after {_elapsed:.2f}s", flush=True)
+        log.info(f"[AdaptiveBurst] {email}: sleep done after {_elapsed:.2f}s — proceeding to submit gate")
     
     def get_delay(self, email: str) -> float:
         """Get current delay value for monitoring."""
@@ -129,6 +135,37 @@ class AdaptiveBurstController:
         self._delays[email] = self._initial
         self._streaks[email] = 0
         self._last_adjustment[email] = datetime.now()
+
+    def cap_delay(
+        self,
+        email: str,
+        maximum: float,
+        *,
+        reset_streak: bool = True,
+        reason: str = "",
+    ) -> bool:
+        """Clamp account delay down to a maximum value.
+
+        Useful after cooldown/recovery so accounts do not stay stuck at a very
+        high 429 backoff (for example 22-30s) long after the server has
+        already accepted new submits again.
+        """
+        delay = self._get_delay(email)
+        capped = max(self._min, float(maximum))
+        if delay <= capped:
+            return False
+
+        old = delay
+        self._delays[email] = capped
+        if reset_streak:
+            self._streaks[email] = 0
+        self._last_adjustment[email] = datetime.now()
+
+        extra = f" ({reason})" if reason else ""
+        log.info(
+            f"[AdaptiveBurst] {email}: clamped {old:.1f}s → {capped:.1f}s{extra}"
+        )
+        return True
     
     def get_stats(self) -> dict:
         """Return stats for all accounts."""

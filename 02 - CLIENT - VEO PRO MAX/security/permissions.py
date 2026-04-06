@@ -1,5 +1,6 @@
 """
-Permissions v2.0 - Hardened Role-based Feature Visibility
+DEPRECATED - DO NOT USE - Runtime uses services/permissions.py
+Permissions v2.0 - Hardened Role-based Feature Visibility (LEGACY MODULE)
 
 Security hardening (v2.0):
 - No permanent role cache — re-queries LicenseClient per call (60s TTL in LicenseClient)

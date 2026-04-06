@@ -134,6 +134,7 @@ class PromptRow:
     image_tags: List[str] = field(default_factory=list)  # Extracted [tag] references
     duration: Optional[int] = None                       # Per-scene duration (from JSON)
     metadata: dict = field(default_factory=dict)          # Extra fields (description_vi, narration_vi)
+    voice_id: str = ""                                    # R2V: voice mediaId (e.g. "aoede")
     
     @property
     def is_continuation(self) -> bool:
@@ -162,46 +163,72 @@ class PromptRow:
         return "🔒"
     
     def extract_tags(self):
-        """Extract [tag], @tag, @"quoted tag", and JSON "image"/"images" references from text."""
-        matches = _TAG_PATTERN.findall(self.text)
-        tags = []
-        for bracket_name, bracket_ext, at_quoted, at_tag in matches:
-            if bracket_name:
-                # [name] or [name].ext → combine
-                tags.append(bracket_name + bracket_ext)
-            elif at_quoted:
-                # @"tag with spaces"
-                tags.append(at_quoted)
-            elif at_tag:
-                tags.append(at_tag)
+        """Extract image references from text.
         
-        # Also extract from JSON "image" / "images" fields
+        JSON text: extract only from explicit "image"/"images" fields.
+        Plain text: extract [tag], @tag, @"quoted tag" patterns via regex,
+                    but skip known voice names (e.g. [Aoede], [Algieba]).
+        """
+        tags = []
+        
+        # Get known voice names for filtering
+        _voice_names = set()
+        try:
+            from services.voice_library import VoiceLibrary
+            _voice_names = {v.id for v in VoiceLibrary.get_all_voices()}
+        except Exception:
+            pass
+        
         if self.text.strip().startswith('{'):
+            # ── JSON mode: ONLY use "image"/"images" field extraction ──
+            # Do NOT run _TAG_PATTERN regex on JSON text — it would match
+            # JSON array brackets [...] as image tags (e.g. objects_on_foreground).
             try:
                 import json as _json
-                import re as _re
-                # Full sanitization: stray chars, semicolons, trailing commas
-                _sanitized = self.text.strip()
-                _sanitized = _re.sub(r'(?<=[{,])\s*[^"\s{}\[\]:,]+\s*(?=")', ' ', _sanitized)
-                _sanitized = _re.sub(r'(?<=["\d}\]])\s*;\s*(?=")', ', ', _sanitized)
-                _sanitized = _re.sub(r',\s*,', ',', _sanitized)
-                _sanitized = _re.sub(r',\s*([}\]])', r'\1', _sanitized)
-                obj = _json.loads(_sanitized)
+                obj = _json.loads(self.text.strip())
                 if isinstance(obj, dict):
-                    # "image": "tag_name"
-                    img_val = obj.get('image', '')
-                    if isinstance(img_val, str) and img_val.strip():
-                        tags.append(img_val.strip())
-                    # "images": ["tag1", "tag2"]
-                    imgs_val = obj.get('images', [])
-                    if isinstance(imgs_val, list):
-                        for v in imgs_val:
-                            if isinstance(v, str) and v.strip():
-                                tags.append(v.strip())
-                    elif isinstance(imgs_val, str) and imgs_val.strip():
-                        tags.append(imgs_val.strip())
+                    # Unwrap single-key wrapper: {"wrapper_name": {actual_scene}}
+                    if len(obj) == 1:
+                        inner = next(iter(obj.values()))
+                        if isinstance(inner, dict):
+                            _candidate = inner
+                        else:
+                            _candidate = obj
+                    else:
+                        _candidate = obj
+                    
+                    # Search for image/images in candidate and its direct children
+                    for _src in [obj, _candidate]:
+                        # "image": "tag_name"
+                        img_val = _src.get('image', '')
+                        if isinstance(img_val, str) and img_val.strip():
+                            tags.append(img_val.strip())
+                        # "images": ["tag1", "tag2"]
+                        imgs_val = _src.get('images', [])
+                        if isinstance(imgs_val, list):
+                            for v in imgs_val:
+                                if isinstance(v, str) and v.strip():
+                                    tags.append(v.strip())
+                        elif isinstance(imgs_val, str) and imgs_val.strip():
+                            tags.append(imgs_val.strip())
             except (ValueError, Exception):
                 pass
+        else:
+            # ── Plain text mode: extract via regex ──
+            # ★ Skip known voice names — they belong in Voice column, not Images
+            matches = _TAG_PATTERN.findall(self.text)
+            for bracket_name, bracket_ext, at_quoted, at_tag in matches:
+                if bracket_name:
+                    # [name] or [name].ext → combine
+                    tag = bracket_name + bracket_ext
+                    if tag.strip().lower() in _voice_names:
+                        continue  # Skip voice names
+                    tags.append(tag)
+                elif at_quoted:
+                    # @"tag with spaces"
+                    tags.append(at_quoted)
+                elif at_tag:
+                    tags.append(at_tag)
         
         # Deduplicate while preserving first-occurrence order
         # (same tag referenced multiple times → only one image slot)
@@ -223,6 +250,7 @@ class PromptTable(QWidget):
     
     ROW_HEIGHT = 40
     ROW_HEIGHT_WITH_IMAGES = 100  # Taller rows for mini image thumbnails
+    MAX_RENDER_ROWS = 5_000  # Safety cap: rendering 300k rows blocks the UI thread
     
     # Signals
     edit_clicked = Signal(int)  # index
@@ -246,9 +274,12 @@ class PromptTable(QWidget):
         image_mode: ImageMode = ImageMode.NONE,
         accent_color: str = "",
         show_continuation: bool = True,
+        show_voice: bool = False,
     ):
         super().__init__(parent)
-        self.setAcceptDrops(True)  # Also accept drops on wrapper for fallback
+        # NOTE: PromptTable wrapper does NOT accept drops itself.
+        # Drop handling is done by _DroppableTable (child) via viewportEvent().
+        # MainWindow.dropEvent() handles forwarding from wrapper → child table.
         
         self.on_edit = on_edit
         self.on_delete = on_delete
@@ -256,10 +287,12 @@ class PromptTable(QWidget):
         self._refreshing = False  # Guard against re-entrance
         self._image_mode = image_mode
         self._show_continuation = show_continuation
+        self._show_voice = show_voice
         self._accent_color = accent_color or Theme.BLUE
         self._image_config = self._IMAGE_CONFIGS[image_mode]
         self._image_col_count = 1 if image_mode != ImageMode.NONE else 0  # Single 'Images' column
         self._image_slots: dict = {}  # {row_idx: [ImageSlotWidget, ...]}
+        self._voice_slots: dict = {}  # {row_idx: VoiceSlotWidget}  (R2V only)
         
         # Register library change callback for auto-refresh
         if image_mode != ImageMode.NONE:
@@ -296,6 +329,9 @@ class PromptTable(QWidget):
         # Single 'Images' column (if mode uses images)
         if self._image_mode != ImageMode.NONE:
             cols.append("Images")
+        # Voice column (R2V only)
+        if self._show_voice:
+            cols.append("Voice")
         # Standard columns
         cols.append("Prompt")
         if self._has_continuation():
@@ -352,6 +388,12 @@ class PromptTable(QWidget):
             header.setSectionResizeMode(img_col, QHeaderView.Fixed)
             self.table.setColumnWidth(img_col, img_width)
         
+        # Voice column — fixed width (R2V only)
+        voice_col = self._col_index("Voice")
+        if voice_col >= 0:
+            header.setSectionResizeMode(voice_col, QHeaderView.Fixed)
+            self.table.setColumnWidth(voice_col, 95)
+        
         # Prompt — stretch
         prompt_col = self._col_index("Prompt")
         header.setSectionResizeMode(prompt_col, QHeaderView.Stretch)
@@ -397,7 +439,13 @@ class PromptTable(QWidget):
         self._add_row_to_table(row)
     
     def _refresh_table(self):
-        """Refresh table with current rows."""
+        """Refresh table with current rows.
+        
+        Performance guards:
+        - setUpdatesEnabled(False) prevents per-row repaint (10x faster rebuid)
+        - MAX_RENDER_ROWS cap: only render first N rows in QTableWidget;
+          self._rows holds ALL rows so get_prompts() + Add to Queue are unaffected.
+        """
         self._refreshing = True
         
         # Rebuild column structure
@@ -416,6 +464,11 @@ class PromptTable(QWidget):
             header.setSectionResizeMode(img_col, QHeaderView.Fixed)
             self.table.setColumnWidth(img_col, img_width)
         
+        voice_col = self._col_index("Voice")
+        if voice_col >= 0:
+            header.setSectionResizeMode(voice_col, QHeaderView.Fixed)
+            self.table.setColumnWidth(voice_col, 95)
+        
         prompt_col = self._col_index("Prompt")
         if prompt_col >= 0:
             header.setSectionResizeMode(prompt_col, QHeaderView.Stretch)
@@ -432,8 +485,35 @@ class PromptTable(QWidget):
         
         self.table.setRowCount(0)
         self._image_slots.clear()
-        for row in self._rows:
-            self._add_row_to_table(row)
+        self._voice_slots.clear()
+        
+        # Determine rows to render
+        rows_to_render = self._rows[:self.MAX_RENDER_ROWS]
+        overflow = len(self._rows) - self.MAX_RENDER_ROWS
+        
+        # Batch rendering: suppress per-row repaint events for massive speedup
+        self.table.setUpdatesEnabled(False)
+        try:
+            for row in rows_to_render:
+                self._add_row_to_table(row)
+            
+            # Overflow warning row (informational only — data intact in self._rows)
+            if overflow > 0:
+                warn_idx = self.table.rowCount()
+                self.table.insertRow(warn_idx)
+                self.table.setRowHeight(warn_idx, self.ROW_HEIGHT)
+                n_total = len(self._rows)
+                warn_item = QTableWidgetItem(
+                    f"⚠️ Displaying first {self.MAX_RENDER_ROWS:,} of {n_total:,} prompts. "
+                    f"All {n_total:,} will be submitted when you click Add to Queue."
+                )
+                warn_item.setForeground(QColor(Theme.YELLOW))
+                warn_item.setTextAlignment(Qt.AlignCenter)
+                warn_col = self._col_index("Prompt")
+                self.table.setItem(warn_idx, warn_col, warn_item)
+        finally:
+            self.table.setUpdatesEnabled(True)
+        
         self._refreshing = False
     
     def _add_row_to_table(self, row: PromptRow):
@@ -445,8 +525,9 @@ class PromptTable(QWidget):
         row_h = self.ROW_HEIGHT_WITH_IMAGES if has_images else self.ROW_HEIGHT
         self.table.setRowHeight(row_idx, row_h)
         
-        # Extract tags from prompt text
-        row.extract_tags()
+        # Extract tags from prompt text (only if not already set by parser)
+        if not row.image_tags:
+            row.extract_tags()
         
         # Column: #
         index_item = QTableWidgetItem(str(row.index))
@@ -457,6 +538,10 @@ class PromptTable(QWidget):
         # Image columns (if any)
         if has_images:
             self._add_image_cells(row_idx, row)
+        
+        # Voice column (R2V only)
+        if self._show_voice:
+            self._add_voice_cell(row_idx, row)
         
         # Column: Prompt text (truncated)
         prompt_col = self._col_index("Prompt")
@@ -743,6 +828,52 @@ class PromptTable(QWidget):
         self._image_slots[row_idx] = slots
         self.table.setCellWidget(row_idx, img_col, container)
     
+    def _add_voice_cell(self, row_idx: int, row: PromptRow):
+        """Add voice slot widget inside the 'Voice' column cell."""
+        voice_col = self._col_index("Voice")
+        if voice_col < 0:
+            return
+        
+        from ui.components.voice_slot_widget import VoiceSlotWidget
+        slot = VoiceSlotWidget(accent_color=self._accent_color, slot_width=85)
+        if row.voice_id:
+            slot.set_voice(row.voice_id)
+        slot.voice_cleared.connect(
+            lambda r=row_idx: self._on_voice_cleared(r)
+        )
+        self._voice_slots[row_idx] = slot
+        self.table.setCellWidget(row_idx, voice_col, slot)
+    
+    def _on_voice_cleared(self, row_idx: int):
+        """Handle voice [×] clear on a specific row."""
+        if row_idx < len(self._rows):
+            self._rows[row_idx].voice_id = ""
+            self.slot_image_changed.emit(row_idx)  # reuse signal for generic change
+    
+    def set_voice_for_all(self, voice_id: str):
+        """Apply voice to ALL rows (called from Voice Library popup).
+        
+        Args:
+            voice_id: Voice ID to assign, e.g. "aoede"
+        """
+        for row in self._rows:
+            row.voice_id = voice_id
+        # Update slots without full table rebuild
+        for row_idx, slot in self._voice_slots.items():
+            slot.set_voice(voice_id)
+    
+    def set_voice_for_empty(self, voice_id: str):
+        """Apply voice only to rows that don't have a voice yet.
+        
+        Args:
+            voice_id: Voice ID to assign
+        """
+        for i, row in enumerate(self._rows):
+            if not row.voice_id:
+                row.voice_id = voice_id
+                if i in self._voice_slots:
+                    self._voice_slots[i].set_voice(voice_id)
+    
     def _on_add_slot_clicked(self, row_idx: int):
         """Handle '+' button click — add a slot and rebuild that row's image cell."""
         if row_idx >= len(self._rows):
@@ -830,7 +961,7 @@ class PromptTable(QWidget):
                 json_obj['image'] = all_tags[0]
             elif len(all_tags) > 1:
                 json_obj['images'] = all_tags
-            row.text = _json.dumps(json_obj, ensure_ascii=False)
+            row.text = _json.dumps(json_obj, ensure_ascii=False, indent=2)
         else:
             # Plain text format: replace/append [tag]
             if slot_idx < len(old_tags):
@@ -914,7 +1045,7 @@ class PromptTable(QWidget):
                 json_obj['image'] = all_tags[0]
             elif len(all_tags) > 1:
                 json_obj['images'] = all_tags
-            row.text = _json.dumps(json_obj, ensure_ascii=False)
+            row.text = _json.dumps(json_obj, ensure_ascii=False, indent=2)
         else:
             # TEXT format: remove [tag] from text
             pattern = re.escape(f"[{old_tag}]")
@@ -961,7 +1092,7 @@ class PromptTable(QWidget):
         - JSON format: add "image" field or append to "images" array
         Also auto-adds to ImageLibrary and populates image slots if available.
         """
-        if row_idx >= len(self._rows):
+        if row_idx < 0 or row_idx >= len(self._rows):
             return
         row = self._rows[row_idx]
         
@@ -1016,7 +1147,7 @@ class PromptTable(QWidget):
             elif len(existing_tags) > 1:
                 json_obj['images'] = existing_tags
             
-            row.text = _json.dumps(json_obj, ensure_ascii=False)
+            row.text = _json.dumps(json_obj, ensure_ascii=False, indent=2)
         else:
             # TEXT format: append [tag] (or replace existing)
             existing_tags = row.image_tags.copy() if row.image_tags else []
@@ -1161,7 +1292,11 @@ class PromptTable(QWidget):
             self.on_delete(index)
     
     def get_prompts(self) -> List[PromptRow]:
-        """Get all prompts with synced image data from slots."""
+        """Get all prompts with synced image data from slots.
+        
+        Note: image slot sync only applies to rendered rows (first MAX_RENDER_ROWS).
+        Overflow rows beyond the render cap retain their original data intact.
+        """
         for row_idx, row in enumerate(self._rows):
             slots = self._image_slots.get(row_idx, [])
             if slots:

@@ -1,0 +1,12 @@
+{
+  "app_version": "2.3.11",
+  "generated_at": "2026-04-01T04:12:59.170357",
+  "source_dist": "D:\\Music\\Ruby\\Produce for Customer\\##Tools\\VEO Tool\\#NEW VEO API\\03 - Final App Client\\main.dist",
+  "installer_asset_name": "VEO_Pro_Max_Setup_v2.3.11.exe",
+  "installer_release_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.11/VEO_Pro_Max_Setup_v2.3.11.exe",
+  "status": "built",
+  "script_path": "D:\\Music\\Ruby\\Produce for Customer\\##Tools\\VEO Tool\\#NEW VEO API\\03.1-Installer\\VEO_Pro_Max_Setup_v2.3.11.iss",
+  "compiler_path": "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe",
+  "installer_path": "D:\\Music\\Ruby\\Produce for Customer\\##Tools\\VEO Tool\\#NEW VEO API\\03.1-Installer\\VEO_Pro_Max_Setup_v2.3.11.exe",
+  "installer_sha256": "d0fcb41d487f260fb96dc2378b474ea6c103aec9103e90681eac0fc17375962d"
+}

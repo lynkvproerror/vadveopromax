@@ -160,13 +160,9 @@ class SettingsProfilesMixin:
             email_item = self.profiles_table.item(row, 2)  # Email is col 2
             if not email_item:
                 continue
-            # P3 fix: strip credential indicator prefix before matching
-            email_text = email_item.text().strip()
-            for prefix in ("🔑 ", "🔓 "):
-                if email_text.startswith(prefix):
-                    email_text = email_text[len(prefix):].strip()
-                    break
-            if email_text == email:
+            # Use authoritative UserRole data (works with masked emails)
+            item_email = email_item.data(Qt.ItemDataRole.UserRole)
+            if item_email == email:
                 # Update Status (col 6)
                 status_item = self.profiles_table.item(row, 6)
                 if status_item:
@@ -389,27 +385,8 @@ class SettingsProfilesMixin:
             )
             self.profiles_table.setCellWidget(actual_row, 8, lp_spin)
 
-            # Extension status (col 9) — 3-state: 🟢 has headers, 🟡 connecting, 🔴 disconnected
-            ext_connected = False
-            ext_has_headers = False
-            try:
-                if self.controller and hasattr(self.controller, 'extension_bridge'):
-                    bridge = self.controller.extension_bridge
-                    ext_connected = bridge.is_connected(email)
-                    if ext_connected:
-                        headers = bridge.get_cached_headers(email, max_age_seconds=300)
-                        ext_has_headers = bool(headers)
-            except Exception:
-                pass
-            if ext_has_headers:
-                ext_icon = "🟢"
-                ext_tip = "Extension connected — headers ready"
-            elif ext_connected:
-                ext_icon = "🟡"
-                ext_tip = "Extension connecting — waiting for headers..."
-            else:
-                ext_icon = "🔴"
-                ext_tip = "Extension not connected"
+            # Extension status (col 9) — app-centric delivery state
+            ext_icon, ext_tip = self._get_ext_ui_state(email)
             ext_item = QTableWidgetItem(ext_icon)
             ext_item.setFlags(ext_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             ext_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -586,15 +563,81 @@ class SettingsProfilesMixin:
         finally:
             self.profiles_table.blockSignals(False)
 
+    def _get_ext_ui_state(self, email: str) -> tuple[str, str]:
+        """Return `(icon, tooltip)` for app-centric extension delivery state."""
+        bridge = None
+        if self.controller and hasattr(self.controller, 'extension_bridge'):
+            bridge = self.controller.extension_bridge
+
+        snapshot = {
+            "connected": False,
+            "headers_ready": False,
+            "headers_any": False,
+            "last_headers_age_seconds": None,
+        }
+        if bridge:
+            try:
+                snapshot.update(bridge.get_delivery_status(email, max_age_seconds=300))
+            except Exception:
+                pass
+
+        cdp_loaded = False
+        try:
+            pc = getattr(self.controller, '_profiles_controller', None)
+            debug_browsers = getattr(pc, '_debug_browsers', {}) if pc else {}
+            entry = debug_browsers.get(email, {})
+            cdp_port = entry.get("cdp_port")
+            if cdp_port:
+                from core.extension_manager import is_extension_loaded
+                cdp_loaded = bool(is_extension_loaded(cdp_port))
+        except Exception:
+            pass
+
+        if snapshot["headers_ready"]:
+            icon = "🟢"
+            tip = "Extension connected — headers delivered to app"
+        elif snapshot["connected"]:
+            icon = "🟡"
+            age = snapshot.get("last_headers_age_seconds")
+            if snapshot["headers_any"] and age is not None:
+                tip = (
+                    f"Bridge connected to app, but cached headers are stale ({int(age)}s old) — "
+                    "waiting for fresh delivery"
+                )
+            else:
+                tip = "Bridge connected to app — waiting for first headers delivery"
+        elif cdp_loaded:
+            icon = "🟠"
+            tip = (
+                "Extension loaded in Chrome, but bridge to app is disconnected.\n"
+                "Popup may show headers captured locally, but app has not received live headers yet."
+            )
+        elif snapshot["headers_any"]:
+            icon = "🟠"
+            tip = "App only has stale headers from an earlier session; live bridge is currently disconnected."
+        else:
+            icon = "🔴"
+            tip = "Extension not loaded"
+
+        if not snapshot["headers_ready"] and bridge:
+            try:
+                diag = bridge.get_connection_diagnosis()
+                if diag.get('severity') in ('warning', 'error'):
+                    tip = f"{tip}\n\n{diag['reason']}\n\n💡 {diag['fix']}"
+            except Exception:
+                pass
+
+        return icon, tip
+
     def _refresh_ext_column(self):
         """Lightweight periodic refresh of Extension status column (col 8) only.
 
         Runs every 5s via QTimer. Does NOT rebuild the table — just updates
-        the Ext icon cells using a composite check:
-        - 🟢 WS bridge connected + headers ready
-        - 🟡 WS bridge connected, waiting for headers
-        - 🟠 Extension loaded (CDP) but WS bridge not connected
-        - 🔴 Extension not loaded at all
+        the Ext icon cells using app-centric delivery states:
+        - 🟢 headers already delivered into app
+        - 🟡 bridge connected, waiting for first/fresh headers
+        - 🟠 extension loaded in Chrome or stale cached headers, but live bridge not ready
+        - 🔴 extension not loaded at all
         """
         if not self.controller or not hasattr(self.controller, 'extension_bridge'):
             return
@@ -602,10 +645,6 @@ class SettingsProfilesMixin:
         bridge = self.controller.extension_bridge
         if not bridge:
             return
-
-        # Get CDP port mapping for CDP-level checks
-        pc = getattr(self.controller, '_profiles_controller', None)
-        debug_browsers = getattr(pc, '_debug_browsers', {}) if pc else {}
 
         for row in range(self.profiles_table.rowCount()):
             email_item = self.profiles_table.item(row, 2)  # Email column
@@ -617,52 +656,12 @@ class SettingsProfilesMixin:
             if not email_text:
                 continue
 
-            ext_connected = False
-            ext_has_headers = False
-            cdp_loaded = False
-            try:
-                ext_connected = bridge.is_connected(email_text)
-                if ext_connected:
-                    headers = bridge.get_cached_headers(email_text, max_age_seconds=300)
-                    ext_has_headers = bool(headers)
-                else:
-                    # WS bridge not connected — check CDP to distinguish
-                    # "extension loaded but bridge disconnected" vs "extension missing"
-                    entry = debug_browsers.get(email_text, {})
-                    cdp_port = entry.get("cdp_port")
-                    if cdp_port:
-                        from core.extension_manager import is_extension_loaded
-                        cdp_loaded = is_extension_loaded(cdp_port)
-            except Exception:
-                pass
-
             ext_item = self.profiles_table.item(row, 9)
             if ext_item:
-                if ext_has_headers:
-                    new_icon = "🟢"
-                    new_tip = "Extension connected — headers ready"
-                elif ext_connected:
-                    new_icon = "🟡"
-                    new_tip = "Extension connecting — waiting for headers..."
-                elif cdp_loaded:
-                    new_icon = "🟠"
-                    new_tip = "Extension loaded but bridge not connected"
-                else:
-                    new_icon = "🔴"
-                    new_tip = "Extension not loaded"
-                
-                # Enrich tooltip with diagnosis when not healthy
-                if not ext_has_headers:
-                    try:
-                        diag = bridge.get_connection_diagnosis()
-                        if diag.get('severity') in ('warning', 'error'):
-                            new_tip = f"{diag['reason']}\n\n💡 {diag['fix']}"
-                    except Exception:
-                        pass
-                
+                new_icon, new_tip = self._get_ext_ui_state(email_text)
                 if ext_item.text() != new_icon:
                     ext_item.setText(new_icon)
-                    ext_item.setToolTip(new_tip)
+                ext_item.setToolTip(new_tip)
 
     # _refresh_accounts — REMOVED (dead code, referenced non-existent self.accounts_list)
     # _create_account_row — REMOVED (dead code from pre-componentization)

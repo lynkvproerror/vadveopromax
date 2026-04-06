@@ -32,10 +32,11 @@ class SettingsBrowserControlsMixin:
             email_item = self.profiles_table.item(row, 2)
             if not email_item:
                 continue
-            # Extract raw email (remove emoji prefix like 🔑 or 🔓)
-            text = email_item.text()
-            parts = text.split(' ', 1)
-            email = parts[-1].strip() if len(parts) > 1 else text.strip()
+            # B3 fix: use authoritative UserRole data (works with masked emails)
+            from PySide6.QtCore import Qt
+            email = email_item.data(Qt.ItemDataRole.UserRole)
+            if not email:
+                continue
 
             state = self.profiles_controller.get_debug_browser_state(email)
             self._update_visibility_toggle_btn(email, state)
@@ -64,7 +65,7 @@ class SettingsBrowserControlsMixin:
             import threading
             def _bg_open():
                 success = self.profiles_controller.open_browser_for_debug(
-                    email, on_state_change=on_state_change
+                    email, on_state_change=on_state_change, user_initiated=True
                 )
                 if not success:
                     from PySide6.QtCore import QMetaObject, Qt
@@ -99,9 +100,13 @@ class SettingsBrowserControlsMixin:
         # Find the toggle button by objectName in the actions widget
         for row in range(self.profiles_table.rowCount()):
             email_item = self.profiles_table.item(row, 2)
-            if not email_item or email not in email_item.text():
+            # B3 fix: match via UserRole data (works with masked emails)
+            from PySide6.QtCore import Qt
+            item_email = email_item.data(Qt.ItemDataRole.UserRole) if email_item else None
+            if not item_email or item_email != email:
                 continue
-            actions_widget = self.profiles_table.cellWidget(row, 9)
+            # B2 fix: Actions column is 10, not 9 (9 is Ext)
+            actions_widget = self.profiles_table.cellWidget(row, 10)
             if not actions_widget:
                 break
             toggle_btn = actions_widget.findChild(QPushButton, f"toggle_vis_{email}")
