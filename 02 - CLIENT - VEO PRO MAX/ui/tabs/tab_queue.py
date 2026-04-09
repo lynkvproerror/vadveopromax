@@ -2499,11 +2499,8 @@ class TabQueue(
         ):
             return
         
-        # Phase 3: Remove from dispatcher
-        removed = 0
-        for tid in clean_ids:
-            if dispatcher.remove_task(tid):
-                removed += 1
+        # Phase 3: Remove from dispatcher (batch for performance)
+        removed = dispatcher.remove_tasks(clean_ids)
         
         self._request_immediate_queue_refresh()
         

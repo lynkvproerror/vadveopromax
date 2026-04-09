@@ -763,6 +763,132 @@ class FirebaseRESTClient:
         except Exception:
             return False
     
+    # ── Server-Side Hardware Attestation (Option C: Redundant) ──
+    
+    # Bot API URLs for license validation with hardware verification
+    # Client tries PRIMARY (Vercel) first, then BACKUP (Cloudflare)
+    # Both compute machine_id independently from raw hw components
+    _BOT_API_URLS = [
+        "https://veo-license-bot.vercel.app/api/license/validate",     # PRIMARY: Vercel
+        "https://veo-license-validate.vadmedia.workers.dev",              # BACKUP: Cloudflare
+    ]
+    _BOT_API_TIMEOUT = 15
+    
+    def validate_via_bot(self, license_key: str, hw_components: dict,
+                         app: str = "veo") -> Tuple[bool, int, dict]:
+        """
+        Validate license via Bot API with server-side hardware attestation.
+        
+        Instead of sending pre-computed machine_id (spoofable), sends raw
+        hardware components. Server independently computes the hash and
+        verifies against stored binding.
+        
+        Args:
+            license_key: License key string
+            hw_components: Raw hardware dict from HardwareFingerprint.get_all_components()
+                          {cpu_id, mb_serial, mb_uuid, bios_serial, disk_serial}
+            app: Application name ("veo" or "grok")
+        
+        Returns:
+            (is_valid, status_code, response_data)
+            status_code: 0x20=valid, 0x10=not_found, 0x12=machine_mismatch, etc.
+        
+        Raises:
+            ConnectionError: If Bot API is unreachable (for cache fallback)
+        """
+        # SSL check
+        if not self._ssl_checked:
+            self._verify_ssl_integrity()
+        if self._ssl_compromised:
+            _log.error("[SSL] 🚫 Refusing Bot API request — SSL interception detected")
+            raise ConnectionError("SSL integrity compromised")
+        
+        # Compute machine_id locally to generate request token
+        combined = '|'.join([
+            hw_components.get('cpu_id', ''),
+            hw_components.get('mb_serial', ''),
+            hw_components.get('mb_uuid', ''),
+            hw_components.get('bios_serial', ''),
+            hw_components.get('disk_serial', ''),
+        ])
+        computed_mid = hashlib.sha256(combined.encode()).hexdigest()
+        
+        # Generate HMAC request token
+        token = self._generate_request_token(computed_mid)
+        
+        payload = {
+            "action": "validate",
+            "license_key": license_key,
+            "hw": hw_components,
+            "app": app,
+            "_token": token,
+        }
+        
+        try:
+            headers = {"Content-Type": "application/json"}
+            
+            # Add API secret if configured
+            api_secret = getattr(self, '_bot_api_secret', None)
+            if api_secret:
+                headers["X-Api-Secret"] = api_secret
+            
+            # Try each Bot API endpoint (Vercel → Cloudflare)
+            last_error = None
+            for idx, api_url in enumerate(self._BOT_API_URLS):
+                try:
+                    resp = self._session.post(
+                        api_url,
+                        json=payload,
+                        headers=headers,
+                        timeout=self._BOT_API_TIMEOUT,
+                    )
+                    
+                    if resp.status_code == 403:
+                        _log.warning(f"[BOT_API] ⛔ Forbidden from {api_url[:30]}...")
+                        continue  # Try next endpoint
+                    
+                    if resp.status_code != 200:
+                        _log.warning(f"[BOT_API] HTTP {resp.status_code} from {api_url[:30]}...")
+                        continue  # Try next endpoint
+                    
+                    data = resp.json()
+                    
+                    if data.get("valid"):
+                        src = "Vercel" if idx == 0 else "Cloudflare"
+                        _log.info(f"[BOT_API] ✅ License valid (hw-attested, {src}): tier={data.get('tier')}")
+                        return True, _S_VC, data
+                    
+                    # Server responded with rejection — this is authoritative
+                    error = data.get("error", "unknown")
+                    _error_map = {
+                        "validation_failed": _S_CF,
+                        "invalid_token": _S_CF,
+                        "key_not_found": _S_NF,
+                        "machine_mismatch": _S_MM,
+                        "hardware_mismatch": _S_MM,
+                        "license_revoked": _S_RV,
+                        "license_expired": _S_EX,
+                        "machine_blocked": _S_RV,
+                    }
+                    status = _error_map.get(error, _S_CF)
+                    _log.warning(f"[BOT_API] ❌ Rejected: {error}")
+                    return False, status, data
+                    
+                except (requests.ConnectionError, requests.Timeout) as e:
+                    last_error = e
+                    src = "Vercel" if idx == 0 else "Cloudflare"
+                    _log.warning(f"[BOT_API] 🌐 {src} unreachable: {e}")
+                    continue  # Try next endpoint
+            
+            # All endpoints failed
+            raise ConnectionError(f"All Bot API endpoints unreachable: {last_error}")
+            
+        except ConnectionError:
+            raise
+        except Exception as e:
+            _log.warning(f"[BOT_API] ⚠️ Unexpected error: {e}")
+            raise ConnectionError(f"Bot API error: {e}")
+    
     def write_upgrade_request(self, machine_id: str, tier: str, st_token: str, send_count: int = 1,
                                client_name: str = "", email: str = "",
                                client_ip: str = "unknown", is_first_buy: bool = False) -> bool:

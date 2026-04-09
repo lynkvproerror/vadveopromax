@@ -1,0 +1,448 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────
+    // ARCHITECTURE NOTES
+    // ─────────────────────────────────────────────────────
+    //
+    // Bot (Telegram/Seller Management):
+    //   Uses Admin SDK → BYPASSES all rules below.
+    //   isBot() is kept for defense-in-depth only.
+    //
+    // Client (VEO Pro Max app v2.3.14+):
+    //   PRIMARY: Bot API for license validation (server-side hw attestation).
+    //   FALLBACK: Firestore REST API direct read (when Bot API down).
+    //   Uses Firestore REST API + API key for usage/trials/requests.
+    //   request.auth == null (anonymous).
+    //
+    // Client (VEO Pro Max app v2.3.13 and below):
+    //   Uses Firestore REST API direct read only (no Bot API).
+    //   Machine ID check is client-side only (bypassable by patched binary).
+    //
+    // Machine ID:
+    //   64-char hex SHA-256 of hardware fingerprint.
+    //   Used as document ID where applicable → doc ownership via URL.
+    //
+    // Security Model (Option B — No Single Point of Failure):
+    //   Bot API online (99.9%): server-side hw attestation → 100% secure
+    //   Bot API down (0.1%):    Firestore fallback → client-side check only
+    //   Trade-off: Attacker must BOTH patch binary AND wait for Bot API downtime
+    //
+    // ─────────────────────────────────────────────────────
+
+    // ─────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────
+    function isBot() {
+      // Defense-in-depth only. Bot uses Admin SDK (bypasses rules).
+      return request.auth != null
+        && request.auth.token.role == 'bot';
+    }
+
+    function isAllowedTier(tier) {
+      return tier in ['TRIAL', '1M', '3M', '6M', '1Y', 'LIFETIME', '12H', '1D'];
+    }
+
+    function isValidMachineId(mid) {
+      return mid is string && mid.size() == 64;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 1. Client Config — public read, bot write
+    // ─────────────────────────────────────────────────────
+    match /_config/{configId} {
+      allow read: if true;
+      allow create, update, delete: if isBot();
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 2. License Source of Truth — BOT-ONLY READ
+    //
+    // READ = isBot():
+    //   Only the bot user (custom claim role='bot') can read.
+    //   Client REST API (no auth) → PERMISSION_DENIED.
+    //   Both Vercel and Cloudflare Worker sign in as bot → can read.
+    //
+    // This BLOCKS the attack:
+    //   Attacker reads _lic/{key} → gets _mid → fakes machine_id
+    //   Because: request.auth == null → isBot() = false → DENIED
+    //
+    // WRITE = FALSE:
+    //   No client can create, modify, or delete license records.
+    //   Only Bot (via write_doc with auth) manages license lifecycle.
+    //
+    // Security Model (Option C — Redundant Bot API):
+    //   Vercel Bot API → signs in as bot → reads _lic → validates hw
+    //   Cloudflare Worker → signs in as bot → reads _lic → validates hw
+    //   Both down → client uses local cache (7-day grace)
+    //   Client REST (no auth) → CANNOT read _lic → CANNOT spoof
+    // ─────────────────────────────────────────────────────
+    match /_lic/{keyId} {
+      allow read: if isBot();
+      allow create, update, delete: if false;
+    }
+
+    match /_lic_grok/{keyId} {
+      allow read: if isBot();
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 3. Machine-to-Key Mapping — FULLY LOCKED
+    // ─────────────────────────────────────────────────────
+    match /_mid_to_key/{machineId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /_grok_mid_to_key/{machineId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 4. Customer Records — FULLY LOCKED
+    // ─────────────────────────────────────────────────────
+    match /_customers/{machineId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /_grok_customers/{machineId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 5. Blocked Machines — client can read own status
+    // ─────────────────────────────────────────────────────
+    match /_blocked_machines/{machineId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    match /_grok_blocked_machines/{machineId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 6. Trials — doc ID = machine_id
+    //
+    // Machine ID BINDING:
+    //   - document ID = machine_id
+    //   - machine_id field MUST match doc ID
+    //   - machine_id field is IMMUTABLE after creation
+    //
+    // ANTI-TAMPERING:
+    //   - status: active → expired only (no rollback)
+    //   - daily_count: same day → can only increase
+    // ─────────────────────────────────────────────────────
+    match /_trials/{machineId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        isValidMachineId(machineId)
+        && request.resource.data.machine_id == machineId
+        && request.resource.data.status == 'active'
+        && request.resource.data.machine_id is string;
+
+      allow update: if
+        request.resource.data.machine_id == resource.data.machine_id
+        && request.resource.data.machine_id == machineId
+        && (
+             request.resource.data.status == resource.data.status
+             || (resource.data.status == 'active' && request.resource.data.status == 'expired')
+           )
+        && (
+             !('daily_count' in request.resource.data) || !('daily_count' in resource.data)
+             || request.resource.data.daily_date != resource.data.daily_date
+             || request.resource.data.daily_count >= resource.data.daily_count
+           );
+    }
+
+    match /_grok_trials/{machineId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        isValidMachineId(machineId)
+        && request.resource.data.machine_id == machineId
+        && request.resource.data.status == 'active'
+        && request.resource.data.machine_id is string;
+
+      allow update: if
+        request.resource.data.machine_id == resource.data.machine_id
+        && request.resource.data.machine_id == machineId
+        && (
+             request.resource.data.status == resource.data.status
+             || (resource.data.status == 'active' && request.resource.data.status == 'expired')
+           )
+        && (
+             !('daily_count' in request.resource.data) || !('daily_count' in resource.data)
+             || request.resource.data.daily_date != resource.data.daily_date
+             || request.resource.data.daily_count >= resource.data.daily_count
+           );
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 7. Rate Limit — client self-reports, bot manages
+    //
+    // ANTI-TAMPERING:
+    //   - attempts can only INCREASE (or reset with new window)
+    //   - mid field is immutable
+    //   - Hard cap: 20 attempts max
+    // ─────────────────────────────────────────────────────
+    match /_rate_limit/{docId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        request.resource.data.attempts is int
+        && request.resource.data.attempts >= 1
+        && request.resource.data.mid is string;
+
+      allow update: if
+        request.resource.data.mid == resource.data.mid
+        && request.resource.data.attempts is int
+        && (
+             request.resource.data.first_attempt != resource.data.first_attempt
+             || request.resource.data.attempts >= resource.data.attempts
+           )
+        && request.resource.data.attempts <= 20;
+    }
+
+    match /_grok_rate_limit/{docId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        request.resource.data.attempts is int
+        && request.resource.data.attempts >= 1
+        && request.resource.data.mid is string;
+
+      allow update: if
+        request.resource.data.mid == resource.data.mid
+        && request.resource.data.attempts is int
+        && (
+             request.resource.data.first_attempt != resource.data.first_attempt
+             || request.resource.data.attempts >= resource.data.attempts
+           )
+        && request.resource.data.attempts <= 20;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 8. Usage Stats — doc ID = machine_id
+    //
+    // ANTI-ROLLBACK:
+    //   - total_generations can only INCREASE
+    //   - total_downloads can only INCREASE
+    //   - daily_count: same day → can only increase
+    // ─────────────────────────────────────────────────────
+    match /_usage/{machineId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        isValidMachineId(machineId)
+        && request.resource.data.machine_id == machineId
+        && request.resource.data.daily_count is int
+        && request.resource.data.daily_count >= 0
+        && request.resource.data.total_generations is int
+        && request.resource.data.total_generations >= 0
+        && request.resource.data.total_downloads is int
+        && request.resource.data.total_downloads >= 0
+        && request.resource.data.daily_date is string
+        && request.resource.data.last_sync_at is string;
+
+      allow update: if
+        request.resource.data.machine_id == machineId
+        && request.resource.data.machine_id == resource.data.machine_id
+        && request.resource.data.daily_count is int
+        && request.resource.data.daily_date is string
+        && request.resource.data.total_generations is int
+        && request.resource.data.total_downloads is int
+        && request.resource.data.last_sync_at is string
+        && request.resource.data.total_generations >= resource.data.total_generations
+        && request.resource.data.total_downloads >= resource.data.total_downloads
+        && request.resource.data.daily_count >= 0
+        && (
+             request.resource.data.daily_date != resource.data.daily_date
+             || request.resource.data.daily_count >= resource.data.daily_count
+           );
+    }
+
+    match /_grok_usage/{machineId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        isValidMachineId(machineId)
+        && request.resource.data.machine_id == machineId
+        && request.resource.data.daily_count is int
+        && request.resource.data.daily_count >= 0
+        && request.resource.data.total_generations is int
+        && request.resource.data.total_generations >= 0
+        && request.resource.data.total_downloads is int
+        && request.resource.data.total_downloads >= 0
+        && request.resource.data.daily_date is string
+        && request.resource.data.last_sync_at is string;
+
+      allow update: if
+        request.resource.data.machine_id == machineId
+        && request.resource.data.machine_id == resource.data.machine_id
+        && request.resource.data.daily_count is int
+        && request.resource.data.daily_date is string
+        && request.resource.data.total_generations is int
+        && request.resource.data.total_downloads is int
+        && request.resource.data.last_sync_at is string
+        && request.resource.data.total_generations >= resource.data.total_generations
+        && request.resource.data.total_downloads >= resource.data.total_downloads
+        && request.resource.data.daily_count >= 0
+        && (
+             request.resource.data.daily_date != resource.data.daily_date
+             || request.resource.data.daily_count >= resource.data.daily_count
+           );
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 9. Upgrade Requests — doc ID = machine_id
+    //
+    // ANTI-SPAM:
+    //   - send_count: +1 per update, max 10
+    //   - status: client only sets 'pending'
+    //   - tier, app: immutable after create
+    // ─────────────────────────────────────────────────────
+    match /_upgrade_requests/{machineId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        isValidMachineId(machineId)
+        && request.resource.data.machine_id == machineId
+        && request.resource.data.client_name is string
+        && request.resource.data.email is string
+        && request.resource.data.client_ip is string
+        && request.resource.data.app is string
+        && isAllowedTier(request.resource.data.tier)
+        && request.resource.data.client_submitted_at is string
+        && request.resource.data.send_count is int
+        && request.resource.data.send_count == 1
+        && request.resource.data.status == 'pending';
+
+      allow update: if
+        request.resource.data.machine_id == machineId
+        && request.resource.data.machine_id == resource.data.machine_id
+        && request.resource.data.status == 'pending'
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.tier == resource.data.tier
+        && request.resource.data.app == resource.data.app
+        && request.resource.data.send_count is int
+        && request.resource.data.send_count == resource.data.send_count + 1
+        && request.resource.data.send_count <= 10
+        && request.resource.data.client_name is string
+        && request.resource.data.email is string
+        && request.resource.data.client_submitted_at is string;
+    }
+
+    match /_grok_upgrade_requests/{machineId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        isValidMachineId(machineId)
+        && request.resource.data.machine_id == machineId
+        && request.resource.data.client_name is string
+        && request.resource.data.email is string
+        && request.resource.data.client_ip is string
+        && request.resource.data.app is string
+        && isAllowedTier(request.resource.data.tier)
+        && request.resource.data.client_submitted_at is string
+        && request.resource.data.send_count is int
+        && request.resource.data.send_count == 1
+        && request.resource.data.status == 'pending';
+
+      allow update: if
+        request.resource.data.machine_id == machineId
+        && request.resource.data.machine_id == resource.data.machine_id
+        && request.resource.data.status == 'pending'
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.tier == resource.data.tier
+        && request.resource.data.app == resource.data.app
+        && request.resource.data.send_count is int
+        && request.resource.data.send_count == resource.data.send_count + 1
+        && request.resource.data.send_count <= 10
+        && request.resource.data.client_name is string
+        && request.resource.data.email is string
+        && request.resource.data.client_submitted_at is string;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 10. Trial Keys — burn-once semantics
+    //
+    // Only 3 fields can change: status, machine_id, used_at
+    // status: active/available → used (irreversible)
+    // machine_id: set once, then immutable (one key = one machine)
+    // ─────────────────────────────────────────────────────
+    match /_trial_keys/{keyId} {
+      allow read: if true;
+      allow create, delete: if false;
+
+      allow update: if
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'machine_id', 'used_at'
+        ])
+        && request.resource.data.status == 'used'
+        && resource.data.status in ['active', 'available']
+        && request.resource.data.machine_id is string
+        && request.resource.data.machine_id.size() > 0
+        && (
+             !('machine_id' in resource.data)
+             || resource.data.machine_id == null
+             || resource.data.machine_id == ''
+             || resource.data.machine_id == request.resource.data.machine_id
+           )
+        && request.resource.data.used_at is string;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 11. License Requests (legacy)
+    // ─────────────────────────────────────────────────────
+    match /_license_requests/{docId} {
+      allow read: if true;
+      allow delete: if false;
+
+      allow create: if
+        request.resource.data.machine_id is string
+        && request.resource.data.machine_id.size() > 0
+        && request.resource.data.status == 'pending'
+        && request.resource.data.client_name is string
+        && request.resource.data.email is string;
+
+      allow update: if
+        request.resource.data.machine_id == resource.data.machine_id
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'pending';
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 12-14. Admin-only collections — FULLY LOCKED
+    // ─────────────────────────────────────────────────────
+    match /_bot_audit/{logId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /_sellers/{sellerId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /_seller_audit/{logId} {
+      allow read, create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // Catch-all: DENY everything else
+    // ─────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

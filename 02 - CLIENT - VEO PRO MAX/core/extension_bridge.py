@@ -1216,6 +1216,11 @@ class ExtensionBridge:
     ) -> Optional[dict]:
         """Submit upscale request via Extension page context.
         
+        ★ FIX #429: Now serialized through _recaptcha_locks + _submit_semaphores,
+        matching the same per-account serialization path used by submit_prompt().
+        Without this, concurrent UpscaleQueue jobs fire simultaneous requests
+        → 429 "quota exhausted". Browser submits sequentially with ~3-5s gaps.
+        
         Reuses the submit_prompt handler in background.js with
         endpoint='UPSCALE_VIDEO'. Extension injects fresh reCAPTCHA token.
         
@@ -1241,57 +1246,85 @@ class ExtensionBridge:
         except Exception:
             pass
         
-        request_id = str(uuid.uuid4())
-        future = asyncio.get_running_loop().create_future()
-        self._pending_requests[request_id] = future
-        self._pending_request_conns[request_id] = conn
+        # ★ FIX #429: Acquire per-account recaptcha lock (serializes with submit_prompt)
+        # This prevents concurrent upscale + prompt submissions on the same account.
+        if email not in self._recaptcha_locks:
+            self._recaptcha_locks[email] = asyncio.Lock()
+        async with self._recaptcha_locks[email]:
+            return await self._submit_upscale_core(email, body, timeout)
+    
+    async def _submit_upscale_core(
+        self,
+        email: str,
+        body: dict,
+        timeout: float,
+    ) -> Optional[dict]:
+        """Core upscale submit — runs inside per-account recaptcha lock + semaphore.
         
-        try:
-            await self._ws_send(conn, {
-                'action': 'submit_prompt',
-                'requestId': request_id,
-                'email': email,
-                'endpoint': 'UPSCALE_VIDEO',
-                'payload': {'body': body},
-                'needsRecaptcha': True,
-            })
+        Separated from submit_upscale() to keep the lock acquisition clean.
+        The _submit_semaphores throttle is shared with submit_prompt → at most
+        _MAX_CONCURRENT_SUBMITS requests per account across ALL submit types.
+        """
+        # ★ FIX #429: Throttle concurrent submits (shared with submit_prompt)
+        if email not in self._submit_semaphores:
+            self._submit_semaphores[email] = asyncio.Semaphore(self._MAX_CONCURRENT_SUBMITS)
+        async with self._submit_semaphores[email]:
+            conn = self._find_connection(email)
+            if not conn:
+                log.warning(f"[ExtensionBridge] _submit_upscale_core: connection lost for {email}")
+                return None
             
-            result = await asyncio.wait_for(future, timeout=timeout)
+            request_id = str(uuid.uuid4())
+            future = asyncio.get_running_loop().create_future()
+            self._pending_requests[request_id] = future
+            self._pending_request_conns[request_id] = conn
             
-            success = result.get('success', False)
-            status = result.get('status', 0)
-            error = result.get('error', '')
-            token_len = result.get('tokenLength', 0)
-            
-            if success:
-                # Guard 3: Validate token length on upscale success
-                if token_len > 0 and token_len < self.MIN_TOKEN_LENGTH:
-                    log.warning(
-                        f"[ExtensionBridge] ⚠️ submit_upscale for {email}: "
-                        f"HTTP {status} but token only {token_len} chars "
-                        f"(need ≥{self.MIN_TOKEN_LENGTH})"
-                    )
+            try:
+                await self._ws_send(conn, {
+                    'action': 'submit_prompt',
+                    'requestId': request_id,
+                    'email': email,
+                    'endpoint': 'UPSCALE_VIDEO',
+                    'payload': {'body': body},
+                    'needsRecaptcha': True,
+                })
+                
+                result = await asyncio.wait_for(future, timeout=timeout)
+                
+                success = result.get('success', False)
+                status = result.get('status', 0)
+                error = result.get('error', '')
+                token_len = result.get('tokenLength', 0)
+                
+                if success:
+                    # Guard 3: Validate token length on upscale success
+                    if token_len > 0 and token_len < self.MIN_TOKEN_LENGTH:
+                        log.warning(
+                            f"[ExtensionBridge] ⚠️ submit_upscale for {email}: "
+                            f"HTTP {status} but token only {token_len} chars "
+                            f"(need ≥{self.MIN_TOKEN_LENGTH})"
+                        )
+                    else:
+                        log.info(
+                            f"[ExtensionBridge] ✅ submit_upscale for {email}: "
+                            f"HTTP {status} (token {token_len} chars)"
+                        )
                 else:
-                    log.info(
-                        f"[ExtensionBridge] ✅ submit_upscale for {email}: "
-                        f"HTTP {status} (token {token_len} chars)"
+                    log.warning(
+                        f"[ExtensionBridge] ❌ submit_upscale for {email}: "
+                        f"HTTP {status} — {error}"
                     )
-            else:
-                log.warning(
-                    f"[ExtensionBridge] ❌ submit_upscale for {email}: "
-                    f"HTTP {status} — {error}"
+                return result
+                
+            except asyncio.TimeoutError:
+                log.error(
+                    f"[ExtensionBridge] submit_upscale timed out for {email} ({timeout}s)"
                 )
-            return result
-            
-        except asyncio.TimeoutError:
-            log.error(
-                f"[ExtensionBridge] submit_upscale timed out for {email} ({timeout}s)"
-            )
-            return None
-        finally:
-            self._cleanup_request_timing(request_id)
-            self._pending_requests.pop(request_id, None)
-            self._pending_request_conns.pop(request_id, None)
+                return None
+            finally:
+                self._cleanup_request_timing(request_id)
+                self._pending_requests.pop(request_id, None)
+                self._pending_request_conns.pop(request_id, None)
 
     async def submit_status_check(
         self,

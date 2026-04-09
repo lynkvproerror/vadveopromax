@@ -1,0 +1,18 @@
+name = "veo-license-validate"
+main = "src/worker.js"
+compatibility_date = "2024-12-01"
+
+# Route: https://veo-license.workers.dev (or custom domain)
+
+[vars]
+# Non-secret env vars (if any)
+# FIREBASE_PRIMARY_PROJECT = "veo-pro-max"
+# FIREBASE_BACKUP_PROJECT = "veoauto-f54b5"
+
+# ⚠️ Secrets — set via CLI, NOT in this file:
+#   wrangler secret put FIREBASE_BOT_EMAIL
+#   wrangler secret put FIREBASE_BOT_PASSWORD
+#   wrangler secret put FIREBASE_PRIMARY_API_KEY
+#   wrangler secret put FIREBASE_BACKUP_API_KEY
+#   wrangler secret put FIREBASE_PRIMARY_PROJECT
+#   wrangler secret put FIREBASE_BACKUP_PROJECT

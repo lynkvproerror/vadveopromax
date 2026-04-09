@@ -822,7 +822,11 @@ async function handleAppMessage(msg) {
       const email = msg.email;
       if (!email) break;
 
-      console.log(`[VEO Bridge] 📧 Server assigned email: ${email}`);
+      const serverProfilePath = msg.profilePath || '';
+      // NOTE: MV3 extensions cannot access the browser's user-data-dir,
+      // so client-side profile verification is not possible. The profilePath
+      // is logged for server-side diagnostics only.
+      console.log(`[VEO Bridge] 📧 Server assigned email: ${email} (profilePath=${serverProfilePath || 'none'})`);
 
       // First: check if ANY tab already has this email assigned
       let existingTabId = findTabForEmail(email);

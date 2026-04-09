@@ -194,13 +194,35 @@ class TaskWatchdog:
         # Preserve checkpoint data for submitted/generated/downloaded tasks so
         # resume logic can continue from the last good stage instead of
         # completing with empty outputs after watchdog recovery.
-        preserve_checkpoint = getattr(task, 'stage', None) in {
+        # ★ FIX: Validate that checkpoint has actual data. DOWNLOADED_720 without
+        # any files is a phantom checkpoint (created by timeout_retry bug) and
+        # must NOT be preserved — otherwise resume will complete with empty data.
+        task_stage = getattr(task, 'stage', None)
+        preserve_checkpoint = False
+        if task_stage in {
             TaskStage.SUBMITTED,
             TaskStage.GENERATED,
             TaskStage.DOWNLOADED_720,
             TaskStage.UPSCALING,
             TaskStage.UPSCALED,
-        }
+        }:
+            # Validate data integrity for download/upscale stages
+            if task_stage in (TaskStage.DOWNLOADED_720, TaskStage.UPSCALING, TaskStage.UPSCALED):
+                has_files = any(
+                    (getattr(vo, 'file_720p', '') or getattr(vo, 'file_upscaled', ''))
+                    for vo in getattr(task, 'video_outputs', [])
+                )
+                if has_files:
+                    preserve_checkpoint = True
+                else:
+                    log.warning(
+                        f"[Watchdog] Task {task.id}: stage={task_stage.value} but "
+                        f"NO valid files in video_outputs — clearing phantom checkpoint"
+                    )
+                    task.stage = TaskStage.INIT  # Reset stage so resume re-submits
+            else:
+                # SUBMITTED/GENERATED: preserve (server may still have the op)
+                preserve_checkpoint = True
         if not preserve_checkpoint:
             # Clear partial results so UI doesn't show stale thumbnails on READY
             task.output_uris = []

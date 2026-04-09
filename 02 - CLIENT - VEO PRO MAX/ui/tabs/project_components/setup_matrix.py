@@ -919,6 +919,23 @@ class SetupMatrixPanel(QFrame):
         self.video_quality.setStyleSheet(combo_style)
         prod_layout.addWidget(self.video_quality)
 
+        # ── 🖼️ Video I2V Frame Mode ──
+        lbl = QLabel("🖼️ I2V Mode (Start / Start+End)")
+        lbl.setStyleSheet(lbl_style)
+        prod_layout.addWidget(lbl)
+        self.video_frame_mode = QComboBox()
+        self.video_frame_mode.addItem("🖼️ Start only", "start")
+        self.video_frame_mode.addItem("🖼️ Start + End", "both")
+        self.video_frame_mode.setCurrentIndex(1)  # Default: Start + End (dual-frame)
+        self.video_frame_mode.setMinimumHeight(34)
+        self.video_frame_mode.setStyleSheet(combo_style)
+        self.video_frame_mode.setToolTip(
+            "Start only: Chỉ dùng ảnh đầu tiên làm khung mở đầu\n"
+            "Start + End: Dùng cả ảnh đầu và ảnh kế tiếp làm khung kết thúc\n"
+            "  → Cho video chuyển cảnh mượt hơn (dual-frame _fl_ model)"
+        )
+        prod_layout.addWidget(self.video_frame_mode)
+
         # ── 📂 Image Library ──
         self.image_library_btn = QPushButton(t("sidebar.image_library"))
         self.image_library_btn.setFixedHeight(34)
@@ -1210,6 +1227,7 @@ class SetupMatrixPanel(QFrame):
             "image_outputs":     self.image_outputs.value(),
             "video_model":       self.video_model.currentText(),
             "video_quality":     self.video_quality.currentText(),
+            "video_frame_mode":  self.video_frame_mode.currentData() or "both",
             "video_aspect":      vid_aspect,
             "video_count":       self.video_count.value(),
             "video_outputs":     self.video_outputs.value(),

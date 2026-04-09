@@ -2927,16 +2927,21 @@ class TabProject(QWidget):
                         per_prompt_images = {}
                         per_prompt_workflows = {}
                         i2v_count = r2v_count = t2v_count = 0
+                        frame_mode = config.get("video_frame_mode", "both")
                         for i, s in enumerate(v_scenes):
                             if i >= len(prompts):
                                 break
                             if s.image_path and os.path.isfile(s.image_path):
-                                # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
-                                next_s = v_scenes[i + 1] if i + 1 < len(v_scenes) else None
-                                if next_s and next_s.image_path and os.path.isfile(next_s.image_path):
-                                    per_prompt_images[i] = [s.image_path, next_s.image_path]
+                                if frame_mode == "both":
+                                    # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
+                                    next_s = v_scenes[i + 1] if i + 1 < len(v_scenes) else None
+                                    if next_s and next_s.image_path and os.path.isfile(next_s.image_path):
+                                        per_prompt_images[i] = [s.image_path, next_s.image_path]
+                                    else:
+                                        per_prompt_images[i] = [s.image_path]  # last scene: single-frame
                                 else:
-                                    per_prompt_images[i] = [s.image_path]  # last scene: single-frame
+                                    # Start only: single frame
+                                    per_prompt_images[i] = [s.image_path]
                                 per_prompt_workflows[i] = "I2V"
                                 i2v_count += 1
                             elif char_images:
@@ -2947,7 +2952,7 @@ class TabProject(QWidget):
                                 per_prompt_workflows[i] = "T2V"
                                 t2v_count += 1
                         # Enable _fl_ model when pairs are available
-                        v_settings["frame_mode"] = "both"
+                        v_settings["frame_mode"] = frame_mode
                         
                         log.info(
                             f"[Pipeline] Stage 6 {version.label}: "
@@ -3052,18 +3057,23 @@ class TabProject(QWidget):
                         i2v_count = 0
                         r2v_count = 0
                         t2v_count = 0
+                        frame_mode = config.get("video_frame_mode", "both")
                         for i, s in enumerate(scenes):
                             if i >= len(prompts):
                                 break
                             if s.image_path and os.path.isfile(s.image_path):
-                                # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
-                                # This drives the _fl_ (First+Last) model for smooth transitions.
-                                # Last scene has no next scene → falls back to single-frame I2V.
-                                next_scene = scenes[i + 1] if i + 1 < len(scenes) else None
-                                if next_scene and next_scene.image_path and os.path.isfile(next_scene.image_path):
-                                    per_prompt_images[i] = [s.image_path, next_scene.image_path]
+                                if frame_mode == "both":
+                                    # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
+                                    # This drives the _fl_ (First+Last) model for smooth transitions.
+                                    # Last scene has no next scene → falls back to single-frame I2V.
+                                    next_scene = scenes[i + 1] if i + 1 < len(scenes) else None
+                                    if next_scene and next_scene.image_path and os.path.isfile(next_scene.image_path):
+                                        per_prompt_images[i] = [s.image_path, next_scene.image_path]
+                                    else:
+                                        per_prompt_images[i] = [s.image_path]  # last scene: single-frame
                                 else:
-                                    per_prompt_images[i] = [s.image_path]  # last scene: single-frame
+                                    # Start only: single frame I2V
+                                    per_prompt_images[i] = [s.image_path]
                                 per_prompt_workflows[i] = "I2V"
                                 i2v_count += 1
                             elif char_images:
@@ -3073,8 +3083,8 @@ class TabProject(QWidget):
                             else:
                                 per_prompt_workflows[i] = "T2V"
                                 t2v_count += 1
-                        # Enable _fl_ model when pairs are available
-                        settings["frame_mode"] = "both"
+                        # Use configured frame mode
+                        settings["frame_mode"] = frame_mode
                         
                         log.info(
                             f"[Pipeline] Stage 6 routing: {i2v_count} I2V, "

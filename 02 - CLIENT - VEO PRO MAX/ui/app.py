@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.theme import Theme
 from config.i18n import t, set_language, get_signal as i18n_signal
 from ui.components.toast import ToastManager
+from ui.components.taskbar_progress import TaskbarProgress
 from core.notification_manager import NotificationManager
 
 # Import PySide6 tabs
@@ -97,6 +98,11 @@ class MainWindow(QMainWindow):
         # Notification manager (sound playback)
         self._notification_manager = NotificationManager()
         
+        # Windows Taskbar Progress (ITaskbarList3)
+        # Initialized lazily — HWND unavailable until after show()
+        self._taskbar_progress = None
+        self._taskbar_hwnd_ready = False
+        
         # Init i18n from saved settings
         if settings:
             set_language(getattr(settings, 'ui_language', 'Tiếng Việt'))
@@ -112,6 +118,9 @@ class MainWindow(QMainWindow):
         
         # Restore previous session
         self._restore_session()
+        
+        # Deferred: capture HWND after window is shown (splash.finish calls show())
+        QTimer.singleShot(500, self._init_taskbar_progress)
         
         # License countdown timer (1s) for status bar
         self._license_expires_dt = None  # cached expiry datetime
@@ -824,7 +833,7 @@ class MainWindow(QMainWindow):
             if "workers" in self._status_widgets:
                 # ★ Pool Separation: show Fast ops + LP ops + upscale counts
                 active_upscale = acc.get("active_upscale", 0)
-                max_upscale = acc.get("max_upscale", 4)
+                max_upscale = acc.get("max_upscale", 8)
                 active_lp = acc.get("active_workers_lp", 0)
                 max_lp = acc.get("max_workers_lp", 20)
                 # Fast workers = total active ops minus LP workers
@@ -846,11 +855,18 @@ class MainWindow(QMainWindow):
                 groups = self.controller.get_queue_groups()
                 total_prompts = 0
                 completed_prompts = 0
+                failed_prompts = 0
+                running_prompts = 0
                 for g in groups:
                     for t in g.get('tasks', []):
                         total_prompts += 1
-                        if t.get('status') == 'completed' or t.get('progress', 0) >= 100:
+                        status = t.get('status', '')
+                        if status == 'completed' or t.get('progress', 0) >= 100:
                             completed_prompts += 1
+                        elif status == 'failed':
+                            failed_prompts += 1
+                        elif status in ('running', 'waiting_poll'):
+                            running_prompts += 1
                 if "queue" in self._status_widgets:
                     self._status_widgets["queue"].setText(f"📋 {completed_prompts}/{total_prompts}")
                     if total_prompts > 0:
@@ -858,6 +874,12 @@ class MainWindow(QMainWindow):
                     else:
                         color = Theme.SUBTEXT0
                     self._status_widgets["queue"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
+                
+                # ★ Taskbar Progress: sync with queue status
+                self._update_taskbar_progress(
+                    completed_prompts, total_prompts,
+                    failed_prompts, running_prompts,
+                )
         except Exception:
             pass
         
@@ -873,6 +895,81 @@ class MainWindow(QMainWindow):
         
         # License status (may be N/A at init if _license_client not yet ready)
         self._update_license_widget()
+    
+    # ── Taskbar Progress ─────────────────────────────────────────
+    
+    def _init_taskbar_progress(self):
+        """Initialize Windows taskbar progress bar.
+        
+        Called 500ms after __init__ so the HWND is valid (splash.finish calls show()).
+        Uses ITaskbarList3 COM interface via ui.components.taskbar_progress.
+        """
+        if self._taskbar_hwnd_ready:
+            return
+        try:
+            hwnd = int(self.winId())
+            if hwnd:
+                self._taskbar_progress = TaskbarProgress(hwnd)
+                self._taskbar_hwnd_ready = True
+                import logging
+                logging.getLogger("veo.ui").info(
+                    f"[TaskbarProgress] Ready (hwnd={hwnd:#x}, available={self._taskbar_progress.available})"
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger("veo.ui").warning(f"[TaskbarProgress] Init failed: {e}")
+    
+    def _update_taskbar_progress(
+        self, completed: int, total: int,
+        failed: int = 0, running: int = 0,
+    ):
+        """Update Windows taskbar progress bar based on queue state.
+        
+        State machine:
+          - Queue empty (total=0):     Clear taskbar (no bar)
+          - All completed:             Flash green 100%, then clear after 5s
+          - Has failures (no running): Red error bar at current progress
+          - Has running tasks:         Green normal bar at current progress
+          - Pending but not started:   Indeterminate pulse
+        """
+        tb = self._taskbar_progress
+        if not tb or not tb.available:
+            return
+        
+        # No tasks -> clear
+        if total == 0:
+            tb.clear()
+            return
+        
+        # All done -> show 100% briefly, then auto-clear
+        if completed == total:
+            tb.set_progress(total, total)
+            # Auto-clear after 5s so user sees the completion flash
+            if not getattr(self, '_taskbar_clear_pending', False):
+                self._taskbar_clear_pending = True
+                QTimer.singleShot(5000, self._clear_taskbar_after_completion)
+            return
+        
+        self._taskbar_clear_pending = False
+        
+        # Has failures and nothing running -> red error bar
+        if failed > 0 and running == 0:
+            tb.set_error(completed, total)
+            return
+        
+        # Actively running -> green normal bar
+        if running > 0 or completed > 0:
+            tb.set_progress(completed, total)
+            return
+        
+        # Pending tasks queued but not started -> indeterminate pulse
+        tb.set_indeterminate()
+    
+    def _clear_taskbar_after_completion(self):
+        """Auto-clear taskbar progress 5s after queue completes."""
+        self._taskbar_clear_pending = False
+        if self._taskbar_progress:
+            self._taskbar_progress.clear()
     
     def _update_memory(self):
         """Update memory and CPU usage in status bar."""
@@ -1342,6 +1439,13 @@ class MainWindow(QMainWindow):
         try:
             if hasattr(self, '_notification_manager') and self._notification_manager:
                 self._notification_manager.stop()
+        except Exception:
+            pass
+
+        # Clear taskbar progress bar before shutdown
+        try:
+            if self._taskbar_progress:
+                self._taskbar_progress.clear()
         except Exception:
             pass
 

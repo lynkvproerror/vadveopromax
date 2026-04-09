@@ -5776,6 +5776,17 @@ class AppController:
         """Clear all non-running tasks."""
         return self._dispatcher.clear_all()
     
+    def remove_tasks(self, task_ids: list) -> int:
+        """Batch-remove specific tasks from queue.
+        
+        PERF: Uses dispatcher.remove_tasks() for O(1) group-scan
+        instead of calling remove_task() in a loop.
+        """
+        count = self._dispatcher.remove_tasks(task_ids)
+        if count > 0:
+            self._invalidate_queue_groups_cache()
+        return count
+    
     def clear_completed_tasks(self):
         """Clear completed/failed/cancelled tasks."""
         self._dispatcher.clear_completed()

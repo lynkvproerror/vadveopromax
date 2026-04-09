@@ -47,6 +47,15 @@ class MultiAccountManager:
         self._machine_client_data_cache: str = ""
         self._machine_client_data_checked_at: float = 0.0
         self._machine_client_data_check_cooldown: float = 300.0
+
+    @staticmethod
+    def _display_max_upscale_per_account() -> int:
+        """UI-facing upscale cap should mirror UpscaleQueue AIMD ceiling."""
+        try:
+            from core.upscale_queue import AdaptiveJobController
+            return int(getattr(AdaptiveJobController, "MAX", 8) or 8)
+        except Exception:
+            return 8
     
     @property
     def total_capacity(self) -> int:
@@ -90,11 +99,8 @@ class MultiAccountManager:
     
     @property
     def total_max_upscale(self) -> int:
-        """Sum of max upscale workers from all accounts."""
-        return sum(
-            getattr(acc.session, 'max_upscale_workers', 4)
-            for acc in self._accounts
-        )
+        """Sum of UI-facing upscale caps from all accounts."""
+        return self.account_count * self._display_max_upscale_per_account()
     
     @property
     def account_count(self) -> int:
@@ -201,19 +207,23 @@ class MultiAccountManager:
             }
         """
         result = {"accounts": {}}
+        max_upscale_per_account = self._display_max_upscale_per_account()
         for acc in self._accounts:
             ext_connected = False
             if acc.extension_bridge:
                 ext_connected = acc.extension_bridge.is_connected(acc.email)
+            active_upscale_inline = getattr(acc.session, 'active_upscale_workers', 0)
+            active_upscale_bg = getattr(acc.session, 'active_bg_upscale', 0)
             
             result["accounts"][acc.email] = {
                 "score": self._compute_health_score(acc),
                 "available_workers": acc.available_workers,
                 "active_workers": acc.active_workers,
                 "max_workers": acc.max_workers,
-                "active_upscale": getattr(acc.session, 'active_upscale_workers', 0),
-                "active_bg_upscale": getattr(acc.session, 'active_bg_upscale', 0),
-                "max_upscale": getattr(acc.session, 'max_upscale_workers', 4),
+                "active_upscale": active_upscale_inline,
+                "active_bg_upscale": active_upscale_bg,
+                "active_upscale_total": active_upscale_inline + active_upscale_bg,
+                "max_upscale": max_upscale_per_account,
                 # Backward compat
                 "available_slots": acc.available_workers,
                 "active_slots": acc.active_workers,

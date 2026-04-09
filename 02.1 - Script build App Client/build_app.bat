@@ -11,7 +11,7 @@ set "BUILD_RUNNER=%SCRIPT_DIR%\build_app_runner.cmd"
 set "MONITOR_INTERVAL=15"
 
 echo ===================================================
-echo VEO Pro Max - Build Script (v2.3.11)
+echo VEO Pro Max - Build Script (v2.3.13)
 echo ===================================================
 echo.
 
@@ -19,9 +19,9 @@ cd /d "%SCRIPT_DIR%"
 
 echo [INFO] This BAT is a wrapper.
 echo [INFO] GitHub upload is handled INSIDE build_release.py:
-echo        - VEO_Pro_Max_v2.3.11.zip
-echo        - VEO_Extension_v2.3.11.zip
-echo        - VEO_Pro_Max_Setup_v2.3.11.exe
+echo        - VEO_Pro_Max_v2.3.13.zip
+echo        - VEO_Extension_v2.3.13.zip
+echo        - VEO_Pro_Max_Setup_v2.3.13.exe
 echo        - push version.json to public repo
 echo [INFO] First full build may take a long time on Windows if Nuitka needs
 echo        to auto-download MinGW64 because no native C compiler is installed.

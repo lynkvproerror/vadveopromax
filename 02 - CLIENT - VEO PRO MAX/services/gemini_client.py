@@ -54,7 +54,7 @@ class GeminiClient:
     """
 
     BASE = "https://generativelanguage.googleapis.com/v1beta"
-    MODEL = "models/gemma-3-27b-it"  # Default (14,400 RPD free tier)
+    MODEL = "models/gemini-3.1-flash-lite-preview"  # Default (500 RPD, proven stable)
     MODEL_FLASH = "models/gemini-2.5-flash"  # Fallback
     MODEL_PRO = "models/gemini-2.5-pro"  # Highest quality (paid)
     DEFAULT_TIMEOUT = 30  # seconds
@@ -63,9 +63,8 @@ class GeminiClient:
     _MODEL_ALIASES = {
         "flash": "models/gemini-2.5-flash",
         "pro": "models/gemini-2.5-pro",
-        "flash-lite": "models/gemini-2.5-flash-lite",
+        "flash-lite": "models/gemini-3.1-flash-lite-preview",
         "gemma-27b": "models/gemma-3-27b-it",
-        "gemma-4": "models/gemma-4-31b-it",
     }
 
     # ── System Prompts (class-level constants) ─────────────────────
@@ -169,9 +168,14 @@ class GeminiClient:
             model_path = f"models/{model_path}"
         
         url = f"{self.BASE}/{model_path}:generateContent"
+        
+        # ★ Gemma models don't support systemInstruction field.
+        # Prepend system text into user prompt instead.
+        is_gemma = "gemma" in model_path.lower()
+        user_text = f"{system}\n\n{prompt}" if is_gemma and system else prompt
+        
         body = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"parts": [{"text": user_text}]}],
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": max_tokens,
@@ -183,6 +187,9 @@ class GeminiClient:
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             ],
         }
+        # Only add systemInstruction for non-Gemma models (Gemini supports it)
+        if not is_gemma and system:
+            body["systemInstruction"] = {"parts": [{"text": system}]}
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -208,8 +215,11 @@ class GeminiClient:
                     raise RateLimitError(error_body)
 
                 if resp.status in (401, 403):
-                    log.error(f"[Gemini] Invalid key: {error_body}")
-                    raise InvalidKeyError(error_body)
+                    log.error(
+                        f"[Gemini] {resp.status} ({model_path}) "
+                        f"[key=...{api_key[-6:]}]: {error_body}"
+                    )
+                    raise InvalidKeyError(f"{error_body} (model={model_path})")
 
                 log.error(f"[Gemini] API error {resp.status}: {error_body}")
                 raise GeminiAPIError(resp.status, error_body)

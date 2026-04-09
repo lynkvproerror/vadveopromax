@@ -639,16 +639,24 @@ class LicenseClient:
     
     def _activate_with_rest(self, license_key: str) -> LicenseInfo:
         """
-        Activate license via REST API (no Admin SDK needed).
+        Activate license via Bot API with server-side hardware attestation.
         
-        Uses validate_with_crosscheck for dual-Firebase validation,
-        then saves locally on success.
+        Option C: No Firestore fallback. Bot API (Vercel + Cloudflare)
+        is the ONLY path. This prevents machine_id spoofing attacks.
+        If both endpoints are down, activation fails (retry later).
         """
         try:
-            is_valid, status, data = self._rest_client.validate_with_crosscheck(
-                license_key,
-                self.machine_id
+            import logging as _logging
+            _llog = _logging.getLogger("veo.license")
+            
+            hw = HardwareFingerprint.get_all_components()
+            is_valid, status, data = self._rest_client.validate_via_bot(
+                license_key, hw
             )
+            if is_valid:
+                _llog.info("[LICENSE] ✅ Activated via Bot API (hw-attested)")
+            else:
+                _llog.info(f"[LICENSE] ❌ Bot API rejected: {data.get('error', status)}")
             
             if not is_valid:
                 _em = {
@@ -871,17 +879,20 @@ class LicenseClient:
     
     def _validate_with_rest(self, license_key: str) -> LicenseInfo:
         """
-        Validate using REST client with dual-Firebase cross-validation.
+        Validate using REST client with server-side hw attestation.
         
-        Raises ConnectionError if network is down (for cache fallback).
+        Option C: Bot API only (Vercel → Cloudflare).
+        No Firestore fallback. ConnectionError propagates to caller
+        → uses local cache (7-day grace).
         """
         if not hasattr(self, '_rest_client') or not self._rest_client:
             raise ConnectionError("REST client not available")
         
-        # Let ConnectionError propagate to caller for cache fallback
-        is_valid, status, data = self._rest_client.validate_with_crosscheck(
-            license_key, 
-            self.machine_id
+        # Bot API only (Vercel → Cloudflare). No Firestore fallback (Option C).
+        # ConnectionError propagates to caller → uses local cache (7-day grace)
+        hw = HardwareFingerprint.get_all_components()
+        is_valid, status, data = self._rest_client.validate_via_bot(
+            license_key, hw
         )
         
         if not is_valid:

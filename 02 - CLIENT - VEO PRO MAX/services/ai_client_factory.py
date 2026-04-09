@@ -82,7 +82,7 @@ def get_ai_config():
 
     source = getattr(s, 'pb_ai_source', 'account')
     provider = getattr(s, 'pb_ai_provider', 'Google')
-    model = getattr(s, 'pb_ai_model', 'gemini-2.5-flash')
+    model = getattr(s, 'pb_ai_model', 'gemini-3.1-flash-lite-preview')
     base_url = getattr(s, 'pb_ai_base_url', '') or ''
 
     api_key = ""

@@ -482,6 +482,24 @@ class PromptEnhancer:
                 if isinstance(e, GeminiAPIError) and e.status == 400 and is_google:
                     log.warning(f"[Enhance] {model} blocked (400), trying next model...")
                     continue
+                # ★ 403 "denied access" — model-specific OR key/project-level
+                from services.gemini_client import InvalidKeyError
+                if isinstance(e, InvalidKeyError) and is_google:
+                    rotation.mark_exhausted(profile_email, model)
+                    # Also rotate key — denied key won't work on any model
+                    try:
+                        from services.key_quota_manager import get_quota_manager
+                        qm = get_quota_manager()
+                        qm.mark_denied(api_key)
+                        if custom_keys:
+                            next_key = qm.get_available_key(custom_keys)
+                            if next_key and next_key != api_key:
+                                api_key = next_key
+                                log.info(f"[Enhance] 403 → switched key ...{api_key[-8:]}")
+                    except Exception:
+                        pass
+                    log.warning(f"[Enhance] {model} access denied (403), model+key rotated")
+                    continue
                 log.warning(f"[Enhance] Failed ({model}): {e}")
                 break
 

@@ -88,6 +88,13 @@ class AccountSupervisor:
         # Prevents 8 foremen burst-submitting when reCAPTCHA is broken.
         self._first_submit_ok = asyncio.Event()
         
+        # ★ Cold profile gate: set after 2nd consecutive success.
+        # Foremen idx>1 wait on this to prevent burst-submitting on cold accounts
+        # where reCAPTCHA trust hasn't been established yet.
+        # Per-account: each account's Supervisor owns its own gate independently.
+        self._second_submit_ok = asyncio.Event()
+        self._success_count = 0  # Track consecutive successes for this account
+        
         self._running = False
 
     async def report_error(self, error_type: str, details: str = ""):
@@ -163,6 +170,12 @@ class AccountSupervisor:
             # This ensures reCAPTCHA widget initializes on the correct
             # project page context (avoids token rejection).
             await self._ensure_project_page()
+            
+            # ── Cold profile warmup: build behavioral trust before first submit ──
+            # Cold profiles (just started, project just created) produce tokens
+            # that pass length validation but fail Google's trust evaluation → 403.
+            # 3x simulate_activity builds browsing history to improve trust scores.
+            await self._warmup_cold_profile()
             
             log.info(f"[Supervisor:{self.email}] Pre-warming reCAPTCHA...")
             rc_ready = await self.engine._wait_for_recaptcha_ready(
@@ -372,6 +385,49 @@ class AccountSupervisor:
         # submit_prompt uses executeScript with absolute API URLs,
         # so page URL is irrelevant (reCAPTCHA + fetch work from any VEO page).
 
+    async def _warmup_cold_profile(self):
+        """Build behavioral trust on cold profiles before first submit.
+        
+        Cold profile problem:
+          - Profile just started, project just created
+          - reCAPTCHA token passes length validation (>1000 chars)
+          - But Google's trust evaluation gives low score → 403
+          - Account 1 (xcd=8) succeeds while Account 2 (xcd=36) fails
+            → proving it's trust, not XCD
+        
+        Solution: simulate human browsing behavior before first submit.
+        3x simulate_activity with 2s gaps (~8s total).
+        This is per-account — each Supervisor warms its own account.
+        """
+        bridge = getattr(self.account, 'extension_bridge', None)
+        if not bridge or not bridge.is_connected(self.email):
+            log.debug(f"[Supervisor:{self.email}] Skip warmup — no extension bridge")
+            return
+        
+        log.info(
+            f"[Supervisor:{self.email}] 🔥 Cold profile warmup: "
+            f"3x simulate_activity (building trust)..."
+        )
+        
+        for i in range(3):
+            if self.engine._stop_event.is_set():
+                return
+            try:
+                await bridge.simulate_activity(self.email, timeout=3.0)
+                log.debug(
+                    f"[Supervisor:{self.email}] Warmup {i+1}/3 OK"
+                )
+            except Exception as e:
+                log.debug(
+                    f"[Supervisor:{self.email}] Warmup {i+1}/3 failed: {e}"
+                )
+            # 2s gap between activity simulations
+            if i < 2:
+                await asyncio.sleep(2.0)
+        
+        log.info(
+            f"[Supervisor:{self.email}] ✅ Cold profile warmup complete (~8s)"
+        )
 
     async def _probe_submit(self) -> bool:
         """Probe: verify reCAPTCHA pipeline is functional before unblocking foremen.
@@ -766,6 +822,9 @@ class Engine:
         # Fix G6: Inject burst_controller into upscale queue for anti-detect delay
         self._upscale_queue._burst_controller = self._burst_controller
         
+        # ★ Inject zoom_crop_fn into upscale queue for TRPC ZIP watermark removal
+        self._upscale_queue._zoom_crop_fn = self._remove_watermark_zoom_crop
+        
         # Fix #4: Inject reCAPTCHA health check for upscale failover
         def _uq_recaptcha_health(email: str) -> bool:
             bridge = self._extension_bridge
@@ -831,6 +890,7 @@ class Engine:
         # Pre-warm: proactive reCAPTCHA soft recovery after idle period
         # Prevents 403 cascade by resetting reCAPTCHA context before first submit
         self._last_successful_submit: Dict[str, float] = {}  # email → timestamp
+        self._force_prewarm: set = set()  # emails that need forced prewarm (Fix-M1)
         self._prewarm_stats: Dict[str, dict] = {}  # email → {count, last_idle_secs, last_time}
         self._prewarm_locks: Dict[str, asyncio.Lock] = {}  # email → Lock (coordinate foremen)
         
@@ -1373,9 +1433,9 @@ class Engine:
             if hasattr(account, 'get_browser_headers'):
                 xcd_cached = (account.get_browser_headers().get('x-client-data', '') or '')
             if len(xcd_cached) < MIN_VALID_XCD:
-                log.debug(
-                    f"[PreSubmitGate:{email}] xcd cache={len(xcd_cached)} chars "
-                    f"(OK — Extension fetch auto-injects real xcd)"
+                log.info(
+                    f"[PreSubmitGate:{email}] 📊 XCD-DIAG: cache={len(xcd_cached)} chars "
+                    f"(Extension auto-injects real xcd — cache value is diagnostic only)"
                 )
         else:
             # Direct API path (no extension): must have valid cached xcd
@@ -2656,14 +2716,28 @@ class Engine:
         threshold_secs = threshold_min * 60
         
         # ── Quick check BEFORE lock (avoid lock contention if not needed) ──
+        force = email in self._force_prewarm
         last = self._last_successful_submit.get(email, 0)
         idle_secs = time.time() - last if last else 0
-        if idle_secs < threshold_secs:
+        if not force and idle_secs < threshold_secs:
             log.debug(
                 f"[PreWarm] {email}: SKIP (idle={idle_secs:.0f}s < threshold={threshold_secs}s, "
                 f"last_submit_ts={last})"
             )
             return  # Not idle enough
+        
+        # ── Guard: skip prewarm if submit is in-flight for this account ──
+        # Soft recovery navigates the page away, aborting any active fetch().
+        bridge = getattr(account, 'extension_bridge', None)
+        if bridge:
+            sem = bridge._submit_semaphores.get(email)
+            # Semaphore._value < initial = submit in-flight
+            if sem and getattr(sem, '_value', 1) < getattr(bridge, '_MAX_CONCURRENT_SUBMITS', 1):
+                log.debug(
+                    f"[PreWarm] {email}: SKIP — submit in-flight "
+                    f"(sem={sem._value}), would abort active fetch"
+                )
+                return
     
         # BUG-32: Skip prewarm during stop (soft recovery + reCAPTCHA = 20+s)
         if self._stop_event.is_set():
@@ -2684,16 +2758,25 @@ class Engine:
         
         async with lock:
             # ── Re-check idle after acquiring lock ──
+            force = email in self._force_prewarm
             last = self._last_successful_submit.get(email, 0)
             idle_secs = time.time() - last if last else 0
-            if idle_secs < threshold_secs:
+            if not force and idle_secs < threshold_secs:
                 return  # Another foreman already prewarmed
+            
+            # Re-check in-flight guard inside lock
+            if bridge:
+                sem = bridge._submit_semaphores.get(email)
+                if sem and getattr(sem, '_value', 1) < getattr(bridge, '_MAX_CONCURRENT_SUBMITS', 1):
+                    log.info(f"[PreWarm] {email}: SKIP (inside lock) — submit in-flight")
+                    return
             
             if self._stop_event.is_set():
                 return
         
+            reason = "FORCED (Fix-M1 pipeline done)" if force else f"idle {idle_secs:.0f}s > {threshold_secs}s"
             log.info(
-                f"[PreWarm] {email}: idle {idle_secs:.0f}s > {threshold_secs}s "
+                f"[PreWarm] {email}: {reason} "
                 f"— triggering soft recovery before submit"
             )
             
@@ -2750,7 +2833,9 @@ class Engine:
             
             # ★ Update timestamp INSIDE lock so waiting foremen see it
             self._last_successful_submit[email] = time.time()
-            log.info(f"[PreWarm] {email}: ✅ pre-warm complete (idle was {idle_secs:.0f}s)")
+            # Clear force flag — prewarm has been consumed
+            self._force_prewarm.discard(email)
+            log.info(f"[PreWarm] {email}: ✅ pre-warm complete (idle was {idle_secs:.0f}s, forced={force})")
     
     async def pause(self):
         """Pause: workers sleep at next loop iteration without exiting.
@@ -3589,6 +3674,23 @@ class Engine:
                     log.info(f"[{fid}] ✅ First submit verified — starting")
                 except asyncio.TimeoutError:
                     log.warning(f"[{fid}] ⚠️ First submit timeout (90s) — starting anyway")
+            
+            # ★ Cold profile gate: foremen idx>1 wait for 2nd success
+            # Serializes early submits to build reCAPTCHA trust per-account.
+            # Foreman-0 → immediate, foreman-1 → after 1st success,
+            # foremen 2+ → after 2nd success (trust established).
+            if foreman_idx > 1 and supervisor and not supervisor._second_submit_ok.is_set():
+                log.info(
+                    f"[{fid}] ⏳ Cold profile gate: waiting for 2nd "
+                    f"successful submit ({account.email})..."
+                )
+                try:
+                    await asyncio.wait_for(
+                        supervisor._second_submit_ok.wait(), timeout=120.0
+                    )
+                    log.info(f"[{fid}] ✅ 2nd submit verified — trust established, starting")
+                except asyncio.TimeoutError:
+                    log.warning(f"[{fid}] ⚠️ 2nd submit timeout (120s) — starting anyway")
             # Stagger: always use Settings tab anti-detect delay
             from config.settings import get_settings as _get_stagger_settings
             _s = _get_stagger_settings()
@@ -4495,10 +4597,22 @@ class Engine:
                                                 error_msg = api_err
                                         
                                         if status_code == 403:
-                                            # Log full 403 response for debugging
+                                            # ★ Token+Status correlation: diagnose cold account trust
+                                            # Key insight: token can be >1000 chars but still 403
+                                            # when profile lacks behavioral trust (cold start).
+                                            _ext_token_len = ext_result.get('tokenLength', 0)
+                                            _ext_xcd_len = 0
+                                            _ext_bridge = getattr(account, 'extension_bridge', None)
+                                            if _ext_bridge and hasattr(_ext_bridge, '_header_cache'):
+                                                _ext_xcd_len = len(
+                                                    _ext_bridge._header_cache.get(account.email, {}).get('x-client-data', '')
+                                                )
                                             log.warning(
-                                                f"[Extension] 403 response data for {account.email}: "
-                                                f"{str(resp_data)[:500]}"
+                                                f"[Extension] 403 for {account.email}: "
+                                                f"tokenLength={_ext_token_len}, "
+                                                f"cached_xcd={_ext_xcd_len}, "
+                                                f"error={error_msg!r}, "
+                                                f"data={str(resp_data)[:300]}"
                                             )
                                             error_msg = f"403 Forbidden: {error_msg}"
                                         result = WorkerResult(
@@ -4743,14 +4857,21 @@ class Engine:
                             error_lower = (result.error or "").lower()
                             recaptcha_fail = "recaptcha" in error_lower
                             auth_fail = "401" in (result.error or "") or "unauthenticated" in error_lower
+                            # ★ Tab dead detection: broken DOM / dead page context
+                            # "Could not extract reCAPTCHA site key" = no reCAPTCHA scripts in DOM
+                            # "fetch failed: Failed to fetch" (HTTP 0) = page context navigated away
+                            tab_dead = ("could not extract" in error_lower and "site key" in error_lower) or \
+                                       ("fetch failed" in error_lower and "failed to fetch" in error_lower)
                             acct_email = account.email
                             
-                            if recaptcha_fail or "403" in (result.error or "") or auth_fail:
+                            if recaptcha_fail or "403" in (result.error or "") or auth_fail or tab_dead:
                                 # M1 fix: Record error for adaptive delay backoff
                                 if auth_fail:
                                     status = 401
                                 elif "403" in (result.error or ""):
                                     status = 403
+                                elif tab_dead:
+                                    status = 0  # HTTP 0 — dead tab / broken DOM
                                 else:
                                     status = 500
                                 self._burst_controller.record_error(account.email, status)
@@ -4881,7 +5002,23 @@ class Engine:
                         supervisor = self._supervisors.get(account.email)
                         if supervisor and not supervisor._first_submit_ok.is_set():
                             supervisor._first_submit_ok.set()
-                            log.info(f"[{fid}] 🚀 First submit success → unlocking remaining foremen")
+                            log.info(f"[{fid}] 🚀 First submit success → unlocking foreman-1")
+                        # ★ Cold profile: track consecutive successes per-account
+                        # Signal _second_submit_ok after 2 successes to unlock all foremen
+                        if supervisor and not supervisor._second_submit_ok.is_set():
+                            supervisor._success_count += 1
+                            if supervisor._success_count >= 2:
+                                supervisor._second_submit_ok.set()
+                                log.info(
+                                    f"[{fid}] 🚀🚀 2nd submit success → "
+                                    f"trust established, unlocking ALL foremen "
+                                    f"({account.email})"
+                                )
+                            else:
+                                log.info(
+                                    f"[{fid}] 🔥 Success #{supervisor._success_count}/2 "
+                                    f"— building trust ({account.email})"
+                                )
                         # Smart-Hide: countdown to re-hide browser after 403 recovery
                         _sh_remaining = self._smart_hide_rehide_countdown.get(account.email, 0)
                         if _sh_remaining > 0:
@@ -5211,13 +5348,14 @@ class Engine:
                 _cap_evt = self._workers_available.get(account.email)
                 if _cap_evt:
                     _cap_evt.set()
-            # ★ Fix M1: Force prewarm for NEXT task by backdating last_submit.
+            # ★ Fix M1: Force prewarm for NEXT task.
             # Video pipeline took minutes — session context (reCAPTCHA,
             # headers, cookies) has gone stale.
-            # ★ FIX: Use epoch 1 (not 0!) — 0 is falsy, causes
-            # idle_secs = 0 in _maybe_prewarm(), bypassing prewarm.
-            # Epoch 1 is truthy → idle_secs ≈ 1.7B secs → always triggers.
-            self._last_successful_submit[account.email] = 1
+            # ★ FIX v2: Use dedicated flag instead of epoch=1 hack.
+            # Old code set timestamp=1 → idle_secs ≈ 1.7B secs → triggered
+            # soft recovery even while other foremen had active fetches,
+            # causing self-inflicted 'Failed to fetch' aborts.
+            self._force_prewarm.add(account.email)
             log.info(
                 f"[Fix-M1:{account.email}] Task {task.id}: pipeline done "
                 f"— forced prewarm for next task"
@@ -5549,8 +5687,11 @@ class Engine:
                 elif op_status == "MEDIA_GENERATION_STATUS_FAILED":
                     error = op.get("operation", {}).get("error", {}).get("message", "unknown")
                     log.warning(f"{log_prefix} Op FAILED: {error}")
-                    # Signal retryable server-side timeout with prefix
-                    if "TIMED_OUT" in error.upper():
+                    # Signal retryable server-side errors with prefix
+                    # TIMED_OUT: VEO rendering timeout (server overload)
+                    # INTERNAL: Transient server-side failure (same root cause)
+                    error_upper = error.upper()
+                    if "TIMED_OUT" in error_upper or error_upper == "INTERNAL":
                         return None, None, f"RETRYABLE_TIMEOUT:{error}"
                     return None, None, error
 
@@ -5703,15 +5844,43 @@ class Engine:
         
         email = account.email
         total = len(task.operation_names)
-        successes = [r for r in results_dict.values() if r.quality != "failed"]
+        # ★ FIX: timeout_retry is NOT a success — it's a non-terminal state
+        # meaning a replacement task was queued. Only count results with actual files.
+        _NON_SUCCESS = {"failed", "timeout_retry", "pending", "polling", "downloading"}
+        successes = [r for r in results_dict.values() if r.quality not in _NON_SUCCESS]
         failures = [r for r in results_dict.values() if r.quality == "failed"]
+        retrying = [r for r in results_dict.values() if r.quality == "timeout_retry"]
         success_count = len(successes)
         failed_count = len(failures)
+        retry_count = len(retrying)
 
         log.info(
             f"[Finalizer:{email}] Task {task.id}: "
             f"{success_count}/{total} succeeded, {failed_count} failed"
+            f"{f', {retry_count} retrying' if retry_count else ''}"
         )
+
+        # ★ FIX: If ALL results are timeout_retry (replacement tasks queued),
+        # do NOT advance stage. Release running counter so slot is freed.
+        # Replacement tasks will handle completion via result-slotting.
+        if retry_count > 0 and success_count == 0 and failed_count == 0:
+            log.info(
+                f"[Finalizer:{email}] Task {task.id}: ALL {retry_count} ops are "
+                f"timeout_retry — releasing slot, deferring to replacement tasks"
+            )
+            # Release running counter so parent doesn't block foremen
+            if not getattr(task, '_counter_decremented', False):
+                self._dispatcher.decrement_running(account.email)
+                task._counter_decremented = True
+            return
+
+        # ★ FIX: Mixed results with retries — only process actual successes.
+        # Don't count retry slots toward merge/completion.
+        if retry_count > 0:
+            log.info(
+                f"[Finalizer:{email}] Task {task.id}: {retry_count} op(s) still "
+                f"retrying — finalizing {success_count} real success(es) only"
+            )
 
         # ── G3: Handle all-failed ──
         if success_count == 0:
@@ -5848,6 +6017,20 @@ class Engine:
             task.output_uris = final_paths
 
         # ── G8: Continuation frame (from video[0] only, 1 location) ──
+        # ★ FIX: Only advance to DOWNLOADED_720 if we have actual files.
+        # Without files, this checkpoint causes phantom completion.
+        if not final_paths:
+            log.warning(
+                f"[Finalizer:{email}] Task {task.id}: no output files — "
+                f"NOT advancing to DOWNLOADED_720 (stage={task.stage.value})"
+            )
+            errors = [r.error for r in results_dict.values() if r.error]
+            self._dispatcher.fail_task(
+                task.id,
+                f"No output files ({failed_count} failed, {retry_count} retrying): "
+                f"{errors[0][:100] if errors else 'unknown'}"
+            )
+            return
         task.stage = TaskStage.DOWNLOADED_720
         self._sync_overall_upscale_status(task)
         
@@ -5907,9 +6090,19 @@ class Engine:
         if has_pending_upscale:
             # Don't call complete_task — UpscaleQueue owns completion.
             # Keep stage as UPSCALING (already set by _poll_operation).
+            # Continuation extraction may have already pushed the task to 95%.
+            # Use a monotonic progress value here so the persisted status_text
+            # does not get stuck on "Uploading frame..." after the next refresh.
             self._dispatcher.update_progress(
-                task.id, 88, f"⬆️ Upscaling {getattr(task, 'download_quality', '?')}..."
+                task.id, 96, f"⬆️ Upscaling {getattr(task, 'download_quality', '?')}..."
             )
+            # Release dispatcher running counters now that the worker pipeline
+            # is done and the task is owned by UpscaleQueue in the background.
+            # Without this, continuation children can be READY but remain starved
+            # behind the per-account running cap until upscale finishes.
+            if not getattr(task, '_counter_decremented', False):
+                self._dispatcher.decrement_running(account.email)
+                task._counter_decremented = True
             log.info(
                 f"[Finalizer] Task {task.id}: upscale pending — "
                 f"deferring complete_task to UpscaleQueue"
@@ -7232,12 +7425,24 @@ class Engine:
                                         task.video_outputs[i].quality = task.download_quality
                                     dl_idx += 1
                 
-                # Update final paths
+                # Update final paths — ★ FIX: filter empty strings
                 final_paths = []
                 for vo in task.video_outputs:
-                    final_paths.append(vo.file_upscaled or vo.file_720p)
+                    p = vo.file_upscaled or vo.file_720p
+                    if p:  # Skip empty/None entries
+                        final_paths.append(p)
                 if final_paths:
                     task.output_uris = final_paths
+                else:
+                    # ★ FIX: No valid files — fail instead of completing with empty data
+                    log.warning(
+                        f"[Poll] Task {task.id}: resume from {task.stage.value} but "
+                        f"NO valid output files found — failing task"
+                    )
+                    self._dispatcher.fail_task(
+                        task.id, "Resume failed: no valid output files in checkpoint"
+                    )
+                    return
                 
                 self._sync_overall_upscale_status(task)
                 
@@ -10473,12 +10678,18 @@ class Engine:
         zoomed_h = int(orig_h * zoom) // 2 * 2
         
         # FFmpeg: scale up → center-crop → overwrite
+        # ★ Quality-first settings: CRF 15 + slow preset + high profile
+        #   ensures near-lossless output at ALL resolutions (720p/1080p/4K).
+        #   lanczos scaler produces sharper results than default bilinear.
+        #   Tradeoff: ~3x slower encoding but visually indistinguishable from source.
         tmp_path = filepath.with_suffix(".tmp.mp4")
         cmd = [
             ffmpeg, "-y", "-i", str(filepath),
-            "-vf", f"scale={zoomed_w}:{zoomed_h},crop={orig_w}:{orig_h}",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-            "-c:a", "copy",  # Pass-through audio
+            "-vf", f"scale={zoomed_w}:{zoomed_h}:flags=lanczos,crop={orig_w}:{orig_h}",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "15",
+            "-profile:v", "high", "-level", "5.1",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",  # Pass-through audio (no re-encode)
             "-movflags", "+faststart",
             str(tmp_path),
         ]
@@ -10490,7 +10701,7 @@ class Engine:
                 stderr=asyncio.subprocess.PIPE,
                 **({'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}),
             )
-            _, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
             
             if process.returncode != 0:
                 err_msg = (stderr or b"").decode(errors="replace")[-200:]

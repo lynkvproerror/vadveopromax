@@ -30,12 +30,10 @@ MODEL_POOL = [
     {"id": "gemma-3-27b-it",                "rpd": 14400, "rpm": 30},
     {"id": "gemma-3-12b-it",                "rpd": 14400, "rpm": 30},
     {"id": "gemma-3-4b-it",                 "rpd": 14400, "rpm": 30},
-    {"id": "gemma-3-2b-it",                 "rpd": 14400, "rpm": 30},
     {"id": "gemma-3-1b-it",                 "rpd": 14400, "rpm": 30},
     # ── Gemma 4 family: 1,500 RPD, 15 RPM, Unlimited TPM ─────
     # Higher quality reasoning, unlimited token throughput.
     {"id": "gemma-4-31b-it",                "rpd": 1500,  "rpm": 15},
-    {"id": "gemma-4-26b-it",                "rpd": 1500,  "rpm": 15},
     # ── Gemini Flash family: 20-500 RPD ───────────────────────
     # Proven models, lower quota but tested stable.
     {"id": "gemini-3.1-flash-lite-preview", "rpd": 500,   "rpm": 15},

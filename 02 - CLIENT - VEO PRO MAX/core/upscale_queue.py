@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 
 # Debug flag: set UPSCALE_DEBUG=1 for verbose reCAPTCHA timing logs
 _UPSCALE_DEBUG = os.environ.get('UPSCALE_DEBUG', '').strip() in ('1', 'true', 'yes')
+_UNSUPPORTED_REUPSCALE_ERROR = "Re-upscale requires debug browser (TRPC unavailable)"
 
 
 class AdaptiveBurstController:
@@ -138,7 +139,7 @@ class AdaptiveJobController:
     
     INITIAL = 4
     MIN = 1
-    MAX = 4
+    MAX = 8
     SCALE_UP_AFTER = 3  # consecutive successes before +1
     
     def __init__(self):
@@ -194,6 +195,8 @@ class UpscaleJob:
     max_retries: int = 3            # Max job-level retries before permanent fail
     retry_indices: List[int] = field(default_factory=list)  # Which video indices to retry (empty = all)
     enqueue_after: float = 0.0      # Bug 2 fix: monotonic time to delay processing until (0 = no delay)
+    reupscale_signature: str = ""   # Active dedupe for force=True re-upscale
+    outcome_applied: bool = False   # Ensure AIMD is updated at most once per job
 
 
 class UpscaleQueue:
@@ -325,6 +328,7 @@ class UpscaleQueue:
         
         # Bug 3: Dedup set — prevent duplicate upscale submissions
         self._enqueued_ids: set = set()  # "task_id:media_id" strings
+        self._active_reupscale_signatures: set = set()  # Force re-upscale dedupe while queued/running
         
         # Processing-level dedup — prevents concurrent _process_job calls
         # from submitting same media_id (happens during continuation when
@@ -345,6 +349,12 @@ class UpscaleQueue:
         
         # Dead-tab pause: accounts whose tabs are dead → stop picking up new jobs
         self._paused_accounts: set = set()  # email strings
+        
+        # ★ FIX #429: Per-account consecutive 429 counter for escalating backoff.
+        # Cooldown is only triggered after _429_COOLDOWN_THRESHOLD consecutive 429s
+        # (not on first occurrence, unlike 403 which is immediate).
+        self._consecutive_429s: Dict[str, int] = {}  # email → count
+        self._429_COOLDOWN_THRESHOLD = 3  # escalate to _set_cooldown after 3 consecutive 429s
     
     def start(self):
         """Mark queue as running."""
@@ -381,9 +391,99 @@ class UpscaleQueue:
                 log.info(f"[UpscaleQueue] Cancelled worker for {email}")
         self._upscale_processors.clear()
         self._paused_accounts.clear()
+        self._active_reupscale_signatures.clear()
         log.info(
             f"[UpscaleQueue] Stopped — "
             f"completed={self._total_completed}, failed={self._total_failed}"
+        )
+
+    def _build_reupscale_signature(self, job: UpscaleJob) -> str:
+        """Build a stable signature for duplicate force=True re-upscale jobs."""
+        media_ids = [mid for mid in job.media_ids if mid]
+        if not media_ids:
+            return ""
+        return f"{job.task_id}:{'|'.join(media_ids)}"
+
+    def _apply_job_outcome(self, job: UpscaleJob, reason: str, detail: str = ""):
+        """Apply AIMD outcome once per job and emit a diagnostic log."""
+        if getattr(job, 'outcome_applied', False):
+            return
+        job.outcome_applied = True
+
+        before = self._job_controller.get_limit(job.account_email)
+        if reason == "success":
+            self._job_controller.record_success(job.account_email)
+        elif reason == "failure":
+            self._job_controller.record_failure(job.account_email)
+        after = self._job_controller.get_limit(job.account_email)
+
+        suffix = f", detail={detail}" if detail else ""
+        log.info(
+            f"[UpscaleQueue] Job outcome: task={job.task_id[:12]} "
+            f"account={job.account_email} reason={reason} "
+            f"limit={before}->{after}{suffix}"
+        )
+
+    @staticmethod
+    def _is_unsupported_reupscale_output(video_output) -> bool:
+        return (
+            str(getattr(video_output, 'upscale_status', '') or '').lower() == "skipped"
+            and str(getattr(video_output, 'upscale_error', '') or '') == _UNSUPPORTED_REUPSCALE_ERROR
+        )
+
+    def _get_job_output_indices(self, task, job: UpscaleJob) -> List[int]:
+        """Map job-local media_ids back to authoritative task.video_outputs indices."""
+        outputs = getattr(task, 'video_outputs', None) or []
+        indices: List[int] = []
+        for local_idx, _ in enumerate(job.media_ids or [None]):
+            orig_idx = job.retry_indices[local_idx] if job.retry_indices else local_idx
+            if 0 <= orig_idx < len(outputs):
+                indices.append(orig_idx)
+        return indices
+
+    def _classify_job_outcome(self, task, job: UpscaleJob) -> tuple[str, str]:
+        """Classify the finished job for AIMD purposes."""
+        indices = self._get_job_output_indices(task, job)
+        if not indices:
+            return ("neutral", "no-owned-outputs")
+
+        success = 0
+        unsupported = 0
+        pending = 0
+        failed = 0
+        for idx in indices:
+            video_output = task.video_outputs[idx]
+            status = str(getattr(video_output, 'upscale_status', '') or '').lower()
+            if status in ("success", "completed"):
+                success += 1
+            elif self._is_unsupported_reupscale_output(video_output):
+                unsupported += 1
+            elif status in ("pending", "polling", "submitting", "retrying", ""):
+                pending += 1
+            elif status in ("failed", "skipped"):
+                failed += 1
+            else:
+                pending += 1
+
+        detail = (
+            f"success={success}, unsupported={unsupported}, "
+            f"pending={pending}, failed={failed}"
+        )
+        if success > 0:
+            return ("success", detail)
+        if unsupported == len(indices):
+            return ("neutral", f"unsupported-re-upscale, {detail}")
+        if pending > 0 and failed == 0:
+            return ("neutral", f"pending-retry, {detail}")
+        if failed > 0:
+            return ("failure", detail)
+        return ("neutral", detail)
+
+    def _task_all_outputs_unsupported(self, task) -> bool:
+        outputs = getattr(task, 'video_outputs', None) or []
+        return bool(outputs) and all(
+            self._is_unsupported_reupscale_output(video_output)
+            for video_output in outputs
         )
     
     def pause_account(self, email: str):
@@ -439,10 +539,21 @@ class UpscaleQueue:
         
         # Clear cancelled flag if task is being re-enqueued (post-force-retry re-generation)
         self._cancelled_task_ids.discard(job.task_id)
-        
+
         # Bug 3: Dedup — skip if already enqueued
         dedup_keys = [f"{job.task_id}:{mid}" for mid in job.media_ids if mid]
         if force:
+            reupscale_signature = self._build_reupscale_signature(job)
+            if reupscale_signature and reupscale_signature in self._active_reupscale_signatures:
+                _item_type = "images" if getattr(job, 'job_type', 'video') == 'image' else "videos"
+                log.warning(
+                    f"[UpscaleQueue] Skipped duplicate re-upscale for task {job.task_id} "
+                    f"({len(dedup_keys)} {_item_type} already queued/running)"
+                )
+                return
+            if reupscale_signature:
+                job.reupscale_signature = reupscale_signature
+                self._active_reupscale_signatures.add(reupscale_signature)
             # Re-upscale: clear old dedup keys so job can be re-enqueued
             self._enqueued_ids -= set(dedup_keys)
         if all(k in self._enqueued_ids for k in dedup_keys) and dedup_keys:
@@ -498,6 +609,11 @@ class UpscaleQueue:
         # Clean dedup keys containing this task_id
         stale_keys = {k for k in self._enqueued_ids if k.startswith(f"{task_id}:")}
         self._enqueued_ids -= stale_keys
+        stale_reupscale = {
+            sig for sig in self._active_reupscale_signatures
+            if sig.startswith(f"{task_id}:")
+        }
+        self._active_reupscale_signatures -= stale_reupscale
         stale_proc = {k for k in self._processing_ids if k.startswith(f"{task_id}:")}
         self._processing_ids -= stale_proc
         
@@ -509,6 +625,8 @@ class UpscaleQueue:
                 while not q.empty():
                     job = q.get_nowait()
                     if job.task_id == task_id:
+                        if getattr(job, 'reupscale_signature', ''):
+                            self._active_reupscale_signatures.discard(job.reupscale_signature)
                         evicted += 1
                     else:
                         keep.append(job)
@@ -590,7 +708,7 @@ class UpscaleQueue:
                 
                 # (720p_priority pause logic removed — UpscaleQueue runs independently)
                 
-                # Adaptive job concurrency (AIMD): starts at 4, max 4
+                # Adaptive job concurrency (AIMD): starts at 4, max 8
                 # record_success/record_failure called at end of _process_job
                 max_jobs = self._job_controller.get_limit(email)
                 
@@ -636,7 +754,8 @@ class UpscaleQueue:
                 active_jobs.append(task)
                 log.info(
                     f"[UpscaleQueue] {email}: launched job {job.task_id[:8]} "
-                    f"(active={len(active_jobs)}, burst={self._burst.active_polls}/{self._burst.max_polls})"
+                    f"(active={len(active_jobs)}, limit={max_jobs}, "
+                    f"burst={self._burst.active_polls}/{self._burst.max_polls})"
                 )
                 
             except asyncio.CancelledError:
@@ -682,7 +801,12 @@ class UpscaleQueue:
             account.session.active_bg_upscale += upscale_count
         try:
             await self._process_job(job)
+        except Exception as e:
+            self._apply_job_outcome(job, "failure", f"unhandled-exception: {e}")
+            raise
         finally:
+            if getattr(job, 'reupscale_signature', ''):
+                self._active_reupscale_signatures.discard(job.reupscale_signature)
             if account and hasattr(account, 'session'):
                 account.session.active_bg_upscale = max(
                     0, account.session.active_bg_upscale - upscale_count
@@ -720,14 +844,14 @@ class UpscaleQueue:
                 f"[UpscaleQueue] Skipping stale job for force-retried task "
                 f"{job.task_id[:12]} (cancelled)"
             )
-            self._job_controller.record_failure(job.account_email)
+            self._apply_job_outcome(job, "neutral", "cancelled-stale-job")
             return
         
         task = self._dispatcher.get_task(job.task_id)
         if not task:
             log.warning(f"[UpscaleQueue] Task {job.task_id} not found, skipping")
             self._total_failed += 1
-            self._job_controller.record_failure(job.account_email)
+            self._apply_job_outcome(job, "neutral", "task-not-found")
             return
         
         # Guard: if task was reset (video_outputs cleared by force retry)
@@ -737,7 +861,7 @@ class UpscaleQueue:
                 f"[UpscaleQueue] Task {job.task_id[:12]} has empty video_outputs "
                 f"(likely force-retried), skipping stale upscale job"
             )
-            self._job_controller.record_failure(job.account_email)
+            self._apply_job_outcome(job, "neutral", "empty-video-outputs")
             return
         
         # Get the account
@@ -745,7 +869,7 @@ class UpscaleQueue:
         if not account:
             log.warning(f"[UpscaleQueue] Account {job.account_email} not found, skipping")
             self._total_failed += 1
-            self._job_controller.record_failure(job.account_email)
+            self._apply_job_outcome(job, "neutral", "account-not-found")
             return
         
         # DD6: Failover — if primary account unhealthy (cooldown OR reCAPTCHA dead), try others
@@ -831,7 +955,7 @@ class UpscaleQueue:
             )
             self._sync_status_fn(task)
             self._total_failed += 1
-            self._job_controller.record_failure(job.account_email)
+            self._apply_job_outcome(job, "failure", "auth-expired")
             return
         
         # ★ RC1 FIX: Per-slot media ID update (not task-level overwrite).
@@ -871,6 +995,7 @@ class UpscaleQueue:
         }
         resolution = quality_map.get(job.target_quality)
         if not resolution:
+            self._apply_job_outcome(job, "neutral", f"unsupported-resolution:{job.target_quality}")
             return
         is_free_upscale = (resolution == "VIDEO_RESOLUTION_1080P")
         from core.api_client import generate_random_seed
@@ -1106,11 +1231,15 @@ class UpscaleQueue:
                         )
                         from core.api_client import APIResponse
                         if ext_r and ext_r.get('success'):
-                            resp = APIResponse(success=True, data=ext_r.get('data', {}))
+                            resp = APIResponse(
+                                success=True, data=ext_r.get('data', {}),
+                                response_code=ext_r.get('status', 200),
+                            )
                         elif ext_r:
                             resp = APIResponse(
                                 success=False,
                                 error=ext_r.get('error', '') or f"HTTP {ext_r.get('status', 0)}",
+                                response_code=ext_r.get('status', 0),
                             )
                         else:
                             resp = APIResponse(success=False, error="Extension timeout")
@@ -1134,6 +1263,7 @@ class UpscaleQueue:
                     
                     if resp.success:
                         self._clear_cooldown(job.account_email)
+                        self._consecutive_429s[job.account_email] = 0  # Reset on success
                         break
                     
                     error_lower = (resp.error or "").lower()
@@ -1155,6 +1285,57 @@ class UpscaleQueue:
                         f"Upscale {video_label} submit attempt {attempt + 1}/{max_submit_retries} "
                         f"failed: {resp.error}"
                     )
+                    
+                    # ★ FIX #429: Dedicated 429 rate-limit handling
+                    # Distinct from 403 path: uses Retry-After + exp backoff + jitter,
+                    # only escalates to _set_cooldown after repeated 429s (not first hit).
+                    is_429 = (
+                        getattr(resp, 'response_code', 0) == 429
+                        or "429" in error_lower
+                        or "quota" in error_lower
+                        or "rate" in error_lower
+                    )
+                    if is_429:
+                        import re as _re
+                        # Track consecutive 429s per account
+                        prev_count = self._consecutive_429s.get(job.account_email, 0)
+                        self._consecutive_429s[job.account_email] = prev_count + 1
+                        n429 = self._consecutive_429s[job.account_email]
+                        
+                        # Parse Retry-After from error body (server may embed it)
+                        retry_after = 0
+                        ra_match = _re.search(r'retry[\-_ ]?after[":\s]+(\d+)', error_lower)
+                        if ra_match:
+                            retry_after = min(int(ra_match.group(1)), 120)  # Cap at 2 min
+                        
+                        # Exponential backoff + jitter (base: 5s × 2^attempt, max 60s)
+                        import random as _rng
+                        backoff = min(5 * (2 ** attempt), 60)
+                        jitter = _rng.uniform(0, backoff * 0.3)  # ±30% jitter
+                        wait_time = max(retry_after, backoff) + jitter
+                        
+                        log.warning(
+                            f"Upscale {video_label}: HTTP 429 (consecutive #{n429}) — "
+                            f"backoff {wait_time:.1f}s "
+                            f"(retry_after={retry_after}, base_backoff={backoff})"
+                        )
+                        
+                        # Escalate to cooldown only after threshold consecutive 429s
+                        if n429 >= self._429_COOLDOWN_THRESHOLD:
+                            log.warning(
+                                f"Upscale {video_label}: {n429} consecutive 429s — "
+                                f"escalating to account cooldown for {job.account_email}"
+                            )
+                            self._set_cooldown(
+                                job.account_email,
+                                f"upscale 429 x{n429} (quota exhausted)",
+                            )
+                            # Report to AIMD controller (halve concurrency)
+                            self._job_controller.record_failure(job.account_email)
+                            await self._wait_cooldown(job.account_email)
+                        else:
+                            await asyncio.sleep(wait_time)
+                        continue  # Skip generic delay at bottom of loop
                     
                     # ★ Extension disconnect recovery: wait for reconnection
                     # before retrying (prevents fallback to aiohttp → guaranteed 403)
@@ -1517,7 +1698,6 @@ class UpscaleQueue:
                     task.video_outputs[_exh_orig].upscale_error = "All retries exhausted"
             self._sync_status_fn(task)
             self._total_failed += 1
-            self._job_controller.record_failure(job.account_email)
             
             # ★ RC2: Only complete task if ALL outputs terminal
             if self._all_outputs_terminal(task):
@@ -1532,6 +1712,7 @@ class UpscaleQueue:
                     f"[UpscaleQueue] Retries exhausted for job but other outputs "
                     f"still pending — deferring completion"
                 )
+            self._apply_job_outcome(job, "failure", "retries-exhausted")
             if self._on_completed:
                 try:
                     self._on_completed(task)
@@ -1844,9 +2025,7 @@ class UpscaleQueue:
                             )
                             if orig_idx < len(task.video_outputs):
                                 task.video_outputs[orig_idx].upscale_status = "skipped"
-                                task.video_outputs[orig_idx].upscale_error = (
-                                    "Re-upscale requires debug browser (TRPC unavailable)"
-                                )
+                                task.video_outputs[orig_idx].upscale_error = _UNSUPPORTED_REUPSCALE_ERROR
                             continue
                         # ★ Re-upscale: TRPC ZIP first → FIFE fallback (4 attempts)
                         for attempt in range(4):
@@ -2035,12 +2214,13 @@ class UpscaleQueue:
                 1 for vo in task.video_outputs
                 if getattr(vo, 'upscale_status', '') in ("success", "failed", "skipped", "completed")
             )
+            job_outcome_reason, job_outcome_detail = self._classify_job_outcome(task, job)
             log.info(
                 f"[UpscaleQueue] Job for task {job.task_id[:12]} finished "
                 f"({_terminal}/{len(task.video_outputs)} terminal) — "
                 f"deferring completion until all outputs done"
             )
-            self._job_controller.record_success(job.account_email)
+            self._apply_job_outcome(job, job_outcome_reason, job_outcome_detail)
             # Notify UI of partial progress
             if self._on_completed:
                 try:
@@ -2064,6 +2244,8 @@ class UpscaleQueue:
             getattr(vo, 'upscale_status', '') in ("success", "completed")
             for vo in task.video_outputs
         )
+        task_all_unsupported = self._task_all_outputs_unsupported(task)
+        job_outcome_reason, job_outcome_detail = self._classify_job_outcome(task, job)
         task.stage = TaskStage.COMPLETED
         
         if any_success:
@@ -2071,13 +2253,16 @@ class UpscaleQueue:
                 task.id, 100, f"✅ Upscaled to {job.target_quality}"
             )
             self._total_completed += 1
-            self._job_controller.record_success(job.account_email)
+        elif task_all_unsupported:
+            self._dispatcher.update_progress(
+                task.id, 100, "⚠️ Re-upscale unsupported — keeping 720p"
+            )
         else:
             self._dispatcher.update_progress(
                 task.id, 100, f"⚠️ Upscale failed — 720p saved"
             )
             self._total_failed += 1
-            self._job_controller.record_failure(job.account_email)
+        self._apply_job_outcome(job, job_outcome_reason, job_outcome_detail)
         
         # Call complete_task() — transitions task state to COMPLETED
         # NOTE: Continuation children were already activated early by engine

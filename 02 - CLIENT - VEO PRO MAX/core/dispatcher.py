@@ -1070,29 +1070,37 @@ class Dispatcher:
                 log.warning(f"[ResultSlot] Replacement {task.id} completed but "
                             f"has EMPTY video_outputs — slotting skipped")
             else:
-                # Copy replacement's first video_output into original slot
+                # ★ FIX: Only slot if replacement has actual valid output
                 src_vo = task.video_outputs[0]
-                dst_vo = orig_task.video_outputs[orig_video_idx]
-                dst_vo.file_720p = src_vo.file_720p
-                dst_vo.file_upscaled = src_vo.file_upscaled
-                dst_vo.thumbnail_path = src_vo.thumbnail_path
-                dst_vo.quality = src_vo.quality
-                dst_vo.upscale_status = src_vo.upscale_status
-                dst_vo.upscale_error = src_vo.upscale_error
-                dst_vo.operation_name = src_vo.operation_name
-                dst_vo.scene_id = src_vo.scene_id
-                dst_vo.media_id = src_vo.media_id
-                
-                # Add file paths to original task's lists
                 best = src_vo.best_file
-                if best and best not in orig_task.output_uris:
-                    orig_task.output_uris.append(best)
-                if src_vo.thumbnail_path and src_vo.thumbnail_path not in orig_task.thumbnail_paths:
-                    orig_task.thumbnail_paths.append(src_vo.thumbnail_path)
-                
-                log.info(f"[ResultSlot] ✅ Replacement {task.id} video[0] → "
-                         f"original {orig_task_id} video[{orig_video_idx}] "
-                         f"(quality={dst_vo.quality}, file={dst_vo.best_file})")
+                if src_vo.quality == "failed" or not best:
+                    log.warning(
+                        f"[ResultSlot] Replacement {task.id} completed but "
+                        f"has FAILED/EMPTY output (quality={src_vo.quality}, "
+                        f"file={best!r}) — slotting SKIPPED to prevent phantom data"
+                    )
+                else:
+                    # Copy replacement's first video_output into original slot
+                    dst_vo = orig_task.video_outputs[orig_video_idx]
+                    dst_vo.file_720p = src_vo.file_720p
+                    dst_vo.file_upscaled = src_vo.file_upscaled
+                    dst_vo.thumbnail_path = src_vo.thumbnail_path
+                    dst_vo.quality = src_vo.quality
+                    dst_vo.upscale_status = src_vo.upscale_status
+                    dst_vo.upscale_error = src_vo.upscale_error
+                    dst_vo.operation_name = src_vo.operation_name
+                    dst_vo.scene_id = src_vo.scene_id
+                    dst_vo.media_id = src_vo.media_id
+                    
+                    # Add file paths to original task's lists
+                    if best not in orig_task.output_uris:
+                        orig_task.output_uris.append(best)
+                    if src_vo.thumbnail_path and src_vo.thumbnail_path not in orig_task.thumbnail_paths:
+                        orig_task.thumbnail_paths.append(src_vo.thumbnail_path)
+                    
+                    log.info(f"[ResultSlot] ✅ Replacement {task.id} video[0] → "
+                             f"original {orig_task_id} video[{orig_video_idx}] "
+                             f"(quality={dst_vo.quality}, file={dst_vo.best_file})")
                 
                 # Clean replacement mapping
                 self._replace_target_map.pop(task_id, None)
@@ -1187,6 +1195,36 @@ class Dispatcher:
                     vo.upscale_error = f"Retry failed: {error[:80]}"
                     log.info(f"[Dispatcher] Reset parent {orig_task_id} video[{orig_video_idx}] "
                              f"quality retrying→failed (replacement failed)")
+            
+            # ★ FIX: When ALL replacements for parent resolved, finalize parent.
+            # Without this, parent stays RUNNING forever → pipeline stuck at 80%.
+            if orig_task and orig_task.state == TaskState.RUNNING:
+                still_pending = any(
+                    oid == orig_task_id
+                    for oid, _ in self._replace_target_map.values()
+                )
+                if not still_pending:
+                    has_any_output = any(
+                        (getattr(v, 'file_720p', '') or getattr(v, 'file_upscaled', ''))
+                        for v in getattr(orig_task, 'video_outputs', [])
+                    )
+                    if has_any_output:
+                        valid_paths = [
+                            v.file_upscaled or v.file_720p
+                            for v in orig_task.video_outputs
+                            if (v.file_upscaled or v.file_720p)
+                        ]
+                        log.info(
+                            f"[Dispatcher] All replacements resolved for {orig_task_id}: "
+                            f"partial success ({len(valid_paths)} files)"
+                        )
+                        self.complete_task(orig_task_id, output_uris=valid_paths)
+                    else:
+                        log.warning(
+                            f"[Dispatcher] All replacements resolved for {orig_task_id}: "
+                            f"ALL FAILED — failing parent task"
+                        )
+                        self.fail_task(orig_task_id, f"All retry attempts failed: {error[:80]}")
         
         # C1: Cascade-fail ALL descendants waiting on this parent (recursive)
         self._cascade_fail_children(task_id, error)
@@ -1319,6 +1357,72 @@ class Dispatcher:
             "action": "remove", "task_id": task_id,
         }, source="dispatcher")
         return True
+    
+    def remove_tasks(self, task_ids: list) -> int:
+        """Batch-remove multiple tasks in a single pass.
+        
+        PERF: Avoids O(N x G) overhead of calling remove_task() in a loop.
+        - Collects all IDs to remove (including orphan replacement tasks)
+        - Cancels running tasks and decrements counters once
+        - Does ONE group-scan to prune all removed IDs
+        - Emits a single QUEUE_UPDATED event
+        
+        Returns count of tasks actually removed.
+        """
+        if not task_ids:
+            return 0
+        
+        # Phase 1: Expand removal set with orphan replacement tasks
+        ids_to_remove = set()
+        for task_id in task_ids:
+            task = self._all_tasks.get(task_id)
+            if not task:
+                continue
+            ids_to_remove.add(task_id)
+            # BUG-B17: Also collect replacement tasks targeting this parent
+            orphan_ids = [
+                rep_id for rep_id, (orig_id, _) in self._replace_target_map.items()
+                if orig_id == task_id
+            ]
+            ids_to_remove.update(orphan_ids)
+        
+        if not ids_to_remove:
+            return 0
+        
+        # Phase 2: Cancel running tasks + release claims (batch)
+        for tid in ids_to_remove:
+            task = self._all_tasks.get(tid)
+            if not task:
+                continue
+            self._release_task_claim(task)
+            if task.state in (TaskState.RUNNING, TaskState.WAITING_POLL):
+                if not getattr(task, '_counter_decremented', False):
+                    self._running_count = max(0, self._running_count - 1)
+                    self._decrement_account_running(task.assigned_account)
+            task.state = TaskState.CANCELLED
+            # Remove from waiting queue
+            self._waiting_tasks.pop(tid, None)
+        
+        # Phase 3: Remove from _all_tasks + _replace_target_map (batch)
+        for tid in ids_to_remove:
+            self._all_tasks.pop(tid, None)
+            self._replace_target_map.pop(tid, None)
+        
+        # Phase 4: ONE pass over groups to prune removed task IDs
+        empty_groups = []
+        for gid, group in self._task_groups.items():
+            group.tasks = [t for t in group.tasks if t.id not in ids_to_remove]
+            if not group.tasks:
+                empty_groups.append(gid)
+        for gid in empty_groups:
+            del self._task_groups[gid]
+        
+        removed_count = len(ids_to_remove)
+        log.info(f"[Dispatcher] Batch-removed {removed_count} tasks")
+        emit_event(EventType.QUEUE_UPDATED, {
+            "action": "batch_remove", "count": removed_count,
+        }, source="dispatcher")
+        return removed_count
     
     def has_children(self, task_id: str) -> bool:
         """Check if a task has pending continuation children."""
@@ -1487,13 +1591,13 @@ class Dispatcher:
         if not group:
             return False
         
-        # Remove each task properly (cancel + remove from _all_tasks)
-        for task in group.tasks:
-            self.cancel_task(task.id)  # Handle running counters
-            self._all_tasks.pop(task.id, None)
-        
+        task_count = len(group.tasks)
+        task_ids = [task.id for task in group.tasks]
+        # Pre-remove group so remove_tasks won't re-scan it
         self._task_groups.pop(group_id, None)
-        log.info(f"[Dispatcher] Removed group {group_id} with {len(group.tasks)} tasks")
+        # Batch-remove all tasks (handles cancel, orphans, replacement maps)
+        self.remove_tasks(task_ids)
+        log.info(f"[Dispatcher] Removed group {group_id} with {task_count} tasks")
         return True
     
     def get_status_summary(self) -> dict:

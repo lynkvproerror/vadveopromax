@@ -1,0 +1,75 @@
+{
+  "group_id": "group_20260406_183637",
+  "workflow": "R2V",
+  "model_display": "Veo 3.1 - Fast [LP]",
+  "model_api_key": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+  "aspect_ratio_raw": "LANDSCAPE",
+  "aspect_ratio_api": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+  "dual_frame": false,
+  "output_count": 1,
+  "tasks": [
+    {
+      "id": "group_20260406_183637_task_0",
+      "prompt": "[di_ghe] [Autonoe] Chào Algieba, ngôi sao sáng của chòm Sư Tử. Từ quỹ đạo xa xôi và lạnh lẽo này của Thái Dương Hệ, ánh sáng vàng cam của bạn trông thật rực rỡ và ấm áp.",
+      "model": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260406_183637_task_1",
+      "prompt": "[but] [Algieba] Chào Autonoe, mặt trăng nhỏ bé bé của sao Mộc. Ta chiếu sáng không ngừng nghỉ, nhưng vạn vật quanh ta lại quá đỗi tĩnh lặng. Cậu có thấy cô đơn khi cứ mãi lang thang trong bóng tối, quay quanh một hành tinh khổng lồ không?",
+      "model": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260406_183637_task_2",
+      "prompt": "[di_ghe] [Autonoe] Đôi khi có chứ. Lực hấp dẫn của Mộc Tinh trói buộc tôi, khiến tôi mãi là một mảnh vỡ trôi dạt ở rìa ngoài. Nhưng bù lại, từ trong bóng tối, tôi có thể ngắm nhìn cả vũ trụ bao la đang chuyển động, và thấy được những chòm sao vĩ đại như bạn.",
+      "model": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260406_183637_task_3",
+      "prompt": "[but] [Algieba] Cậu thật lạc quan. Hệ sao của ta tuy mạnh mẽ và chói lòa, nhưng thực chất lại bị giam cầm trong chính vòng xoáy vô tận của nhau. Cậu có biết rằng, ánh sáng của ta mà cậu đang chiêm ngưỡng đã phải du hành hơn một trăm năm mới tới được đó không?",
+      "model": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260406_183637_task_4",
+      "prompt": "[di_ghe] [Autonoe] Tôi biết chứ. Thứ tôi đang nhìn thấy lúc này chỉ là quá khứ xa xăm của bạn. Nhưng chính khoảng cách không gian và thời gian ấy lại làm cho khoảnh khắc chúng ta \"chạm\" vào nhau bằng ánh sáng càng thêm kỳ diệu.",
+      "model": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260406_183637_task_5",
+      "prompt": "[but] [Algieba] Lời của cậu làm ta thấy vơi đi phần nào sự lạnh lẽo của khoảng không vũ trụ. Có lẽ chúng ta đều được kết nối với nhau bằng những tàn dư của thời gian. Hãy tiếp tục vòng quỹ đạo bền bỉ của mình nhé, hỡi vệ tinh nhỏ bé.",
+      "model": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    },
+    {
+      "id": "group_20260406_183637_task_6",
+      "prompt": "[di_ghe] [Autonoe] Tạm biệt Algieba. Xin hãy cứ tiếp tục rực cháy, tôi sẽ luôn dõi theo ánh sáng của bạn từ nơi vùng tối sâu thẳm này.",
+      "model": "veo_3_1_r2v_fast_landscape_ultra_relaxed",
+      "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
+      "duration": 8,
+      "images": [],
+      "parent": null
+    }
+  ]
+}

@@ -2994,7 +2994,7 @@ YÊU CẦU:
         3. On 400: safety block → try next model
         4. Raises on complete exhaustion
         """
-        from services.gemini_client import RateLimitError, GeminiAPIError, GeminiClient
+        from services.gemini_client import RateLimitError, GeminiAPIError, InvalidKeyError, GeminiClient
         
         # Auto-create client if None (pipeline may be initialized without one)
         if not self.client:
@@ -3101,6 +3101,32 @@ YÊU CẦU:
                         pass
                     log.warning(f"[Pipeline] {model} rate limited (429), trying next...")
                     continue
+                
+                except InvalidKeyError as e:
+                    # ★ 403 "denied access" — could be model-specific OR key/project-level
+                    # Strategy: mark BOTH model exhausted AND key denied, try next of each
+                    last_error = e
+                    try:
+                        rotation.mark_exhausted("pipeline", model)
+                    except Exception:
+                        pass
+                    # Mark key denied + rotate to next available key
+                    try:
+                        from services.key_quota_manager import get_quota_manager
+                        qm = get_quota_manager()
+                        qm.mark_denied(api_key)
+                        if custom_keys:
+                            next_key = qm.get_available_key(custom_keys)
+                            if next_key and next_key != api_key:
+                                log.info(f"[Pipeline] 403 → switched key ...{next_key[-8:]}")
+                                api_key = next_key
+                    except Exception:
+                        pass
+                    log.warning(
+                        f"[Pipeline] {model} access denied (403): {e} — "
+                        f"model exhausted + key rotated, trying next..."
+                    )
+                    continue
                     
                 except GeminiAPIError as e:
                     last_error = e
@@ -3111,7 +3137,9 @@ YÊU CẦU:
                         # 503 = server overload, 500 = internal error — retryable
                         log.warning(f"[Pipeline] {model} server error ({e.status}), trying next model...")
                         continue
-                    raise  # 401/403 and other client errors: propagate immediately
+                    # Other client errors (e.g. 404): try next model
+                    log.warning(f"[Pipeline] {model} error ({e.status}), trying next model...")
+                    continue
                     
                 except Exception as e:
                     last_error = e

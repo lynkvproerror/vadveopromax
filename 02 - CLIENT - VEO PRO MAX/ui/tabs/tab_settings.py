@@ -494,11 +494,9 @@ class TabSettings(
                 "gemma-3-27b-it",
                 "gemma-3-12b-it",
                 "gemma-3-4b-it",
-                "gemma-3-2b-it",
                 "gemma-3-1b-it",
                 # Gemma 4: 1,500 RPD, 15 RPM, Unlimited TPM
                 "gemma-4-31b-it",
-                "gemma-4-26b-it",
                 # Gemini Flash: 20-500 RPD
                 "gemini-3.1-flash-lite-preview",
                 "gemini-3-flash-preview",
@@ -635,7 +633,7 @@ class TabSettings(
         self._pb_model_combo.addItems(models_list)
 
         # Set current model
-        current_model = getattr(s, 'pb_ai_model', 'gemma-3-27b-it')
+        current_model = getattr(s, 'pb_ai_model', 'gemini-3.1-flash-lite-preview')
         idx = self._pb_model_combo.findText(current_model)
         if idx >= 0:
             self._pb_model_combo.setCurrentIndex(idx)
@@ -772,12 +770,10 @@ class TabSettings(
                         from services.key_quota_manager import get_quota_manager
                         qm = get_quota_manager()
                         for k in added:
-                            state = qm._get_state(k)
-                            state.rpm_blocked_at = None
-                            state.rpd_blocked_at = None
+                            qm.clear_denied(k)
                         _log.info(
                             f"[Settings] 🔑 Hot-reload: {len(added)} new key(s) added, "
-                            f"total {len(new_keys)} keys (quota reset for new keys)"
+                            f"total {len(new_keys)} keys (denied status cleared)"
                         )
                     except Exception:
                         pass

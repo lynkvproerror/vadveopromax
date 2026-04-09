@@ -165,9 +165,12 @@ class DashboardPage(QWidget):
         for email, info in accounts.items():
             short = email[:19] + ".." if len(email) > 21 else email
             slots = f"{info.get('active_workers', 0)}/{info.get('max_workers', 20)}"
-            upscale = info.get('active_upscale', 0)
+            upscale = info.get(
+                'active_upscale_total',
+                info.get('active_upscale', 0) + info.get('active_bg_upscale', 0),
+            )
             if upscale > 0:
-                slots += f" ⬆️{upscale}/{info.get('max_upscale', 4)}"
+                slots += f" ⬆️{upscale}/{info.get('max_upscale', 8)}"
             score = info.get("score", 0)
             ext = "✅" if info.get("ext_connected") else "❌"
             b_delay = burst_accounts.get(email, {}).get("delay", "-")

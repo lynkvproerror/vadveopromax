@@ -1,13 +1,12 @@
-v2.3.12 — Nâng cấp bảo mật, thư viện media và luồng cập nhật
+v2.3.13 — Project Builder I2V Frame Mode & Engine Retry Fix
 
-🔒 Bảo mật
-• Tăng cường độ ổn định và an toàn cho các cơ chế bảo vệ ứng dụng.
-• Cải thiện luồng cập nhật để đồng bộ tốt hơn giữa app, installer và dữ liệu phiên bản.
+🎬 Project Builder
+• Thêm lựa chọn I2V Mode (Start only / Start + End) trong sidebar.
+• Start only: chỉ dùng 1 ảnh đầu — giảm tải server, ít timeout.
+• Start + End: dùng cặp ảnh liên tiếp cho dual-frame (_fl_ model) — chuyển cảnh mượt.
+• Model tự động chuyển đúng (Single/Dual/Fast/LP) theo lựa chọn.
 
-🖼️ Media & workflow
-• Cải thiện thư viện ảnh và bổ sung thư viện giọng nói để thao tác media thuận tiện hơn.
-• Tối ưu queue, pipeline và các popup thao tác để xử lý dự án mượt và rõ ràng hơn.
-
-🧩 Extension & tương thích
-• Cải thiện extension bridge, popup và xử lý nền để hoạt động ổn định hơn.
-• Tăng độ ổn định khi cài đặt, làm mới và đồng bộ extension với ứng dụng Windows.
+🔧 Engine & Retry
+• Sửa lỗi task fail với INTERNAL error không được retry.
+• INTERNAL error giờ được xử lý giống TIMED_OUT — tự động retry 2 lần trước khi fail.
+• Cải thiện độ ổn định pipeline khi server VEO bị quá tải.

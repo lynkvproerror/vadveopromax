@@ -299,12 +299,36 @@ async def _remedy_refresh_token(account, ext_bridge, **kwargs):
 
 
 async def _remedy_simulate_activity(account, ext_bridge, **kwargs):
-    """Simulate user activity to warm up reCAPTCHA."""
+    """Simulate user activity to warm up reCAPTCHA.
+    
+    ★ Cold profile enhancement: if the account hasn't established trust
+    yet (_second_submit_ok not set), do 3x simulate_activity to rebuild
+    behavioral history. Warm accounts get 1x (faster recovery).
+    """
     if ext_bridge and ext_bridge.is_connected(account.email):
         try:
-            await ext_bridge.simulate_activity(account.email, timeout=5.0)
+            # Check if account is still "cold" (trust not yet established)
+            # Access supervisor's _second_submit_ok via engine reference
+            _is_cold = True
+            engine = getattr(account, '_engine', None)
+            if engine and hasattr(engine, '_supervisors'):
+                supervisor = engine._supervisors.get(account.email)
+                if supervisor and supervisor._second_submit_ok.is_set():
+                    _is_cold = False
+            
+            passes = 3 if _is_cold else 1
+            log.info(
+                f"[Remedy] {account.email}: simulate_activity "
+                f"x{passes} ({'cold profile' if _is_cold else 'warm'})"
+            )
+            
+            for i in range(passes):
+                await ext_bridge.simulate_activity(account.email, timeout=5.0)
+                if i < passes - 1:
+                    await asyncio.sleep(2.0)
+            
             await asyncio.sleep(2.0)
-            log.info(f"[Remedy] {account.email}: simulated activity + warmup")
+            log.info(f"[Remedy] {account.email}: simulated activity + warmup complete")
             return True
         except Exception as e:
             log.warning(f"[Remedy] simulate_activity failed: {e}")
@@ -367,11 +391,13 @@ REMEDY_CHAINS: Dict[ErrorType, List[Remedy]] = {
     ],
 
     ErrorType.RECAPTCHA_TIMEOUT: [
-        # wait_after 8s: tương tự RECAPTCHA_403 — đủ thời gian build trust score
-        Remedy("simulate_activity", "Warm up tab with simulated activity", 8),
+        # ★ FIX: soft_recovery FIRST — only remedy that can fix dead DOM
+        # Old order wasted 18s on simulate_activity+reload_tab on broken page
+        Remedy("soft_recovery", "Navigate away/back — fix dead DOM first", 10),
+        Remedy("simulate_activity", "Warm up tab after recovery", 5),
         Remedy("reload_tab", "Reload active tab", 5),
-        Remedy("soft_recovery", "Soft browser recovery", 8),
-        Remedy("soft_recovery", "Extended soft recovery — navigate away/back", 15),
+        Remedy("soft_recovery", "Extended soft recovery — full page reload", 15),
+        Remedy("hard_restart", "Kill Chrome + relaunch — last resort", 20),
     ],
 
     ErrorType.TOKEN_TOO_SHORT: [
@@ -381,8 +407,12 @@ REMEDY_CHAINS: Dict[ErrorType, List[Remedy]] = {
     ],
 
     ErrorType.TAB_FROZEN: [
-        Remedy("reload_tab", "Reload frozen tab", 5),
-        Remedy("soft_recovery", "Extended soft recovery — navigate away/back", 15),
+        # ★ FIX: soft_recovery first — dead tabs can't respond to reload_tab
+        Remedy("soft_recovery", "Navigate away/back — recover dead tab", 10),
+        Remedy("reload_tab", "Reload tab after recovery", 5),
+        Remedy("simulate_activity", "Warm up recovered tab", 5),
+        Remedy("soft_recovery", "Extended soft recovery", 15),
+        Remedy("hard_restart", "Kill Chrome + relaunch — last resort", 20),
     ],
 
     ErrorType.XCD_STUCK: [

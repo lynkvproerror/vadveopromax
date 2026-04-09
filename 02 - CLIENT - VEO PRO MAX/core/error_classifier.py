@@ -64,6 +64,14 @@ def classify_error(
     if any(s in lower for s in policy_signals) and "403" not in (error_msg or ""):
         return ErrorType.POLICY_VIOLATION
     
+    # ── Tab dead / DOM broken (check BEFORE network — "fetch failed" overlaps) ──
+    # "Could not extract reCAPTCHA site key" = page DOM has no reCAPTCHA scripts
+    # "fetch failed: Failed to fetch" (HTTP 0) = page context dead/navigated away
+    if "could not extract" in lower and "site key" in lower:
+        return ErrorType.TAB_FROZEN
+    if "fetch failed" in lower and "failed to fetch" in lower:
+        return ErrorType.TAB_FROZEN
+    
     # ── Network errors (highest priority — don't penalize account) ──
     network_signals = (
         "network", "connection", "dns", "econnreset", "econnrefused",

@@ -18,6 +18,10 @@
         {
             "src": "/api/notify/(.*)",
             "dest": "/api/notify/$1.py"
+        },
+        {
+            "src": "/api/license/(.*)",
+            "dest": "/api/license/$1.py"
         }
     ],
     "crons": [
