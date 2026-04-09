@@ -5,13 +5,13 @@
     "changelog": "v2.3.13 — Project Builder I2V Frame Mode & Engine Retry Fix\n\n🎬 Project Builder\n• Thêm lựa chọn I2V Mode (Start only / Start + End) trong sidebar.\n• Start only: chỉ dùng 1 ảnh đầu — giảm tải server, ít timeout.\n• Start + End: dùng cặp ảnh liên tiếp cho dual-frame (_fl_ model) — chuyển cảnh mượt.\n• Model tự động chuyển đúng (Single/Dual/Fast/LP) theo lựa chọn.\n\n🔧 Engine & Retry\n• Sửa lỗi task fail với INTERNAL error không được retry.\n• INTERNAL error giờ được xử lý giống TIMED_OUT — tự động retry 2 lần trước khi fail.\n• Cải thiện độ ổn định pipeline khi server VEO bị quá tải.",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Pro_Max_v2.3.14.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Extension_v2.3.13.zip",
-    "sha256": "cd7cc5f15d0c32f266767a3cb81bdb7b006e051b8674a65aa256c363adf99a82",
+    "sha256": "09f84139e530cf324893a21712c172c008452f2401c075972ff44bf65b6a7483",
     "ext_sha256": "5cbb3d9b20f2cde5cbf35b25a038bcad200b8c1f7df809a1b4f5a16aae516705",
     "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Pro_Max_Setup_v2.3.14.exe",
-    "installer_sha256": "4f669c36bcc35d450d83aa2592b211c0a76ba396f5a84c8ca1ac96acb63bd62b",
+    "installer_sha256": "c5d27d3376c958da1a268b916420db45ed17daf7d160d2bbd6fefa19c51771d6",
     "installer_filename": "VEO_Pro_Max_Setup_v2.3.14.exe",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1775734657,
-    "build_time": "2026-04-09T18:37:37.654912"
+    "build_number": 1775737339,
+    "build_time": "2026-04-09T19:22:19.810029"
 }
