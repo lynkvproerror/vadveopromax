@@ -2931,7 +2931,17 @@ class TabProject(QWidget):
                         for i, s in enumerate(v_scenes):
                             if i >= len(prompts):
                                 break
-                            if s.image_path and os.path.isfile(s.image_path):
+                            if frame_mode == "r2v":
+                                # ★ R2V Ingredient mode: use character images for ALL scenes
+                                # Bypasses scene images (Stage 5) — uses Stage 4 characters directly
+                                if char_images:
+                                    per_prompt_images[i] = char_images
+                                    per_prompt_workflows[i] = "R2V"
+                                    r2v_count += 1
+                                else:
+                                    per_prompt_workflows[i] = "T2V"
+                                    t2v_count += 1
+                            elif s.image_path and os.path.isfile(s.image_path):
                                 if frame_mode == "both":
                                     # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
                                     next_s = v_scenes[i + 1] if i + 1 < len(v_scenes) else None
@@ -2951,8 +2961,8 @@ class TabProject(QWidget):
                             else:
                                 per_prompt_workflows[i] = "T2V"
                                 t2v_count += 1
-                        # Enable _fl_ model when pairs are available
-                        v_settings["frame_mode"] = frame_mode
+                        # Enable _fl_ model when pairs are available (not for R2V)
+                        v_settings["frame_mode"] = frame_mode if frame_mode != "r2v" else "start"
                         
                         log.info(
                             f"[Pipeline] Stage 6 {version.label}: "
@@ -3061,7 +3071,17 @@ class TabProject(QWidget):
                         for i, s in enumerate(scenes):
                             if i >= len(prompts):
                                 break
-                            if s.image_path and os.path.isfile(s.image_path):
+                            if frame_mode == "r2v":
+                                # ★ R2V Ingredient mode: use character images for ALL scenes
+                                # Bypasses scene images (Stage 5) — uses Stage 4 characters directly
+                                if char_images:
+                                    per_prompt_images[i] = char_images
+                                    per_prompt_workflows[i] = "R2V"
+                                    r2v_count += 1
+                                else:
+                                    per_prompt_workflows[i] = "T2V"
+                                    t2v_count += 1
+                            elif s.image_path and os.path.isfile(s.image_path):
                                 if frame_mode == "both":
                                     # ★ Consecutive pair: Scene[i] (start) + Scene[i+1] (end)
                                     # This drives the _fl_ (First+Last) model for smooth transitions.
@@ -3083,8 +3103,8 @@ class TabProject(QWidget):
                             else:
                                 per_prompt_workflows[i] = "T2V"
                                 t2v_count += 1
-                        # Use configured frame mode
-                        settings["frame_mode"] = frame_mode
+                        # Use configured frame mode (R2V doesn't need _fl_ model)
+                        settings["frame_mode"] = frame_mode if frame_mode != "r2v" else "start"
                         
                         log.info(
                             f"[Pipeline] Stage 6 routing: {i2v_count} I2V, "

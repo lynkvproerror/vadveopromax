@@ -3700,6 +3700,12 @@ class AppController:
                 log.info(f"  [AUTO] {old_wf} → I2V (continuation, task {i})")
             # === End auto-switch ===
             
+            # ★ R2V model re-resolve: per_prompt_workflows may set R2V
+            # but batch default model was resolved for I2V. Fix model to R2V.
+            if task.workflow_type == "R2V" and has_images and "_i2v_" in (task.model or ""):
+                task.model = resolve_model_key(model_display, WorkflowType.R2V, raw_ar, False)
+                log.info(f"  [AUTO] Model re-resolved for R2V task {i}: {task.model}")
+            
             # ★ CRITICAL: Dual-frame (_fl_) model guard.
             # frame_mode='both' selects _fl_ model (needs 2 images: start+end).
             # If only 1 image provided → endImage=null → VEO3 crash:

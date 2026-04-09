@@ -1296,10 +1296,13 @@ class LicenseClient:
             
             pass  # key found
             
-            # 🔒 CROSS-VALIDATE: verify key actually exists and is valid in _lic
-            if hasattr(rest_client, 'validate_with_crosscheck'):
+            # 🔒 CROSS-VALIDATE via Bot API (Firestore rules block direct _lic reads)
+            # validate_with_crosscheck → 403 (rules: allow read: if isBot())
+            # validate_via_bot → Bot API has auth → can read _lic
+            if hasattr(rest_client, 'validate_via_bot'):
                 try:
-                    is_valid, status, _data = rest_client.validate_with_crosscheck(key, self.machine_id)
+                    hw = HardwareFingerprint.get_all_components()
+                    is_valid, status, _data = rest_client.validate_via_bot(key, hw)
                     if not is_valid:
                         return None  # key invalid on server
                 except Exception as e:

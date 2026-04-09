@@ -920,19 +920,21 @@ class SetupMatrixPanel(QFrame):
         prod_layout.addWidget(self.video_quality)
 
         # ── 🖼️ Video I2V Frame Mode ──
-        lbl = QLabel("🖼️ I2V Mode (Start / Start+End)")
+        lbl = QLabel("🖼️ I2V Mode")
         lbl.setStyleSheet(lbl_style)
         prod_layout.addWidget(lbl)
         self.video_frame_mode = QComboBox()
         self.video_frame_mode.addItem("🖼️ Start only", "start")
         self.video_frame_mode.addItem("🖼️ Start + End", "both")
+        self.video_frame_mode.addItem("🎭 Ingredient (R2V)", "r2v")
         self.video_frame_mode.setCurrentIndex(1)  # Default: Start + End (dual-frame)
         self.video_frame_mode.setMinimumHeight(34)
         self.video_frame_mode.setStyleSheet(combo_style)
         self.video_frame_mode.setToolTip(
-            "Start only: Chỉ dùng ảnh đầu tiên làm khung mở đầu\n"
-            "Start + End: Dùng cả ảnh đầu và ảnh kế tiếp làm khung kết thúc\n"
-            "  → Cho video chuyển cảnh mượt hơn (dual-frame _fl_ model)"
+            "Start only: Chỉ dùng ảnh đầu tiên làm khung mở đầu (I2V)\n"
+            "Start + End: Dùng cả ảnh đầu và ảnh kế tiếp (dual-frame _fl_ model)\n"
+            "Ingredient (R2V): Dùng ảnh nhân vật/vật thể từ Stage 4\n"
+            "  → Không cần ảnh cảnh riêng (Stage 5), dùng trực tiếp ảnh character"
         )
         prod_layout.addWidget(self.video_frame_mode)
 

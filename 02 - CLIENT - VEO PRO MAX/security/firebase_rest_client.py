@@ -548,6 +548,11 @@ class FirebaseRESTClient:
                 return self._parse_document(response.json())
             elif response.status_code == 404:
                 return None  # Key genuinely not found
+            elif response.status_code == 403:
+                # Permission denied by Firestore rules (anonymous client can't read _lic)
+                # This is NOT a network error — server is reachable but access is denied
+                _log.debug(f"[REST] 403 on _lic/{license_key[:8]}... (expected: rules block anonymous reads)")
+                return None
             else:
                 raise ConnectionError(f"Firebase returned {response.status_code}")
         except ConnectionError:

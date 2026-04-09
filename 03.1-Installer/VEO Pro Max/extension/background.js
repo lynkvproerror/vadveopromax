@@ -1075,6 +1075,39 @@ async function handleAppMessage(msg) {
         chrome.runtime.getPlatformInfo(() => { });
       }, 25000);
 
+      // ── Pre-flight Tab Health Check ──────────────────────────────────
+      // Verify tab DOM is alive before wasting reCAPTCHA + fetch attempt.
+      // Chrome Memory Saver can discard tabs while they're still in tabState.
+      // "Could not extract reCAPTCHA site key" = dead DOM → detect early.
+      try {
+        const tabInfo = await chrome.tabs.get(tabId);
+        const VEO_PATHS = ['/fx/tools/flow', '/fx/vi/tools/flow'];
+        const isVeoPage = VEO_PATHS.some(p => (tabInfo.url || '').includes(p));
+
+        if (tabInfo.discarded || tabInfo.status === 'unloaded') {
+          console.warn(
+            `[VEO Bridge] ⚠️ Pre-flight: tab ${tabId} discarded/unloaded ` +
+            `— reloading before submit`
+          );
+          await chrome.tabs.reload(tabId);
+          await new Promise(r => setTimeout(r, 15000)); // VEO needs 13-15s
+        } else if (!isVeoPage) {
+          console.warn(
+            `[VEO Bridge] ⚠️ Pre-flight: tab ${tabId} not on VEO page ` +
+            `(url=${tabInfo.url}) — navigating back`
+          );
+          await chrome.tabs.update(tabId, {
+            url: 'https://labs.google/fx/vi/tools/flow'
+          });
+          await new Promise(r => setTimeout(r, 15000));
+        }
+      } catch (preFlightErr) {
+        console.warn(
+          `[VEO Bridge] Pre-flight check failed for tab ${tabId}: ` +
+          preFlightErr.message
+        );
+      }
+
       try {
         // Endpoint URLs mapped by type
         const ENDPOINTS = {
@@ -1274,6 +1307,13 @@ async function handleAppMessage(msg) {
                   }
                 } catch (e) { /* ignore parse errors */ }
               }
+            }
+
+            // ── Step 4.5: Request Storage Access (if needed) ──────────────
+            if (document.requestStorageAccess) {
+              try {
+                await document.requestStorageAccess();
+              } catch (e) { /* non-fatal */ }
             }
 
             // ── Step 5: Send API request (with 20s AbortController) ──────
@@ -2857,11 +2897,31 @@ async function recoverStaleTab(email) {
       try {
         await chrome.tabs.reload(targetTab.id);
         console.log(`[VEO Bridge] 🔄 Reloaded discarded tab ${targetTab.id}`);
-        await new Promise(r => setTimeout(r, 5000));  // Wait for page load
+        await new Promise(r => setTimeout(r, 15000));  // ★ VEO needs 13-15s to fully load
       } catch (e) {
         console.warn(`[VEO Bridge] Failed to reload discarded tab: ${e.message}`);
         return null;
       }
+    }
+
+    // 3.5. Verify tab is on correct VEO tool page (not just labs.google/*)
+    // Tab may be on labs.google/some-other-tool → no reCAPTCHA widget
+    try {
+      const updatedTab = await chrome.tabs.get(targetTab.id);
+      const VEO_PATHS = ['/fx/tools/flow', '/fx/vi/tools/flow'];
+      const isVeoPage = VEO_PATHS.some(p => (updatedTab.url || '').includes(p));
+      if (!isVeoPage) {
+        console.warn(
+          `[VEO Bridge] 🔄 Tab ${targetTab.id} on wrong page ` +
+          `(${updatedTab.url}) — navigating to VEO tool`
+        );
+        await chrome.tabs.update(targetTab.id, {
+          url: 'https://labs.google/fx/vi/tools/flow'
+        });
+        await new Promise(r => setTimeout(r, 15000)); // Full VEO load
+      }
+    } catch (urlErr) {
+      console.warn(`[VEO Bridge] URL verification failed: ${urlErr.message}`);
     }
 
     // 4. Re-inject content.js to revive the content script
