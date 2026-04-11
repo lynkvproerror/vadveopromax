@@ -5,13 +5,13 @@
     "changelog": "v2.3.14 — Veo 3.1 Lite Model & Engine Optimization\n\n🚀 New Models\n• Thêm model Veo 3.1 - Lite: tốc độ nhanh, nhẹ tài nguyên.\n• Thêm model Veo 3.1 - Lite [LP]: Low Priority tier cho Lite.\n• Full matrix: T2V, I2V, R2V × Landscape/Portrait đều hỗ trợ.\n• Xoá model Veo 2 (đã deprecated).\n\n🔧 Engine & Performance\n• Fix Extension false-reinstall: bridge-aware guard ngăn reinstall sai lúc startup.\n• Tối ưu FFmpeg watermark: giới hạn 2 process song song, CPU cap -threads 4.\n• Fix is_relaxed_model: nhận diện đúng Lite LP \"_low_priority\".\n\n🛡️ Stability\n• Extension bridge verification dùng is_connected() thay vì CDP detection.\n• FFmpeg chạy ở BELOW_NORMAL priority, tránh treo máy.",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Pro_Max_v2.3.14.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Extension_v2.3.14.zip",
-    "sha256": "45bfc959b86e659eb6938217ba7287df923e4176735199b04dc7cbc8d51f47df",
-    "ext_sha256": "56364a57e4e88fc2c09870aaad453cdcbb06367aa215069c91608a372e0dba7a",
+    "sha256": "ccaa795deeaf783702c2503c9de962cf41c372234d8eaf05fa6c68a83a6339ab",
+    "ext_sha256": "b81df22a3cb656ee1248b87c66a6b8f7ef99b8e05f0e22c0257ab18de81abb4a",
     "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Pro_Max_Setup_v2.3.14.exe",
-    "installer_sha256": "3f97fb2da78dcd3e781898b38915f2379737a8ffd3b701c3b35e0d6eceb2d347",
+    "installer_sha256": "727a95a33ff3732e0e8b52b7f97a55334bb2c0f6db3543ce5fb47d88ea79cfab",
     "installer_filename": "VEO_Pro_Max_Setup_v2.3.14.exe",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1775906799,
-    "build_time": "2026-04-11T18:26:39.774948"
+    "build_number": 1775924855,
+    "build_time": "2026-04-11T23:27:35.509079"
 }
