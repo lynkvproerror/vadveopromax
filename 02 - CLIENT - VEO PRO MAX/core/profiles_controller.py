@@ -1468,7 +1468,7 @@ class ProfilesController:
                                 _ext_dir = Path(__file__).resolve().parent.parent / "extension"
                                 _chrome_exe = chrome_info.get("chrome_exe", "")
                                 if _ext_dir.exists() and (_ext_dir / "manifest.json").exists() and is_branded_chrome(_chrome_exe):
-                                    _ext_ok = install_if_needed(cdp_port, str(_ext_dir))
+                                    _ext_ok = install_if_needed(cdp_port, str(_ext_dir), email=email, caller="profiles_step1b")
                                     log.info(f"[DEBUG] Step 1b: Extension install → {'✅' if _ext_ok else '⚠️ failed'}")
                                 else:
                                     log.debug(f"[DEBUG] Step 1b: Skipped (CfT or no extension dir)")
@@ -2458,7 +2458,7 @@ class ProfilesController:
                         
                         if _ext_dir.exists() and (_ext_dir / "manifest.json").exists():
                             if is_branded_chrome(_chrome_exe):
-                                ext_ok = install_if_needed(cdp_port, str(_ext_dir))
+                                ext_ok = install_if_needed(cdp_port, str(_ext_dir), email=(session_email or ""), caller="profiles_postlogin")
                                 log.info(f"[ProfilesController] Extension install: {'✅' if ext_ok else '⚠️ failed'}")
                             else:
                                 log.info("[ProfilesController] CfT — extension loaded via --load-extension flag")

@@ -863,7 +863,7 @@ class FirebaseRESTClient:
                         _log.info(f"[BOT_API] ✅ License valid (hw-attested, {src}): tier={data.get('tier')}")
                         return True, _S_VC, data
                     
-                    # Server responded with rejection — this is authoritative
+                    # Server responded with rejection
                     error = data.get("error", "unknown")
                     _error_map = {
                         "validation_failed": _S_CF,
@@ -876,8 +876,21 @@ class FirebaseRESTClient:
                         "machine_blocked": _S_RV,
                     }
                     status = _error_map.get(error, _S_CF)
-                    _log.warning(f"[BOT_API] ❌ Rejected: {error}")
-                    return False, status, data
+                    
+                    # Authoritative rejections → return immediately (no point retrying)
+                    _AUTHORITATIVE = {"key_not_found", "machine_mismatch", "hardware_mismatch",
+                                      "license_revoked", "license_expired", "machine_blocked"}
+                    if error in _AUTHORITATIVE:
+                        _log.warning(f"[BOT_API] ❌ Authoritative rejection: {error}")
+                        return False, status, data
+                    
+                    # Retryable errors (validation_failed, invalid_token, unknown)
+                    # → try next endpoint before giving up
+                    src = "Vercel" if idx == 0 else "Cloudflare"
+                    _log.warning(f"[BOT_API] ⚠️ {src} rejected ({error}), trying next...")
+                    last_error = Exception(f"{src}: {error}")
+                    last_rejection = (False, status, data)
+                    continue
                     
                 except (requests.ConnectionError, requests.Timeout) as e:
                     last_error = e
@@ -886,6 +899,11 @@ class FirebaseRESTClient:
                     continue  # Try next endpoint
             
             # All endpoints failed
+            # If we got a rejection from at least one endpoint, return it
+            # (not a network error — server responded but rejected)
+            if 'last_rejection' in dir() and last_rejection:
+                _log.warning(f"[BOT_API] All endpoints rejected with retryable error")
+                return last_rejection
             raise ConnectionError(f"All Bot API endpoints unreachable: {last_error}")
             
         except ConnectionError:
@@ -893,6 +911,77 @@ class FirebaseRESTClient:
         except Exception as e:
             _log.warning(f"[BOT_API] ⚠️ Unexpected error: {e}")
             raise ConnectionError(f"Bot API error: {e}")
+    
+    def restore_by_mid_via_bot(self, hw_components: dict, app: str = "veo") -> dict:
+        """
+        Restore license by Machine ID via Bot API.
+        
+        When client has no local cache (lost license.dat), asks server
+        to look up _mid_to_key/{machine_id} and return the bound key.
+        
+        Args:
+            hw_components: Raw hardware dict from HardwareFingerprint.get_all_components()
+            app: Application name ("veo" or "grok")
+        
+        Returns:
+            {"found": True, "key": "...", "tier": "...", ...} or {"found": False}
+        
+        Raises:
+            ConnectionError: If Bot API is unreachable
+        """
+        if not self._ssl_checked:
+            self._verify_ssl_integrity()
+        if self._ssl_compromised:
+            raise ConnectionError("SSL integrity compromised")
+        
+        combined = '|'.join([
+            hw_components.get('cpu_id', ''),
+            hw_components.get('mb_serial', ''),
+            hw_components.get('mb_uuid', ''),
+            hw_components.get('bios_serial', ''),
+            hw_components.get('disk_serial', ''),
+        ])
+        computed_mid = hashlib.sha256(combined.encode()).hexdigest()
+        token = self._generate_request_token(computed_mid)
+        
+        payload = {
+            "action": "restore",
+            "hw": hw_components,
+            "app": app,
+            "_token": token,
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        api_secret = getattr(self, '_bot_api_secret', None)
+        if api_secret:
+            headers["X-Api-Secret"] = api_secret
+        
+        last_error = None
+        for idx, api_url in enumerate(self._BOT_API_URLS):
+            try:
+                resp = self._session.post(
+                    api_url, json=payload, headers=headers,
+                    timeout=self._BOT_API_TIMEOUT,
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                if data.get("found"):
+                    src = "Vercel" if idx == 0 else "Cloudflare"
+                    _log.info(f"[BOT_API] ✅ License restored via {src}: key={data.get('key','')[:8]}...")
+                    return data
+                # Not found on this endpoint — try next
+                last_error = data
+                continue
+            except (requests.ConnectionError, requests.Timeout) as e:
+                last_error = e
+                continue
+        
+        # If any endpoint returned a valid "not found", return that
+        if isinstance(last_error, dict):
+            return last_error
+        
+        raise ConnectionError(f"All Bot API endpoints unreachable for restore: {last_error}")
     
     def write_upgrade_request(self, machine_id: str, tier: str, st_token: str, send_count: int = 1,
                                client_name: str = "", email: str = "",

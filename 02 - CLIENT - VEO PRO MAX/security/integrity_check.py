@@ -40,12 +40,12 @@ def _hash_file(filepath: Path) -> str:
 # Critical files to verify (relative to app root)
 # Hashes are populated at build time by build_release.py
 CRITICAL_FILES: Dict[str, str] = {
-    "security/license_client.py": "285d6882a3b2e6023ad4cb43b4303ee0c2b81209cbe3fa8f3ca64474892a6c01",
-    "security/firebase_rest_client.py": "9e51875e79d0ffbde0418cd81518d1c42575e7824b52c877d6e99608e5878266",
+    "security/license_client.py": "b32980f9b4dd240fb87a770a1cc6ee0a1ee24b5b90acf6ba6ef3621e8eb6663e",
+    "security/firebase_rest_client.py": "da09fb94387846bcdd54642090dd6a31a722e073cbb463d3aa1cbb401f6df9c8",
     "security/trial_protection.py": "a5a0f8eee0f8aafca58dde4f663447f8af655c17a6fd6442db6c1f394b069a1c",
     "security/_encrypted_keys.py": "5f54acf0ad1c7bc70a1dcb537ca49d286200d5fa139caf42ffcc7a18b4365201",
     "security/_encrypted_api_keys.py": "09f906eb6af8355ea19f5a402abe6787d01144dbe398c65e24ca763110fc7c51",
-    "services/permissions.py": "732957a21f7b787e922ec0a595344d0bbb9456c1da3ade2e59df3caaac80a35e",
+    "services/permissions.py": "94b85392156de689d3ee2cb45a0a76a47d623a199cd23f549dbada3c8e241b54",
     "security/anti_tamper.py": "5b2ad36f6ce99d9fe10b6d32c4c07a6b3bcec7970359172eb0741f77f6fd41d8",
 }
 

@@ -187,8 +187,8 @@ class LicenseController:
             info = self._license_client.validate()
             from datetime import datetime
             return {
-                "is_licensed": info.valid and info.tier and info.tier.value != "trial",
-                "is_trial": info.tier and info.tier.value == "trial" if info.valid else True,
+                "is_licensed": info.valid and info.tier and info.tier.value != "TRIA",
+                "is_trial": info.tier and info.tier.value == "TRIA" if info.valid else True,
                 "tier": info.tier.value if info.tier else None,
                 "days_remaining": (info.expires - datetime.now()).days if info.expires else 0,
                 "trial_expired": not info.valid and "expired" in (info.error or "").lower(),
@@ -275,7 +275,7 @@ class LicenseController:
         """Check if trial warning should be shown."""
         try:
             info = self._license_client.validate()
-            if info.valid and info.tier and info.tier.value == "trial":
+            if info.valid and info.tier and info.tier.value == "TRIA":
                 from datetime import datetime
                 if info.expires:
                     days = (info.expires - datetime.now()).days

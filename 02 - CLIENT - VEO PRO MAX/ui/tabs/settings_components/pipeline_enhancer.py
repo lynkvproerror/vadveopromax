@@ -192,6 +192,19 @@ class SettingsPipelineEnhancerMixin:
         self.auto_retry_dl_switch.toggled_signal.connect(retry_dl_container.setVisible)
         self.auto_retry_dl_switch.toggled_signal.connect(self._save_pipeline_settings)
 
+        # --- Auto-Retry Failed (On-the-fly Sweep) ---
+        self.auto_retry_failed_switch = self._create_enable_row(
+            "♻️ Auto-Retry Failed:", checked=getattr(_s, 'auto_retry_failed', True),
+            bold=True, color=Theme.GREEN
+        )
+        self.auto_retry_failed_switch.setToolTip(
+            "Automatically retry failed video slots and re-upscale failed outputs\n"
+            "while queue is processing (on-the-fly). Max rounds controlled by\n"
+            "auto_sweep_max_rounds setting."
+        )
+        layout.addLayout(self.auto_retry_failed_switch._row_layout)
+        self.auto_retry_failed_switch.toggled_signal.connect(self._save_pipeline_settings)
+
         # --- Pre-warm (Idle Recovery) ---
         self.prewarm_switch = self._create_enable_row(
             "🔥 Pre-warm (Idle Recovery):", checked=getattr(_s, 'prewarm_enabled', True),
@@ -259,6 +272,8 @@ class SettingsPipelineEnhancerMixin:
                 settings.auto_retry_download = self.auto_retry_dl_switch.isToggled()
             if hasattr(self, 'dl_retry_max'):
                 settings.auto_retry_download_max = self.dl_retry_max.value()
+            if hasattr(self, 'auto_retry_failed_switch'):
+                settings.auto_retry_failed = self.auto_retry_failed_switch.isToggled()
             if hasattr(self, 'prewarm_switch'):
                 settings.prewarm_enabled = self.prewarm_switch.isToggled()
             if hasattr(self, 'prewarm_threshold'):

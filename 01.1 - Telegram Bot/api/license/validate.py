@@ -127,8 +127,8 @@ def handle_validate(body: dict) -> dict:
     
     Args:
         body: {
-            "action": "activate" | "validate",
-            "license_key": "XXXX-...",
+            "action": "activate" | "validate" | "restore",
+            "license_key": "XXXX-..." (not required for restore),
             "hw": {"cpu_id": ..., "mb_serial": ..., "mb_uuid": ..., "bios_serial": ..., "disk_serial": ...},
             "app": "veo" | "grok",  (optional, default "veo")
             "_token": "timestamp:hmac"  (HMAC request token)
@@ -141,11 +141,15 @@ def handle_validate(body: dict) -> dict:
 
     # ── Extract & validate inputs ──
     action = body.get("action", "validate")
-    license_key = (body.get("license_key") or "").strip()
     hw = body.get("hw") or {}
     app = (body.get("app") or "veo").lower()
     token = body.get("_token", "")
 
+    # Route restore action (no license_key required)
+    if action == "restore":
+        return handle_restore(body)
+
+    license_key = (body.get("license_key") or "").strip()
     if not license_key:
         return {"valid": False, "error": "missing_license_key"}
 
@@ -273,6 +277,87 @@ def handle_validate(body: dict) -> dict:
 
     log.info(f"[VALIDATE] ✅ Valid: key={license_key[:8]}... tier={tier_code}")
     return response
+
+
+def handle_restore(body: dict) -> dict:
+    """
+    Restore license by Machine ID.
+    
+    Client lost license.dat but key is still bound on server.
+    Server reads _mid_to_key/{machine_id} → returns key + tier.
+    
+    Args:
+        body: {"action": "restore", "hw": {...}, "app": "veo", "_token": "..."}
+    
+    Returns:
+        {"found": bool, "key": str, "tier": str, "expires": str, "role": int}
+    """
+    from bot.firebase_ops import FirebaseOps
+    
+    hw = body.get("hw") or {}
+    app = (body.get("app") or "veo").lower()
+    token = body.get("_token", "")
+    
+    if app not in _APP_COLLECTIONS:
+        return {"found": False, "error": "invalid_app"}
+    
+    # Validate hardware components
+    required_hw = ('cpu_id', 'mb_serial', 'mb_uuid', 'bios_serial', 'disk_serial')
+    for key in required_hw:
+        val = hw.get(key, '')
+        if not val or not isinstance(val, str) or len(val) < 2:
+            return {"found": False, "error": f"missing_hw_{key}"}
+    
+    # Compute machine_id from hardware
+    computed_mid = compute_machine_id(hw)
+    
+    # Verify HMAC request token
+    if not verify_request_token(computed_mid, token):
+        log.warning(f"[RESTORE] ⛔ Invalid HMAC token for {computed_mid[:12]}...")
+        return {"found": False, "error": "invalid_token"}
+    
+    # Check if machine is blocked
+    ops = FirebaseOps()
+    collections = _APP_COLLECTIONS[app]
+    blocked = ops.read_doc(collections["blocked"], computed_mid)
+    if blocked and blocked.get("blocked"):
+        return {"found": False, "error": "machine_blocked"}
+    
+    # Read _mid_to_key/{machine_id}
+    mid_to_key_col = collections.get("mid_to_key", "_mid_to_key")
+    mid_data = ops.read_doc(mid_to_key_col, computed_mid)
+    if not mid_data:
+        log.info(f"[RESTORE] No key bound for mid={computed_mid[:12]}...")
+        return {"found": False}
+    
+    license_key = mid_data.get("key", "")
+    if not license_key or license_key == "****":
+        return {"found": False}
+    
+    # Read license doc to get full info
+    lic_data = ops.read_doc(collections["lic"], license_key)
+    if not lic_data:
+        return {"found": False}
+    
+    # Check revoked/expired
+    if lic_data.get("_st") == "r" or lic_data.get("revoked"):
+        return {"found": False, "error": "license_revoked"}
+    
+    tier_code = lic_data.get("_t") or lic_data.get("tier") or "TRIA"
+    role = lic_data.get("_role") or lic_data.get("role") or 1
+    exp_str = lic_data.get("_exp") or lic_data.get("expires") or ""
+    client_name = lic_data.get("_cn") or lic_data.get("client_name") or ""
+    
+    log.info(f"[RESTORE] ✅ Restored: mid={computed_mid[:12]}... key={license_key[:8]}... tier={tier_code}")
+    
+    return {
+        "found": True,
+        "key": license_key,
+        "tier": tier_code,
+        "role": role,
+        "expires": exp_str,
+        "client_name": client_name,
+    }
 
 
 # ── Vercel Handler ─────────────────────────────────────────────

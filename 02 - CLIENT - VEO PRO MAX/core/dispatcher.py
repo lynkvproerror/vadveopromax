@@ -2194,7 +2194,7 @@ class Dispatcher:
     
     def retry_all_failed(self) -> int:
         """Retry all failed tasks. Returns count retried."""
-        task_ids: List[str] = []
+        count = 0
         for task in list(self._all_tasks.values()):
             if task.state == TaskState.FAILED:
                 if self.retry_task(task.id):

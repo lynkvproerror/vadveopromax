@@ -9,6 +9,8 @@ Eliminates ~1,200 lines of duplicated code.
 
 from typing import Optional, List
 import sys
+import copy
+import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -45,6 +47,13 @@ class GenerationTabBase(QWidget):
     
     # Signals
     add_to_queue = Signal(list)
+    _submit_finished = Signal(int, str)  # (prompt_count, error_msg)
+    
+    # Class-level lock: serialize submit across ALL tab instances.
+    # Before this fix, submit ran on the UI thread so it was naturally serial.
+    # Now that it runs on a worker thread, two tabs could interleave
+    # submit_prompts() without this lock.
+    _submit_lock = threading.Lock()
     
     # Class-level flag: suppress concurrency warning until app restart
     # Shared across ALL generation tabs (intentional - one dismiss = all)
@@ -67,6 +76,8 @@ class GenerationTabBase(QWidget):
     def __init__(self, parent: Optional[QWidget] = None, controller=None):
         super().__init__(parent)
         self.controller = controller
+        self._submitting = False  # Guard: prevent double-submit while worker runs
+        self._submit_finished.connect(self._on_submit_finished)
         
         self._init_extra()
         self._setup_ui()
@@ -782,9 +793,19 @@ class GenerationTabBase(QWidget):
         return errors
     
     def _on_add_to_queue(self):
-        """Collect prompts and settings, submit to controller."""
+        """Collect prompts and settings, submit to controller.
+        
+        ★ Perf: Controller method runs on a background thread to avoid
+        blocking the GUI thread with batch building, dispatcher insertion,
+        and queue-status recomputation. UI feedback (toast, clear, auto-start)
+        is deferred to _on_submit_finished via Signal.
+        """
         prompts = self.prompt_table.get_prompts()
         if not prompts:
+            return
+        
+        # Guard: prevent double-submit while worker is running
+        if self._submitting:
             return
         
         # Enforce max prompts per batch from server limits
@@ -870,18 +891,56 @@ class GenerationTabBase(QWidget):
         
         if self.controller:
             method = getattr(self.controller, self.CONTROLLER_METHOD)
-            method(prompts, settings)
-            if self.CLEAR_AFTER_ADD:
-                self.prompt_table.set_prompts([])
-            main_win = self.window()
-            if hasattr(main_win, 'show_toast'):
-                main_win.show_toast(f"✅ Added {len(prompts)} prompt(s) to queue", "success")
-            # Trigger auto-start if setting enabled
-            if hasattr(main_win, 'tab_instances'):
-                queue_tab = main_win.tab_instances.get('queue')
-                if queue_tab and hasattr(queue_tab, '_auto_start_if_idle'):
-                    from PySide6.QtCore import QTimer
-                    QTimer.singleShot(500, queue_tab._auto_start_if_idle)
+            # ★ Perf: Snapshot data and submit on background thread.
+            # Keeps GUI responsive during batch build + dispatcher insert.
+            #
+            # Deep-copy PromptRow list to create an immutable snapshot.
+            # Without this, the worker holds references to live UI objects
+            # and user edits after clicking "Add to Queue" could mutate
+            # the batch mid-submit (image_tags, text, continuation_from).
+            _prompts = copy.deepcopy(prompts)
+            _settings = copy.deepcopy(settings)
+            _count = len(prompts)
+            self._submitting = True
+            
+            def _submit_worker():
+                _err = ""
+                try:
+                    # Class-level lock serializes submits across all tabs.
+                    with GenerationTabBase._submit_lock:
+                        result = method(_prompts, _settings)
+                    # Soft-failure: submit_prompts() returns "" when blocked
+                    # by license gate, missing x-client-data, etc.
+                    if not result:
+                        _err = "Submit was blocked (check license or account status)"
+                except Exception as _e:
+                    _err = str(_e)
+                # Signal fires on UI thread via Qt cross-thread signal delivery
+                self._submit_finished.emit(_count, _err)
+            
+            threading.Thread(
+                target=_submit_worker, daemon=True, name="queue-submit"
+            ).start()
+    
+    def _on_submit_finished(self, count: int, error: str):
+        """UI thread callback after background submit completes."""
+        self._submitting = False
+        
+        if error:
+            from ui.popups import show_warning
+            show_warning(self, "Submit Error", f"Failed to add to queue:\n\n{error}")
+            return
+        
+        if self.CLEAR_AFTER_ADD:
+            self.prompt_table.set_prompts([])
+        main_win = self.window()
+        if hasattr(main_win, 'show_toast'):
+            main_win.show_toast(f"✅ Added {count} prompt(s) to queue", "success")
+        # Trigger auto-start if setting enabled
+        if hasattr(main_win, 'tab_instances'):
+            queue_tab = main_win.tab_instances.get('queue')
+            if queue_tab and hasattr(queue_tab, '_auto_start_if_idle'):
+                QTimer.singleShot(500, queue_tab._auto_start_if_idle)
     
     # ── Session Persistence ──────────────────────────────────────
     

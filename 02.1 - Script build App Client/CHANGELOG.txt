@@ -1,12 +1,16 @@
-v2.3.13 — Project Builder I2V Frame Mode & Engine Retry Fix
+v2.3.14 — Veo 3.1 Lite Model & Engine Optimization
 
-🎬 Project Builder
-• Thêm lựa chọn I2V Mode (Start only / Start + End) trong sidebar.
-• Start only: chỉ dùng 1 ảnh đầu — giảm tải server, ít timeout.
-• Start + End: dùng cặp ảnh liên tiếp cho dual-frame (_fl_ model) — chuyển cảnh mượt.
-• Model tự động chuyển đúng (Single/Dual/Fast/LP) theo lựa chọn.
+🚀 New Models
+• Thêm model Veo 3.1 - Lite: tốc độ nhanh, nhẹ tài nguyên.
+• Thêm model Veo 3.1 - Lite [LP]: Low Priority tier cho Lite.
+• Full matrix: T2V, I2V, R2V × Landscape/Portrait đều hỗ trợ.
+• Xoá model Veo 2 (đã deprecated).
 
-🔧 Engine & Retry
-• Sửa lỗi task fail với INTERNAL error không được retry.
-• INTERNAL error giờ được xử lý giống TIMED_OUT — tự động retry 2 lần trước khi fail.
-• Cải thiện độ ổn định pipeline khi server VEO bị quá tải.
+🔧 Engine & Performance
+• Fix Extension false-reinstall: bridge-aware guard ngăn reinstall sai lúc startup.
+• Tối ưu FFmpeg watermark: giới hạn 2 process song song, CPU cap -threads 4.
+• Fix is_relaxed_model: nhận diện đúng Lite LP "_low_priority".
+
+🛡️ Stability
+• Extension bridge verification dùng is_connected() thay vì CDP detection.
+• FFmpeg chạy ở BELOW_NORMAL priority, tránh treo máy.

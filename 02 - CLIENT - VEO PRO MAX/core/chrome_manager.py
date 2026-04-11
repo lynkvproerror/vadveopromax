@@ -835,8 +835,12 @@ def launch_chrome(
     elif _has_extension and _is_branded and cdp_ready:
         log.info(f"[ChromeManager] Branded Chrome — installing extension NOW...")
         try:
-            from core.extension_manager import install_if_needed
-            install_if_needed(port, str(_extension_dir))
+            from core.extension_manager import install_if_needed, inject_extension_identity
+            install_if_needed(port, str(_extension_dir), email=email, caller="launch_chrome")
+            # ★ Primary identity injection — deterministic, right after install.
+            # Extension reads this from chrome.storage.local on WS connect.
+            if email:
+                inject_extension_identity(port, email)
         except Exception as e:
             log.warning(f"[ChromeManager] Instant extension install failed (will retry in ensure_all_extensions): {e}")
     elif not _has_extension:
@@ -1023,7 +1027,7 @@ def launch_or_reconnect(
                         # Branded Chrome: auto-install via CDP
                         log.warning(f"[ChromeManager] Reconnected — extension MISSING on port {port}, auto-installing...")
                         try:
-                            install_if_needed(port, str(_extension_dir))
+                            install_if_needed(port, str(_extension_dir), email=email, caller="reconnect")
                         except Exception as e:
                             log.error(f"[ChromeManager] Auto-reinstall on reconnect failed: {e}")
                     elif port:

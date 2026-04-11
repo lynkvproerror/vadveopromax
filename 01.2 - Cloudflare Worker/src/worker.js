@@ -25,8 +25,8 @@ const HMAC_DERIVE_KEY = "veo_rest_derive_2026";
 const HMAC_DERIVE_SUFFIX = "||REST_HMAC";
 
 const APP_COLLECTIONS = {
-  veo: { lic: "_lic", blocked: "_blocked_machines" },
-  grok: { lic: "_lic_grok", blocked: "_grok_blocked_machines" },
+  veo: { lic: "_lic", blocked: "_blocked_machines", mid_to_key: "_mid_to_key" },
+  grok: { lic: "_lic_grok", blocked: "_grok_blocked_machines", mid_to_key: "_grok_mid_to_key" },
 };
 
 // ── Cached auth token (per isolate) ────────────────────────────
@@ -211,11 +211,16 @@ async function verifyRequestToken(machineId, token) {
 
 async function handleValidate(body, env) {
   const action = body.action || "validate";
-  const licenseKey = (body.license_key || "").trim();
   const hw = body.hw || {};
   const app = (body.app || "veo").toLowerCase();
   const token = body._token || "";
 
+  // Route restore action (no license_key required)
+  if (action === "restore") {
+    return handleRestore(body, env);
+  }
+
+  const licenseKey = (body.license_key || "").trim();
   if (!licenseKey) return { valid: false, error: "missing_license_key" };
   if (!(app in APP_COLLECTIONS)) return { valid: false, error: "invalid_app" };
 
@@ -315,6 +320,64 @@ async function handleValidate(body, env) {
   if (lim) response._lim = lim;
 
   return response;
+}
+
+
+// ── Restore by Machine ID ──────────────────────────────────────
+
+async function handleRestore(body, env) {
+  const hw = body.hw || {};
+  const app = (body.app || "veo").toLowerCase();
+  const token = body._token || "";
+
+  if (!(app in APP_COLLECTIONS)) return { found: false, error: "invalid_app" };
+
+  // Validate hardware components
+  for (const key of ["cpu_id", "mb_serial", "mb_uuid", "bios_serial", "disk_serial"]) {
+    const val = hw[key] || "";
+    if (!val || typeof val !== "string" || val.length < 2) {
+      return { found: false, error: `missing_hw_${key}` };
+    }
+  }
+
+  const computedMid = await computeMachineId(hw);
+
+  if (!(await verifyRequestToken(computedMid, token))) {
+    return { found: false, error: "invalid_token" };
+  }
+
+  // Sign in as bot
+  const primaryToken = await getIdToken(
+    env.FIREBASE_PRIMARY_API_KEY, env.FIREBASE_BOT_EMAIL, env.FIREBASE_BOT_PASSWORD
+  );
+
+  const collections = APP_COLLECTIONS[app];
+
+  // Check blocked
+  const blocked = await readDoc(env.FIREBASE_PRIMARY_PROJECT, collections.blocked, computedMid, primaryToken);
+  if (blocked && blocked.blocked) return { found: false, error: "machine_blocked" };
+
+  // Read _mid_to_key/{machine_id} (app-specific collection)
+  const midData = await readDoc(env.FIREBASE_PRIMARY_PROJECT, collections.mid_to_key, computedMid, primaryToken);
+  if (!midData) return { found: false };
+
+  const licenseKey = midData.key || "";
+  if (!licenseKey || licenseKey === "****") return { found: false };
+
+  // Read license doc for full info
+  const licData = await readDoc(env.FIREBASE_PRIMARY_PROJECT, collections.lic, licenseKey, primaryToken);
+  if (!licData) return { found: false };
+
+  if (licData._st === "r" || licData.revoked) return { found: false, error: "license_revoked" };
+
+  return {
+    found: true,
+    key: licenseKey,
+    tier: licData._t || licData.tier || "TRIA",
+    role: licData._role || licData.role || 1,
+    expires: licData._exp || licData.expires || "",
+    client_name: licData._cn || licData.client_name || "",
+  };
 }
 
 // ── Worker Entry Point ─────────────────────────────────────────

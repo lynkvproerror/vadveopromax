@@ -90,9 +90,9 @@ class SettingsSectionsMixin:
         model_options = [
             "Veo 3.1 - Fast",
             "Veo 3.1 - Fast [LP]",
+            "Veo 3.1 - Lite",
+            "Veo 3.1 - Lite [LP]",
             "Veo 3.1 - Quality",
-            "Veo 2 - Fast",
-            "Veo 2 - Quality",
         ]
         combo = self._create_setting_row(layout, t("settings.defaults_sub.ai_model"), model_options)
         if _s:

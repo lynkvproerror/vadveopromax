@@ -101,7 +101,33 @@ class VideoModel(str, Enum):
     R2V_LANDSCAPE_LP = "veo_3_1_r2v_fast_landscape_ultra_relaxed"
     R2V_PORTRAIT_LP = "veo_3_1_r2v_fast_portrait_ultra_relaxed"
     
-    # --- VEO 3.0 Models (legacy) ---
+    # --- T2V Lite: Text to Video (Lite tier) ---
+    # T2V LP key confirmed from log: veo_3_1_t2v_lite_low_priority
+    # Non-LP and portrait inferred from Fast pattern (no _ultra suffix)
+    T2V_LITE_LANDSCAPE = "veo_3_1_t2v_lite"
+    T2V_LITE_PORTRAIT = "veo_3_1_t2v_lite_portrait"
+    T2V_LITE_LANDSCAPE_LP = "veo_3_1_t2v_lite_low_priority"
+    T2V_LITE_PORTRAIT_LP = "veo_3_1_t2v_lite_portrait_low_priority"
+    
+    # --- I2V Single Lite (inferred from Fast pattern) ---
+    I2V_SINGLE_LITE_LANDSCAPE = "veo_3_1_i2v_s_lite"
+    I2V_SINGLE_LITE_PORTRAIT = "veo_3_1_i2v_s_lite_portrait"
+    I2V_SINGLE_LITE_LANDSCAPE_LP = "veo_3_1_i2v_s_lite_low_priority"
+    I2V_SINGLE_LITE_PORTRAIT_LP = "veo_3_1_i2v_s_lite_portrait_low_priority"
+    
+    # --- I2V Dual (FL) Lite (inferred from Fast pattern) ---
+    I2V_DUAL_LITE_LANDSCAPE = "veo_3_1_i2v_s_lite_fl"
+    I2V_DUAL_LITE_PORTRAIT = "veo_3_1_i2v_s_lite_portrait_fl"
+    I2V_DUAL_LITE_LANDSCAPE_LP = "veo_3_1_i2v_s_lite_fl_low_priority"
+    I2V_DUAL_LITE_PORTRAIT_LP = "veo_3_1_i2v_s_lite_portrait_fl_low_priority"
+    
+    # --- R2V Lite (inferred from Fast pattern) ---
+    R2V_LITE_LANDSCAPE = "veo_3_1_r2v_lite_landscape"
+    R2V_LITE_PORTRAIT = "veo_3_1_r2v_lite_portrait"
+    R2V_LITE_LANDSCAPE_LP = "veo_3_1_r2v_lite_landscape_low_priority"
+    R2V_LITE_PORTRAIT_LP = "veo_3_1_r2v_lite_portrait_low_priority"
+    
+    # --- VEO 3.0 Models (legacy — kept for backward compat) ---
     VEO_30_LANDSCAPE = "veo_3_0_t2v_landscape_ultra"
     VEO_30_PORTRAIT = "veo_3_0_t2v_portrait_ultra"
     
@@ -139,6 +165,7 @@ def resolve_model_key(
     """
     is_portrait = "PORTRAIT" in aspect_ratio.upper()
     is_lp = "[LP]" in display_name or "Lower" in display_name
+    is_lite = "Lite" in display_name
     
     # T2I and I2I both use ImageModel, not VideoModel
     if workflow in (WorkflowType.T2I, WorkflowType.I2I):
@@ -146,28 +173,48 @@ def resolve_model_key(
             return image_model
         return ImageModel.GEM_PIX_2.value  # Sidebar default: 🔥 Nano Banana Pro
     
-    # Model lookup table: (workflow_key, is_portrait, is_lp) → VideoModel
+    # Model lookup table: (workflow_key, is_portrait, is_lp, is_lite) → VideoModel
     _MAP = {
-        # T2V
-        ("T2V", False, False): VideoModel.T2V_LANDSCAPE,
-        ("T2V", True,  False): VideoModel.T2V_PORTRAIT,
-        ("T2V", False, True):  VideoModel.T2V_LANDSCAPE_LP,
-        ("T2V", True,  True):  VideoModel.T2V_PORTRAIT_LP,
-        # I2V Single
-        ("I2V_S", False, False): VideoModel.I2V_SINGLE_LANDSCAPE,
-        ("I2V_S", True,  False): VideoModel.I2V_SINGLE_PORTRAIT,
-        ("I2V_S", False, True):  VideoModel.I2V_SINGLE_LANDSCAPE_LP,
-        ("I2V_S", True,  True):  VideoModel.I2V_SINGLE_PORTRAIT_LP,
-        # I2V Dual (First + Last frame)
-        ("I2V_D", False, False): VideoModel.I2V_DUAL_LANDSCAPE,
-        ("I2V_D", True,  False): VideoModel.I2V_DUAL_PORTRAIT,
-        ("I2V_D", False, True):  VideoModel.I2V_DUAL_LANDSCAPE_LP,
-        ("I2V_D", True,  True):  VideoModel.I2V_DUAL_PORTRAIT_LP,
-        # R2V
-        ("R2V", False, False): VideoModel.R2V_LANDSCAPE,
-        ("R2V", True,  False): VideoModel.R2V_PORTRAIT,
-        ("R2V", False, True):  VideoModel.R2V_LANDSCAPE_LP,
-        ("R2V", True,  True):  VideoModel.R2V_PORTRAIT_LP,
+        # ── T2V Fast ──
+        ("T2V", False, False, False): VideoModel.T2V_LANDSCAPE,
+        ("T2V", True,  False, False): VideoModel.T2V_PORTRAIT,
+        ("T2V", False, True,  False): VideoModel.T2V_LANDSCAPE_LP,
+        ("T2V", True,  True,  False): VideoModel.T2V_PORTRAIT_LP,
+        # ── T2V Lite ──
+        ("T2V", False, False, True):  VideoModel.T2V_LITE_LANDSCAPE,
+        ("T2V", True,  False, True):  VideoModel.T2V_LITE_PORTRAIT,
+        ("T2V", False, True,  True):  VideoModel.T2V_LITE_LANDSCAPE_LP,
+        ("T2V", True,  True,  True):  VideoModel.T2V_LITE_PORTRAIT_LP,
+        # ── I2V Single Fast ──
+        ("I2V_S", False, False, False): VideoModel.I2V_SINGLE_LANDSCAPE,
+        ("I2V_S", True,  False, False): VideoModel.I2V_SINGLE_PORTRAIT,
+        ("I2V_S", False, True,  False): VideoModel.I2V_SINGLE_LANDSCAPE_LP,
+        ("I2V_S", True,  True,  False): VideoModel.I2V_SINGLE_PORTRAIT_LP,
+        # ── I2V Single Lite ──
+        ("I2V_S", False, False, True):  VideoModel.I2V_SINGLE_LITE_LANDSCAPE,
+        ("I2V_S", True,  False, True):  VideoModel.I2V_SINGLE_LITE_PORTRAIT,
+        ("I2V_S", False, True,  True):  VideoModel.I2V_SINGLE_LITE_LANDSCAPE_LP,
+        ("I2V_S", True,  True,  True):  VideoModel.I2V_SINGLE_LITE_PORTRAIT_LP,
+        # ── I2V Dual Fast ──
+        ("I2V_D", False, False, False): VideoModel.I2V_DUAL_LANDSCAPE,
+        ("I2V_D", True,  False, False): VideoModel.I2V_DUAL_PORTRAIT,
+        ("I2V_D", False, True,  False): VideoModel.I2V_DUAL_LANDSCAPE_LP,
+        ("I2V_D", True,  True,  False): VideoModel.I2V_DUAL_PORTRAIT_LP,
+        # ── I2V Dual Lite ──
+        ("I2V_D", False, False, True):  VideoModel.I2V_DUAL_LITE_LANDSCAPE,
+        ("I2V_D", True,  False, True):  VideoModel.I2V_DUAL_LITE_PORTRAIT,
+        ("I2V_D", False, True,  True):  VideoModel.I2V_DUAL_LITE_LANDSCAPE_LP,
+        ("I2V_D", True,  True,  True):  VideoModel.I2V_DUAL_LITE_PORTRAIT_LP,
+        # ── R2V Fast ──
+        ("R2V", False, False, False): VideoModel.R2V_LANDSCAPE,
+        ("R2V", True,  False, False): VideoModel.R2V_PORTRAIT,
+        ("R2V", False, True,  False): VideoModel.R2V_LANDSCAPE_LP,
+        ("R2V", True,  True,  False): VideoModel.R2V_PORTRAIT_LP,
+        # ── R2V Lite ──
+        ("R2V", False, False, True):  VideoModel.R2V_LITE_LANDSCAPE,
+        ("R2V", True,  False, True):  VideoModel.R2V_LITE_PORTRAIT,
+        ("R2V", False, True,  True):  VideoModel.R2V_LITE_LANDSCAPE_LP,
+        ("R2V", True,  True,  True):  VideoModel.R2V_LITE_PORTRAIT_LP,
     }
     
     # Determine workflow key
@@ -179,7 +226,7 @@ def resolve_model_key(
     else:
         wf_key = "T2V"
     
-    result = _MAP.get((wf_key, is_portrait, is_lp))
+    result = _MAP.get((wf_key, is_portrait, is_lp, is_lite))
     if result:
         return result.value
     
@@ -199,7 +246,9 @@ def is_relaxed_model(model_key: str) -> bool:
     Returns:
         True if the model is Low Priority (requires conservative throttling).
     """
-    return bool(model_key) and model_key.endswith("_relaxed")
+    return bool(model_key) and (
+        model_key.endswith("_relaxed") or model_key.endswith("_low_priority")
+    )
 
 
 # === VIDEO RESOLUTION API VALUES ===
@@ -255,6 +304,8 @@ class LicenseTier(str, Enum):
     TESTER role is assigned via Firebase _role field, not via tier.
     """
     TRIAL = "TRIA"           # 3 days free (matches license_client.py)
+    TWELVE_HOURS = "12H"     # 12-hour package
+    ONE_DAY = "1D"           # 24-hour package
     ONE_MONTH = "1M"         # 300,000 VND
     THREE_MONTHS = "3M"      # 500,000 VND
     SIX_MONTHS = "6M"        # 800,000 VND
@@ -264,7 +315,8 @@ class LicenseTier(str, Enum):
 
 # === SHARED TIER DISPLAY NAMES (single source of truth) ===
 TIER_DISPLAY_MAP = {
-    "TRIA": "Trial (3d)", "1M": "1 Tháng", "3M": "3 Tháng",
+    "TRIA": "Trial (3d)", "12H": "12 Giờ", "1D": "1 Ngày",
+    "1M": "1 Tháng", "3M": "3 Tháng",
     "6M": "6 Tháng", "1Y": "1 Năm", "LT": "Vĩnh viễn",
 }
 
@@ -350,7 +402,7 @@ def get_timeout_tier(attempt: int = 0) -> dict:
 class AppConstants:
     """Application-wide constants."""
     APP_NAME = "VEO Pro Max"
-    APP_VERSION = "2.3.13"
+    APP_VERSION = "2.3.14"
     
     # Auto-update (GitHub public repo)
     GITHUB_REPO = "lynkvproerror/vadveopromax"

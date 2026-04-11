@@ -296,24 +296,17 @@ def main():
         splash.set_status("Checking license...")
         print("[LICENSE] Startup license validation...")
         try:
-            # 🔒 Force IMMEDIATE online check at startup (bypass 5-min cache)
+            # 🔒 License check at startup: trust cached + 6h online interval.
+            # Cache is AES-256+HMAC signed (machine-bound) — can't be forged.
+            # _validate_uncached() handles: online check (6h), soft-reject, auto-restore.
             if hasattr(controller, '_license_client') and controller._license_client:
                 lc = controller._license_client
-                if hasattr(lc, 'validate_online_now'):
-                    splash.set_status("Verifying license online...")
-                    app.processEvents()
-                    print("[LICENSE] Calling validate_online_now()...")
-                    online_result = lc.validate_online_now()
-                    print(f"[LICENSE] Online result: valid={online_result.valid}, error={getattr(online_result, 'error', None)}")
-                    
-                    if not online_result.valid:
-                        # Key deleted/revoked on server → force invalid
-                        controller._license_valid = False
-                        print(f"[LICENSE] ⛔ Server says INVALID → blocking app")
-                    else:
-                        print(f"[LICENSE] ✅ Server confirmed valid")
-                else:
-                    print("[LICENSE] ⚠️ validate_online_now not found")
+                splash.set_status("Verifying license...")
+                app.processEvents()
+                startup_result = lc.validate()
+                print(f"[LICENSE] Startup result: valid={startup_result.valid}, error={getattr(startup_result, 'error', None)}")
+                if not startup_result.valid:
+                    controller._license_valid = False
             else:
                 print("[LICENSE] ⚠️ _license_client not available")
             
@@ -341,8 +334,10 @@ def main():
                 controller._tamper_detected = True
                 if hasattr(controller, '_permissions') and controller._permissions:
                     controller._permissions._tamper_detected = True
+                # Don't clear license.dat — tampered binary can't decrypt it anyway
+                # (AES key derives from machine_id + PBKDF2 salt in binary)
+                # Clearing would only punish legitimate users on false positives.
                 try:
-                    controller._license_client.storage.clear()
                     controller._license_client._invalidate_validate_cache()
                 except Exception:
                     pass

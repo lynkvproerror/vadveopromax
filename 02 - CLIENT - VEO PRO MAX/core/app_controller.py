@@ -223,6 +223,10 @@ class AppController:
         # Wire extension bridge into Engine for UpscaleQueue fallback injection
         self._engine._extension_bridge = self._extension_bridge
         
+        # ★ Register bridge in extension_manager for bridge-aware install guard
+        from core.extension_manager import set_bridge_ref
+        set_bridge_ref(self._extension_bridge)
+        
         # Image Enhancer — GPU detection (background) + model management (portable)
         from core.gpu_detector import GPUDetector
         from core.model_manager import ModelManager
@@ -638,8 +642,9 @@ class AppController:
                 if hasattr(self, '_permissions') and self._permissions:
                     self._permissions._tamper_detected = True
                 # Invalidate cached license to force TRIAL limitations
+                # Don't clear license.dat — tampered binary can't decrypt it anyway
+                # (AES key derives from machine_id + PBKDF2 salt in binary)
                 try:
-                    self._license_client.storage.clear()
                     self._license_client._invalidate_validate_cache()
                 except Exception:
                     pass
@@ -1117,22 +1122,29 @@ class AppController:
     def _on_unregistered_extension(self):
         """Callback from ExtensionBridge when a connection hasn't registered after 5s.
         
-        Iterates known profiles and assigns emails to any unregistered connections.
-        This handles late-connecting extensions that missed Step 5's initial assignment.
+        Iterates runtime-enabled accounts and assigns emails to any unregistered
+        connections. This handles late-connecting extensions that missed the
+        initial fallback assignment without binding disabled/non-runtime profiles.
         """
         import asyncio
         
         async def _assign_pending():
-            profiles = (
-                self._profiles_controller.get_all_profiles()
-                if hasattr(self, '_profiles_controller') and self._profiles_controller
-                else []
-            )
-            for p in profiles:
-                email = p.get("email")
+            accounts = list(getattr(getattr(self, '_multi_account', None), '_accounts', []) or [])
+            for acc in accounts:
+                if not getattr(acc, 'is_enabled', True):
+                    continue
+                email = getattr(acc, 'email', '')
                 if email and not self._extension_bridge.is_connected(email):
-                    profile_path = p.get("browser_profile_path", "")
-                    log.info(f"[AutoAssign] 📧 Late-assign email: {email} (profile={Path(profile_path).name if profile_path else '?'})")
+                    profile = (
+                        self._profiles_controller.get_profile(email)
+                        if hasattr(self, '_profiles_controller') and self._profiles_controller
+                        else None
+                    )
+                    profile_path = getattr(profile, "browser_profile_path", "") or ""
+                    log.info(
+                        f"[AutoAssign] 📧 Late-assign email: {email} "
+                        f"(profile={Path(profile_path).name if profile_path else '?'})"
+                    )
                     assigned = await self._extension_bridge.assign_email(email, profile_path=Path(profile_path).name if profile_path else "")
                     if assigned:
                         self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
@@ -1556,12 +1568,21 @@ class AppController:
                 # (fallback when content.js email detection fails on VEO page)
                 if self._extension_bridge:
                     await asyncio.sleep(3)  # Wait for extensions to connect
-                    profiles = self._profiles_controller.get_all_profiles() if hasattr(self, '_profiles_controller') and self._profiles_controller else []
-                    for p in profiles:
-                        email = p.get("email")
+                    for acc in list(getattr(self._multi_account, '_accounts', []) or []):
+                        if not getattr(acc, 'is_enabled', True):
+                            continue
+                        email = getattr(acc, 'email', '')
                         if email and not self._extension_bridge.is_connected(email):
-                            profile_path = p.get("browser_profile_path", "")
-                            log.info(f"[AutoLaunch] 📧 Assigning email to unregistered extension: {email} (profile={Path(profile_path).name if profile_path else '?'})")
+                            profile = (
+                                self._profiles_controller.get_profile(email)
+                                if hasattr(self, '_profiles_controller') and self._profiles_controller
+                                else None
+                            )
+                            profile_path = getattr(profile, "browser_profile_path", "") or ""
+                            log.info(
+                                f"[AutoLaunch] 📧 Assigning email to unregistered extension: {email} "
+                                f"(profile={Path(profile_path).name if profile_path else '?'})"
+                            )
                             await self._extension_bridge.assign_email(email, profile_path=Path(profile_path).name if profile_path else "")
                     
                     connected = self._extension_bridge.get_connected_emails()
@@ -1710,7 +1731,7 @@ class AppController:
                         _prof = self._profiles_controller.get_profile(email) if self._profiles_controller else None
                         _ppath = getattr(_prof, 'browser_profile_path', '') or '' if _prof else ''
                         await self._extension_bridge.assign_email(email, profile_path=Path(_ppath).name if _ppath else "")
-                        log.info(f"[HotAdd] 📧 Email assigned to extension: {email} (profile={Path(_ppath).name if _ppath else '?'})")
+                        log.info(f"[HotAdd] 📨 Email assignment requested: {email} (profile={Path(_ppath).name if _ppath else '?'})")
                     
                     # Ensure extension is installed
                     try:
@@ -2157,6 +2178,14 @@ class AppController:
                     # Confirmed same version — skip reinstall
                     results[email] = "✅ bridge connected"
                     log.info(f"[AppController] Extension v{installed_ver} connected via bridge for {email} — up-to-date")
+                    # ★ Corrective: Always re-inject identity even when bridge is connected.
+                    # Fixes wrong bindings from earlier assign_email guesses.
+                    if email and port:
+                        try:
+                            from core.extension_manager import inject_extension_identity
+                            inject_extension_identity(port, email)
+                        except Exception:
+                            pass
                     continue
                 elif local_ver and installed_ver and installed_ver != local_ver:
                     log.warning(f"[AppController] Extension connected but outdated: installed={installed_ver}, local={local_ver} — reinstalling...")
@@ -2166,11 +2195,32 @@ class AppController:
                     # Fall through to install_if_needed below
             
             try:
-                ok = install_if_needed(port, str(_extension_dir))
+                ok = install_if_needed(port, str(_extension_dir), email=email, caller="ensure_all_extensions")
                 results[email] = "✅" if ok else "⚠️ failed"
+                # ★ Secondary: re-inject identity after install/update
+                # chrome.storage.local is wiped by uninstall → must re-inject.
+                if ok and email and port:
+                    try:
+                        from core.extension_manager import inject_extension_identity
+                        inject_extension_identity(port, email)
+                    except Exception:
+                        pass
             except Exception as e:
                 results[email] = f"❌ {e}"
                 log.error(f"[AppController] Extension batch install error for {email}: {e}")
+        
+        # ★ Corrective: After all injections, trigger re-registration across all connections.
+        # This fixes any wrong bindings from earlier assign_email guesses.
+        if self._extension_bridge and results:
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.ensure_future(self._extension_bridge.send_check_identity())
+                else:
+                    loop.run_until_complete(self._extension_bridge.send_check_identity())
+            except Exception as e:
+                log.debug(f"[AppController] check_identity send failed: {e}")
         
         if results:
             log.info(f"[AppController] Extension batch check results: {results}")
@@ -2185,10 +2235,13 @@ class AppController:
         Runs in background thread to avoid blocking UI.
         
         Strategy per Chrome type:
-        - Branded Chrome: CDP reinstall (uninstall old → install new from disk)
+        - Branded Chrome: deterministic CDP reinstall (uninstall old → install new)
+          ★ Does NOT use chrome.runtime.reload() — it loads from the original
+          install path (stale temp copy), not the updated source on disk.
         - CfT: restart browser (--load-extension only loads at launch time)
         
-        After reload, verifies installed version matches local version.
+        After reload/reinstall, verifies installed version matches local version.
+        Forces reinstall if version is unreadable (MV3 service worker suspended).
         """
         import threading
         
@@ -2201,7 +2254,15 @@ class AppController:
                 return
             
             from core.chrome_manager import is_branded_chrome, _load_pid_file
+            from core.extension_manager import (
+                reinstall_extension,
+                get_local_extension_version,
+                _get_installed_version_fast,
+            )
             from pathlib import Path
+            
+            _client_dir = Path(__file__).resolve().parent.parent
+            _extension_dir = _client_dir / "extension"
             
             running_emails = list(pc._debug_browsers.keys())
             if not running_emails:
@@ -2216,26 +2277,48 @@ class AppController:
             results = {}
             for email in running_emails:
                 try:
-                    # Determine Chrome type
+                    # ★ Option A: Discover cdp_port + chrome_exe BEFORE branching
+                    # (reuse pattern from ensure_all_extensions() L2115-2138)
+                    entry = pc._debug_browsers.get(email, {})
+                    cdp_port = entry.get("cdp_port")
                     chrome_exe = ""
                     profile = pc.get_profile(email)
                     if profile and profile.browser_profile_path:
                         pid_data = _load_pid_file(profile.browser_profile_path)
                         if pid_data:
+                            if not cdp_port:
+                                cdp_port = pid_data.get("port")
                             chrome_exe = pid_data.get("chrome_exe", "")
                     
                     if is_branded_chrome(chrome_exe):
-                        # ★ Branded Chrome: reload via existing method
-                        # (tries WebSocket hot-reload first, then CDP reinstall)
-                        log.info(f"[ExtHotUpdate] {email}: Branded Chrome — reloading extension...")
-                        ok = self.reload_extension_for(email)
+                        if not cdp_port:
+                            results[email] = "⚠️ no CDP port"
+                            log.warning(f"[ExtHotUpdate] {email}: Branded Chrome but no CDP port — skip")
+                            continue
+                        
+                        # ★ Option A: Direct CDP reinstall — deterministic, bypasses
+                        # unreliable chrome.runtime.reload() which loads from stale path.
+                        log.info(f"[ExtHotUpdate] {email}: Branded Chrome — CDP reinstall...")
+                        ok = reinstall_extension(cdp_port, str(_extension_dir))
+                        
                         if ok:
-                            results[email] = "✅ reloaded"
+                            results[email] = "✅ reinstalled"
+                            # Wait for extension to reconnect via WebSocket
+                            bridge = getattr(self, '_extension_bridge', None)
+                            if bridge:
+                                try:
+                                    import asyncio
+                                    loop = getattr(self, '_loop', None)
+                                    if loop:
+                                        asyncio.run_coroutine_threadsafe(
+                                            bridge.wait_for_extension(email, timeout=15.0),
+                                            loop,
+                                        ).result(timeout=20)
+                                except Exception:
+                                    pass
                         else:
-                            # Fallback: full ensure (catches version mismatch)
-                            log.warning(f"[ExtHotUpdate] {email}: reload failed — trying ensure_all...")
-                            ensure_result = self.ensure_all_extensions()
-                            results[email] = ensure_result.get(email, "⚠️ ensure fallback")
+                            results[email] = "❌ reinstall failed"
+                            log.error(f"[ExtHotUpdate] {email}: CDP reinstall failed")
                     else:
                         # ★ CfT: must restart browser (--load-extension only loads at launch)
                         log.info(f"[ExtHotUpdate] {email}: CfT — restarting browser for extension reload...")
@@ -2258,26 +2341,35 @@ class AppController:
                         else:
                             results[email] = "❌ restart failed"
                     
-                    # ★ Fix 4: Version verify after reload
+                    # ★ Version verify after reload/reinstall
+                    # Re-read cdp_port — CfT restart may have assigned a new port
                     entry = pc._debug_browsers.get(email, {})
                     cdp_port = entry.get("cdp_port")
+                    if not cdp_port:
+                        # Fallback: read from PID file (covers port reassignment)
+                        profile = pc.get_profile(email)
+                        if profile and profile.browser_profile_path:
+                            pid_data = _load_pid_file(profile.browser_profile_path)
+                            if pid_data:
+                                cdp_port = pid_data.get("port")
+                    
                     if cdp_port:
-                        from core.extension_manager import (
-                            get_local_extension_version,
-                            _get_installed_version_fast,
-                            install_if_needed,
-                        )
                         local_ver = get_local_extension_version()
                         installed_ver = _get_installed_version_fast(cdp_port)
                         if local_ver and installed_ver and installed_ver != local_ver:
                             log.warning(
                                 f"[ExtHotUpdate] {email}: version mismatch after reload "
-                                f"(installed={installed_ver}, local={local_ver}) — reinstalling"
+                                f"(installed={installed_ver}, local={local_ver}) — forcing reinstall"
                             )
-                            _client_dir = Path(__file__).resolve().parent.parent
-                            _extension_dir = _client_dir / "extension"
-                            install_if_needed(cdp_port, str(_extension_dir))
-                            results[email] = "🔄 reinstalled (version mismatch)"
+                            fix_ok = reinstall_extension(cdp_port, str(_extension_dir))
+                            results[email] = "🔄 reinstalled (version mismatch)" if fix_ok else "❌ reinstall failed (version mismatch)"
+                        elif local_ver and not installed_ver:
+                            # ★ Option B: Version unreadable — force reinstall to be safe
+                            log.warning(
+                                f"[ExtHotUpdate] {email}: version unreadable after reload — forcing reinstall"
+                            )
+                            fix_ok = reinstall_extension(cdp_port, str(_extension_dir))
+                            results[email] = "🔄 reinstalled (version unreadable)" if fix_ok else "❌ reinstall failed (version unreadable)"
                         elif local_ver and installed_ver:
                             log.info(f"[ExtHotUpdate] {email}: ✅ verified v{installed_ver}")
                 
@@ -3530,6 +3622,7 @@ class AppController:
         
         Returns group_id.
         """
+        _submit_t0 = time.monotonic()  # ★ Timing: measure total submit_prompts
         # G0: Block if license expired / invalid — INLINE CHECK (not just flag)
         if not self._check_license_gate():
             log.warning("[License] Generation blocked — license expired or invalid")
@@ -3788,16 +3881,15 @@ class AppController:
                 ],
             }
             try:
-                from PySide6.QtCore import QMetaObject, Qt, QThread
-                # Stash data for the safe slot to pick up
+                from PySide6.QtCore import QMetaObject, Qt
+                # ★ Perf: Always defer via QueuedConnection — avoid blocking
+                # submit hot path with json.dumps + setPlainText even when
+                # called from the same thread (user-submit path).
                 self._pending_json_preview = preview
-                if QThread.currentThread() == self._dev_console.thread():
-                    self._dev_console.update_json_preview(preview)
-                else:
-                    QMetaObject.invokeMethod(
-                        self._dev_console, "update_json_preview_safe",
-                        Qt.ConnectionType.QueuedConnection
-                    )
+                QMetaObject.invokeMethod(
+                    self._dev_console, "update_json_preview_safe",
+                    Qt.ConnectionType.QueuedConnection
+                )
             except Exception:
                 pass
         
@@ -3805,6 +3897,12 @@ class AppController:
         
         self.state.queue_count += len(tasks)
         self._notify_queue_updated()
+        
+        _submit_ms = (time.monotonic() - _submit_t0) * 1000.0
+        if _submit_ms >= 20:
+            log.debug(
+                f"[SubmitTiming] submit_prompts: {len(tasks)} tasks in {_submit_ms:.1f}ms"
+            )
         
         return group_id
     
@@ -4335,6 +4433,9 @@ class AppController:
         import time as _time
         self._engine_start_ts = _time.monotonic()
         
+        # ★ Reset on-the-fly sweep counter for fresh processing batch
+        self._otf_sweep_count = 0
+        
         # ★ Pause Tab Keepalive — engine takes over tab management
         # Prevents conflict: both keepalive and engine use executeScript
         # on the same tabs (Chrome serializes → delays reCAPTCHA tokens)
@@ -4704,6 +4805,16 @@ class AppController:
             
             terminal_states = {'completed', 'failed', 'cancelled'}
             
+            # ★ On-the-fly sweep: retry failed tasks/videos WHILE engine is
+            # still running (other tasks active). This fires every _check_auto_stop
+            # tick, not only when all tasks are done. Allows immediate recovery
+            # instead of waiting for entire queue to finish.
+            if self._should_on_the_fly_sweep():
+                swept = self._run_on_the_fly_sweep()
+                if swept > 0:
+                    log.info(f"[OTF-Sweep] Injected {swept} item(s) while engine still processing")
+                    # Don't return — let the rest of auto-stop logic check normally
+            
             # Check ready queue first (fast path)
             if self._dispatcher.ready_count > 0:
                 return
@@ -4722,6 +4833,14 @@ class AppController:
                     log.info("[AutoStop] Deferred — UpscaleQueue still has pending work")
                     return
             
+            # ★ On-the-fly sweep gate: before auto-stopping, check if we can
+            # rescue failed tasks/videos/upscales and keep engine running.
+            if self._should_on_the_fly_sweep():
+                swept = self._run_on_the_fly_sweep()
+                if swept > 0:
+                    log.info(f"[AutoStop] Deferred — on-the-fly sweep injected {swept} item(s)")
+                    return  # Engine continues processing the swept items
+            
             # All tasks in terminal state + ready queue empty + no pending upscales → auto-stop
             log.info("[AutoStop] All tasks finished — stopping engine automatically")
             self.stop_processing()
@@ -4735,6 +4854,180 @@ class AppController:
                     log.warning(f"[AutoStop] Post-queue callback failed: {cb_e}")
         except Exception as e:
             log.warning(f"[AutoStop] Check failed: {e}")
+    
+    def _should_on_the_fly_sweep(self) -> bool:
+        """Check if on-the-fly sweep should run.
+        
+        Conditions:
+        1. auto_retry_failed setting is ON
+        2. Sweep count < max rounds (prevents infinite loops)
+        3. Cooldown: at least 30s since last sweep (avoid spamming)
+        4. There's actually incomplete work to sweep
+        """
+        try:
+            from config.settings import get_settings
+            s = get_settings()
+            if not getattr(s, 'auto_retry_failed', True):
+                return False
+            
+            max_rounds = getattr(s, 'auto_sweep_max_rounds', 5)
+            otf_count = getattr(self, '_otf_sweep_count', 0)
+            if otf_count >= max_rounds:
+                if otf_count == max_rounds:  # Log once
+                    log.info(f"[OTF-Sweep] Max {max_rounds} rounds exhausted — no more auto-retry")
+                return False
+            
+            # Throttle: 30s cooldown between sweep rounds
+            import time as _time
+            last_sweep_ts = getattr(self, '_otf_last_sweep_ts', 0)
+            if (_time.monotonic() - last_sweep_ts) < 30.0:
+                return False
+            
+            # Check for incomplete work
+            return self._has_incomplete_work_for_otf()
+        except Exception:
+            return False
+    
+    def _has_incomplete_work_for_otf(self) -> bool:
+        """Check if any tasks have failed outputs worth retrying."""
+        try:
+            from core.dispatcher import TaskState
+            for task in self._dispatcher._all_tasks.values():
+                if getattr(task, 'replace_target', None):
+                    continue
+                # Failed tasks
+                if task.state == TaskState.FAILED:
+                    return True
+                # Completed tasks with partial failures
+                if task.state != TaskState.COMPLETED:
+                    continue
+                for vo in (task.video_outputs or []):
+                    if vo.quality == 'failed':
+                        return True
+                    if vo.upscale_status == 'failed':
+                        return True
+        except Exception:
+            pass
+        return False
+    
+    def _run_on_the_fly_sweep(self) -> int:
+        """Execute one on-the-fly sweep round. Returns total items retried/re-queued.
+        
+        Phases:
+        1. Retry all FAILED tasks
+        2. Retry failed video slots (quality='failed')
+        3. Re-upscale failed upscales (upscale_status='failed')
+        4. Re-generate tasks missing media_id
+        """
+        self._otf_sweep_count = getattr(self, '_otf_sweep_count', 0) + 1
+        import time as _time
+        self._otf_last_sweep_ts = _time.monotonic()
+        from config.settings import get_settings
+        max_rounds = getattr(get_settings(), 'auto_sweep_max_rounds', 5)
+        
+        total = 0
+        
+        # Phase 1+2: Retry failed tasks + failed video slots
+        try:
+            retried_tasks = self._dispatcher.retry_all_failed()
+            retried_videos = self._dispatcher.force_retry_all_failed_videos()
+            total += retried_tasks + retried_videos
+        except Exception as e:
+            log.warning(f"[OTF-Sweep] Phase 1+2 error: {e}")
+        
+        # Phase 3: Re-upscale tasks with upscale_status='failed'
+        reupscale_count = 0
+        needs_regen_ids = []
+        try:
+            from core.dispatcher import TaskState
+            for task in list(self._dispatcher._all_tasks.values()):
+                if getattr(task, 'replace_target', None):
+                    continue
+                if task.state != TaskState.COMPLETED:
+                    continue
+                wants_upscale = getattr(task, 'download_quality', '720p') in ('1080p', '4K', '2K')
+                if not wants_upscale:
+                    continue
+                
+                is_image = getattr(task, 'workflow_type', '') in ('T2I', 'I2I')
+                base_quality = '1K' if is_image else '720p'
+                needs_reupscale = False
+                has_missing_media = False
+                
+                for vo in (task.video_outputs or []):
+                    if vo.quality == 'retrying':
+                        continue
+                    if vo.upscale_status == 'failed':
+                        if vo.media_id:
+                            needs_reupscale = True
+                        else:
+                            has_missing_media = True
+                    elif vo.quality == base_quality and not vo.file_upscaled:
+                        if vo.upscale_status not in ('submitting', 'polling', 'success'):
+                            if vo.media_id:
+                                needs_reupscale = True
+                            else:
+                                has_missing_media = True
+                
+                if has_missing_media and not needs_reupscale:
+                    needs_regen_ids.append(task.id)
+                elif needs_reupscale and hasattr(self, 're_upscale_task'):
+                    # Dedup: skip if already in upscale queue
+                    already_queued = False
+                    engine = getattr(self, '_engine', None)
+                    if engine:
+                        uq = getattr(engine, '_upscale_queue', None)
+                        if uq and hasattr(uq, '_job_queue'):
+                            try:
+                                for job in list(uq._job_queue.queue):
+                                    if getattr(job, 'task_id', None) == task.id:
+                                        already_queued = True
+                                        break
+                            except Exception:
+                                pass
+                    if not already_queued:
+                        self.re_upscale_task(task.id, failed_only=True)
+                        reupscale_count += 1
+        except Exception as e:
+            log.warning(f"[OTF-Sweep] Phase 3 error: {e}")
+        total += reupscale_count
+        
+        # Phase 4: Re-generate tasks with missing media_ids
+        regen_count = 0
+        try:
+            from core.dispatcher import TaskState, TaskStage
+            for tid in needs_regen_ids:
+                task = self._dispatcher.get_task(tid)
+                if not task:
+                    continue
+                task.state = TaskState.READY
+                task.progress = 0
+                task.error = None
+                task.stage = TaskStage.INIT
+                task.status_text = "🔄 Auto-retry: re-generating missing video(s)"
+                task.assigned_account = None
+                task.image_uris.clear()
+                task.image_upload_status = ""
+                task.video_outputs.clear()
+                task.output_uris.clear()
+                task.operation_name = None
+                task.operation_names.clear()
+                task.scene_ids.clear()
+                self._dispatcher._queued_task_ids.discard(tid)
+                self._dispatcher._enqueue_task(task, priority=0)
+                regen_count += 1
+                log.info(f"[OTF-Sweep] Task {tid}: reset to READY for re-generation")
+        except Exception as e:
+            log.warning(f"[OTF-Sweep] Phase 4 error: {e}")
+        total += regen_count
+        
+        log.info(
+            f"[OTF-Sweep] Round {self._otf_sweep_count}/{max_rounds}: "
+            f"retried={retried_tasks} task(s), {retried_videos} video(s), "
+            f"{reupscale_count} re-upscale(s), {regen_count} re-gen(s)"
+        )
+        
+        return total
     
     def set_queue_complete_callback(self, callback):
         """Register callback for when all queue work is done.
@@ -4832,6 +5125,7 @@ class AppController:
     
     def _notify_queue_updated(self):
         """Notify queue update (thread-safe)."""
+        _t0 = time.monotonic()
         self._invalidate_queue_groups_cache()
         status = self.get_queue_status()
         for cb in self._on_queue_updated:
@@ -4839,6 +5133,9 @@ class AppController:
                 cb(status)
             except Exception:
                 pass
+        _notify_ms = (time.monotonic() - _t0) * 1000.0
+        if _notify_ms >= 10:
+            log.debug(f"[SubmitTiming] _notify_queue_updated: {_notify_ms:.1f}ms")
         # Push to DevConsole (thread-safe)
         if self._dev_console and hasattr(self._dev_console, 'update_queue_state'):
             from PySide6.QtCore import QMetaObject, Qt, QThread
@@ -4885,6 +5182,7 @@ class AppController:
             self._license_valid = False
             self._permissions.set_role(Role.TRIAL)
             return
+        
         try:
             info = self._license_client.validate()
             if info.valid and info.tier:
@@ -4984,8 +5282,8 @@ class AppController:
                 self._license_valid = False
                 if hasattr(self, '_permissions') and self._permissions:
                     self._permissions._tamper_detected = True
+                # Don't clear license.dat — tampered binary can't decrypt it anyway
                 try:
-                    self._license_client.storage.clear()
                     self._license_client._invalidate_validate_cache()
                 except Exception:
                     pass
@@ -5011,9 +5309,9 @@ class AppController:
                 }
             info = self._license_client.activate(license_key)
             if info.valid:
-                # Update permissions from tier
+                # Set license valid + apply permissions directly (no re-validate!)
                 self._license_valid = True
-                self._update_permissions()
+                self._apply_activation_result(info)
                 log.info(f"[License] Activated: tier={info.tier.name if info.tier else '?'}, role={info.role.name if info.role else '?'}")
                 return {
                     "success": True,
@@ -5027,6 +5325,33 @@ class AppController:
         except Exception as e:
             log.error(f"[License] Activation error: {e}")
             return {"success": False, "message": f"Activation failed: {str(e)}"}
+    
+    def _apply_activation_result(self, info):
+        """Apply permissions directly from activation result (no re-validate).
+        
+        This bypasses validate() entirely, preventing the race condition where
+        re-validation fails and revokes a just-activated license.
+        """
+        try:
+            if info.tier:
+                try:
+                    self._permissions.set_role_from_tier(info.tier)
+                except (ValueError, AttributeError):
+                    pass
+            # TESTER override from Firebase _role
+            try:
+                from security.license_client import UserRole
+                if hasattr(info, 'role') and info.role == UserRole.TESTER:
+                    self._permissions.set_role(Role.TESTER)
+                    log.info("[License] Role override: TESTER (from Firebase _role)")
+            except Exception:
+                pass
+            # Dynamic limits from Firebase _lim
+            if hasattr(info, 'limits_override') and info.limits_override:
+                self._permissions.apply_server_limits(info.limits_override)
+                log.info(f"[License] Dynamic limits applied: {info.limits_override}")
+        except Exception as e:
+            log.warning(f"[License] _apply_activation_result error: {e}")
     
     def deactivate_license(self):
         """Deactivate current license and revert to TRIAL."""
@@ -5067,6 +5392,8 @@ class AppController:
     # Tier code → display name mapping
     _TIER_DISPLAY_NAMES = {
         'TRIA': 'Trial',
+        '12H': 'Premium',
+        '1D': 'Premium',
         '1M': 'Premium',
         '3M': 'Premium',
         '6M': 'Premium',
@@ -5081,8 +5408,8 @@ class AppController:
             tier_code = info.tier.value if info.tier else None
             tier_name = self._TIER_DISPLAY_NAMES.get(tier_code, tier_code) if tier_code else None
             return {
-                "is_licensed": info.valid and info.tier and info.tier.value != "trial",
-                "is_trial": info.tier and info.tier.value == "trial" if info.valid else True,
+                "is_licensed": info.valid and info.tier and info.tier.value != "TRIA",
+                "is_trial": info.tier and info.tier.value == "TRIA" if info.valid else True,
                 "trial_expired": not info.valid and info.error and "expired" in (info.error or "").lower(),
                 "tier": tier_code,
                 "tier_name": tier_name,

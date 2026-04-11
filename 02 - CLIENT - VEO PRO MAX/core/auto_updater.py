@@ -1461,6 +1461,9 @@ class _ExtUpdateWorker(QThread):
                         log.warning("Extension files locked — force overwriting individual files")
                         # ★ R9-3: Ensure ext_dir exists (rmtree may have partially deleted)
                         os.makedirs(ext_dir, exist_ok=True)
+                        # ★ Option E: Track failed critical files — abort if any can't be overwritten
+                        _CRITICAL_FILES = {'background.js', 'content.js', 'manifest.json'}
+                        _failed_critical = []
                         for root, dirs, files in os.walk(src_ext):
                             rel = os.path.relpath(root, src_ext)
                             dst_root = os.path.join(ext_dir, rel)
@@ -1472,6 +1475,16 @@ class _ExtUpdateWorker(QThread):
                                     shutil.copy2(src_f, dst_f)
                                 except Exception as e:
                                     log.warning(f"Cannot overwrite {f}: {e}")
+                                    if f in _CRITICAL_FILES:
+                                        _failed_critical.append(f)
+                        if _failed_critical:
+                            self.ext_error.emit(
+                                f"Cannot update critical extension files (Chrome lock): "
+                                f"{', '.join(_failed_critical)}. "
+                                f"Close all Chrome browsers and retry."
+                            )
+                            shutil.rmtree(extract_dir, ignore_errors=True)
+                            return
                         # Clean stale files
                         new_files = set()
                         for root, dirs, files in os.walk(src_ext):

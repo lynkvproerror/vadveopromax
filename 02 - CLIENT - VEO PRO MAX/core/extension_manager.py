@@ -39,6 +39,22 @@ _install_locks_guard = threading.Lock()
 # so we don't spam every 5s poll cycle. Reset on install/uninstall.
 _extension_logged_ports: set = set()
 
+# ★ Bridge reference: set by AppController at startup via set_bridge_ref().
+# Used by install_if_needed() to check if extension is connected via WebSocket
+# before falling back to unreliable CDP service_worker detection.
+_bridge_ref = None
+
+def set_bridge_ref(bridge):
+    """Register the ExtensionBridge instance for bridge-aware install guard.
+    
+    Called once by AppController after creating the bridge, so install_if_needed()
+    can check bridge.is_connected(email) to prevent false reinstalls during
+    MV3 service worker startup race conditions.
+    """
+    global _bridge_ref
+    _bridge_ref = bridge
+    log.info(f"[ExtMgr] Bridge reference registered: {type(bridge).__name__}")
+
 
 # ── Extension Detection (Single Source of Truth) ─────────────────────────
 
@@ -132,6 +148,67 @@ def get_local_extension_version() -> Optional[str]:
         return data.get("version")
     except Exception:
         return None
+
+
+def inject_extension_identity(port: int, email: str) -> bool:
+    """Inject deterministic email identity into extension's chrome.storage.local via CDP.
+    
+    Uses the extension's service worker WebSocket debugger URL to evaluate:
+        chrome.storage.local.set({__veo_identity: '<email>'})
+    
+    This ensures the extension always registers with the correct email
+    on next WS connect, regardless of socket connection ordering.
+    
+    Pattern reused from _get_installed_version_fast() — find SW target
+    via CDP /json, evaluate JS via WebSocket.
+    
+    Args:
+        port: Chrome CDP port for this profile
+        email: Account email to bind to this profile's extension
+    
+    Returns:
+        True if injection succeeded, False otherwise.
+    """
+    # Escape email for JS string literal (basic safety)
+    safe_email = email.replace("'", "\\'").replace("\\", "\\\\")
+    
+    for attempt in range(2):
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/json", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                targets = json.loads(resp.read())
+        except Exception:
+            if attempt == 0:
+                time.sleep(2)
+                continue
+            return False
+        
+        for target in targets:
+            if not _is_our_extension(target):
+                continue
+            ws_url = target.get("webSocketDebuggerUrl")
+            if not ws_url:
+                continue
+            try:
+                # Set __veo_identity in chrome.storage.local
+                # This is a Promise-based API — wrap in async IIFE for CDP
+                js = f"chrome.storage.local.set({{__veo_identity: '{safe_email}'}})"
+                result = _cdp_evaluate(ws_url, js, timeout=5.0)
+                # chrome.storage.local.set returns undefined on success (no error = OK)
+                if result and "error" not in str(result.get("result", {}).get("exceptionDetails", "")):
+                    log.info(f"[ExtMgr] 🔐 CDP identity injected: {email} (port {port})")
+                    return True
+                else:
+                    log.warning(f"[ExtMgr] CDP identity injection returned unexpected result: {result}")
+            except Exception as e:
+                log.debug(f"[ExtMgr] CDP identity injection failed (attempt {attempt + 1}): {e}")
+        
+        # Retry: SW may have been suspended on first attempt
+        if attempt == 0:
+            time.sleep(2)
+    
+    log.warning(f"[ExtMgr] ⚠️ CDP identity injection failed for {email} (port {port}) after 2 attempts")
+    return False
 
 
 def _get_installed_version_fast(port: int) -> Optional[str]:
@@ -1079,13 +1156,18 @@ def uninstall_extension(port: int, ext_id: Optional[str] = None, _reuse_ws: Opti
         if _owns_tab:
             _cleanup_extensions_tabs(port)
         
-        # Step 5: Verify extension removed
+        # Step 5: Verify the SPECIFIC ext_id was removed.
+        # Previous code used is_extension_loaded() which only checks "any copy
+        # of our extension still running" — useless when duplicate IDs exist
+        # because the OTHER copy satisfies the check.
         time.sleep(2)
-        if not is_extension_loaded(port):
-            log.info("[ExtMgr] ✅ Extension uninstalled successfully!")
+        remaining_id = get_extension_id(port)
+        if remaining_id != ext_id:
+            # Either no extension left, or only a DIFFERENT copy remains
+            log.info(f"[ExtMgr] ✅ Extension {ext_id[:12]}... uninstalled successfully!")
             return True
         
-        log.warning("[ExtMgr] ⚠️ Extension still detected after uninstall")
+        log.warning(f"[ExtMgr] ⚠️ Extension {ext_id[:12]}... still detected after uninstall")
         return False
         
     except Exception as e:
@@ -1135,7 +1217,7 @@ def _find_extension_id_via_dom(port: int, _reuse_ws: Optional[str] = None) -> Op
         if (!card.shadowRoot) continue;
         const nameEl = card.shadowRoot.querySelector('#name');
         if (nameEl && nameEl.textContent.trim() === '{ext_name}') {{
-            return card.id;  // extension ID
+            return card.id;  // extension ID (first match)
         }}
     }}
     return null;
@@ -1157,6 +1239,66 @@ def _find_extension_id_via_dom(port: int, _reuse_ws: Optional[str] = None) -> Op
             _cleanup_extensions_tabs(port)
 
 
+def _find_all_extension_ids_via_dom(port: int, _reuse_ws: Optional[str] = None) -> list:
+    """Find ALL extension IDs matching our extension name.
+    
+    Unlike _find_extension_id_via_dom() which returns the first match,
+    this returns ALL cards with matching name — critical when duplicate
+    IDs exist (e.g. after source path change created a new ID while
+    the old one was never removed).
+    
+    Returns:
+        List of extension ID strings (may be empty).
+    """
+    _owns_tab = _reuse_ws is None
+    
+    if _reuse_ws:
+        ws_url = _reuse_ws
+    else:
+        ws_url = _open_extensions_page(port)
+        if not ws_url:
+            return []
+        time.sleep(2.5)
+        ws_url = _get_extensions_ws_url(port) or ws_url
+    
+    ext_name = EXTENSION_NAME
+    js = f"""
+(function() {{
+    const mgr = document.querySelector('extensions-manager');
+    if (!mgr || !mgr.shadowRoot) return [];
+    
+    const itemsList = mgr.shadowRoot.querySelector('extensions-item-list')
+                   || mgr.shadowRoot.querySelector('#items-list');
+    if (!itemsList || !itemsList.shadowRoot) return [];
+    
+    const ids = [];
+    const cards = itemsList.shadowRoot.querySelectorAll('extensions-item');
+    for (const card of cards) {{
+        if (!card.shadowRoot) continue;
+        const nameEl = card.shadowRoot.querySelector('#name');
+        if (nameEl && nameEl.textContent.trim() === '{ext_name}') {{
+            ids.push(card.id);
+        }}
+    }}
+    return ids;
+}})()
+"""
+    try:
+        result = _cdp_evaluate(ws_url, js, timeout=5.0)
+        ids = result.get("result", {}).get("result", {}).get("value", [])
+        if isinstance(ids, list) and ids:
+            log.info(f"[ExtMgr] Found {len(ids)} extension(s) via DOM: {ids}")
+            return ids
+        log.debug("[ExtMgr] No extensions found in DOM")
+        return []
+    except Exception as e:
+        log.debug(f"[ExtMgr] DOM extension search error: {e}")
+        return []
+    finally:
+        if _owns_tab:
+            _cleanup_extensions_tabs(port)
+
+
 def reinstall_extension(port: int, extension_dir: str, **kwargs) -> bool:
     """Uninstall then reinstall extension using a SINGLE chrome://extensions tab.
     
@@ -1172,41 +1314,52 @@ def reinstall_extension(port: int, extension_dir: str, **kwargs) -> bool:
     """
     log.info(f"[ExtMgr] 🔄 Reinstalling extension...")
     
-    # Step 1: Find existing extension — fast CDP /json first (no tab needed)
-    ext_id = get_extension_id(port)
+    # Step 1: Find ALL existing copies — not just the first.
+    # Duplicate IDs happen when source path changes (e.g. _get_safe_path copies
+    # to %TEMP%, or project folder moves) and manifest has no fixed `key`.
+    # Previous code only removed one copy, leaving legacy versions alive.
+    ws_url = _open_extensions_page(port)
+    if ws_url:
+        time.sleep(2.5)
+        ws_url = _get_extensions_ws_url(port) or ws_url
     
-    if not ext_id:
-        # Fallback: DOM search (needs tab) — open tab and keep it for reuse
-        ws_url = _open_extensions_page(port)
-        if ws_url:
-            time.sleep(2.5)
-            ws_url = _get_extensions_ws_url(port) or ws_url
-            ext_id = _find_extension_id_via_dom(port, _reuse_ws=ws_url)
-    else:
-        ws_url = None  # Will be opened later if needed
+    all_ids = []
+    if ws_url:
+        all_ids = _find_all_extension_ids_via_dom(port, _reuse_ws=ws_url)
+    if not all_ids:
+        # Fallback: try CDP /json (only finds active service workers)
+        single_id = get_extension_id(port)
+        if single_id:
+            all_ids = [single_id]
     
-    # Step 2: Uninstall if found (reuse tab)
-    if ext_id:
-        log.info(f"[ExtMgr] Found existing extension {ext_id} — removing before reinstall")
-        # Ensure tab is open for uninstall
-        if not ws_url:
-            ws_url = _open_extensions_page(port)
+    # Step 2: Remove ALL copies (oldest first, newest last)
+    if all_ids:
+        log.info(f"[ExtMgr] Found {len(all_ids)} copy(ies) to remove: {all_ids}")
+        for ext_id in all_ids:
+            log.info(f"[ExtMgr] Removing copy {ext_id[:16]}...")
+            # Ensure tab is open (may need reopen after each uninstall dialog)
+            if not ws_url:
+                ws_url = _open_extensions_page(port)
+                if ws_url:
+                    time.sleep(2.5)
+                    ws_url = _get_extensions_ws_url(port) or ws_url
             if ws_url:
-                time.sleep(2.5)
+                uninstall_extension(port, ext_id=ext_id, _reuse_ws=ws_url)
+                # Tab may be stale after dialog — refresh ws_url
+                time.sleep(1)
                 ws_url = _get_extensions_ws_url(port) or ws_url
-        if ws_url:
-            if not uninstall_extension(port, ext_id=ext_id, _reuse_ws=ws_url):
-                log.warning("[ExtMgr] Uninstall failed — trying install anyway")
-        else:
-            # Fallback: uninstall with own tab
-            if not uninstall_extension(port, ext_id=ext_id):
-                log.warning("[ExtMgr] Uninstall failed — trying install anyway")
-        # Close tab after uninstall — install needs fresh page state
+            else:
+                uninstall_extension(port, ext_id=ext_id)
+        
         _cleanup_extensions_tabs(port)
         time.sleep(2)
+        
+        # Verify all copies are gone
+        remaining = _find_all_extension_ids_via_dom(port)
+        if remaining:
+            log.warning(f"[ExtMgr] ⚠️ {len(remaining)} copy(ies) still remain after cleanup: {remaining}")
     else:
         log.info("[ExtMgr] No existing extension found — fresh install")
-        # Close any leftover tab from DOM search
         if ws_url:
             _cleanup_extensions_tabs(port)
     
@@ -1316,23 +1469,63 @@ def _update_unpacked_extension(port: int, extension_dir: str) -> bool:
         return False
 
 
-def install_if_needed(port: int, extension_dir: str, **kwargs) -> bool:
-    """Install extension if missing, or update/reinstall if version outdated.
+def install_if_needed(port: int, extension_dir: str, *, email: str = "", caller: str = "unknown", **kwargs) -> bool:
+    """Install extension if missing, or reinstall if version outdated/unknown.
     
     Optimized: uses fast CDP service worker version check (no tab needed)
     instead of opening chrome://extensions tab for every check.
     
+    ★ Bridge-aware guard: when the Extension Bridge WebSocket has a live
+    registration for this email, the extension is provably alive — skip
+    the unreliable CDP service_worker detection (MV3 workers suspend quickly,
+    causing false negatives during startup).
+    
     Checks:
-    1. Is extension loaded at all? → install
-    2. Is installed version != local version? → update (fast) → reinstall (fallback)
+    1. Bridge connected for email? → skip CDP, only check version
+    2. Is extension loaded at all (CDP)? → install
+    3. Is installed version != local version? → deterministic reinstall
+    4. Is installed version unreadable? → force reinstall
     
     Args:
         port: Chrome CDP port
         extension_dir: Absolute path to extension directory
+        email: Account email (enables bridge-aware guard when provided)
+        caller: Caller identifier for diagnostic logging
     
     Returns:
         True if extension is (or becomes) loaded and up-to-date
     """
+    log.info(f"[ExtMgr] install_if_needed called (port={port}, email={email or '?'}, caller={caller})")
+    
+    # ★ Bridge-aware guard: if bridge confirms extension is connected for
+    # this email, skip unreliable CDP service_worker detection entirely.
+    # The bridge WebSocket registration is authoritative — the extension
+    # content_script registered and is alive, even if the MV3 service_worker
+    # target hasn't appeared in CDP /json yet (startup race condition).
+    if email:
+        try:
+            if _bridge_ref and _bridge_ref.is_connected(email):
+                log.info(
+                    f"[ExtMgr] ✅ Bridge confirms extension connected for {email} "
+                    f"— skipping CDP service_worker check (caller={caller})"
+                )
+                # Still check version to prevent stale extension running indefinitely
+                local_ver = get_local_extension_version()
+                if local_ver:
+                    installed_ver = _get_installed_version_fast(port)
+                    if installed_ver and installed_ver != local_ver:
+                        log.warning(
+                            f"[ExtMgr] ⚠️ Bridge connected but version mismatch: "
+                            f"installed={installed_ver}, local={local_ver} — reinstalling"
+                        )
+                        return reinstall_extension(port, extension_dir)
+                    elif installed_ver:
+                        log.info(f"[ExtMgr] Extension v{installed_ver} up-to-date (bridge-verified)")
+                    # else: version unreadable but bridge says connected → trust bridge, skip reinstall
+                return True
+        except Exception as e:
+            log.debug(f"[ExtMgr] Bridge guard check failed (falling back to CDP): {e}")
+    
     # Retry a few times — on startup, service worker may take seconds to register
     loaded = is_extension_loaded(port)
     if not loaded:
@@ -1344,7 +1537,7 @@ def install_if_needed(port: int, extension_dir: str, **kwargs) -> bool:
                 break
     
     if not loaded:
-        log.info("[ExtMgr] Extension not loaded after retries — reinstalling (will remove stale if any)...")
+        log.info(f"[ExtMgr] Extension not loaded after retries — reinstalling (caller={caller})...")
         return reinstall_extension(port, extension_dir)
     
     # Version check: fast method via service worker (no chrome://extensions tab)
@@ -1359,18 +1552,21 @@ def install_if_needed(port: int, extension_dir: str, **kwargs) -> bool:
         if installed_ver and installed_ver != local_ver:
             log.warning(f"[ExtMgr] ⚠️ Version mismatch: installed={installed_ver}, local={local_ver}")
             
-            # Try fast update first (refresh files + reload button)
-            if _update_unpacked_extension(port, extension_dir):
-                return True
-            
-            # Fallback: full reinstall
-            log.warning(f"[ExtMgr] Fast update failed — falling back to full reinstall")
+            # ★ Option C: Go directly to deterministic reinstall.
+            # Previously tried _update_unpacked_extension() first (clicks ↻ reload
+            # button on chrome://extensions), but that uses the same stale-path
+            # mechanism as chrome.runtime.reload() — unreliable with # paths and
+            # temp copies. Full reinstall is ~10s slower but guaranteed correct.
             return reinstall_extension(port, extension_dir)
         elif installed_ver:
             log.info(f"[ExtMgr] Extension v{installed_ver} up-to-date — skipping")
         else:
-            # Could not read installed version — assume OK
-            log.info(f"[ExtMgr] Extension loaded (version unknown), local v{local_ver} — skipping")
+            # ★ Option B: Cannot read version — force reinstall to be safe.
+            # Previously assumed OK ("version unknown, skip"), but this caused
+            # stale extensions to run indefinitely when MV3 service worker was
+            # suspended or CDP timed out.
+            log.warning(f"[ExtMgr] ⚠️ Extension loaded but version unknown (local v{local_ver}) — forcing reinstall")
+            return reinstall_extension(port, extension_dir)
     else:
         log.info(f"[ExtMgr] Extension already installed — skipping")
     

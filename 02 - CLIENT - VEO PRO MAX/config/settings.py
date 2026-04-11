@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 18
+SETTINGS_VERSION = 19
 
 
 @dataclass
@@ -143,6 +143,7 @@ class AppSettings:
     post_queue_action_enabled: bool = False  # Master toggle
     post_queue_action: str = "nothing"       # "nothing" | "shutdown" | "sleep"
     auto_sweep_max_rounds: int = 5           # Max retry rounds before giving up
+    auto_retry_failed: bool = True             # Auto-retry failed tasks/videos while queue is processing
     
     # === AUTO-UPDATE ===
     auto_update_enabled: bool = True         # Check for updates on startup + every 30min
@@ -294,6 +295,10 @@ class AppSettings:
             # 17 → 18: Remove Project Builder global-session restore toggle.
             # Project Builder now manages its own project-local pipeline session.
             17: lambda d: {k: v for k, v in d.items() if k != 'restore_project_builder'},
+            # 18 → 19: Add auto-retry failed setting (on-the-fly sweep)
+            18: lambda d: {**d,
+                'auto_retry_failed': True,
+            },
         }
         
         while file_version < SETTINGS_VERSION:

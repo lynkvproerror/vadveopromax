@@ -1613,12 +1613,12 @@ class QueueGroupMixin:
             current_model = group_data.get('model', '').upper()
             idx = 1 if 'NARWHAL' in current_model else (2 if 'IMAGEN' in current_model else 0)
         else:
-            model_combo.addItems(["Veo 3.1 - Fast", "Veo 3.1 - Fast [LP]", "Veo 3.1 - Quality", "Veo 2 - Fast", "Veo 2 - Quality"])
+            model_combo.addItems(["Veo 3.1 - Fast", "Veo 3.1 - Fast [LP]", "Veo 3.1 - Lite", "Veo 3.1 - Lite [LP]", "Veo 3.1 - Quality"])
             current_model = group_data.get('model', '').lower()
-            if '3_1' in current_model or '3.1' in current_model:
-                idx = 1 if ('lp' in current_model or 'relaxed' in current_model) else (2 if 'quality' in current_model else 0)
-            elif '2' in current_model or '3_0' in current_model:
-                idx = 4 if 'quality' in current_model else 3
+            if 'lite' in current_model or 'low_priority' in current_model:
+                idx = 3 if ('lp' in current_model or 'low_priority' in current_model) else 2
+            elif '3_1' in current_model or '3.1' in current_model:
+                idx = 1 if ('lp' in current_model or 'relaxed' in current_model) else (4 if 'quality' in current_model else 0)
             else:
                 idx = 0
         model_combo.setCurrentIndex(idx)

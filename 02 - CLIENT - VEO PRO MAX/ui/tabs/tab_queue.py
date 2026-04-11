@@ -1694,7 +1694,9 @@ class TabQueue(
         self._restart_animation_timers()
         if self._refresh_hidden_pending:
             self._refresh_hidden_pending = False
-            QTimer.singleShot(0, self._refresh_queue_from_controller)
+            # ★ Perf: 150ms delay — let tab paint its frame first before
+            # heavy DTO rebuild + widget refresh hits the GUI thread.
+            QTimer.singleShot(150, self._refresh_queue_from_controller)
 
     def hideEvent(self, event):
         """Stop animation timers while the Queue tab is hidden."""
@@ -2719,9 +2721,10 @@ class TabQueue(
                         return  # Upscale still running
             
             # ── Auto-Sweep Gate ──
-            # ★ FIX P1-#3: Only auto-sweep when action is shutdown/sleep.
-            # "Do Nothing" means literally do nothing — no retry, no sweep.
-            has_incomplete = self._has_incomplete_work(dispatcher) if action != 'nothing' else False
+            # ★ FIX P1-#3: Auto-sweep when action is shutdown/sleep,
+            # OR when auto_retry_failed is ON (regardless of post_queue_action).
+            auto_retry = getattr(s, 'auto_retry_failed', True)
+            has_incomplete = self._has_incomplete_work(dispatcher) if (action != 'nothing' or auto_retry) else False
             
             if has_incomplete and self._sweep_count < self._max_sweep_rounds:
                 # ★ R2-2: Account Readiness Gate — only needed for auto-sweep

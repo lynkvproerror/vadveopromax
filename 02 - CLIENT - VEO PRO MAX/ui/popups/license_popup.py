@@ -107,9 +107,20 @@ class LicenseRequiredDialog(QDialog):
         
         self.setWindowTitle("VEO Pro Max — License")
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
-        self.setMinimumSize(700, 580)
         self.setModal(True)
         self.setStyleSheet(f"background-color: {Theme.BASE}; color: {Theme.TEXT};")
+        
+        # Adaptive sizing: scale down for small screens
+        from PySide6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            popup_w = min(700, int(avail.width() * 0.85))
+            popup_h = min(580, int(avail.height() * 0.85))
+        else:
+            popup_w, popup_h = 700, 580
+        self.setMinimumSize(popup_w, popup_h)
+        self.resize(popup_w, popup_h)
         
         self._setup_ui()
         
@@ -120,6 +131,31 @@ class LicenseRequiredDialog(QDialog):
         # Pre-select tier if provided
         if selected_tier:
             self._select_tier(selected_tier)
+    
+    def showEvent(self, event):
+        """Center dialog on screen when shown."""
+        super().showEvent(event)
+        from PySide6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            x = avail.x() + (avail.width() - self.width()) // 2
+            y = avail.y() + (avail.height() - self.height()) // 2
+            self.move(x, y)
+    
+    # ── Drag support for frameless window ──
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+    
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton and hasattr(self, '_drag_pos'):
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+    
+    def mouseReleaseEvent(self, event):
+        self._drag_pos = None
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -144,10 +180,26 @@ class LicenseRequiredDialog(QDialog):
             header_text = "⏰ LICENSE ĐÃ HẾT HẠN"
             header_color = Theme.PEACH
             warn_text = "⚠️ License đã hết hạn. Gia hạn hoặc nhập key mới để tiếp tục."
-        elif "machine" in err:
-            header_text = "🔒 SAI MÁY"
-            header_color = Theme.PURPLE
-            warn_text = "⚠️ License này được kích hoạt trên máy khác. Liên hệ admin."
+        elif "clock" in err:
+            header_text = "🕐 PHÁT HIỆN THAY ĐỔI ĐỒNG HỒ"
+            header_color = Theme.RED
+            warn_text = "⚠️ Hệ thống ghi nhận đồng hồ bị điều chỉnh. Nhập lại key để kích hoạt."
+        elif "integrity" in err or "tamper" in err or "reinstall" in err:
+            header_text = "⛔ FILE BỊ THAY ĐỔI"
+            header_color = Theme.RED
+            warn_text = "🚫 Phát hiện file ứng dụng bị sửa đổi. Vui lòng tải lại bản cài từ nguồn chính thức."
+        elif "security" in err:
+            header_text = "🔒 XÁC THỰC THẤT BẠI"
+            header_color = Theme.RED
+            warn_text = "⚠️ Xác thực bảo mật không thành công. Thử lại hoặc liên hệ admin."
+        elif "invalid" in err or "format" in err:
+            header_text = "❌ KEY KHÔNG HỢP LỆ"
+            header_color = Theme.RED
+            warn_text = "⚠️ Key nhập vào không đúng định dạng. Kiểm tra lại key và thử lại."
+        elif "network" in err or "connection" in err or "unavailable" in err or "firebase" in err:
+            header_text = "🌐 LỖI KẾT NỐI"
+            header_color = Theme.PEACH
+            warn_text = "⚠️ Không thể kết nối server để xác thực. Kiểm tra mạng và thử lại."
         elif "stale" in err or "backup" in err:
             header_text = "❌ LICENSE ĐÃ BỊ XOÁ"
             header_color = Theme.RED
@@ -156,6 +208,14 @@ class LicenseRequiredDialog(QDialog):
             header_text = "📋 CẦN LICENSE"
             header_color = Theme.YELLOW
             warn_text = "⚠️ Bản dùng thử đã kết thúc. Nâng cấp để sử dụng đầy đủ tính năng."
+        elif "machine" in err or "transferred" in err:
+            header_text = "🔒 SAI MÁY"
+            header_color = Theme.PURPLE
+            warn_text = "⚠️ License này được kích hoạt trên máy khác. Liên hệ admin."
+        elif "activation" in err:
+            header_text = "❌ KÍCH HOẠT THẤT BẠI"
+            header_color = Theme.RED
+            warn_text = "⚠️ Không thể kích hoạt license. Kiểm tra key và thử lại."
         else:
             header_text = "❌ LICENSE HẾT HẠN"
             header_color = Theme.RED
@@ -534,11 +594,12 @@ class LicenseRequiredDialog(QDialog):
                 sel_btn.setEnabled(False)
                 self._start_trial_polling()
                 
-            elif trial_state in ("active", "expired", "revoked"):
+            elif trial_state in ("active", "expired", "revoked", "upgraded"):
                 state_msgs = {
                     "active": ("✅ Đang dùng thử", Theme.GREEN),
                     "expired": ("❌ Đã hết hạn", Theme.RED),
                     "revoked": ("❌ Đã bị thu hồi", Theme.RED),
+                    "upgraded": ("✅ Đã nâng cấp — nhập key bên dưới", Theme.YELLOW),
                 }
                 msg, clr = state_msgs.get(trial_state, ("❌ Đã hết hạn", Theme.RED))
                 sel_btn = QPushButton(msg)
@@ -687,8 +748,10 @@ class LicenseRequiredDialog(QDialog):
                         return "approved"
                     elif status == "revoked":
                         return "revoked"
-                    elif status in ("expired", "upgraded"):
+                    elif status in ("expired",):
                         return "expired"
+                    elif status == "upgraded":
+                        return "upgraded"
             
             # No server record → check local pending flag
             if self._has_trial_requested_flag():

@@ -73,6 +73,8 @@ except ImportError:
     class LicenseTier(str, Enum):
         """VND Pricing Model - License Tiers (fallback)"""
         TRIAL = "TRIA"
+        TWELVE_HOURS = "12H"
+        ONE_DAY = "1D"
         ONE_MONTH = "1M"
         THREE_MONTHS = "3M"
         SIX_MONTHS = "6M"
@@ -393,12 +395,12 @@ class LicenseStorage:
             # → fails when app upgrades. Try to migrate by re-signing.
             old_version = data.get('_sig_version', 0)
             if old_version <= 2 and data.get('key'):
-                log.info(f"[LicenseStorage] Migrating license from sig v{old_version} → v3")
+                print(f"[LicenseStorage] Migrating license from sig v{old_version} → v3")
                 # Re-sign with new version-agnostic format
                 data.pop('_sig', None)
                 data.pop('_nonce', None)
                 self.save(data)  # save() uses v3 signature
-                log.info("[LicenseStorage] ✅ License migrated successfully")
+                print("[LicenseStorage] ✅ License migrated successfully")
                 return data
             
             # Signature invalid and not migratable → tampered
@@ -780,6 +782,10 @@ class LicenseClient:
         cached = self.storage.load()
         
         if not cached:
+            # No local cache — try auto-restore from server before trial check
+            restored = self._try_restore_by_mid()
+            if restored and restored.valid:
+                return restored
             return self._check_trial()
         
         # ✅ Trial cache: always re-query server for latest expires_at
@@ -799,17 +805,29 @@ class LicenseClient:
         role_code = cached.get('role', 1)
         expires = self._safe_parse_dt(cached.get('expires', '2000-01-01'))
         if expires < datetime.now():
+            # Try online re-validation before clearing (server may have extended)
+            _use = getattr(self, '_use_rest', False)
+            _has_rc = hasattr(self, '_rest_client') and self._rest_client is not None
+            if _use and _has_rc:
+                try:
+                    online_result = self._validate_with_rest(cached.get('key'))
+                    if online_result and online_result.valid:
+                        return online_result  # Server extended — cache updated by _validate_with_rest
+                except Exception:
+                    pass  # Network error — proceed to expire
             self.storage.clear()
             self._invalidate_validate_cache()
             return LicenseInfo(valid=False, error="License expired")
         
-        # 🔒 ONLINE-FIRST VALIDATION
-        # Try online every 5 min — if invalid, revoke + clear cache
-        # If offline (network error), just use local cache (expires naturally)
+        # 🔒 ONLINE VALIDATION — Check once per day (24h)
+        # If server confirms valid → update cache timestamp
+        # If server rejects (unified "validation_failed") → soft reject, keep cache
+        #   (server uses unified error to prevent key enumeration)
+        # If network error → use cache, retry next time online
         last_check = self._safe_parse_dt(cached.get('last_verified', '2000-01-01'))
         since_last_check = (datetime.now() - last_check).total_seconds()
         
-        ONLINE_CHECK_INTERVAL = 300  # 5 minutes
+        ONLINE_CHECK_INTERVAL = 21600  # 6 hours
         
         if since_last_check > ONLINE_CHECK_INTERVAL:
             online_result = None
@@ -821,7 +839,7 @@ class LicenseClient:
                 try:
                     online_result = self._validate_with_rest(cached.get('key'))
                 except Exception as e:
-                    pass  # Network error → use cache
+                    pass  # Network error → use cache, retry next day
             elif _has_db:
                 try:
                     online_result = self._validate_online(cached.get('key'))
@@ -831,28 +849,24 @@ class LicenseClient:
                 pass  # No online check method available
             
             if online_result is not None:
-                # If server says invalid → clear local cache!
-                if not online_result.valid:
-                    self.storage.clear()
-                    self._invalidate_validate_cache()
-                else:
-                    # 🔒 Update last_verified on successful online check
+                if online_result.valid:
+                    # ✅ Server confirmed valid → update cache timestamp
                     cached['last_verified'] = datetime.now().isoformat()
                     cached['_last_known_time'] = datetime.now().isoformat()
                     self.storage.save(cached)
-                return online_result
+                    return online_result
+                else:
+                    # ❌ Server rejected — soft reject, keep cache
+                    # Server uses unified "validation_failed" (can't distinguish reason)
+                    # Don't clear cache → retry next day, license works from cache
+                    import logging
+                    logging.getLogger("veo.license").warning(
+                        f"[LICENSE] Online check returned invalid: {getattr(online_result, 'error', '?')} "
+                        f"— keeping cache, will retry next check"
+                    )
+                    # Don't update last_verified → will retry next app launch
         else:
-            pass  # Online check skipped — within interval
-        
-        # 🔒 OFFLINE GRACE: hard deadline — revoke if no successful online check in N days
-        offline_seconds = since_last_check
-        if offline_seconds > (self.OFFLINE_GRACE_DAYS * 86400):
-            self.storage.clear()
-            self._invalidate_validate_cache()
-            return LicenseInfo(
-                valid=False,
-                error=f"Offline quá {self.OFFLINE_GRACE_DAYS} ngày. Kết nối internet để xác thực lại license."
-            )
+            pass  # Online check skipped — within 24h interval
         
         # 🔒 Update last known time (for next clock check)
         cached['_last_known_time'] = datetime.now().isoformat()
@@ -1121,11 +1135,9 @@ class LicenseClient:
             data = doc.to_dict()
             
             if data.get('_st') == 'r':
-                self.storage.clear()
                 return LicenseInfo(valid=False, error="License revoked")
             
-            if data.get('_mid') != self.machine_id:
-                self.storage.clear()
+            if data.get('_mid') and data.get('_mid').lower() != self.machine_id:
                 return LicenseInfo(valid=False, error="License transferred to another machine")
             
             exp = data.get('_exp')
@@ -1172,11 +1184,24 @@ class LicenseClient:
                     if status == "upgraded":
                         # Trial upgraded to paid → try auto-restore key from _mid_to_key
                         restored = self._try_restore_by_mid()
-                        if restored:
+                        if restored and restored.valid:
                             return restored
-                        # Auto-restore failed (no _mid_to_key entry)
-                        # → Let the user enter key manually via activation dialog
-                        # Do NOT block with hard error — user may have a valid _lic key
+                        # Auto-restore failed — check if there's a cached paid key
+                        cached = self.storage.load()
+                        if cached and cached.get('key') and not cached.get('_is_trial'):
+                            # Has cached paid key → validate it normally
+                            if cached.get('machine_id') == self.machine_id:
+                                expires = self._safe_parse_dt(cached.get('expires', '2000-01-01'))
+                                if expires > datetime.now():
+                                    tier = self._tier_from_code(cached.get('tier', ''))
+                                    return LicenseInfo(
+                                        valid=True, tier=tier,
+                                        role=UserRole(cached.get('role', 1)),
+                                        expires=expires,
+                                        machine_id=self.machine_id,
+                                        limits_override=cached.get('_lim')
+                                    )
+                        # No cached key either → ask user to enter key
                         return LicenseInfo(
                             valid=False,
                             tier="TRIAL",
@@ -1274,18 +1299,20 @@ class LicenseClient:
     
     def _try_restore_by_mid(self):
         """
-        Try to auto-restore license from Firebase by Machine ID.
+        Try to auto-restore license from server by Machine ID.
         
-        Searches _lic collection for active key bound to this MID.
-        If found: restores local cache (license.dat) and returns valid LicenseInfo.
+        Uses Bot API (action=restore) → server reads _mid_to_key/{MID}.
+        If found: validates via Bot API, restores local cache, returns valid LicenseInfo.
         If not found: returns None.
         """
         try:
             rest_client = getattr(self, '_rest_client', None)
-            if not rest_client or not hasattr(rest_client, 'query_license_by_mid'):
+            if not rest_client or not hasattr(rest_client, 'restore_by_mid_via_bot'):
                 return None
             
-            result = rest_client.query_license_by_mid(self.machine_id)
+            # Step 1: Ask server for bound key via Bot API
+            hw = HardwareFingerprint.get_all_components()
+            result = rest_client.restore_by_mid_via_bot(hw)
             if not result.get("found"):
                 return None
             
@@ -1293,22 +1320,20 @@ class LicenseClient:
             tier_code = result.get("tier", "")
             role = result.get("role", 1)
             expires_str = result.get("expires", "")
+            client_name = result.get("client_name", "")
             
-            pass  # key found
+            if not key:
+                return None
             
-            # 🔒 CROSS-VALIDATE via Bot API (Firestore rules block direct _lic reads)
-            # validate_with_crosscheck → 403 (rules: allow read: if isBot())
-            # validate_via_bot → Bot API has auth → can read _lic
-            if hasattr(rest_client, 'validate_via_bot'):
-                try:
-                    hw = HardwareFingerprint.get_all_components()
-                    is_valid, status, _data = rest_client.validate_via_bot(key, hw)
-                    if not is_valid:
-                        return None  # key invalid on server
-                except Exception as e:
-                    return None  # Network error → don't restore blindly
+            # Step 2: Cross-validate via Bot API (hw attestation)
+            try:
+                is_valid, status, _data = rest_client.validate_via_bot(key, hw)
+                if not is_valid:
+                    return None  # key invalid on server
+            except Exception:
+                return None  # Network error → don't restore blindly
             
-            # Restore local cache
+            # Step 3: Restore local cache
             try:
                 expires = datetime.fromisoformat(expires_str) if expires_str else datetime.now() + timedelta(days=30)
             except Exception:
@@ -1320,11 +1345,16 @@ class LicenseClient:
                 'role': role,
                 'expires': expires.isoformat(),
                 'machine_id': self.machine_id,
+                'client_name': client_name,
                 'last_verified': datetime.now().isoformat(),
             }
             self.storage.save(cache_data)
             
             tier = self._tier_from_code(tier_code)
+            import logging
+            logging.getLogger("veo.license").info(
+                f"[LICENSE] ✅ Auto-restored from server: key={key[:8]}... tier={tier_code}"
+            )
             return LicenseInfo(
                 valid=True,
                 tier=tier,
@@ -1414,11 +1444,16 @@ class LicenseClient:
             return LicenseInfo(valid=False, error=status.error)
     
     def _tier_from_code(self, code: str) -> Optional[LicenseTier]:
-        """Convert tier code to enum"""
+        """Convert tier code to enum. Falls back to ONE_MONTH for unknown codes."""
+        if not code:
+            return None
         for tier in LicenseTier:
             if tier.value == code:
                 return tier
-        return None
+        # Unknown tier code from server → treat as paid (don't invalidate license!)
+        import logging
+        logging.getLogger("veo.license").warning(f"[LICENSE] Unknown tier code '{code}', falling back to ONE_MONTH")
+        return LicenseTier.ONE_MONTH
     
     # =====================
     # USAGE TRACKING

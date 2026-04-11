@@ -61,6 +61,9 @@ class ExtensionConnection:
     """State for a single Extension WebSocket connection."""
     ws: Any  # websockets.WebSocketServerProtocol
     registered_emails: list = field(default_factory=list)
+    pending_email: str = ""  # email requested via assign_email, awaiting real register
+    pending_assigned_at: float = 0.0
+    ext_version: str = ""  # Extension version reported on register (for reload verification)
     headers: Dict[str, Dict[str, str]] = field(default_factory=dict)  # email -> headers
     headers_updated_at: Dict[str, datetime] = field(default_factory=dict)  # email -> timestamp
     access_tokens: Dict[str, str] = field(default_factory=dict)  # email -> token
@@ -406,6 +409,14 @@ class ExtensionBridge:
         in-flight fetch() calls get killed with HTTP 0 when the MV3 service
         worker creates a new WebSocket during an active request.
         """
+        if conn.pending_email and conn.pending_email != email:
+            log.warning(
+                f"[ExtensionBridge] ⚠️ Pending assignment mismatch: "
+                f"requested={conn.pending_email}, registered={email}"
+            )
+        conn.pending_email = ""
+        conn.pending_assigned_at = 0.0
+
         if email not in conn.registered_emails:
             conn.registered_emails.append(email)
 
@@ -451,12 +462,13 @@ class ExtensionBridge:
     async def assign_email(self, email: str, profile_path: str = "") -> bool:
         """Tell an unregistered extension connection which email it belongs to.
         
-        ★ Identity binding: sends profile_path alongside email so the extension
-        can verify it's running in the correct browser instance before assigning
-        the email to a tab.
+        Sends a best-effort fallback assignment request to an unregistered
+        extension connection. The email is NOT considered connected until the
+        extension replies with a real `register` message.
         
         Finds the first connection that hasn't registered any emails yet,
-        sends an assign_email message, and registers the email locally.
+        sends an assign_email message, then waits for the extension to confirm
+        via its normal register flow.
         
         This is the server-side fallback when content.js email detection fails
         (e.g. VEO page doesn't have __NEXT_DATA__ or avatar with email).
@@ -472,12 +484,15 @@ class ExtensionBridge:
         if self.is_connected(email):
             return True
         
-        # Find an unregistered connection
-        unregistered = [c for c in self._connections if not c.registered_emails]
+        # Find an unregistered connection not already waiting on another email.
+        unregistered = [
+            c for c in self._connections
+            if not c.registered_emails and not c.pending_email
+        ]
         if not unregistered:
             log.debug(
                 f"[ExtensionBridge] No unregistered connection available for {email} "
-                f"(total: {len(self._connections)} conn(s), all registered)"
+                f"(total: {len(self._connections)} conn(s), all registered/pending)"
             )
             return False
         
@@ -494,23 +509,35 @@ class ExtensionBridge:
                 'email': email,
                 'profilePath': profile_path,  # ★ Identity hint for extension verification
             })
-            await self._claim_email_on_connection(conn, email)
-            log.info(f"[ExtensionBridge] 📧 Assigned email to extension: {email}")
-            # ★ Clear dead-tab flag — browser reconnected, account alive again
-            self.clear_tab_dead(email)
-            if self.on_extension_connect:
-                try:
-                    self.on_extension_connect(email)
-                except Exception:
-                    pass
-            # Signal waiters (wait_for_extension)
-            event = self._connection_events.get(email)
-            if event:
-                event.set()
+            conn.pending_email = email
+            conn.pending_assigned_at = time.time()
+            log.info(f"[ExtensionBridge] 📨 Assignment requested for extension: {email}")
             return True
         except Exception as e:
             log.error(f"[ExtensionBridge] Failed to assign email: {e}")
             return False
+
+    async def send_check_identity(self):
+        """Send check_identity to ALL connections, triggering re-read of __veo_identity.
+        
+        Used as corrective mechanism (Tier 3):
+        1. App injects __veo_identity via CDP into each profile's chrome.storage.local
+        2. This method tells all connected extensions to re-read storage
+        3. Each extension re-registers with the correct email
+        4. _claim_email_on_connection supersedes any wrong bindings
+        
+        Safe to call anytime — extensions with no __veo_identity simply ignore it.
+        """
+        sent = 0
+        for conn in list(self._connections):
+            try:
+                await self._ws_send(conn, {'action': 'check_identity'})
+                sent += 1
+            except Exception:
+                pass
+        if sent > 0:
+            log.info(f"[ExtensionBridge] 🔐 check_identity sent to {sent} connection(s)")
+        return sent
 
     def get_cached_headers(self, email: str, max_age_seconds: int = 180) -> Optional[Dict[str, str]]:
         """Get latest cached headers for an email (from auto-push).
@@ -1551,7 +1578,17 @@ class ExtensionBridge:
             reconnected = await self.wait_for_extension(email, timeout=timeout)
             
             if reconnected:
-                log.info(f"[ExtensionBridge] ✅ Extension reloaded and reconnected for {email}")
+                # ★ Option D: Verify reconnected extension is the expected version
+                from core.extension_manager import get_local_extension_version
+                expected_ver = get_local_extension_version()
+                found_conn = self._find_connection(email)
+                if found_conn and expected_ver and found_conn.ext_version and found_conn.ext_version != expected_ver:
+                    log.warning(
+                        f"[ExtensionBridge] ⚠️ Extension reconnected but WRONG version: "
+                        f"running={found_conn.ext_version}, expected={expected_ver} — reload failed"
+                    )
+                    return False
+                log.info(f"[ExtensionBridge] ✅ Extension reloaded and reconnected for {email} (v{found_conn.ext_version if found_conn else '?'})")
             else:
                 log.warning(f"[ExtensionBridge] ⚠️ Extension reloaded but did not reconnect within {timeout}s")
             return reconnected
@@ -1944,6 +1981,23 @@ class ExtensionBridge:
     async def _delayed_assign_check(self, conn: ExtensionConnection, peer):
         """Wait, then fire callback if connection is still unregistered."""
         await asyncio.sleep(5)
+        if conn not in self._connections or conn.registered_emails:
+            return
+
+        if conn.pending_email:
+            remaining = max(0.0, 15.0 - (time.time() - conn.pending_assigned_at))
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            if conn not in self._connections or conn.registered_emails:
+                return
+            if conn.pending_email:
+                log.warning(
+                    f"[ExtensionBridge] ⏰ Pending assignment timed out for "
+                    f"{conn.pending_email} from {peer} — retrying auto-assign"
+                )
+                conn.pending_email = ""
+                conn.pending_assigned_at = 0.0
+
         if conn in self._connections and not conn.registered_emails:
             log.info(f"[ExtensionBridge] ⏰ Connection from {peer} still unregistered after 5s")
             if self.on_unregistered_connection:
@@ -1963,27 +2017,43 @@ class ExtensionBridge:
         if action == 'register':
             email = msg.get('email', '')
             ext_version = msg.get('version', '')
+            source = msg.get('source', 'content_script')  # ★ Track registration source
+            tab_id = msg.get('tabId')  # ★ Layer B: null = profile-bound only
             if email:
                 # ★ Use _claim_email_on_connection for de-dup
                 await self._claim_email_on_connection(conn, email)
-                log.info(f"[ExtensionBridge] 📧 Extension registered: {email} (v{ext_version})")
+                # ★ Option D: Persist version on connection for reload verification
+                conn.ext_version = ext_version
+                log.info(f"[ExtensionBridge] 📧 Extension registered: {email} (v{ext_version}, src={source}, tabId={tab_id})")
                 
                 # ★ Reset frozen/refresh tracking — new browser session starts fresh
                 old_count = self._frozen_tab_counts.pop(email, 0)
                 self._frozen_tab_first_at.pop(email, None)
                 self._refresh_cooldown_times.pop(email, None)
+                self.clear_tab_dead(email)
                 if old_count > 0:
                     log.info(f"[ExtensionBridge] 🔄 Frozen counter reset for {email} (was {old_count})")
                 
-                if self.on_extension_connect:
-                    try:
-                        self.on_extension_connect(email)
-                    except Exception:
-                        pass
-                # Signal waiters (wait_for_extension)
-                event = self._connection_events.get(email)
-                if event:
-                    event.set()
+                # ★ Layer B Gate: Only fire on_extension_connect when tab is ready.
+                # cdp_identity/identity_refresh registers have tabId=null →
+                #   profile-bound only, do NOT trigger warmup/refresh.
+                # tab_snapshot/content_script/assign_email have real tabId →
+                #   fully ready, fire callback for warmup/refresh.
+                if tab_id is not None:
+                    if self.on_extension_connect:
+                        try:
+                            self.on_extension_connect(email)
+                        except Exception:
+                            pass
+                    # Signal waiters (wait_for_extension)
+                    event = self._connection_events.get(email)
+                    if event:
+                        event.set()
+                else:
+                    log.info(
+                        f"[ExtensionBridge] 🔐 Profile-bound only for {email} "
+                        f"(waiting for tab registration)"
+                    )
             
             # ── Version mismatch check ──
             # NOTE: We do NOT send reload_extension here because chrome.runtime.reload()
@@ -2155,6 +2225,14 @@ class ExtensionBridge:
             if email:
                 self._content_heartbeats[email] = time.time()
                 conn.last_activity = time.time()
+                # C13: Clean up stale frozen tracking if any
+                old = self._frozen_tab_counts.pop(email, 0)
+                self._frozen_tab_first_at.pop(email, None)
+                if old > 0:
+                    log.debug(
+                        f"[ExtensionBridge] ✅ Frozen counter cleared for {email} "
+                        f"on heartbeat (was {old})"
+                    )
 
         elif action == 'recaptcha_warmth':
             # Content script reports reCAPTCHA readiness
@@ -2167,59 +2245,17 @@ class ExtensionBridge:
                     log.debug(f"[ExtensionBridge] 🔥 reCAPTCHA warm for {email}")
 
         elif action == 'tab_frozen':
-            # Background detected frozen tab (missed heartbeats)
+            # C9: Extension detected frozen tab — LOG ONLY
+            # Extension is sole owner of liveness recovery + tab_dead declaration.
+            # Python must NOT recover, escalate, or call on_tab_dead from here.
             email = msg.get('email', '')
             elapsed = msg.get('elapsedMs', 0)
-
-            # ★ Suppress FIRST — don't count false positives from in-progress refresh.
-            # After refresh_headers() reloads the tab, the old heartbeat timestamp
-            # is stale -> extension detects "frozen" -> fires ANOTHER recovery.
-            # If _trigger_refresh cooldown is still active, this frozen event
-            # is a false positive from the reload, not a new freeze.
-            last_refresh = self._refresh_cooldown_times.get(email, 0)
-            if time.time() - last_refresh < 30:
-                log.debug(
-                    f"[ExtensionBridge] 🥶 Tab frozen for {email} suppressed — "
-                    f"refresh already in-progress ({time.time() - last_refresh:.0f}s ago)"
-                )
-                return  # Don't increment counter for false positives
-
-            # Escalation tracking: count genuine frozen events within window
-            now_ts = time.time()
-            first_at = self._frozen_tab_first_at.get(email, 0)
-            if now_ts - first_at > self._FROZEN_WINDOW:
-                # Reset window
-                self._frozen_tab_counts[email] = 0
-                self._frozen_tab_first_at[email] = now_ts
-
-            self._frozen_tab_counts[email] = self._frozen_tab_counts.get(email, 0) + 1
-            count = self._frozen_tab_counts[email]
-
-            if count >= self._FROZEN_ESCALATION_THRESHOLD:
-                # Escalated: multiple frozen events -> tab is truly dead
-                log.warning(
-                    f"[ExtensionBridge] 💀 Tab DEAD for {email} "
-                    f"({count} frozen events in {self._FROZEN_WINDOW}s) — browser restart needed"
-                )
-                # Only notify once per window
-                if count == self._FROZEN_ESCALATION_THRESHOLD:
-                    try:
-                        if self.on_tab_dead:
-                            self.on_tab_dead(email, f"Tab frozen {count}x in {self._FROZEN_WINDOW}s")
-                    except Exception:
-                        pass
-            else:
-                log.warning(
-                    f"[ExtensionBridge] 🥶 Tab frozen for {email} "
-                    f"(no heartbeat for {elapsed // 1000}s) — "
-                    f"recovery attempt {count}/{self._FROZEN_ESCALATION_THRESHOLD}"
-                )
-                # Active recovery via centralized trigger
-                asyncio.ensure_future(self._trigger_refresh(
-                    email,
-                    f"frozen tab recovery {count}/{self._FROZEN_ESCALATION_THRESHOLD}",
-                    level="lightweight" if count == 1 else "full"
-                ))
+            attempt = msg.get('reloadAttempt', 0)
+            log.warning(
+                f"[ExtensionBridge] 🥶 Tab frozen for {email} "
+                f"(no heartbeat for {elapsed // 1000}s) — "
+                f"extension handling recovery cycle {attempt}"
+            )
 
         elif action == 'tab_reloading':
             # Extension is reloading a tab — suspend zombie detection for grace period
@@ -2588,16 +2624,9 @@ class ExtensionBridge:
                         dead.append(conn)
                         continue
                     
-                    # Python-side content heartbeat check:
-                    # If connected but no heartbeat for 120s+, try recovery
-                    for email in conn.registered_emails:
-                        last_hb = self._content_heartbeats.get(email, 0)
-                        if last_hb and (time.time() - last_hb) > 120:
-                            asyncio.ensure_future(self._trigger_refresh(
-                                email,
-                                f"content heartbeat missing {time.time() - last_hb:.0f}s",
-                                level="lightweight"
-                            ))
+                    # C10: Removed Python-side heartbeat recovery.
+                    # Extension is sole owner of tab liveness recovery.
+                    # _trigger_refresh() preserved for business callers only.
                     
                     try:
                         await conn.ws.send(json.dumps({'action': 'ping'}))

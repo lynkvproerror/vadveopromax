@@ -19,6 +19,18 @@ if (window.__veoContentLoaded) {
 } else {
     window.__veoContentLoaded = true;
 
+    // C11: Send early heartbeat immediately — tells background.js this tab
+    // is alive before email detection completes (which takes 3-36s).
+    // background.js will create placeholder tabState if needed.
+    try {
+        chrome.runtime.sendMessage({
+            action: 'content_heartbeat',
+            email: null,
+            timestamp: Date.now(),
+            readyState: document.readyState,
+        });
+    } catch(e) {}
+
     // ── Constants ──────────────────────────────────────────────────────────
     // (reCAPTCHA execution moved to background.js via chrome.scripting.executeScript)
 

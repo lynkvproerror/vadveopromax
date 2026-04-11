@@ -860,6 +860,11 @@ class Engine:
         # Bug 4 fix: Per-task download lock — prevents concurrent duplicate downloads
         self._download_locks: Dict[str, asyncio.Lock] = {}
         
+        # ★ FFmpeg CPU optimization: limit concurrent watermark zoom+crop jobs.
+        # Each job uses ~25% CPU (with -threads 4). Semaphore(2) caps total
+        # FFmpeg CPU at ~50%, leaving headroom for Chrome + app + upscale.
+        self._ffmpeg_watermark_semaphore = asyncio.Semaphore(2)
+        
         # Account-level cooldown: shared between engine workers + upscale queue
         # When ANY 403 hits, the account enters cooldown. Both prompt submission
         # and upscale submit check this before calling API.
@@ -10682,11 +10687,14 @@ class Engine:
         #   ensures near-lossless output at ALL resolutions (720p/1080p/4K).
         #   lanczos scaler produces sharper results than default bilinear.
         #   Tradeoff: ~3x slower encoding but visually indistinguishable from source.
+        # ★ CPU optimization: -threads 4 caps x264 to 4 threads (~25% CPU per
+        #   process instead of auto ~5-6 which hits 35-40%). Quality identical.
         tmp_path = filepath.with_suffix(".tmp.mp4")
         cmd = [
             ffmpeg, "-y", "-i", str(filepath),
             "-vf", f"scale={zoomed_w}:{zoomed_h}:flags=lanczos,crop={orig_w}:{orig_h}",
             "-c:v", "libx264", "-preset", "slow", "-crf", "15",
+            "-threads", "4",
             "-profile:v", "high", "-level", "5.1",
             "-pix_fmt", "yuv420p",
             "-c:a", "copy",  # Pass-through audio (no re-encode)
@@ -10694,45 +10702,56 @@ class Engine:
             str(tmp_path),
         ]
         
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.PIPE,
-                **({'creationflags': subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, 'CREATE_NO_WINDOW') else {}),
-            )
-            _, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
-            
-            if process.returncode != 0:
-                err_msg = (stderr or b"").decode(errors="replace")[-200:]
-                log.warning(f"[Non-Watermark] FFmpeg failed (rc={process.returncode}): {err_msg}")
-                # Clean up temp file
-                if tmp_path.exists():
-                    tmp_path.unlink()
-                return
-            
-            # Verify output file is reasonable size
-            if tmp_path.exists() and tmp_path.stat().st_size > 100_000:
-                # Replace original with processed version
-                import shutil
-                shutil.move(str(tmp_path), str(filepath))
-                log.info(
-                    f"[Non-Watermark] ✅ {filepath.name}: "
-                    f"zoom {zoom:.0%} → crop {orig_w}x{orig_h}"
+        # ★ Semaphore: limit concurrent watermark FFmpeg jobs to prevent CPU saturation.
+        # At ~25% CPU each (with -threads 4), Semaphore(2) caps total at ~50%.
+        async with self._ffmpeg_watermark_semaphore:
+            try:
+                # ★ BELOW_NORMAL_PRIORITY_CLASS: prevent FFmpeg from competing
+                # with Chrome browser and main app for CPU time.
+                _creation_flags = 0
+                if hasattr(subprocess, 'CREATE_NO_WINDOW'):
+                    _creation_flags = subprocess.CREATE_NO_WINDOW
+                if hasattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS'):
+                    _creation_flags |= subprocess.BELOW_NORMAL_PRIORITY_CLASS
+                
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
+                    **({'creationflags': _creation_flags} if _creation_flags else {}),
                 )
-            else:
-                log.warning(f"[Non-Watermark] Output too small, keeping original")
+                _, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+                
+                if process.returncode != 0:
+                    err_msg = (stderr or b"").decode(errors="replace")[-200:]
+                    log.warning(f"[Non-Watermark] FFmpeg failed (rc={process.returncode}): {err_msg}")
+                    # Clean up temp file
+                    if tmp_path.exists():
+                        tmp_path.unlink()
+                    return
+                
+                # Verify output file is reasonable size
+                if tmp_path.exists() and tmp_path.stat().st_size > 100_000:
+                    # Replace original with processed version
+                    import shutil
+                    shutil.move(str(tmp_path), str(filepath))
+                    log.info(
+                        f"[Non-Watermark] ✅ {filepath.name}: "
+                        f"zoom {zoom:.0%} → crop {orig_w}x{orig_h}"
+                    )
+                else:
+                    log.warning(f"[Non-Watermark] Output too small, keeping original")
+                    if tmp_path.exists():
+                        tmp_path.unlink()
+                        
+            except asyncio.TimeoutError:
+                log.warning(f"[Non-Watermark] FFmpeg timed out for {filepath.name}")
                 if tmp_path.exists():
                     tmp_path.unlink()
-                    
-        except asyncio.TimeoutError:
-            log.warning(f"[Non-Watermark] FFmpeg timed out for {filepath.name}")
-            if tmp_path.exists():
-                tmp_path.unlink()
-        except Exception as e:
-            log.warning(f"[Non-Watermark] Error: {e}")
-            if tmp_path.exists():
-                tmp_path.unlink()
+            except Exception as e:
+                log.warning(f"[Non-Watermark] Error: {e}")
+                if tmp_path.exists():
+                    tmp_path.unlink()
 
     # ── Manifest & Thumbnail Helpers ─────────────────────────────
     

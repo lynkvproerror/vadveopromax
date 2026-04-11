@@ -250,9 +250,9 @@ class VideoSidebar(SidebarBase):
         self.model.addItems([
             "Veo 3.1 - Fast",
             "Veo 3.1 - Fast [LP]",
+            "Veo 3.1 - Lite",
+            "Veo 3.1 - Lite [LP]",
             "Veo 3.1 - Quality",
-            "Veo 2 - Fast",
-            "Veo 2 - Quality",
         ])
         if _s:
             _m = getattr(_s, 'default_model', 'Veo 3.1 - Fast')
