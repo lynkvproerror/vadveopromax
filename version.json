@@ -1,17 +1,17 @@
 {
     "version": "2.3.14",
-    "ext_version": "2.3.13",
-    "release_date": "2026-04-09",
-    "changelog": "v2.3.13 — Project Builder I2V Frame Mode & Engine Retry Fix\n\n🎬 Project Builder\n• Thêm lựa chọn I2V Mode (Start only / Start + End) trong sidebar.\n• Start only: chỉ dùng 1 ảnh đầu — giảm tải server, ít timeout.\n• Start + End: dùng cặp ảnh liên tiếp cho dual-frame (_fl_ model) — chuyển cảnh mượt.\n• Model tự động chuyển đúng (Single/Dual/Fast/LP) theo lựa chọn.\n\n🔧 Engine & Retry\n• Sửa lỗi task fail với INTERNAL error không được retry.\n• INTERNAL error giờ được xử lý giống TIMED_OUT — tự động retry 2 lần trước khi fail.\n• Cải thiện độ ổn định pipeline khi server VEO bị quá tải.",
+    "ext_version": "2.3.14",
+    "release_date": "2026-04-11",
+    "changelog": "v2.3.14 — Veo 3.1 Lite Model & Engine Optimization\n\n🚀 New Models\n• Thêm model Veo 3.1 - Lite: tốc độ nhanh, nhẹ tài nguyên.\n• Thêm model Veo 3.1 - Lite [LP]: Low Priority tier cho Lite.\n• Full matrix: T2V, I2V, R2V × Landscape/Portrait đều hỗ trợ.\n• Xoá model Veo 2 (đã deprecated).\n\n🔧 Engine & Performance\n• Fix Extension false-reinstall: bridge-aware guard ngăn reinstall sai lúc startup.\n• Tối ưu FFmpeg watermark: giới hạn 2 process song song, CPU cap -threads 4.\n• Fix is_relaxed_model: nhận diện đúng Lite LP \"_low_priority\".\n\n🛡️ Stability\n• Extension bridge verification dùng is_connected() thay vì CDP detection.\n• FFmpeg chạy ở BELOW_NORMAL priority, tránh treo máy.",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Pro_Max_v2.3.14.zip",
-    "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Extension_v2.3.13.zip",
-    "sha256": "1b6c5de9d9bf24505166130cf95f81e50cdee6922cb4f3e9f50e363681e203d8",
-    "ext_sha256": "5cbb3d9b20f2cde5cbf35b25a038bcad200b8c1f7df809a1b4f5a16aae516705",
+    "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Extension_v2.3.14.zip",
+    "sha256": "45bfc959b86e659eb6938217ba7287df923e4176735199b04dc7cbc8d51f47df",
+    "ext_sha256": "56364a57e4e88fc2c09870aaad453cdcbb06367aa215069c91608a372e0dba7a",
     "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.3.14/VEO_Pro_Max_Setup_v2.3.14.exe",
-    "installer_sha256": "3989deab585a12fc0fffc3dd83c8486778976d0ba7bf6fd8aaab750fab501d90",
+    "installer_sha256": "3f97fb2da78dcd3e781898b38915f2379737a8ffd3b701c3b35e0d6eceb2d347",
     "installer_filename": "VEO_Pro_Max_Setup_v2.3.14.exe",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1775744076,
-    "build_time": "2026-04-09T21:14:36.671483"
+    "build_number": 1775906799,
+    "build_time": "2026-04-11T18:26:39.774948"
 }
