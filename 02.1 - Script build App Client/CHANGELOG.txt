@@ -1,16 +1,17 @@
-v2.3.14 — Veo 3.1 Lite Model & Engine Optimization
+v2.4.0 — Console Log & Pipeline Transparency
 
-🚀 New Models
-• Thêm model Veo 3.1 - Lite: tốc độ nhanh, nhẹ tài nguyên.
-• Thêm model Veo 3.1 - Lite [LP]: Low Priority tier cho Lite.
-• Full matrix: T2V, I2V, R2V × Landscape/Portrait đều hỗ trợ.
-• Xoá model Veo 2 (đã deprecated).
+🚀 Tính năng mới
+• Console Log: bảng log thời gian thực trong Queue tab.
+• Hiển thị rõ prompt nào (#N), video nào (vN) trong mỗi sự kiện.
+• Theo dõi toàn bộ pipeline: Submit → 720p → Upscale → Hoàn tất.
 
 🔧 Engine & Performance
-• Fix Extension false-reinstall: bridge-aware guard ngăn reinstall sai lúc startup.
-• Tối ưu FFmpeg watermark: giới hạn 2 process song song, CPU cap -threads 4.
-• Fix is_relaxed_model: nhận diện đúng Lite LP "_low_priority".
+• Account Recovery Coordinator: tự động khôi phục tài khoản lỗi.
+• Output naming cải tiến: đặt tên video rõ ràng theo variant.
+• LP Worker cap tự động theo số tài khoản.
+• Giảm upscale loop khi reCAPTCHA lỗi.
 
 🛡️ Stability
-• Extension bridge verification dùng is_connected() thay vì CDP detection.
-• FFmpeg chạy ở BELOW_NORMAL priority, tránh treo máy.
+• Fix trùng lặp task khi retry partial failure.
+• Fix upscale queue concurrency cho image workflows.
+• Cải thiện pre-submit gate và stage retry logic.
