@@ -816,34 +816,101 @@ class MainWindow(QMainWindow):
             import logging
             logging.getLogger("veo.ui").debug(f"[StatusBar] Accounts poll error: {e}")
         
-        # Workers: true processing count + worker slots
+        # Workers: per-pool slot counts from telemetry contract
         try:
             acc = self.controller.get_account_summary()
-            running = acc.get("running_tasks", 0)
-            active_workers = acc.get("active_workers", 0)
-            # Get total capacity from multi_account manager
-            total_capacity = 0
-            try:
-                ma = getattr(self.controller, '_multi_account', None)
-                if ma:
-                    total_capacity = ma.total_capacity
-            except Exception:
-                pass
             
             if "workers" in self._status_widgets:
-                # ★ Pool Separation: show Fast ops + LP ops + upscale counts
-                active_upscale = acc.get("active_upscale", 0)
-                max_upscale = acc.get("max_upscale", 8)
+                # ── Active counts (directly from session, per-pool) ──
+                active_fast = acc.get("active_workers_fast", 0)
                 active_lp = acc.get("active_workers_lp", 0)
-                max_lp = acc.get("max_workers_lp", 20)
-                # Fast workers = total active ops minus LP workers
-                active_fast = max(0, active_workers - active_lp)
+                active_upscale = acc.get("active_upscale", 0)
+                total_held = acc.get("total_held", 0)
+                running_tasks = acc.get("running_tasks", 0)
+                
+                # ── Effective capacity (READY accounts only — enabled + session healthy) ──
+                eff_fast = acc.get("eff_capacity_fast", 0)
+                eff_lp = acc.get("eff_capacity_lp", 0)
+                eff_upscale = acc.get("eff_max_upscale", 0)
+                
+                # ── Registered capacity (ALL accounts — for tooltip) ──
+                reg_fast = acc.get("reg_capacity_fast", eff_fast)
+                reg_lp = acc.get("reg_capacity_lp", eff_lp)
+                reg_upscale = acc.get("reg_max_upscale", eff_upscale)
+                
+                enabled = acc.get("enabled", acc.get("total", 0))
+                ready = acc.get("ready", enabled)
+                total_accounts = acc.get("total", 0)
+                
+                # ── Format denominators: show "drn" when ready=0 but slots held ──
+                # Prevents confusing "x/0" display (looks like cap bypass)
+                def _cap_label(active: int, effective: int) -> str:
+                    """Format capacity denominator: number or 'drn' (draining)."""
+                    if effective == 0 and active > 0:
+                        return "drn"  # draining: slots held but no ready accounts
+                    return str(effective)
+                
+                cap_fast = _cap_label(active_fast, eff_fast)
+                cap_lp = _cap_label(active_lp, eff_lp)
+                cap_upscale = _cap_label(active_upscale, eff_upscale)
+                
                 self._status_widgets["workers"].setText(
-                    f"⚡ {active_fast}/{total_capacity} "
-                    f"| 🐢 {active_lp}/{max_lp} "
-                    f"| ⬆️ {active_upscale}/{max_upscale} "
+                    f"🏃 {running_tasks} "
+                    f"| ⚡ {active_fast}/{cap_fast} "
+                    f"| 🐢 {active_lp}/{cap_lp} "
+                    f"| ⬆️ {active_upscale}/{cap_upscale} "
+                    f"| Σ {total_held}"
                 )
-                color = Theme.GREEN if active_workers > 0 else Theme.SUBTEXT0
+                
+                # ── Detect draining state (any pool has held>0 but cap=0) ──
+                is_draining = (
+                    (eff_fast == 0 and active_fast > 0) or
+                    (eff_lp == 0 and active_lp > 0) or
+                    (eff_upscale == 0 and active_upscale > 0)
+                )
+                
+                # ── Tooltip: explain semantics + show registered if different ──
+                tip_lines = [
+                    "🏃 Running tasks (submit + poll + download + upscale)",
+                    f"⚡ Fast slots held / effective cap ({ready} ready account(s))",
+                    f"🐢 LP slots held / LP cap ({ready} ready account(s))",
+                    f"⬆️ Upscale slots held / upscale cap",
+                    "Σ Total slots held (fast + LP + upscale)",
+                    "",
+                    "Denominator = effective usable capacity",
+                    "  (ready = enabled + session healthy).",
+                    "Slots held ≠ visible prompts.",
+                    "Tasks release most slots after submit, keeping 1 pipeline slot.",
+                ]
+                # Draining explanation
+                if is_draining:
+                    tip_lines.append("")
+                    tip_lines.append("⚠️ 'drn' = draining: slots held by non-ready accounts.")
+                    tip_lines.append("  Ready capacity = 0 → no new work admitted.")
+                    tip_lines.append("  Held slots are finishing or waiting for recovery.")
+                # Show registered vs effective when they differ
+                if reg_fast != eff_fast or reg_lp != eff_lp:
+                    tip_lines.append("")
+                    tip_lines.append(
+                        f"Registered (all {total_accounts} accounts): "
+                        f"⚡ {reg_fast} | 🐢 {reg_lp} | ⬆️ {reg_upscale}"
+                    )
+                    if enabled != ready:
+                        tip_lines.append(
+                            f"Enabled: {enabled} | Ready: {ready}"
+                        )
+                    tip_lines.append(
+                        f"Effective ({ready} ready): "
+                        f"⚡ {eff_fast} | 🐢 {eff_lp} | ⬆️ {eff_upscale}"
+                    )
+                self._status_widgets["workers"].setToolTip("\n".join(tip_lines))
+                
+                if is_draining:
+                    color = Theme.YELLOW  # Draining: held slots but no ready capacity
+                elif total_held > 0:
+                    color = Theme.GREEN
+                else:
+                    color = Theme.SUBTEXT0
                 self._status_widgets["workers"].setStyleSheet(f"color: {color}; margin-right: 8px; font-weight: bold;")
         except Exception as e:
             import logging

@@ -35,6 +35,14 @@ _last_recovery_ts: Dict[str, float] = {}
 _last_recovery_result: Dict[str, "RecoveryResult"] = {}
 _RECOVERY_DEDUP_WINDOW_SEC = 5.0
 
+# ★ v5.2: Remedy escalation tracker.
+# Prevents infinite soft_recovery loops where health check (skip_probe) reports
+# healthy but real submit keeps failing with the same error.
+# Tracks {email: {"error_type": ErrorType, "remedy_idx": int, "ts": float}}
+# If same error within _ESCALATION_WINDOW, resume from remedy_idx+1.
+_remedy_escalation: Dict[str, dict] = {}
+_ESCALATION_WINDOW_SEC = 180.0  # 3 minutes
+
 
 # ── Data Classes ──────────────────────────────────────────────
 
@@ -580,7 +588,30 @@ async def execute_recovery(
             "soft_recovery",
         }
 
+        # ★ v5.2: Escalation — if same error keeps recurring, skip already-tried remedies.
+        # Without this, soft_recovery (skip_probe=True) always passes health check
+        # but real submit fails → remedy index resets to 0 → infinite loop.
+        start_idx = 0
+        esc = _remedy_escalation.get(email)
+        if esc and esc.get("error_type") == error_type:
+            if (time.monotonic() - esc.get("ts", 0)) < _ESCALATION_WINDOW_SEC:
+                start_idx = esc["remedy_idx"] + 1
+                if start_idx < len(chain):
+                    log.info(
+                        f"[Recovery] {email}: escalating — skipping remedies 1-{start_idx} "
+                        f"(same '{error_type.value}' within {_ESCALATION_WINDOW_SEC:.0f}s)"
+                    )
+                else:
+                    # All remedies exhausted within window → reset to try again
+                    start_idx = 0
+                    log.warning(
+                        f"[Recovery] {email}: all {len(chain)} remedies exhausted "
+                        f"within escalation window — resetting chain"
+                    )
+        
         for i, remedy in enumerate(chain):
+            if i < start_idx:
+                continue
             log.info(
                 f"[Recovery] {email}: trying remedy {i+1}/{len(chain)} "
                 f"'{remedy.name}' — {remedy.description}"
@@ -636,6 +667,14 @@ async def execute_recovery(
                 if credit_window:
                     credit_window.record_success(email)
 
+                # ★ v5.2: Track escalation position so next same-error failure
+                # will skip this remedy and try the next one.
+                _remedy_escalation[email] = {
+                    "error_type": error_type,
+                    "remedy_idx": i,
+                    "ts": time.monotonic(),
+                }
+                
                 result = RecoveryResult(
                     success=True,
                     error_type=error_type,

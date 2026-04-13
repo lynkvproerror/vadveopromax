@@ -427,7 +427,14 @@ class AccountSession:
             session.max_workers = data["max_slots"] * 4
         else:
             session.max_workers = 20
-        session.max_workers_lp = data.get("max_workers_lp", session.max_workers)
+        if "max_workers_lp" in data:
+            session.max_workers_lp = data["max_workers_lp"]
+        else:
+            session.max_workers_lp = session.max_workers
+            import logging
+            logging.getLogger(__name__).info(
+                f"[Session] {session.email}: max_workers_lp missing → fallback to max_workers={session.max_workers}"
+            )
         # Bug #10 fix: Always reset active_workers on load (crash recovery)
         session.active_workers = 0
         session.active_workers_lp = 0

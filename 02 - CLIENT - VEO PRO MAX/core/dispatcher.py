@@ -187,6 +187,11 @@ class Task:
     excluded_accounts: set = field(default_factory=set)  # Smart Recovery: accounts that failed this task
     project_id: Optional[str] = None
     
+    # Background ownership (lease contract)
+    background_owner: Optional[str] = None        # "upscale_queue" when handed off
+    owner_heartbeat_ts: float = 0.0               # time.time() of last heartbeat from owner
+    owner_lease_duration: float = 120.0            # seconds before lease expires
+    
     @property
     def is_continuation(self) -> bool:
         return self.parent_task_id is not None
@@ -210,8 +215,7 @@ class Task:
                 log.debug(f"[UpscaleStatus] Task {self.id}: fallback to _upscale_status='{self._upscale_status}' (no video_outputs)")
             return self._upscale_status
         statuses = [vo.upscale_status for vo in self.video_outputs]
-        success_like = {"success", "completed"}
-        if all(s in success_like for s in statuses):
+        if all(s == "success" for s in statuses):
             return "success"
         if any(s == "failed" for s in statuses):
             return "failed"
@@ -243,6 +247,40 @@ class Task:
     def upscale_error(self, value: str):
         """Absorb writes for backward compat — actual error derived from video_outputs."""
         self._upscale_error = value
+
+
+def has_live_background_owner(task: Task, coordinator=None) -> bool:
+    """Check if a task has a live background owner (lease contract).
+    
+    Returns True if:
+    - task.background_owner is set AND
+    - heartbeat is within lease duration
+    - OR coordinator reports the owner's account is in RECOVERING state
+      (lease freeze — prevents false-expire during drain-and-remedy)
+    
+    Used by: watchdog, OTF sweep, _mark_account_sick, any rescue path.
+    """
+    if not task.background_owner:
+        return False
+    
+    import time
+    now = time.time()
+    
+    # If heartbeat is within lease duration → owner is alive
+    if task.owner_heartbeat_ts > 0 and (now - task.owner_heartbeat_ts) < task.owner_lease_duration:
+        return True
+    
+    # Lease freeze: if coordinator says account is recovering OR quarantined,
+    # owner is still alive (heartbeat paused during drain-and-remedy sequence)
+    if coordinator is not None:
+        try:
+            if coordinator.is_account_blocked(task.assigned_account):
+                return True
+        except Exception:
+            pass
+    
+    # Lease expired and no recovery freeze → owner is dead
+    return False
 
 
 @dataclass
@@ -326,9 +364,11 @@ class Dispatcher:
         # fn(email) -> bool: True if reCAPTCHA is healthy for this account
         self._is_recaptcha_healthy_fn: Optional[Callable[[str], bool]] = None
         
-        # Max workers per account callback — set by engine
-        # fn(email) -> int: returns max_workers for this account (hard cap)
-        self._get_max_workers_fn: Optional[Callable[[str], int]] = None
+        # Per-account prompt-cap callback — set by engine.
+        # fn(email, task=None) -> int: returns hard cap for concurrent prompts
+        # on this account. Task-aware lookup maps model/output_count into
+        # prompt slots (e.g. LP pool 8 with output_count=4 => cap 2 tasks).
+        self._get_max_workers_fn: Optional[Callable[..., int]] = None
         
         # Callbacks
         self._on_task_ready: Optional[Callable[[Task], None]] = None
@@ -425,13 +465,30 @@ class Dispatcher:
         """Return how many not-yet-submitted tasks an account may overlap."""
         limit = max(1, self._max_pre_submit_claims_per_account)
         if email and self._get_max_workers_fn:
-            try:
-                max_workers = int(self._get_max_workers_fn(email) or 0)
-            except Exception:
-                max_workers = 0
+            max_workers = self._get_account_task_cap(email)
             if max_workers > 0:
                 limit = min(limit, max_workers)
         return max(1, limit)
+
+    def _get_account_task_cap(
+        self,
+        email: Optional[str],
+        task: Optional['Task'] = None,
+    ) -> int:
+        """Resolve prompt hard-cap for an account, optionally task-aware."""
+        if not email or not self._get_max_workers_fn:
+            return 0
+        try:
+            if task is not None:
+                return int(self._get_max_workers_fn(email, task) or 0)
+            return int(self._get_max_workers_fn(email) or 0)
+        except TypeError:
+            try:
+                return int(self._get_max_workers_fn(email) or 0)
+            except Exception:
+                return 0
+        except Exception:
+            return 0
 
     def _claim_task(self, task: 'Task', account_email: Optional[str]):
         """Reserve a task before the real submit phase starts."""
@@ -563,12 +620,13 @@ class Dispatcher:
         """Set reCAPTCHA health check callback. Called by Engine at startup."""
         self._is_recaptcha_healthy_fn = fn
     
-    def set_max_workers_fn(self, fn: Callable[[str], int]) -> None:
-        """Set max-workers-per-account callback. Called by Engine at startup.
+    def set_max_workers_fn(self, fn: Callable[..., int]) -> None:
+        """Set prompt-cap-per-account callback. Called by Engine at startup.
         
-        Prevents _per_account_running from growing beyond max_workers.
-        Critical for T2I fire-and-forget which releases session workers
-        immediately, allowing unbounded dispatcher task dispatch without this cap.
+        Prevents _per_account_running from growing beyond the per-task prompt
+        capacity derived from model pool and output_count.
+        Critical for fire-and-forget paths which may release session workers
+        before dispatcher-level accounting catches up.
         """
         self._get_max_workers_fn = fn
     
@@ -606,18 +664,8 @@ class Dispatcher:
                 )
                 return None
         
-        # Hard cap: prevent _per_account_running from exceeding max_workers
-        # Without this, T2I fire-and-forget releases session workers immediately,
-        # allowing unbounded task dispatch (e.g., 54 tasks for max_workers=20)
-        if account_email and self._get_max_workers_fn:
-            my_running = self._per_account_running.get(account_email, 0)
-            max_wk = self._get_max_workers_fn(account_email)
-            if max_wk > 0 and my_running >= max_wk:
-                log.debug(
-                    f"[Dispatcher] HardCap: {account_email} running={my_running} "
-                    f">= max_workers={max_wk} — yielding"
-                )
-                return None
+        # Task-aware hard cap runs inside the queue scan where the candidate
+        # task's model/output_count are known.
         
         # PA3: Fair-share gate — only when multi-account
         # Smart Recovery: exclude suspended accounts from average calc
@@ -647,7 +695,7 @@ class Dispatcher:
                     )
                     return None
         
-        # Deferred items: tasks that can't go to this account (excluded)
+        # Deferred items: tasks currently unavailable for this account
         deferred = []
         # Fix: Batch-count stale entries instead of logging each one individually
         stale_dupe_count = 0
@@ -673,6 +721,15 @@ class Dispatcher:
                 if account_email and account_email in excluded:
                     deferred.append((priority, group_key, prompt_idx, counter, task))
                     continue  # Try next task
+
+                # Prompt-level hard cap: compare running prompt count against
+                # this task's effective prompt capacity, not raw worker slots.
+                if account_email and self._get_max_workers_fn:
+                    my_running = self._per_account_running.get(account_email, 0)
+                    task_cap = self._get_account_task_cap(account_email, task)
+                    if task_cap > 0 and my_running >= task_cap:
+                        deferred.append((priority, group_key, prompt_idx, counter, task))
+                        continue
                 
                 task.state = TaskState.RUNNING
                 task._counter_decremented = False  # Reset flag for new run
@@ -706,7 +763,7 @@ class Dispatcher:
                 if deferred:
                     log.debug(
                         f"[Dispatcher] Deferred {len(deferred)} tasks "
-                        f"(excluded {account_email})"
+                        f"(unavailable for {account_email})"
                     )
                 
                 return task
@@ -725,7 +782,7 @@ class Dispatcher:
                 if deferred:
                     log.debug(
                         f"[Dispatcher] Deferred {len(deferred)} tasks "
-                        f"(excluded {account_email})"
+                        f"(unavailable for {account_email})"
                     )
                 return None
     
@@ -1042,6 +1099,11 @@ class Dispatcher:
         task.completed_at = datetime.now()
         task.output_uris = output_uris
         task.progress = 100
+        task.status_text = ""  # ★ P1: Clear stale status_text (e.g. "✅ Upscaled..." from UQ)
+        
+        # ★ T0-4: Upscale normalization removed from here (ownership violation).
+        # UpscaleQueue now normalizes upscale_status before calling complete_task().
+        # See: upscale_queue.py → _normalize_upscale_status_before_completion()
         # Guard: skip decrement if engine already called decrement_running()
         # (e.g., when task was delegated to UpscaleQueue). Without this guard,
         # counters get decremented TWICE: once by engine, once here.
@@ -1098,6 +1160,14 @@ class Dispatcher:
                     if src_vo.thumbnail_path and src_vo.thumbnail_path not in orig_task.thumbnail_paths:
                         orig_task.thumbnail_paths.append(src_vo.thumbnail_path)
                     
+                    # ★ v5.2: Copy continuation frame for chain dependency resolution
+                    _repl_frame_uri = getattr(task, 'continuation_frame_uri', None)
+                    _repl_frame_local = getattr(task, 'continuation_frame_local_path', None)
+                    if _repl_frame_uri and not orig_task.continuation_frame_uri:
+                        orig_task.continuation_frame_uri = _repl_frame_uri
+                    if _repl_frame_local and not orig_task.continuation_frame_local_path:
+                        orig_task.continuation_frame_local_path = _repl_frame_local
+                    
                     log.info(f"[ResultSlot] ✅ Replacement {task.id} video[0] → "
                              f"original {orig_task_id} video[{orig_video_idx}] "
                              f"(quality={dst_vo.quality}, file={dst_vo.best_file})")
@@ -1105,9 +1175,9 @@ class Dispatcher:
                 # Clean replacement mapping
                 self._replace_target_map.pop(task_id, None)
                 
-                # Trigger UI refresh on original task
-                if self._on_task_completed:
-                    self._on_task_completed(orig_task)
+                # ★ v5.2: Try promoting original task + always trigger UI refresh
+                # Replaces old unconditional _on_task_completed(orig_task) call.
+                self._try_promote_after_slot(orig_task)
         
         # Resolve dependencies
         if task_id in self._parent_to_children:
@@ -1120,6 +1190,79 @@ class Dispatcher:
         }, source="dispatcher")
         if released_claim and self._on_task_ready:
             self._on_task_ready(task)
+    
+    def _try_promote_after_slot(self, orig_task):
+        """Promote original task to COMPLETED if all outputs settled.
+        Also triggers UI refresh unconditionally (replaces old L1108-1110 callback).
+        
+        Handles parent states:
+        - RUNNING: timeout_retry defers at engine.py:5966
+        - FAILED: all fast retries exhausted but replacement succeeded
+        - WAITING_POLL: watchdog requeued parent → foreman resumed as poll
+        """
+        _promoted = False
+        
+        # ★ FIX: Include WAITING_POLL — parent can be requeued by watchdog
+        # during upscale wait, then resumed as WAITING_POLL by foreman.
+        # Without this, replacement completes but parent never promotes.
+        if orig_task.state in (TaskState.RUNNING, TaskState.FAILED, TaskState.WAITING_POLL):
+            was_failed = (orig_task.state in (TaskState.FAILED, TaskState.WAITING_POLL))
+            
+            # Check if ALL video_outputs are settled
+            _all_settled = True
+            for vo in orig_task.video_outputs:
+                q = getattr(vo, 'quality', '') or ''
+                us = getattr(vo, 'upscale_status', '') or ''
+                
+                # Not settled: still processing or gen-failed
+                if q in ('', 'pending', 'polling', 'downloading',
+                         'retrying', 'timeout_retry', 'failed'):
+                    _all_settled = False
+                    break
+                # Not settled: upscale actively processing
+                if us in ('submitting', 'polling', 'retrying'):
+                    _all_settled = False
+                    break
+                # upscale_status='failed' → settled (720p saved)
+                # upscale_status='' / 'success' / 'skipped' → settled
+            
+            if _all_settled and orig_task.video_outputs:
+                # All settled — promote
+                orig_task.state = TaskState.COMPLETED
+                orig_task.completed_at = datetime.now()
+                orig_task.progress = 100
+                orig_task.error = None
+                
+                output_uris = []
+                for vo in orig_task.video_outputs:
+                    best = getattr(vo, 'best_file', '') or ''
+                    if best and best not in output_uris:
+                        output_uris.append(best)
+                orig_task.output_uris = output_uris or orig_task.output_uris
+                
+                log.info(
+                    f"[ResultSlot] 🎉 Task {orig_task.id} PROMOTED "
+                    f"{'FAILED' if was_failed else 'RUNNING'} → COMPLETED "
+                    f"({len(orig_task.video_outputs)} outputs settled)"
+                )
+                
+                emit_event(EventType.TASK_COMPLETED, {
+                    "task_id": orig_task.id,
+                    "outputs": len(output_uris),
+                    "promoted": True,
+                }, source="dispatcher")
+                
+                # ★ v5.2-final.1: Do NOT call _resolve_dependencies here.
+                # Replacement tasks have no children mapping (has_children=False),
+                # so engine never extracts continuation_frame for them.
+                # Chain dependency resolution deferred to Tier 2.
+                _promoted = True
+        
+        # ★ Always trigger UI refresh — replaces old L1108-1110.
+        # Fires for BOTH promoted (state changed) and non-promoted (slotted
+        # result visible but other outputs still pending).
+        if self._on_task_completed:
+            self._on_task_completed(orig_task)
     
     def fail_task(self, task_id: str, error: str):
         """Mark a task as failed. C1: Cascade-fail waiting children."""
@@ -2053,7 +2196,8 @@ class Dispatcher:
             for d in descendants
         )
     
-    def requeue_task(self, task, notify=True) -> bool:
+    def requeue_task(self, task, notify=True, preserve_progress=False,
+                     status_text="") -> bool:
         """Re-queue a running task without incrementing retry count.
         
         Used by network error handler / cooldown requeue: task goes back to queue
@@ -2067,6 +2211,10 @@ class Dispatcher:
             notify: If True, wake sleeping foremen via _on_task_ready callback.
                     Set to False for capacity requeue to prevent thundering herd
                     (all idle foremen grabbing the same task simultaneously).
+            preserve_progress: If True, keep current progress value (for capacity/LP
+                    wait requeues where the task hasn't actually regressed).
+            status_text: Optional status text to display instead of clearing.
+                    Used by capacity/LP/D2 requeues for observability.
         """
         if not task:
             return False
@@ -2076,8 +2224,12 @@ class Dispatcher:
         task.state = TaskState.READY
         task.error = None
         # Reset progress and status text so UI shows clean "READY" state
-        task.progress = 0
-        task.status_text = ""
+        # Unless preserve_progress=True (capacity/LP wait — task hasn't regressed)
+        if preserve_progress:
+            task.status_text = status_text or "⏳ Waiting for capacity"
+        else:
+            task.progress = 0
+            task.status_text = status_text or ""
         # Stage: reset to INIT for pre-submit tasks (T2I/I2I)
         # Preserve checkpoint for video tasks that already submitted (SUBMITTED+)
         # so they can resume polling on reconnect instead of re-submitting
@@ -2715,12 +2867,41 @@ class Dispatcher:
         base_task_id = re.sub(r'(_retry_v\d+_\d+)+$', '', task_id)
         replacement_id = f"{base_task_id}_retry_v{video_index}_{datetime.now().strftime('%H%M%S%f')}"
         
+        # ★ FIX: Resolve to root original task — prevent nested retry chains.
+        # If current task is itself a replacement, follow replace_target chain
+        # up to the root task. Otherwise retry_v0 slots into retry_v1 instead
+        # of the original prompt, and watchdog can kill retry_v1 before promote.
+        root_task_id = task_id
+        root_video_idx = video_index
+        _visited = {task_id}
+        while True:
+            _parent = self._all_tasks.get(root_task_id)
+            if _parent and getattr(_parent, 'replace_target', None):
+                _up_id, _up_idx = _parent.replace_target
+                if _up_id in _visited:
+                    break  # Cycle guard
+                _visited.add(_up_id)
+                root_task_id = _up_id
+                root_video_idx = _up_idx
+            else:
+                break
+        
+        if root_task_id != task_id:
+            log.info(
+                f"[ForceRetryVideo] Resolved nested target: "
+                f"{task_id}[{video_index}] → root {root_task_id}[{root_video_idx}]"
+            )
+            # ★ Also mark the ROOT task's video slot as 'retrying'
+            root_task = self._all_tasks.get(root_task_id)
+            if root_task and root_video_idx < len(root_task.video_outputs):
+                root_task.video_outputs[root_video_idx].quality = "retrying"
+        
         # BUG-FIX: Use FLAT prompt_index offset to avoid compounding
         # Old formula: 9000 + (task.prompt_index or 0) * 10 + video_index
         #   → On retry of retry: 9000 + 9000*10 + idx = 99000+ (overflow!)
         # New formula: 9000 + video_index (always bounded 9000..9003)
         # Base task's original prompt_index is NOT factored in.
-        retry_prompt_index = 9000 + video_index
+        retry_prompt_index = task.prompt_index
         
         replacement = Task(
             id=replacement_id,
@@ -2735,7 +2916,7 @@ class Dispatcher:
             output_folder=task.output_folder,
             project_name=task.project_name,
             prompt_index=retry_prompt_index,  # Unique index to avoid file collision
-            replace_target=(task_id, video_index),  # Proper field → serialized
+            replace_target=(root_task_id, root_video_idx),  # ★ Always target ROOT
         )
         
         # Copy image references for I2V/R2V workflows
@@ -2745,20 +2926,29 @@ class Dispatcher:
             replacement.image_uris = list(task.image_uris)
         
         # ── 4. Add to parent's TaskGroup for serialization + UI ──
+        # ★ FIX: Search by root_task_id (not task_id) so replacement joins root's group
         group_found = False
+        _search_id = root_task_id if root_task_id != task_id else task_id
         for group in self._task_groups.values():
-            if any(t.id == task_id for t in group.tasks):
+            if any(t.id == _search_id for t in group.tasks):
                 group.tasks.append(replacement)
                 group_found = True
                 log.info(f"[ForceRetryVideo] Added replacement to group '{group.name}' "
                          f"(now {len(group.tasks)} tasks)")
                 break
         if not group_found:
+            # Fallback: try immediate parent's group
+            for group in self._task_groups.values():
+                if any(t.id == task_id for t in group.tasks):
+                    group.tasks.append(replacement)
+                    group_found = True
+                    break
+        if not group_found:
             log.warning(f"[ForceRetryVideo] No group found for task {task_id} — "
                         f"replacement {replacement_id} won't be serialized in session!")
         
         # ── 5. Register replacement mapping for progress propagation ──
-        self._replace_target_map[replacement_id] = (task_id, video_index)
+        self._replace_target_map[replacement_id] = (root_task_id, root_video_idx)
         
         # ── 6. Register and enqueue ──
         self._all_tasks[replacement_id] = replacement
@@ -3084,6 +3274,18 @@ class Dispatcher:
                     else:
                         log.warning(f"[SessionRestore] Task {task.id}: invalid replace_target format: {rt!r}")
                         task.replace_target = None
+                # ★ T0-2: Restore background ownership (lease contract)
+                # Startup reconcile: UpscaleQueue has no jobs at restore time,
+                # so any persisted background_owner is stale → clear it.
+                # This prevents watchdog/OTF from skipping orphaned tasks forever.
+                saved_owner = td.get("background_owner")
+                if saved_owner:
+                    log.info(
+                        f"[SessionRestore] Task {task.id}: clearing stale "
+                        f"background_owner='{saved_owner}' (startup reconcile)"
+                    )
+                task.background_owner = None
+                task.owner_heartbeat_ts = 0.0
                 # Restore timestamps
                 # BUG-T6: Include started_at (was missing — timing lost on reload)
                 for ts_field in ("created_at", "completed_at", "started_at"):

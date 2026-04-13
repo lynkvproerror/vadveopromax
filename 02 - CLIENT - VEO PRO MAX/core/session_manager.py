@@ -234,6 +234,9 @@ class SessionManager:
                         for vo in (task.video_outputs if hasattr(task, 'video_outputs') else [])
                     ],
                     "replace_target": list(task.replace_target) if getattr(task, 'replace_target', None) else None,
+                    # ★ T0-2: Background ownership (lease contract) persistence
+                    "background_owner": getattr(task, 'background_owner', None),
+                    "owner_heartbeat_ts": getattr(task, 'owner_heartbeat_ts', 0.0),
                 }
                 g_data["tasks"].append(t_data)
             result.append(g_data)

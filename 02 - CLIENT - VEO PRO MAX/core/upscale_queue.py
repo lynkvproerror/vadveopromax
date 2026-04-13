@@ -141,14 +141,30 @@ class AdaptiveJobController:
     MIN = 1
     MAX = 8
     SCALE_UP_AFTER = 3  # consecutive successes before +1
+    POST_RECOVERY_CEILING = 3   # max concurrent jobs right after recovery
+    POST_RECOVERY_COOLDOWN = 120.0  # seconds before ceiling expires
     
     def __init__(self):
         self._limits: Dict[str, int] = {}      # email → current limit
         self._streaks: Dict[str, int] = {}     # email → consecutive successes
+        self._recovery_ceiling: Dict[str, int] = {}     # email → ceiling
+        self._recovery_ceiling_ts: Dict[str, float] = {} # email → when set
     
     def get_limit(self, email: str) -> int:
         """Get current concurrent job limit for account."""
-        return self._limits.get(email, self.INITIAL)
+        limit = self._limits.get(email, self.INITIAL)
+        # ★ Post-recovery ceiling: cap limit for cooldown period
+        ceiling = self._recovery_ceiling.get(email)
+        if ceiling is not None:
+            import time as _t
+            ts = self._recovery_ceiling_ts.get(email, 0)
+            if (_t.monotonic() - ts) < self.POST_RECOVERY_COOLDOWN:
+                return min(limit, ceiling)
+            else:
+                # Cooldown expired — remove ceiling, allow full ramp
+                self._recovery_ceiling.pop(email, None)
+                self._recovery_ceiling_ts.pop(email, None)
+        return limit
     
     def record_success(self, email: str):
         """Record successful job. Scale up after sustained streak."""
@@ -156,6 +172,14 @@ class AdaptiveJobController:
         if self._streaks[email] >= self.SCALE_UP_AFTER:
             old = self.get_limit(email)
             new = min(old + 1, self.MAX)
+            # ★ Cap stored limit at recovery ceiling so it doesn't
+            # silently grow past ceiling during cooldown period
+            ceiling = self._recovery_ceiling.get(email)
+            if ceiling is not None:
+                import time as _t
+                ts = self._recovery_ceiling_ts.get(email, 0)
+                if (_t.monotonic() - ts) < self.POST_RECOVERY_COOLDOWN:
+                    new = min(new, ceiling)
             self._limits[email] = new
             self._streaks[email] = 0
             if new != old:
@@ -174,7 +198,27 @@ class AdaptiveJobController:
         return {
             "limits": dict(self._limits),
             "streaks": dict(self._streaks),
+            "recovery_ceilings": dict(self._recovery_ceiling),
         }
+    
+    def reset_to_min(self, email: str):
+        """Reset concurrency to MIN after recovery, with temporary ceiling.
+        
+        AIMD will ramp naturally via record_success(), but is capped at
+        POST_RECOVERY_CEILING for POST_RECOVERY_COOLDOWN seconds.
+        This prevents the tab from being immediately overloaded after recovery.
+        """
+        import time as _t
+        old = self._limits.get(email, self.INITIAL)
+        self._limits[email] = self.MIN
+        self._streaks[email] = 0
+        self._recovery_ceiling[email] = self.POST_RECOVERY_CEILING
+        self._recovery_ceiling_ts[email] = _t.monotonic()
+        log.info(
+            f"[JobCtrl] {email}: RESET {old}→{self.MIN} "
+            f"(post-recovery ceiling={self.POST_RECOVERY_CEILING} "
+            f"for {self.POST_RECOVERY_COOLDOWN}s)"
+        )
 
 
 @dataclass
@@ -191,8 +235,10 @@ class UpscaleJob:
     upscale_quality: str = "4K"     # Image upscale resolution key
     original_account: str = ""      # DD6: Who generated the video (for failover tracing)
     created_at: datetime = field(default_factory=datetime.now)
+    generated_at: Optional[datetime] = None  # ★ Phase timestamp: when generation completed (poll done)
     retry_count: int = 0            # Job-level retry counter
     max_retries: int = 3            # Max job-level retries before permanent fail
+    durable_retry_count: int = 0    # Extended retry counter (used after max_retries exhausted, transient-only)
     retry_indices: List[int] = field(default_factory=list)  # Which video indices to retry (empty = all)
     enqueue_after: float = 0.0      # Bug 2 fix: monotonic time to delay processing until (0 = no delay)
     reupscale_signature: str = ""   # Active dedupe for force=True re-upscale
@@ -242,6 +288,7 @@ class UpscaleQueue:
         wake_event: asyncio.Event = None, # T1: event-driven wake from engine
         pre_submit_gate_fn: Optional[Callable] = None,  # engine._pre_submit_gate
         zoom_crop_fn: Optional[Callable] = None,  # engine._remove_watermark_zoom_crop
+        regenerate_thumbnail_fn: Optional[Callable] = None,  # engine._regenerate_thumbnail
     ):
         """
         Fully decoupled UpscaleQueue — no engine reference.
@@ -269,6 +316,7 @@ class UpscaleQueue:
             profiles_controller: optional profiles controller for reset
             extension_bridge: optional extension bridge for reCAPTCHA
             zoom_crop_fn: optional async fn(filepath, aspect_ratio) — zoom+crop watermark removal
+            regenerate_thumbnail_fn: optional fn(task, video_index) → str — regenerate thumbnail from best file
         """
         # Injected dependencies (full DI — no engine reference)
         self._dispatcher = dispatcher
@@ -296,6 +344,7 @@ class UpscaleQueue:
         self._wake_event = wake_event  # T1: event-driven wake from engine
         self._pre_submit_gate_fn = pre_submit_gate_fn  # Centralized xcd + reCAPTCHA gate
         self._zoom_crop_fn = zoom_crop_fn  # Non-watermark zoom+crop for TRPC downloads
+        self._regenerate_thumbnail_fn = regenerate_thumbnail_fn  # Thumbnail regen from upscaled file
         
         self._queues: Dict[str, asyncio.Queue] = {}      # email → Queue[UpscaleJob]
         self._upscale_processors: Dict[str, asyncio.Task] = {}       # email → background task
@@ -350,6 +399,16 @@ class UpscaleQueue:
         # Dead-tab pause: accounts whose tabs are dead → stop picking up new jobs
         self._paused_accounts: set = set()  # email strings
         
+        # ★ P0: Explicit task ownership refcount.
+        # Lifecycle: +1 on enqueue(), -1 on every terminal exit (early-return,
+        # completion, cancel). Entry removed when refcount reaches 0.
+        # Truly gap-free: unlike _enqueued_ids (cleared on dequeue) and
+        # _processing_ids (set only inside _process_job), this survives the
+        # entire enqueue→dequeue→delay→process→complete lifecycle.
+        # Used by watchdog and AutoStop to check UQ ownership without
+        # relying on time-based lease (_owner_heartbeat_ts).
+        self._owned_task_refcount: Dict[str, int] = {}  # task_id → active job count
+        
         # ★ FIX #429: Per-account consecutive 429 counter for escalating backoff.
         # Cooldown is only triggered after _429_COOLDOWN_THRESHOLD consecutive 429s
         # (not on first occurrence, unlike 403 which is immediate).
@@ -392,6 +451,7 @@ class UpscaleQueue:
         self._upscale_processors.clear()
         self._paused_accounts.clear()
         self._active_reupscale_signatures.clear()
+        self._owned_task_refcount.clear()  # ★ P0: Clear ownership on stop
         log.info(
             f"[UpscaleQueue] Stopped — "
             f"completed={self._total_completed}, failed={self._total_failed}"
@@ -454,7 +514,7 @@ class UpscaleQueue:
         for idx in indices:
             video_output = task.video_outputs[idx]
             status = str(getattr(video_output, 'upscale_status', '') or '').lower()
-            if status in ("success", "completed"):
+            if status in ("success",):
                 success += 1
             elif self._is_unsupported_reupscale_output(video_output):
                 unsupported += 1
@@ -498,6 +558,31 @@ class UpscaleQueue:
         if worker and not worker.done():
             worker.cancel()
             log.info(f"[UpscaleQueue] ⏸️ Worker cancelled for {email} (tab dead)")
+        
+        # ★ P1-C: Reset stale UI status on paused tasks.
+        # Without this, tasks stay "Submitting 1 upscales..." / "Upscaling 1080p..."
+        # even though worker is cancelled. Update to recovery state.
+        try:
+            for task_id, job in list(self._active_jobs.items()):
+                if getattr(job, 'account_email', None) == email:
+                    task = self._dispatcher.get_task(task_id) if self._dispatcher else None
+                    if task and hasattr(task, 'video_outputs'):
+                        for vo in task.video_outputs:
+                            if getattr(vo, 'upscale_status', '') in ('submitting', 'polling'):
+                                vo.upscale_status = 'paused_recovery'
+                        if self._dispatcher:
+                            self._dispatcher.update_progress(
+                                task_id, None,
+                                "⏸️ Upscale paused (account recovery)"
+                            )
+                        if self._on_completed:
+                            try:
+                                self._on_completed(task)
+                            except Exception:
+                                pass
+        except Exception as e:
+            log.debug(f"[UpscaleQueue] pause status reset error: {e}")
+        
         log.warning(
             f"[UpscaleQueue] ⏸️ Account {email} paused — "
             f"pending={self._queues.get(email, asyncio.Queue()).qsize()} jobs frozen"
@@ -512,6 +597,9 @@ class UpscaleQueue:
         if email not in self._paused_accounts:
             return
         self._paused_accounts.discard(email)
+        # ★ Post-recovery backpressure: reset AIMD to MIN concurrency
+        # with temporary ceiling. Prevents immediate re-overload.
+        self._job_controller.reset_to_min(email)
         log.info(f"[UpscaleQueue] ▶️ Account {email} unpaused")
         
         # If there are pending jobs, restart the worker
@@ -576,6 +664,15 @@ class UpscaleQueue:
         
         self._queues[email].put_nowait(job)
         self._total_enqueued += 1
+        self._owned_task_refcount[job.task_id] = self._owned_task_refcount.get(job.task_id, 0) + 1  # ★ P0: Track ownership (refcount)
+        
+        # ★ T0-2: Set background ownership (lease contract)
+        task = self._dispatcher.get_task(job.task_id) if self._dispatcher else None
+        if task and not task.background_owner:
+            import time as _time
+            task.background_owner = "upscale_queue"
+            task.owner_heartbeat_ts = _time.time()
+            task.owner_lease_duration = 120.0
         
         # Start per-account worker if not already running
         if email not in self._upscale_processors or self._upscale_processors[email].done():
@@ -605,6 +702,7 @@ class UpscaleQueue:
         Returns: number of queued jobs evicted.
         """
         self._cancelled_task_ids.add(task_id)
+        self._owned_task_refcount.pop(task_id, None)  # ★ P0: Force-clear all refs on cancel
         
         # Clean dedup keys containing this task_id
         stale_keys = {k for k in self._enqueued_ids if k.startswith(f"{task_id}:")}
@@ -656,6 +754,29 @@ class UpscaleQueue:
         q = self._queues.get(email)
         return q is not None and not q.empty()
     
+    def has_jobs_for_task(self, task_id: str) -> bool:
+        """Check if this task is owned by UQ (queued, inflight, or pending completion).
+        
+        Gap-free refcount: incremented on enqueue(), decremented on every
+        terminal exit (early-return or completion). Entry removed at 0.
+        Used by watchdog and AutoStop to check UQ ownership without
+        relying on time-based lease (120s default, easily exceeded).
+        """
+        return self._owned_task_refcount.get(task_id, 0) > 0
+    
+    def _release_ownership_ref(self, task_id: str):
+        """Decrement refcount for task. Remove entry when it reaches 0.
+        
+        Safe for multi-job tasks: each job increments on enqueue and
+        decrements on terminal exit. No gap between dequeue and _process_job
+        because the refcount is never touched during that window.
+        """
+        count = self._owned_task_refcount.get(task_id, 0)
+        if count <= 1:
+            self._owned_task_refcount.pop(task_id, None)
+        else:
+            self._owned_task_refcount[task_id] = count - 1
+    
     def has_pending_work(self) -> bool:
         """Check if ANY upscale work is pending or actively processing.
         
@@ -683,12 +804,75 @@ class UpscaleQueue:
         Only the LAST job to finish should call complete_task(). This method
         is the gate: returns True iff every slot is success/failed/skipped.
         """
-        terminal = {"success", "failed", "skipped", "completed"}
+        terminal = {"success", "failed", "skipped"}
         for vo in task.video_outputs:
             status = getattr(vo, 'upscale_status', '')
             if status not in terminal:
                 return False
         return len(task.video_outputs) > 0
+    
+    def _normalize_upscale_status_before_completion(self, task):
+        """★ T0-4: Normalize stale upscale_status before task completion.
+        
+        If a video output has file_upscaled but upscale_status='failed',
+        it means the file was saved successfully but status wasn't updated
+        (e.g., retry succeeded after earlier failure). Without this,
+        UI shows FAIL and OTF re-upscale loops endlessly.
+        
+        Ownership: This logic belongs here (UpscaleQueue) not in dispatcher,
+        because upscale_status is an upscale-stage concern.
+        """
+        for vo in getattr(task, 'video_outputs', []):
+            if getattr(vo, 'file_upscaled', '') and vo.upscale_status == 'failed':
+                log.info(
+                    f"[UpscaleQueue] Normalizing stale upscale_status for task {task.id}: "
+                    f"video[{vo.index}] file_upscaled exists but status was 'failed' → 'success'"
+                )
+                vo.upscale_status = 'success'
+                vo.upscale_error = None
+            # ★ FIX: Failed-generation slots (no 720p, no media_id) will never
+            # be enqueued for upscale. Mark as "skipped" so they don't block
+            # _all_outputs_terminal() → task stuck at "Upscaling 1080p (3/4)".
+            elif (getattr(vo, 'quality', '') == 'failed'
+                    and not getattr(vo, 'file_720p', '')
+                    and not getattr(vo, 'media_id', '')
+                    and getattr(vo, 'upscale_status', '') in ('', None)):
+                log.info(
+                    f"[UpscaleQueue] Normalizing failed-generation slot for task {task.id}: "
+                    f"video[{vo.index}] quality='failed', no files → upscale_status='skipped'"
+                )
+                vo.upscale_status = 'skipped'
+    
+    def _has_transient_errors(self, task, job) -> bool:
+        """Check if job's failed outputs have transient (retryable) errors.
+        
+        Transient errors are eligible for durable retry:
+        - 429 rate limit, 403 auth, timeout, disconnect, poll failed,
+          reCAPTCHA errors, submit failures (HTTP 5xx, network)
+        
+        Structural errors are NOT retryable:
+        - TRPC unavailable (extension-only), unsafe generation, policy,
+          'skipped' status, unsupported re-upscale
+        
+        Returns True if at least one failed output has a transient error.
+        """
+        _STRUCTURAL_MARKERS = {
+            "trpc unavailable", "unsupported", "unsafe", "policy",
+            "license", "skipped", "no rediscovery data",
+        }
+        indices = job.retry_indices if job.retry_indices else list(range(len(job.media_ids)))
+        for local_idx in range(len(job.media_ids)):
+            orig_idx = indices[local_idx] if local_idx < len(indices) else local_idx
+            if orig_idx >= len(task.video_outputs):
+                continue
+            vo = task.video_outputs[orig_idx]
+            if getattr(vo, 'upscale_status', '') != "failed":
+                continue
+            error = (getattr(vo, 'upscale_error', '') or '').lower()
+            is_structural = any(marker in error for marker in _STRUCTURAL_MARKERS)
+            if not is_structural:
+                return True  # At least one transient error found
+        return False
     
     async def _worker_loop(self, email: str):
         """Background worker: processes upscale jobs for one account.
@@ -735,6 +919,10 @@ class UpscaleQueue:
                     if q.empty() and not active_jobs:
                         break  # No more jobs AND no active jobs → worker exits
                     continue
+                
+                # ★ v5.2: Release dedup keys on dequeue so self-requeue works
+                dedup_keys = [f"{job.task_id}:{mid}" for mid in job.media_ids if mid]
+                self._enqueued_ids -= set(dedup_keys)
                 
                 # Launch job concurrently (don't await — fire and forget)
                 # Bug 2 fix: if job has a delay, sleep BEFORE launching
@@ -845,6 +1033,7 @@ class UpscaleQueue:
                 f"{job.task_id[:12]} (cancelled)"
             )
             self._apply_job_outcome(job, "neutral", "cancelled-stale-job")
+            self._release_ownership_ref(job.task_id)  # ★ P1: refcount decrement
             return
         
         task = self._dispatcher.get_task(job.task_id)
@@ -852,6 +1041,23 @@ class UpscaleQueue:
             log.warning(f"[UpscaleQueue] Task {job.task_id} not found, skipping")
             self._total_failed += 1
             self._apply_job_outcome(job, "neutral", "task-not-found")
+            self._release_ownership_ref(job.task_id)  # ★ P1: refcount decrement
+            return
+        
+        # ★ T0-2: Refresh background owner heartbeat
+        import time as _time
+        if task.background_owner == "upscale_queue":
+            task.owner_heartbeat_ts = _time.time()
+        
+        # ★ v5.2: Drop job if task already completed (stale OTF re-enqueue)
+        from core.dispatcher import TaskState
+        if task.state == TaskState.COMPLETED:
+            log.info(
+                f"[UpscaleQueue] Dropping stale job for already-COMPLETED task "
+                f"{job.task_id[:12]} — no-op"
+            )
+            self._apply_job_outcome(job, "neutral", "task-already-completed")
+            self._release_ownership_ref(job.task_id)  # ★ P1: refcount decrement
             return
         
         # Guard: if task was reset (video_outputs cleared by force retry)
@@ -862,6 +1068,7 @@ class UpscaleQueue:
                 f"(likely force-retried), skipping stale upscale job"
             )
             self._apply_job_outcome(job, "neutral", "empty-video-outputs")
+            self._release_ownership_ref(job.task_id)  # ★ P1: refcount decrement
             return
         
         # Get the account
@@ -870,6 +1077,7 @@ class UpscaleQueue:
             log.warning(f"[UpscaleQueue] Account {job.account_email} not found, skipping")
             self._total_failed += 1
             self._apply_job_outcome(job, "neutral", "account-not-found")
+            self._release_ownership_ref(job.task_id)  # ★ P1: refcount decrement
             return
         
         # DD6: Failover — if primary account unhealthy (cooldown OR reCAPTCHA dead), try others
@@ -928,9 +1136,20 @@ class UpscaleQueue:
             log.info(f"[UpscaleQueue] {job.account_email}: on cooldown, waiting before upscale (task {job.task_id})")
             await self._wait_cooldown(job.account_email)
         
+        # ★ Phase timestamps for diagnostic logging
+        _now = datetime.now()
+        _queue_age_s = (_now - job.created_at).total_seconds()
+        _gen_age_s = (_now - job.generated_at).total_seconds() if job.generated_at else None
+        _gen_age_str = f"{_gen_age_s:.0f}s" if _gen_age_s is not None else "unknown"
+        _download_delay_s = (job.created_at - job.generated_at).total_seconds() if job.generated_at else None
+        _dl_delay_str = f"{_download_delay_s:.0f}s" if _download_delay_s is not None else "unknown"
+        
         log.info(
             f"[UpscaleQueue] Processing task {job.task_id}: "
-            f"{total} videos → {job.target_quality} (parallel poll)"
+            f"{total} videos → {job.target_quality} (parallel poll) | "
+            f"age_since_generated={_gen_age_str}, "
+            f"720p_download_time={_dl_delay_str}, "
+            f"queue_age={_queue_age_s:.0f}s"
         )
         
         # Fix C: CircuitBreaker gate — wait for circuit CLOSED before submitting.
@@ -1035,12 +1254,21 @@ class UpscaleQueue:
         # ★ Cold-start pre-warm: simulate user activity to build reCAPTCHA trust score.
         # On fresh browser tabs, reCAPTCHA v3 Enterprise gives low trust scores
         # (no mouse/scroll/click history) → 403 "reCAPTCHA evaluation failed".
-        # Scale warmup based on queue age — longer idle → more warmup needed.
-        queue_age_s = (datetime.now() - job.created_at).total_seconds()
-        if queue_age_s > 600:  # 10+ min stale
+        #
+        # ★ FIX: Use age_since_generated (not queue_age_s) to estimate browser/tab
+        # idle time. queue_age_s resets to 0 on enqueue (after 720p download),
+        # but browser tab has been idle since generation completed. If 720p
+        # download took 6 min, tab was idle 6 min → needs more warmup.
+        _warmup_now = datetime.now()
+        age_since_generated = (
+            (_warmup_now - job.generated_at).total_seconds()
+            if job.generated_at else
+            (_warmup_now - job.created_at).total_seconds()  # Fallback: use queue age
+        )
+        if age_since_generated > 600:  # 10+ min since generation
             warmup_wait = 20
             warmup_rounds = 2
-        elif queue_age_s > 120:  # 2-10 min
+        elif age_since_generated > 120:  # 2-10 min since generation
             warmup_wait = 15
             warmup_rounds = 1
         else:  # Fresh (< 2 min) — engine foreman already pre-warmed reCAPTCHA
@@ -1056,7 +1284,8 @@ class UpscaleQueue:
                         await asyncio.sleep(5)  # Gap between rounds
                 log.info(
                     f"[UpscaleQueue] {account.email}: pre-warm activity simulated "
-                    f"(age={queue_age_s:.0f}s, rounds={warmup_rounds}), "
+                    f"(age_since_generated={age_since_generated:.0f}s, "
+                    f"rounds={warmup_rounds}), "
                     f"waiting {warmup_wait}s for reCAPTCHA trust score..."
                 )
                 await asyncio.sleep(warmup_wait)
@@ -1269,13 +1498,14 @@ class UpscaleQueue:
                     error_lower = (resp.error or "").lower()
                     
                     # ★ RC3/409 FIX: HTTP 409 "already exists" = server already accepted.
-                    # Don't retry. resp.data is usually None for 409 from extension.
+                    # Don't retry. Preserve original resp.data for rediscovery attempt.
                     if "already exists" in error_lower or "409" in str(resp.error):
                         log.info(
                             f"Upscale {video_label}: HTTP 409 — entity already exists. "
-                            f"Treating as idempotent (data may be None)."
+                            f"Treating as idempotent (preserving payload for rediscovery)."
                         )
                         resp.success = True
+                        resp._is_409 = True  # Flag for downstream rediscovery
                         # Ensure resp.data is safe for downstream .get() calls
                         if resp.data is None:
                             resp.data = {"operations": []}
@@ -1383,60 +1613,93 @@ class UpscaleQueue:
                         
                         # Recovery: full if no pending, lightweight if pending
                         if not pending_ops:
-                            # Full recovery — no submitted videos to protect
-                            if attempt == 1:
-                                # M3 Phase 1: Gentle recovery — reload pages
+                            # ★ P1-4: Single Owner — coordinator handles ALL recovery.
+                            # No local soft_recover_browser / restart_browser when
+                            # coordinator exists. Legacy M3 phases only without coordinator.
+                            _coordinator = getattr(self, '_recovery_coordinator', None)
+                            if _coordinator:
+                                # AWAIT coordinator (not fire-and-forget) — it runs
+                                # the full drain-remedy-probe-resume sequence.
                                 try:
-                                    await account.soft_recover_browser()
-                                    await asyncio.sleep(8)
-                                    await self._wait_recaptcha_fn(
-                                        account, max_wait=20.0
-                                    )
-                                except Exception:
-                                    pass
-                            elif attempt == 2:
-                                # M3 Phase 2: Extended soft recovery (no browser kill)
-                                try:
-                                    await account.soft_recover_browser()
-                                    # Simulate activity to rebuild trust score
-                                    _eb = getattr(account, 'extension_bridge', None)
-                                    if _eb and _eb.is_connected(account.email):
-                                        try:
-                                            await _eb.simulate_activity(account.email, timeout=3.0)
-                                        except Exception:
-                                            pass
-                                    self._fix_client_data()
-                                    await asyncio.sleep(15)
-                                    await self._wait_recaptcha_fn(
-                                        account, max_wait=30.0
-                                    )
-                                except Exception:
-                                    pass
-                            elif attempt >= 3:
-                                # M3 Phase 3: Profile reset — most aggressive
-                                try:
+                                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                                    await _coordinator.report_signal(RecoverySignal(
+                                        account_email=account.email,
+                                        source="upscale_queue",
+                                        error_type="upscale_403" if is_403 else "upscale_recaptcha",
+                                        severity=SignalSeverity.MEDIUM if attempt < 3 else SignalSeverity.HIGH,
+                                        task_id=task.id,
+                                        detail=f"attempt {attempt+1}/{max_submit_retries}",
+                                    ))
+                                except Exception as _ce:
                                     log.warning(
-                                        f"Upscale {video_label}: attempt {attempt+1} — "
-                                        f"escalating to profile reset for {account.email}"
+                                        f"Upscale {video_label}: coordinator signal failed: {_ce}"
                                     )
-                                    profiles_ctrl = self._profiles_controller
-                                    if profiles_ctrl and hasattr(profiles_ctrl, 'reset_profile'):
-                                        await profiles_ctrl.reset_profile(account)
+                                # After coordinator finishes, check account health.
+                                # If still blocked (SICK), don't retry — will be caught
+                                # by durable retry or watchdog.
+                                if _coordinator.is_account_blocked(account.email):
+                                    log.warning(
+                                        f"Upscale {video_label}: account still blocked after "
+                                        f"coordinator recovery — breaking submit loop"
+                                    )
+                                    if orig_idx < len(task.video_outputs):
+                                        task.video_outputs[orig_idx].upscale_status = "failed"
+                                        task.video_outputs[orig_idx].upscale_error = "Account quarantined"
+                                    break
+                            else:
+                                # Legacy fallback: no coordinator — direct recovery
+                                if attempt == 1:
+                                    # M3 Phase 1: Gentle recovery — reload pages
+                                    try:
+                                        await account.soft_recover_browser()
+                                        await asyncio.sleep(8)
+                                        await self._wait_recaptcha_fn(
+                                            account, max_wait=20.0
+                                        )
+                                    except Exception:
+                                        pass
+                                elif attempt == 2:
+                                    # M3 Phase 2: Extended soft recovery (no browser kill)
+                                    try:
+                                        await account.soft_recover_browser()
+                                        _eb = getattr(account, 'extension_bridge', None)
+                                        if _eb and _eb.is_connected(account.email):
+                                            try:
+                                                await _eb.simulate_activity(account.email, timeout=3.0)
+                                            except Exception:
+                                                pass
                                         self._fix_client_data()
                                         await asyncio.sleep(15)
                                         await self._wait_recaptcha_fn(
-                                            account, max_wait=40.0
-                                        )
-                                    else:
-                                        await account.soft_recover_browser()
-                                        self._fix_client_data()
-                                        await asyncio.sleep(20)
-                                        await self._wait_recaptcha_fn(
                                             account, max_wait=30.0
                                         )
-                                except Exception as e:
-                                    log.error(f"Upscale {video_label}: profile reset failed: {e}")
-                                    pass
+                                    except Exception:
+                                        pass
+                                elif attempt >= 3:
+                                    # M3 Phase 3: Profile reset — most aggressive
+                                    try:
+                                        log.warning(
+                                            f"Upscale {video_label}: attempt {attempt+1} — "
+                                            f"escalating to profile reset for {account.email}"
+                                        )
+                                        profiles_ctrl = self._profiles_controller
+                                        if profiles_ctrl and hasattr(profiles_ctrl, 'reset_profile'):
+                                            await profiles_ctrl.reset_profile(account)
+                                            self._fix_client_data()
+                                            await asyncio.sleep(15)
+                                            await self._wait_recaptcha_fn(
+                                                account, max_wait=40.0
+                                            )
+                                        else:
+                                            await account.soft_recover_browser()
+                                            self._fix_client_data()
+                                            await asyncio.sleep(20)
+                                            await self._wait_recaptcha_fn(
+                                                account, max_wait=30.0
+                                            )
+                                    except Exception as e:
+                                        log.error(f"Upscale {video_label}: profile reset failed: {e}")
+                                        pass
                         else:
                             # V3 Fix: Lightweight recovery — videos already submitted,
                             # can't restart browser but CAN refresh trust score
@@ -1470,29 +1733,57 @@ class UpscaleQueue:
                     continue
                 
                 # Extract operation ID — null-safe (RC3: 409 responses may have None data)
+                # ★ A1/A2: Unified rediscovery for 409 + ambiguous-success responses
+                # When resp.data has no operations but has mediaGenerationId/rawBytes,
+                # attempt to extract download op_name via the Re-Upscale decoder path.
+                _is_409_resp = getattr(resp, '_is_409', False)
                 if resp.data is None:
                     log.warning(
                         f"Upscale {video_label}: resp.data is None — "
-                        f"likely 409 without payload, skipping"
+                        f"{'409' if _is_409_resp else 'ambiguous'} without payload, skipping"
                     )
                     if orig_idx < len(task.video_outputs):
                         task.video_outputs[orig_idx].upscale_status = "skipped"
-                        task.video_outputs[orig_idx].upscale_error = "409 already exists — no op_name"
+                        task.video_outputs[orig_idx].upscale_error = "409/ambiguous — no payload"
                     continue
                 ops = resp.data.get("operations", [])
                 if not ops:
-                    # ★ Debug: log actual response data to diagnose silent API rejection
-                    import json as _json
-                    _data_keys = list(resp.data.keys()) if isinstance(resp.data, dict) else type(resp.data).__name__
-                    _data_preview = _json.dumps(resp.data, default=str, ensure_ascii=False)[:500] if resp.data else "None"
-                    log.warning(
-                        f"Upscale {video_label}: HTTP 200 OK but NO operations returned! "
-                        f"data_keys={_data_keys}, preview={_data_preview}"
-                    )
-                    if orig_idx < len(task.video_outputs):
-                        task.video_outputs[orig_idx].upscale_status = "failed"
-                        task.video_outputs[orig_idx].upscale_error = "No operation returned"
-                    continue
+                    # ★ A1/A2: Check for rediscovery data (mediaGenerationId/rawBytes)
+                    # Same payload structure as Re-Upscale fast path at L1525.
+                    # Only attempt rediscovery when real UUID data exists in the response.
+                    _rediscovery_mgid = resp.data.get("mediaGenerationId", "")
+                    _rediscovery_raw = resp.data.get("rawBytes")
+                    if _rediscovery_mgid or _rediscovery_raw is not None:
+                        log.info(
+                            f"Upscale {video_label}: {'409' if _is_409_resp else '200+no-ops'} "
+                            f"with mediaGenerationId — attempting rediscovery"
+                        )
+                        # Feed into existing Re-Upscale decoder (same logic as L1537–L1638)
+                        # This will be handled by the rawBytes/mediaGenerationId block below
+                        # by synthesizing an ops-like entry
+                        ops = [{
+                            "mediaGenerationId": _rediscovery_mgid,
+                            "rawBytes": _rediscovery_raw,
+                            "status": resp.data.get("status", "rediscovered"),
+                        }]
+                        # Fall through to existing Re-Upscale fast path decoder
+                    else:
+                        # No rediscovery data — genuine empty response
+                        import json as _json
+                        _data_keys = list(resp.data.keys()) if isinstance(resp.data, dict) else type(resp.data).__name__
+                        _data_preview = _json.dumps(resp.data, default=str, ensure_ascii=False)[:500] if resp.data else "None"
+                        log.warning(
+                            f"Upscale {video_label}: {'409' if _is_409_resp else 'HTTP 200 OK'} "
+                            f"but NO operations and no rediscovery data! "
+                            f"data_keys={_data_keys}, preview={_data_preview}"
+                        )
+                        if orig_idx < len(task.video_outputs):
+                            task.video_outputs[orig_idx].upscale_status = "failed" if not _is_409_resp else "skipped"
+                            task.video_outputs[orig_idx].upscale_error = (
+                                "409 — no rediscovery data" if _is_409_resp
+                                else "No operation returned"
+                            )
+                        continue
                 
                 op_name = ops[0].get("operation", {}).get("name", "")
                 scene_id = ops[0].get("sceneId", "")
@@ -1597,7 +1888,7 @@ class UpscaleQueue:
                             f"fast path → {re_op_name} (skip polling, TRPC download)"
                         )
                         if orig_idx < len(task.video_outputs):
-                            task.video_outputs[orig_idx].upscale_status = "completed"
+                            task.video_outputs[orig_idx].upscale_status = "success"
                         # Add to pending_ops — skip polling, go to TRPC download in Phase 3
                         pending_ops.append((orig_idx, re_op_name, scene_id, media_id))
                         # ★ RC5 FIX: Per-task dict instead of global set
@@ -1629,6 +1920,11 @@ class UpscaleQueue:
                 
                 if op_name:
                     log.info(f"[UpscaleQueue] Upscale {video_label} submitted: op={op_name}")
+                    emit_event(EventType.UI_STATUS_UPDATE, {
+                        'message': f'submit upscale success {video_label}',
+                        'task_label': f'#{getattr(task, "prompt_index", "?")}',
+                        'video_label': f'v{orig_idx}',
+                    }, source='upscale_queue')
                     if orig_idx < len(task.video_outputs):
                         task.video_outputs[orig_idx].upscale_status = "polling"
                         task.video_outputs[orig_idx].upscale_poll_count = 0
@@ -1685,7 +1981,46 @@ class UpscaleQueue:
                         self._on_completed(task)
                     except Exception:
                         pass
-                await asyncio.sleep(retry_delay)
+                # ★ A3a: Use enqueue_after instead of inline sleep — releases worker immediately
+                job.enqueue_after = time.monotonic() + retry_delay
+                self._release_ownership_ref(job.task_id)  # ★ P1: current job done, enqueue will +1
+                self.enqueue(job)
+                return
+            
+            # ★ A3b: Durable retry — extended backoff for transient errors only
+            # Structural errors (skipped, unsupported, policy) are NOT eligible.
+            _has_transient = self._has_transient_errors(task, job)
+            from config.settings import get_settings as _gs_durable
+            _s_durable = _gs_durable()
+            _durable_max = getattr(_s_durable, 'auto_retry_upscale_durable_max', 3)
+            # ★ v5.2: Persistent recovery — practical unlimited retries
+            if getattr(_s_durable, 'persistent_recovery', True):
+                _durable_max = 999
+            if _has_transient and job.durable_retry_count < _durable_max and self._running:
+                job.durable_retry_count += 1
+                job.retry_count = 0  # Reset normal retries for fresh attempt
+                # Exponential backoff: 5min, 10min, 20min, ... capped at 30min
+                _durable_delay = min(300 * (2 ** (job.durable_retry_count - 1)), 1800)
+                log.warning(
+                    f"[UpscaleQueue] Durable retry {job.durable_retry_count}/{_durable_max} "
+                    f"for task {job.task_id} — transient errors, re-enqueue in {_durable_delay}s"
+                )
+                for i in failed_indices:
+                    if i < len(task.video_outputs):
+                        task.video_outputs[i].upscale_status = "pending"
+                        task.video_outputs[i].upscale_error = ""
+                self._dispatcher.update_progress(
+                    task.id, 87,
+                    f"🔁 Durable retry {job.durable_retry_count}/{_durable_max} "
+                    f"in {_durable_delay // 60}min..."
+                )
+                if self._on_completed:
+                    try:
+                        self._on_completed(task)
+                    except Exception:
+                        pass
+                job.enqueue_after = time.monotonic() + _durable_delay
+                self._release_ownership_ref(job.task_id)  # ★ P1: current job done, enqueue will +1
                 self.enqueue(job)
                 return
             
@@ -1704,6 +2039,12 @@ class UpscaleQueue:
                 from core.dispatcher import TaskStage
                 task.stage = TaskStage.COMPLETED
                 self._dispatcher.update_progress(task.id, 100, "⚠️ Upscale failed — 720p saved")
+                # ★ T0-4: Normalize stale upscale_status before completion
+                self._normalize_upscale_status_before_completion(task)
+                # ★ T0-2: Clear background ownership before completion
+                task.background_owner = None
+                task.owner_heartbeat_ts = 0.0
+                self._release_ownership_ref(job.task_id)  # ★ P0: Release ownership (refcount)
                 self._dispatcher.complete_task(
                     task.id, output_uris=task.output_uris or [],
                 )
@@ -1750,6 +2091,7 @@ class UpscaleQueue:
                 retry_count=job.retry_count + 1,
                 max_retries=job.max_retries,
                 retry_indices=failed_indices,  # Map back to original positions
+                generated_at=job.generated_at,  # ★ Inherit: warmup uses original generation time
             )
             # Bug 2 fix: Use enqueue_after instead of fire-and-forget asyncio.create_task.
             # _delayed_retry() would create a ghost task outside active_jobs tracking.
@@ -2181,6 +2523,16 @@ class UpscaleQueue:
             if _up_path and _merge_orig < len(task.video_outputs):
                 task.video_outputs[_merge_orig].file_upscaled = _up_path
                 task.video_outputs[_merge_orig].quality = job.target_quality
+                # ★ B1: Regenerate thumbnail from upscaled file
+                # Mirrors image upscale path (L2775–L2788). Video path was missing this.
+                if self._regenerate_thumbnail_fn:
+                    try:
+                        self._regenerate_thumbnail_fn(task, _merge_orig)
+                    except Exception as _thumb_e:
+                        log.warning(
+                            f"[UpscaleQueue] Thumbnail regen failed for "
+                            f"video {_merge_orig + 1}: {_thumb_e}"
+                        )
         
         # ★ RC2 FIX: Mark THIS job's outputs as terminal
         for local_idx, media_id in enumerate(job.media_ids):
@@ -2188,9 +2540,9 @@ class UpscaleQueue:
             if _rc2_orig < len(task.video_outputs):
                 vo = task.video_outputs[_rc2_orig]
                 if upscale_paths.get(_rc2_orig):
-                    if vo.upscale_status not in ("success", "completed"):
+                    if vo.upscale_status not in ("success",):
                         vo.upscale_status = "success"
-                elif vo.upscale_status not in ("success", "completed", "skipped"):
+                elif vo.upscale_status not in ("success", "skipped"):
                     vo.upscale_status = "failed"
         
         # Rebuild final output_uris from ALL video_outputs (not just this job's)
@@ -2209,15 +2561,29 @@ class UpscaleQueue:
         # === RC2 FIX: Only complete task when ALL outputs are terminal ===
         # With multi-output, each video runs as a separate job.
         # Only the LAST job to finish should call complete_task().
+        # ★ Normalize stale status BEFORE terminal check.
+        # Without this, slots with file_upscaled but status='failed' (retry succeeded
+        # but status wasn't updated) block completion forever at 96%.
+        self._normalize_upscale_status_before_completion(task)
         if not self._all_outputs_terminal(task):
             _terminal = sum(
                 1 for vo in task.video_outputs
-                if getattr(vo, 'upscale_status', '') in ("success", "failed", "skipped", "completed")
+                if getattr(vo, 'upscale_status', '') in ("success", "failed", "skipped")
             )
+            _total = max(len(task.video_outputs), 1)
             job_outcome_reason, job_outcome_detail = self._classify_job_outcome(task, job)
+            
+            # ★ Ratio-based progress: 96 + (settled/total) * 3 → 96..99
+            # Shows per-video progress instead of staying stuck at 96%.
+            _ratio_progress = 96 + int((_terminal / _total) * 3)
+            self._dispatcher.update_progress(
+                task.id, _ratio_progress,
+                f"⬆️ Upscaling {job.target_quality}... ({_terminal}/{_total})"
+            )
+            
             log.info(
                 f"[UpscaleQueue] Job for task {job.task_id[:12]} finished "
-                f"({_terminal}/{len(task.video_outputs)} terminal) — "
+                f"({_terminal}/{_total} terminal, progress={_ratio_progress}%) — "
                 f"deferring completion until all outputs done"
             )
             self._apply_job_outcome(job, job_outcome_reason, job_outcome_detail)
@@ -2241,7 +2607,7 @@ class UpscaleQueue:
         
         from core.dispatcher import TaskStage
         any_success = any(
-            getattr(vo, 'upscale_status', '') in ("success", "completed")
+            getattr(vo, 'upscale_status', '') in ("success",)
             for vo in task.video_outputs
         )
         task_all_unsupported = self._task_all_outputs_unsupported(task)
@@ -2268,6 +2634,12 @@ class UpscaleQueue:
         # NOTE: Continuation children were already activated early by engine
         # (via activate_children_early after 720p download), so we don't pass
         # continuation_frame args here — _parent_to_children already popped.
+        # ★ T0-4: Normalize stale upscale_status before completion
+        self._normalize_upscale_status_before_completion(task)
+        # ★ T0-2: Clear background ownership before completion
+        task.background_owner = None
+        task.owner_heartbeat_ts = 0.0
+        self._release_ownership_ref(job.task_id)  # ★ P0: Release ownership (refcount)
         self._dispatcher.complete_task(
             task.id,
             output_uris=task.output_uris or [],
@@ -2293,6 +2665,11 @@ class UpscaleQueue:
             "outputs": len(task.output_uris or []),
             "parallel_polls": len(pending_ops),
         }, source="upscale_queue")
+        emit_event(EventType.UI_STATUS_UPDATE, {
+            'message': f'upscale download complete {job.task_id}',
+            'task_label': f'#{getattr(task, "prompt_index", "?")}',
+            'prompt_short': (task.prompt or '')[:40],
+        }, source='upscale_queue')
     
     async def _download_via_trpc_zip(
         self,
@@ -2390,34 +2767,17 @@ class UpscaleQueue:
         output_path = Path(output_folder) / project_name / target_quality.strip()
         output_path.mkdir(parents=True, exist_ok=True)
         
-        # Build filename (same convention as _download_outputs_inner)
-        prompt_num = getattr(task, 'prompt_index', 0) + 1
-        idx_str = str(prompt_num).zfill(3)
-        variant_letters = "abcdefghijklmnopqrstuvwxyz"
-        task_output_count = getattr(task, 'output_count', 1) or 1
-        is_multi = total_videos > 1 or task_output_count > 1
-        
-        parts = []
-        if is_multi and video_idx < len(variant_letters):
-            parts.append(f"{idx_str}{variant_letters[video_idx]}")
-        else:
-            parts.append(idx_str)
-        
-        if settings.include_quality:
-            parts.append(target_quality)
-        if settings.include_model:
-            model_short = task.model.replace("veo_3_1_", "v31_").replace("_fast_", "_")
-            parts.append(model_short)
-        
-        sep = settings.separator
-        filename = sep.join(parts) + ".mp4"
-        filepath = output_path / filename
-        
-        # Avoid overwrite
-        counter = 1
-        while filepath.exists():
-            filepath = output_path / f"{sep.join(parts)}_{counter}.mp4"
-            counter += 1
+        # ★ Unified naming via shared helper
+        from core.output_naming import build_output_filename, ensure_unique_path
+        filename = build_output_filename(
+            task=task,
+            video_index=video_idx,
+            loop_index=video_idx,
+            total_outputs=total_videos,
+            target_quality=target_quality,
+            settings=settings,
+        )
+        filepath = ensure_unique_path(output_path / filename)
         
         # Step 4: Download file from GCS (may be MP4 directly or ZIP)
         dl_path = None
@@ -2622,7 +2982,18 @@ class UpscaleQueue:
         )
         
         async def _upscale_single(idx: int) -> bool:
-            """Upscale a single image with retry, protected by semaphore."""
+            """Upscale a single image with retry.
+            
+            Concurrency model (v4):
+            - Cooldown/bridge/reCAPTCHA gates: OUTSIDE semaphore
+            - rate_lock + burst delay: OUTSIDE semaphore (pacing only, no remote call)
+            - upscale_sem: wraps ONLY the remote submit_prompt() call
+            - Decode/save/thumbnail: OUTSIDE semaphore (local I/O)
+            - Error sleeps: OUTSIDE semaphore
+            
+            Bridge-level serialization (_recaptcha_locks) is the true single-lane
+            bottleneck. Local sem is defense-in-depth.
+            """
             mid = job.media_ids[idx] if idx < len(job.media_ids) else ""
             local_1k = job.local_paths[idx] if idx < len(job.local_paths) else ""
             vo = task.video_outputs[idx] if idx < len(task.video_outputs) else None
@@ -2635,6 +3006,8 @@ class UpscaleQueue:
             for attempt in range(max_retries):
                 if not self._running:
                     break
+                
+                # ── Gates: all OUTSIDE semaphore ──
                 
                 # Cooldown gate
                 if self._is_on_cooldown(job.account_email):
@@ -2686,129 +3059,71 @@ class UpscaleQueue:
                                 f"reCAPTCHA still cold after 15s — proceeding anyway"
                             )
                 
-                try:
-                    log.info(
-                        f"[UpscaleQ-Image] {idx+1}/{total}: "
-                        f"upscaling mediaId={mid[:30]}... → {job.upscale_quality}"
-                        f"{f' (attempt {attempt+1})' if attempt > 0 else ''}"
-                    )
-                    
-                    if vo:
-                        vo.upscale_status = "submitting"
-                    
-                    upscale_body = self._api_client.build_upscale_image_body(
-                        media_id=mid,
-                        project_id=account.project_id or "",
-                        target_resolution=target_resolution,
-                        paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
-                    )
-                    
-                    ext_result = await asyncio.wait_for(
-                        ext_bridge.submit_prompt(
-                            email=account.email,
-                            endpoint="UPSCALE_IMAGE",
-                            body=upscale_body,
-                            needs_recaptcha=True,
-                            timeout=120,
-                        ),
-                        timeout=125,
-                    )
-                    
-                    if ext_result and ext_result.get('success'):
-                        data = ext_result.get('data', {})
-                        encoded_image = data.get('encodedImage', '')
-                        
-                        if encoded_image:
-                            # Save upscaled image
-                            output_folder = (
-                                getattr(task, 'output_folder', '') 
-                                or '.'
-                            )
-                            project_name = (
-                                getattr(task, 'project_name', '') or "Untitled"
-                            )
-                            upscale_dir = (
-                                Path(output_folder) / project_name / job.upscale_quality
-                            )
-                            upscale_dir.mkdir(parents=True, exist_ok=True)
-                            
-                            # Replace _1K suffix with actual quality tag
-                            raw_name = Path(local_1k).name if local_1k else f"image_{idx+1}.png"
-                            filename = raw_name.replace('_1K', f'_{job.upscale_quality}')
-                            upscale_path = upscale_dir / filename
-                            img_bytes = base64.b64decode(encoded_image)
-                            upscale_path.write_bytes(img_bytes)
-                            
-                            log.info(
-                                f"[UpscaleQ-Image] {idx+1}/{total}: "
-                                f"✅ {job.upscale_quality} saved "
-                                f"({len(img_bytes)//1024}KB): "
-                                f"{upscale_path.name}"
-                            )
-                            if vo:
-                                vo.file_upscaled = str(upscale_path)
-                                vo.quality = job.upscale_quality
-                                vo.upscale_status = "success"
-                                # ★ Regenerate thumbnail from upscaled image
-                                try:
-                                    from PIL import Image as _Img
-                                    thumb_dir = Path.home() / ".veoauto" / "cache" / "thumbnails"
-                                    thumb_dir.mkdir(parents=True, exist_ok=True)
-                                    _tpath = thumb_dir / f"{task.id}_{idx}.jpg"
-                                    with _Img.open(str(upscale_path)) as _im:
-                                        _r = 200 / _im.width
-                                        _ns = (200, max(1, int(_im.height * _r)))
-                                        _th = _im.resize(_ns, _Img.LANCZOS)
-                                        if _th.mode in ('RGBA', 'P'):
-                                            _th = _th.convert('RGB')
-                                        _th.save(str(_tpath), 'JPEG', quality=90)
-                                    vo.thumbnail_path = str(_tpath)
-                                    log.debug(f"[UpscaleQ-Image] Thumbnail regenerated: {_tpath.name}")
-                                except Exception as _te:
-                                    log.debug(f"[UpscaleQ-Image] Thumb regen skipped: {_te}")
-                            success = True
-                            return True  # Success
-                        else:
-                            log.warning(
-                                f"[UpscaleQ-Image] {idx+1}/{total}: "
-                                f"no encodedImage in response"
-                            )
-                    else:
-                        error = (ext_result or {}).get('error', 'unknown')
-                        status_code = (ext_result or {}).get('status', 0)
-                        log.warning(
-                            f"[UpscaleQ-Image] {idx+1}/{total}: "
-                            f"failed (attempt {attempt+1}/{max_retries}): {error}"
+                # ── P3b: Rate lock + burst discipline (OUTSIDE sem) ──
+                # Mirrors video path at L1198–1217: pacing inside lock, submit outside lock.
+                # Prevents thundering herd when multiple images become ready simultaneously.
+                _img_rate_lock = self._rate_locks.setdefault(
+                    job.account_email, asyncio.Lock()
+                )
+                async with _img_rate_lock:
+                    # Re-check cooldown inside lock (another worker may have set it)
+                    if self._is_on_cooldown(job.account_email):
+                        log.info(f"[UpscaleQ-Image] {idx+1}/{total}: cooldown detected inside rate lock")
+                        await self._wait_cooldown(job.account_email)
+                    # Anti-detect delay (adaptive burst controller)
+                    if self._burst_controller:
+                        _bc_delay = self._burst_controller.get_delay(job.account_email)
+                        log.info(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: anti-detect delay "
+                            f"({_bc_delay:.1f}s) → attempt {attempt+1}/{max_retries}"
                         )
-                        
-                        if status_code == 403 or "403" in str(error):
-                            # Do NOT call _set_cooldown() — same poisoning
-                            # issue as 429. Upscale errors must not block T2I.
-                            await asyncio.sleep(30)
-                        elif status_code == 429 or "429" in str(error) or "exhausted" in str(error).lower():
-                            # Exponential backoff for quota exhaustion
-                            # NOTE: Do NOT call _set_cooldown() here!
-                            # That sets ACCOUNT-LEVEL cooldown which blocks
-                            # ALL T2I submissions (not just upscale).
-                            # Use only local sleep for upscale-specific backoff.
-                            _backoff = min(30 * (2 ** attempt), 120)
-                            import random as _rng
-                            _jitter = _rng.uniform(0, _backoff * 0.3)
-                            log.info(
-                                f"[UpscaleQ-Image] {idx+1}/{total}: "
-                                f"429 backoff {_backoff+_jitter:.0f}s "
-                                f"(attempt {attempt+1}/{max_retries})"
-                            )
-                            await asyncio.sleep(_backoff + _jitter)
-                        else:
-                            await asyncio.sleep(10)
-                        continue
+                        await self._burst_controller.wait(job.account_email)
                 
+                # ── P2: Submit — ONLY remote call inside semaphore ──
+                log.info(
+                    f"[UpscaleQ-Image] {idx+1}/{total}: "
+                    f"upscaling mediaId={mid[:30]}... → {job.upscale_quality}"
+                    f"{f' (attempt {attempt+1})' if attempt > 0 else ''}"
+                )
+                
+                if vo:
+                    vo.upscale_status = "submitting"
+                
+                upscale_body = self._api_client.build_upscale_image_body(
+                    media_id=mid,
+                    project_id=account.project_id or "",
+                    target_resolution=target_resolution,
+                    paygate_tier=account.paygate_tier or "PAYGATE_TIER_TWO",
+                )
+                
+                ext_result = None
+                try:
+                    async with upscale_sem:
+                        # ★ Sem scope: ONLY the remote submit_prompt() call
+                        log.debug(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: "
+                            f"submit_prompt ENTER (sem acquired)"
+                        )
+                        ext_result = await asyncio.wait_for(
+                            ext_bridge.submit_prompt(
+                                email=account.email,
+                                endpoint="UPSCALE_IMAGE",
+                                body=upscale_body,
+                                needs_recaptcha=True,
+                                timeout=120,
+                            ),
+                            timeout=125,
+                        )
+                        log.debug(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: "
+                            f"submit_prompt EXIT (sem releasing)"
+                        )
                 except asyncio.TimeoutError:
                     log.warning(
                         f"[UpscaleQ-Image] {idx+1}/{total}: "
                         f"timeout (attempt {attempt+1}/{max_retries})"
                     )
+                    # Sleep OUTSIDE semaphore — sem already released by context exit
                     await asyncio.sleep(5)
                     continue
                 except Exception as e:
@@ -2816,7 +3131,100 @@ class UpscaleQueue:
                         f"[UpscaleQ-Image] {idx+1}/{total}: "
                         f"error: {e} (attempt {attempt+1}/{max_retries})"
                     )
+                    # Sleep OUTSIDE semaphore
                     await asyncio.sleep(10)
+                    continue
+                
+                # ── Decode + save + thumbnail: OUTSIDE semaphore (local I/O) ──
+                if ext_result and ext_result.get('success'):
+                    data = ext_result.get('data', {})
+                    encoded_image = data.get('encodedImage', '')
+                    
+                    if encoded_image:
+                        # Save upscaled image
+                        output_folder = (
+                            getattr(task, 'output_folder', '') 
+                            or '.'
+                        )
+                        project_name = (
+                            getattr(task, 'project_name', '') or "Untitled"
+                        )
+                        upscale_dir = (
+                            Path(output_folder) / project_name / job.upscale_quality
+                        )
+                        upscale_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        # Replace _1K suffix with actual quality tag
+                        raw_name = Path(local_1k).name if local_1k else f"image_{idx+1}.png"
+                        filename = raw_name.replace('_1K', f'_{job.upscale_quality}')
+                        upscale_path = upscale_dir / filename
+                        img_bytes = base64.b64decode(encoded_image)
+                        upscale_path.write_bytes(img_bytes)
+                        
+                        log.info(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: "
+                            f"✅ {job.upscale_quality} saved "
+                            f"({len(img_bytes)//1024}KB): "
+                            f"{upscale_path.name}"
+                        )
+                        if vo:
+                            vo.file_upscaled = str(upscale_path)
+                            vo.quality = job.upscale_quality
+                            vo.upscale_status = "success"
+                            # ★ Regenerate thumbnail from upscaled image
+                            try:
+                                from PIL import Image as _Img
+                                thumb_dir = Path.home() / ".veoauto" / "cache" / "thumbnails"
+                                thumb_dir.mkdir(parents=True, exist_ok=True)
+                                _tpath = thumb_dir / f"{task.id}_{idx}.jpg"
+                                with _Img.open(str(upscale_path)) as _im:
+                                    _r = 200 / _im.width
+                                    _ns = (200, max(1, int(_im.height * _r)))
+                                    _th = _im.resize(_ns, _Img.LANCZOS)
+                                    if _th.mode in ('RGBA', 'P'):
+                                        _th = _th.convert('RGB')
+                                    _th.save(str(_tpath), 'JPEG', quality=90)
+                                vo.thumbnail_path = str(_tpath)
+                                log.debug(f"[UpscaleQ-Image] Thumbnail regenerated: {_tpath.name}")
+                            except Exception as _te:
+                                log.debug(f"[UpscaleQ-Image] Thumb regen skipped: {_te}")
+                        success = True
+                        return True  # Success
+                    else:
+                        log.warning(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: "
+                            f"no encodedImage in response"
+                        )
+                else:
+                    # ── Error classification + sleep: OUTSIDE semaphore ──
+                    error = (ext_result or {}).get('error', 'unknown')
+                    status_code = (ext_result or {}).get('status', 0)
+                    log.warning(
+                        f"[UpscaleQ-Image] {idx+1}/{total}: "
+                        f"failed (attempt {attempt+1}/{max_retries}): {error}"
+                    )
+                    
+                    if status_code == 403 or "403" in str(error):
+                        # Do NOT call _set_cooldown() — same poisoning
+                        # issue as 429. Upscale errors must not block T2I.
+                        await asyncio.sleep(30)
+                    elif status_code == 429 or "429" in str(error) or "exhausted" in str(error).lower():
+                        # Exponential backoff for quota exhaustion
+                        # NOTE: Do NOT call _set_cooldown() here!
+                        # That sets ACCOUNT-LEVEL cooldown which blocks
+                        # ALL T2I submissions (not just upscale).
+                        # Use only local sleep for upscale-specific backoff.
+                        _backoff = min(30 * (2 ** attempt), 120)
+                        import random as _rng
+                        _jitter = _rng.uniform(0, _backoff * 0.3)
+                        log.info(
+                            f"[UpscaleQ-Image] {idx+1}/{total}: "
+                            f"429 backoff {_backoff+_jitter:.0f}s "
+                            f"(attempt {attempt+1}/{max_retries})"
+                        )
+                        await asyncio.sleep(_backoff + _jitter)
+                    else:
+                        await asyncio.sleep(10)
                     continue
             
             if not success and vo:
@@ -2824,7 +3232,7 @@ class UpscaleQueue:
                 vo.quality = "1K"
             return False
         
-        # Launch all upscales concurrently (semaphore limits to 4)
+        # Launch all upscales concurrently (per-account submit semaphore limits in-flight)
         # Anti-detect: stagger launch with random delays
         import random
         tasks_to_run = []
@@ -2833,12 +3241,19 @@ class UpscaleQueue:
                 if i > 0:
                     delay = random.uniform(2.0, 5.0)
                     await asyncio.sleep(delay)
-                async with upscale_sem:
-                    return await _upscale_single(i)
+                # ★ P2: Semaphore is now inside _upscale_single, not here
+                return await _upscale_single(i)
             tasks_to_run.append(_staggered_upscale())
         
         results = await asyncio.gather(*tasks_to_run, return_exceptions=True)
         success_count = sum(1 for r in results if r is True)
+        
+        # ★ P4: Three-way AIMD outcome
+        if success_count == total:
+            self._apply_job_outcome(job, "success", f"image-{success_count}/{total}")
+        elif success_count == 0:
+            self._apply_job_outcome(job, "failure", f"image-0/{total}")
+        # else: partial — neutral, no AIMD update (don't penalize or reward)
         
         # Summary + update progress + complete task
         if success_count > 0:
@@ -2848,8 +3263,16 @@ class UpscaleQueue:
             )
             self._dispatcher.update_progress(
                 job.task_id, 100,
-                f"✅ {job.upscale_quality} complete ({success_count}/{total})"
+                f"⬆️ {job.upscale_quality} complete ({success_count}/{total})"
             )
+            # ★ T0-4: Normalize stale upscale_status before completion
+            if task:
+                self._normalize_upscale_status_before_completion(task)
+            # ★ T0-2: Clear background ownership before completion
+            if task:
+                task.background_owner = None
+                task.owner_heartbeat_ts = 0.0
+            self._release_ownership_ref(job.task_id)  # ★ P0: Release ownership (refcount)
             self._dispatcher.complete_task(
                 job.task_id,
                 output_uris=task.output_uris if task else [],
@@ -2864,6 +3287,14 @@ class UpscaleQueue:
                 job.task_id, 100,
                 f"⚠️ Upscale failed — 1K saved"
             )
+            # ★ T0-4: Normalize stale upscale_status before completion
+            if task:
+                self._normalize_upscale_status_before_completion(task)
+            # ★ T0-2: Clear background ownership before completion
+            if task:
+                task.background_owner = None
+                task.owner_heartbeat_ts = 0.0
+            self._release_ownership_ref(job.task_id)  # ★ P0: Release ownership (refcount)
             self._dispatcher.complete_task(
                 job.task_id,
                 output_uris=task.output_uris if task else [],

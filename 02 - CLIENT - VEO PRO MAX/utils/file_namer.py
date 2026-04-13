@@ -22,7 +22,7 @@ class FileNamer:
     - Video naming: {task}_{row}_{output}_{quality}_{timestamp}.mp4
     - Image naming: {task}_{row}_{output}_{timestamp}.png
     - Continuation frame: cont_{row}_{timestamp}.png
-    - Conflict resolution (_v2, _v3, ...)
+    - Conflict resolution (_1, _2, ...)
     """
     
     # Illegal characters for file names (Windows)
@@ -172,9 +172,11 @@ class FileNamer:
         return f"{base}_{target_quality}_upscaled{ext}"
     
     def ensure_unique(self, file_path: str) -> str:
-        """Ensure filename is unique by adding version suffix.
+        """Ensure filename is unique by adding numeric suffix.
         
-        If file exists: name.ext → name_v2.ext → name_v3.ext ...
+        If file exists: name.ext → name_1.ext → name_2.ext ...
+        
+        Convention unified with core.output_naming.ensure_unique_path().
         
         Args:
             file_path: Proposed file path
@@ -191,25 +193,25 @@ class FileNamer:
         ext = path.suffix
         parent = path.parent
         
-        # Check for existing version suffix
-        match = re.match(r'(.+)_v(\d+)$', base)
+        # Check for existing numeric suffix
+        match = re.match(r'(.+)_(\d+)$', base)
         if match:
             base_name = match.group(1)
-            version = int(match.group(2))
+            counter = int(match.group(2))
         else:
             base_name = base
-            version = 1
+            counter = 0
         
-        # Find next available version
+        # Find next available number
         while True:
-            version += 1
-            new_name = f"{base_name}_v{version}{ext}"
+            counter += 1
+            new_name = f"{base_name}_{counter}{ext}"
             new_path = parent / new_name
             
             if not new_path.exists():
                 return str(new_path)
             
-            if version > 999:  # Safety limit
+            if counter > 9999:  # Safety limit
                 # Use timestamp as fallback
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                 return str(parent / f"{base_name}_{timestamp}{ext}")

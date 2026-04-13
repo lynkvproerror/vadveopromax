@@ -1,0 +1,306 @@
+=== VEO Pro Max — Session Logs ===
+Session: 20260411_232338
+Total: 301 entries
+============================================================
+
+[INFO ] 23:17:40 - core.session_manager - [Session] Loaded from 2026-04-11T23:17:19.274018
+[INFO ] 23:17:41 - veo.ui.taskbar - [TaskbarProgress] CoCreateInstance OK, ptr=0x1e81a1c9f60
+[INFO ] 23:17:41 - veo.ui.taskbar - [TaskbarProgress] Ready ✓ (hwnd=0x4f1314)
+[INFO ] 23:17:41 - veo.ui - [TaskbarProgress] Ready (hwnd=0x4f1314, available=True)
+[INFO ] 23:17:43 - core.account_manager - [levanlinh.kma@gmail.com] Debug browser still launching (stage=starting, elapsed=0.0s) — continuing extension-only for now
+[INFO ] 23:17:43 - core.multi_account - All account browsers initialized
+[INFO ] 23:17:43 - core.multi_account - 🔍 No account has good x-client-data yet — trying machine Chrome fallback...
+[INFO ] 23:17:43 - core.client_data_extractor - [ClientDataExtractor] Strategy 2: Launching temp Chrome with default profile variations...
+[INFO ] 23:17:43 - core.chrome_manager - [ChromeManager] Found branded Chrome via registry: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 23:17:43 - core.chrome_manager - [ChromeManager] ✅ Using branded Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+[INFO ] 23:17:43 - core.client_data_extractor - [ClientDataExtractor] Temp Chrome launched: PID=11696, port=9260
+[INFO ] 23:17:44 - core.extension_manager - [ExtMgr] Extension not loaded after retries — reinstalling (caller=launch_chrome)...
+[INFO ] 23:17:44 - core.extension_manager - [ExtMgr] 🔄 Reinstalling extension...
+[INFO ] 23:17:44 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9222/devtools/page/644F94E651F02702CA4608E3EC...
+[INFO ] 23:17:45 - veo.tab_queue - [GroupCreate] gid=group_20260411_182007 name='BIỂN 5' LAZY (deferred) expanded=False
+[INFO ] 23:17:46 - core.extension_manager - [ExtMgr] No existing extension found — fresh install
+[INFO ] 23:17:46 - core.extension_manager - [ExtMgr] Closed extensions tab 644F94E6... (PUT)
+[INFO ] 23:17:46 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 23:17:46 - core.extension_manager - [ExtMgr] 🔧 Installing extension: D:\Music\Ruby\Produce for Customer\##Tools\VEO Tool\#NEW VEO API\03.1-Installer\VEO Pro Max\extension
+[INFO ] 23:17:46 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9222/devtools/page/67BF59A6D93D102BA68C1AA5D0...
+[INFO ] 23:17:49 - core.extension_manager - [ExtMgr] Developer Mode: already_on
+[INFO ] 23:17:49 - core.extension_manager - [ExtMgr] Load Unpacked: clicked
+[INFO ] 23:17:49 - core.extension_manager - [ExtMgr] Waiting for folder picker dialog...
+[INFO ] 23:17:49 - core.extension_manager - [ExtMgr] Found dialog: 'Select the extension directory.' (HWND=597394)
+[INFO ] 23:17:49 - core.extension_manager - [ExtMgr] Found filename control via enum (HWND=50469434)
+[WARNING] 23:17:49 - core.extension_manager - [ExtMgr] Path has '#' — creating junction: D:\Music\Ruby\Produce for Customer\##Tools\VEO Tool\#NEW VEO API\03.1-Installer\VEO Pro Max\extension
+[INFO ] 23:17:49 - core.extension_manager - [ExtMgr] Copied extension to safe path: C:\Users\Linh\AppData\Local\Temp\veo_extension
+[WARNING] 23:17:49 - core.extension_manager - [ExtMgr] Using path for dialog: C:\Users\Linh\AppData\Local\Temp\veo_extension
+[INFO ] 23:17:54 - core.extension_manager - [ExtMgr] ✅ Path verified in edit control (attempt 1): C:\Users\Linh\AppData\Local\Temp\veo_extension
+[INFO ] 23:17:54 - core.extension_manager - [ExtMgr] Set folder path via WM_SETTEXT: C:\Users\Linh\AppData\Local\Temp\veo_extension
+[INFO ] 23:17:55 - core.extension_manager - [ExtMgr] ✅ Path verified in edit control (attempt 1): C:\Users\Linh\AppData\Local\Temp\veo_extension
+[INFO ] 23:17:56 - core.extension_manager - [ExtMgr] Pressing Enter to navigate to: C:\Users\Linh\AppData\Local\Temp\veo_extension
+[INFO ] 23:17:56 - core.client_data_extractor - [ClientDataExtractor] Temp Chrome returned short x-client-data (28 chars)
+[INFO ] 23:17:56 - core.multi_account - Machine Chrome fallback returned short x-client-data (28 chars)
+[INFO ] 23:17:56 - core.multi_account - ⏳ No account has good x-client-data yet (best=0 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 23:17:56 - core.app_controller - [AutoLaunch] ✅ All accounts connected to browsers
+[INFO ] 23:17:56 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 23:17:58 - core.extension_manager - [ExtMgr] Clicking Select Folder to confirm navigated directory...
+[INFO ] 23:17:58 - core.extension_bridge - [ExtensionBridge] 🔌 Extension connected from ('127.0.0.1', 58701)
+[INFO ] 23:17:58 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:17:58 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:17:58 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:17:58 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 23:17:59 - core.app_controller - [AutoLaunch] Extension status: 1 emails registered: ['levanlinh.kma@gmail.com']
+[INFO ] 23:17:59 - core.extension_manager - [ExtMgr] Extension ID: oioemlokfchhpnjchhkcelipnflhnbdp
+[INFO ] 23:17:59 - core.extension_manager - [ExtMgr] Reusing existing chrome://extensions tab, ws=ws://127.0.0.1:9222/devtools/page/67BF59A6D93D102BA68C1AA5D0...
+[INFO ] 23:18:00 - core.extension_manager - [ExtMgr] ✅ Folder picker completed: C:\Users\Linh\AppData\Local\Temp\veo_extension
+[INFO ] 23:18:00 - core.extension_manager - [ExtMgr] Closed extensions tab 67BF59A6... (PUT)
+[INFO ] 23:18:00 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 23:18:00 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.14
+[INFO ] 23:18:00 - core.app_controller - [AppController] Extension v2.3.14 connected via bridge for levanlinh.kma@gmail.com — up-to-date
+[INFO ] 23:18:00 - core.extension_manager - [ExtMgr] 🔐 CDP identity injected: levanlinh.kma@gmail.com (port 9222)
+[INFO ] 23:18:00 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 23:18:00 - core.app_controller - [AutoLaunch] Extension check complete: {'levanlinh.kma@gmail.com': '✅ bridge connected'}
+[INFO ] 23:18:00 - core.app_controller - [AutoLaunch] 🔥 Proactive reCAPTCHA warm-up scheduled for 1 emails
+[INFO ] 23:18:00 - core.app_controller - [TierCheck] ✅ levanlinh.kma@gmail.com: Ultra
+[INFO ] 23:18:00 - core.app_controller - [TierCheck] ✅ All accounts are Pro or Ultra
+[INFO ] 23:18:00 - core.app_controller - [AutoLaunch] ✅ Account tier enforcement complete
+[INFO ] 23:18:00 - core.app_controller - [AutoLaunch] ✅ Background browser launch complete
+[INFO ] 23:18:00 - veo - [Status] 🌐 Browsers launched — waiting for extension connection...
+[INFO ] 23:18:00 - core.app_controller - [AutoLaunch] 📸 Image Library: 17 images, all already uploaded
+[INFO ] 23:18:00 - core.extension_bridge - [ExtensionBridge] 🔐 check_identity sent to 1 connection(s)
+[INFO ] 23:18:00 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: startup-header-capture)
+[INFO ] 23:18:00 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:18:00 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:18:00 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for levanlinh.kma@gmail.com
+[INFO ] 23:18:00 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:00 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 23:18:00 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=identity_refresh, tabId=1860496855)
+[INFO ] 23:18:00 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:18:01 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:01 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:18:01 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:18:01 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 23:18:04 - core.extension_manager - [ExtMgr] ✅ Extension installed and verified! (after 1s)
+[INFO ] 23:18:04 - core.extension_manager - [ExtMgr] 🔌 Waking service worker via CDP: ws://127.0.0.1:9222/devtools/page/5335AE7D1C12CA7BC16CC8F4B5...
+[INFO ] 23:18:04 - core.extension_manager - [ExtMgr] ✅ SW wake-up result: unknown
+[INFO ] 23:18:04 - core.extension_manager - [ExtMgr] 🔐 CDP identity injected: levanlinh.kma@gmail.com (port 9222)
+[INFO ] 23:18:04 - core.profiles_controller - [ProfilesController] Chrome PID=8328, port=9222 (new)
+[INFO ] 23:18:04 - core.profiles_controller - [ProfilesController] 1 HWND(s) — visible (sent to back) for levanlinh.kma@gmail.com (smart-hide disabled)
+[WARNING] 23:18:04 - core.profiles_controller - [DEBUG] Step 4: ✅ Already on /tools/flow — skipping navigation
+[INFO ] 23:18:05 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:18:05 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:18:05 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for levanlinh.kma@gmail.com
+[INFO ] 23:18:05 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:08 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 23:18:08 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 23:18:08 - core.profiles_controller - [ProfilesController] ✅ Browser headers captured for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-copyright', 'x-browser-year', 'x-browser-validation', 'x-client-data']
+[INFO ] 23:18:16 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:18 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 23:18:18 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: reCAPTCHA not ready after retry — defer to extension-side recovery (fail #1), cooldown 60s, skip app-side reload storm
+[INFO ] 23:18:22 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:25 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:18:25 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:18:25 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:18:25 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for levanlinh.kma@gmail.com
+[INFO ] 23:18:25 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:27 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 23:18:28 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:18:28 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:18:28 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 23:18:33 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:45 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:18:45 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:18:45 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:18:45 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for levanlinh.kma@gmail.com
+[INFO ] 23:18:45 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:47 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 23:18:48 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:18:48 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:18:48 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 23:18:52 - veo.tab_queue - [LazyExpand] gid=group_20260411_182007 built 100 children (chunked)
+[INFO ] 23:18:53 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:18:54 - core.dispatcher - [Dispatcher] Batch-removed 14 tasks
+[INFO ] 23:18:56 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=10s,cap=❌) | conns=1, pending=0
+[INFO ] 23:18:57 - core.dispatcher - [ForceRetry] force_retry_all: retried 86/86 task(s) (ready=86, waiting=0, skipped=0)
+[INFO ] 23:18:59 - ui.tabs.tab_queue - [AutoStart] ✅ Starting engine! ready_count=171, force=True
+[INFO ] 23:18:59 - core.app_controller - [TabKeepalive] Paused — engine processing
+[INFO ] 23:18:59 - core.app_controller - Profile sync complete: 1 accounts, 0 ready
+[WARNING] 23:18:59 - core.recaptcha_pool - [RecaptchaPool] No running event loop available — pool will start when engine loop begins
+[INFO ] 23:18:59 - core.upscale_queue - [UpscaleQueue] Started — background upscale decoupled from workers
+[INFO ] 23:18:59 - core.log_exporter - [LogExporter] Started — capturing warnings/errors
+[INFO ] 23:18:59 - core.app_controller - [CallbackCheck] ✅ All 7 callbacks verified OK
+[INFO ] 23:18:59 - core.app_controller - [Engine] Processing started
+[INFO ] 23:18:59 - core.multi_account - Starting browsers for 1 accounts...
+[INFO ] 23:18:59 - core.account_manager - [levanlinh.kma@gmail.com] 🔗 Attaching to debug browser (page access only)
+[INFO ] 23:18:59 - core.multi_account - All account browsers initialized
+[INFO ] 23:18:59 - core.multi_account - ⏳ No account has good x-client-data yet (best=28 chars). Extension bridge will provide fresh value from browser headers.
+[INFO ] 23:18:59 - core.engine - Engine starting: 1 accounts, 171 ready tasks in queue
+[INFO ] 23:18:59 - core.engine - [Engine] DEBUG: _running=True, _stop_event.is_set()=False
+[INFO ] 23:18:59 - core.engine - [RecaptchaPool] Registered 1 accounts for background token pre-fetch
+[INFO ] 23:18:59 - core.engine - [Engine] DEBUG: Pre-filter starting (ready_tasks=171)
+[INFO ] 23:18:59 - core.engine - [Engine] DEBUG: Pre-filter done. About to enter TaskGroup (ready=171)
+[INFO ] 23:18:59 - core.engine - [Engine] Entering TaskGroup (ready=171)
+[INFO ] 23:18:59 - core.engine - [Engine] Spawning supervisors for 1 accounts (active_emails=set())
+[INFO ] 23:18:59 - core.engine - [Engine] ✅ Supervisor task created for levanlinh.kma@gmail.com
+[INFO ] 23:18:59 - core.engine - [G1:levanlinh.kma@gmail.com] max_foremen=-1, raw_foreman=20, existing=0
+[INFO ] 23:18:59 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Spawned CHỦ + 20 Foremen (max_workers=20, output=1, retry=3, timeout=120s)
+[INFO ] 23:18:59 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Started
+[INFO ] 23:18:59 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Refreshing browser headers...
+[INFO ] 23:18:59 - core.engine - [CircuitBreaker] Monitor started
+[INFO ] 23:18:59 - core.engine - [CreditWindow] Recovery timer started
+[INFO ] 23:18:59 - core.task_watchdog - [Watchdog] Started — RUNNING timeout=900s, POLL timeout=900s, scan every 30s
+[INFO ] 23:18:59 - core.recaptcha_pool - [RecaptchaPool] Started — pool_size=2, ttl=85.0s, refill_interval=5.0s
+[INFO ] 23:19:01 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Extension connected — skipping xcd poll (Chrome auto-injects real xcd into fetch)
+[INFO ] 23:19:02 - core.engine - [Foreman:levanlinh.kma@gmail.com] ✅ checkAppAvailability: AVAILABLE
+[INFO ] 23:19:02 - core.trpc_client - TRPC: Created project 'My Video Project' → 8e5d1c3b-a9c0-429c-9f21-52dad5ca2396
+[INFO ] 23:19:02 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Project ready: 8e5d1c3b-a9c0-429c-9f21-52dad5ca2396
+[INFO ] 23:19:02 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🔥 Cold profile warmup: 3x simulate_activity (building trust)...
+[WARNING] 23:19:04 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:19:04 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 1)
+[INFO ] 23:19:04 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 3s...
+[INFO ] 23:19:05 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:19:05 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:19:05 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:19:05 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for levanlinh.kma@gmail.com
+[INFO ] 23:19:05 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:19:06 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ✅ Cold profile warmup complete (~8s)
+[INFO ] 23:19:06 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Pre-warming reCAPTCHA...
+[INFO ] 23:19:06 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:19:06 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #1, 0.0/30s) — retry in 2.0s
+[WARNING] 23:19:07 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:19:07 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 2)
+[INFO ] 23:19:07 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 6s...
+[INFO ] 23:19:07 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[INFO ] 23:19:08 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #2, 2.0/30s) — retry in 2.6s
+[INFO ] 23:19:08 - core.extension_bridge - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:19:08 - core.app_controller - [ExtensionBridge] ✅ x-browser-validation captured for levanlinh.kma@gmail.com
+[INFO ] 23:19:08 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 23:19:11 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:19:11 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #3, 4.6/30s) — retry in 3.4s
+[INFO ] 23:19:13 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[WARNING] 23:19:13 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:19:13 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 3)
+[WARNING] 23:19:13 - core.account_manager - [levanlinh.kma@gmail.com] ❌ reCAPTCHA refresh failed all 3 attempts (consecutive failures: 1)
+[INFO ] 23:19:14 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:19:14 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #4, 8.0/30s) — retry in 4.4s
+[INFO ] 23:19:18 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:19:18 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #5, 12.4/30s) — retry in 5.0s
+[WARNING] 23:19:18 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:19:18 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 1)
+[INFO ] 23:19:18 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 3s...
+[WARNING] 23:19:21 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:19:21 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 2)
+[INFO ] 23:19:21 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 6s...
+[INFO ] 23:19:23 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:19:23 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #6, 17.4/30s) — retry in 5.0s
+[WARNING] 23:19:27 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:19:27 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 3)
+[WARNING] 23:19:27 - core.account_manager - [levanlinh.kma@gmail.com] ❌ reCAPTCHA refresh failed all 3 attempts (consecutive failures: 2)
+[INFO ] 23:19:28 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:19:28 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #7, 22.4/30s) — retry in 5.0s
+[WARNING] 23:19:32 - core.account_manager - [levanlinh.kma@gmail.com] ⏸️ reCAPTCHA circuit-breaker: 2 consecutive failures → backing off 30s before retry
+[INFO ] 23:19:33 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:19:33 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ reCAPTCHA not ready (attempt #8, 27.4/30s) — retry in 5.0s
+[INFO ] 23:19:36 - core.profiles_controller - [ProfilesController] 🔇 Browser hidden for levanlinh.kma@gmail.com
+[INFO ] 23:19:38 - core.profiles_controller - [ProfilesController] 👁️ Browser shown for levanlinh.kma@gmail.com
+[WARNING] 23:19:38 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ grecaptcha not ready after 32.4s / 8 attempts — triggering full page reload for recovery
+[INFO ] 23:19:38 - core.extension_bridge - [ExtensionBridge] 🔄 Refresh [full] for levanlinh.kma@gmail.com — reCAPTCHA ready timeout after 8 attempts
+[INFO ] 23:19:38 - core.extension_bridge - [ExtensionBridge] ⏸️ Tab reloading for levanlinh.kma@gmail.com — zombie detection suspended 60s (reason: header-refresh)
+[INFO ] 23:19:38 - core.extension_bridge - [ExtensionBridge] 🔄 Refreshed headers: 1 tab(s) reloaded
+[INFO ] 23:19:38 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⏳ Waiting 25s for reCAPTCHA widget to re-initialize after full reload...
+[INFO ] 23:19:39 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:19:39 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:19:39 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:19:39 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for levanlinh.kma@gmail.com
+[INFO ] 23:19:39 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:19:39 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: waiting 10s for reCAPTCHA widget...
+[INFO ] 23:19:42 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[WARNING] 23:19:42 - core.extension_bridge - [ExtensionBridge] ⚠️ x-browser-validation NOT captured after probe (globalValidation=None)
+[WARNING] 23:19:42 - core.app_controller - [ExtensionBridge] ⚠️ x-browser-validation NOT captured — API requests may get 403
+[INFO ] 23:19:42 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[INFO ] 23:19:48 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:19:49 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 23:19:49 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: ⚠️ reCAPTCHA not ready yet — will retry on next readiness check
+[INFO ] 23:19:56 - core.extension_bridge - [ExtBridge] 📊 Health: levanlinh.km=✅(hb=16s,cap=❌) | conns=1, pending=0
+[INFO ] 23:19:59 - core.extension_bridge - [ExtensionBridge] 📧 Extension registered: levanlinh.kma@gmail.com (v2.3.14, src=tab_snapshot, tabId=1860496855)
+[INFO ] 23:19:59 - core.app_controller - [ExtensionBridge] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:19:59 - veo - [Status] Extension connected for levanlinh.kma@gmail.com
+[INFO ] 23:19:59 - core.extension_bridge - [ExtensionBridge] 🔑 Unsolicited access token for levanlinh.kma@gmail.com
+[INFO ] 23:19:59 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:19:59 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 23:19:59 - core.app_controller - [ProactiveWarmup] levanlinh.kma@gmail.com: reCAPTCHA not ready after retry — defer to extension-side recovery (fail #2), cooldown 60s, skip app-side reload storm
+[INFO ] 23:20:01 - core.app_controller - [ExtensionBridge] ✅ Startup headers refreshed for levanlinh.kma@gmail.com
+[WARNING] 23:20:01 - core.extension_bridge - [ExtensionBridge] ⚠️ x-browser-validation NOT captured after probe (globalValidation=None)
+[WARNING] 23:20:01 - core.app_controller - [ExtensionBridge] ⚠️ x-browser-validation NOT captured — API requests may get 403
+[INFO ] 23:20:01 - core.app_controller - [ExtensionBridge] ✅ Startup access token set for levanlinh.kma@gmail.com
+[WARNING] 23:20:02 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:20:02 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 1)
+[INFO ] 23:20:02 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 3s...
+[INFO ] 23:20:03 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 23:20:05 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:20:05 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 2)
+[INFO ] 23:20:05 - core.account_manager - [levanlinh.kma@gmail.com] Retrying reCAPTCHA in 6s...
+[INFO ] 23:20:06 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:20:06 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[INFO ] 23:20:09 - core.extension_bridge - [ExtensionBridge] ⏳ grecaptcha NOT ready for levanlinh.kma@gmail.com: loaded=? enterprise=? execute=? page=? tokenLen=0
+[WARNING] 23:20:09 - core.engine - [Foreman:levanlinh.kma@gmail.com] ⚠️ reCAPTCHA still not ready after reload + 25s wait + 3 verify attempts
+[WARNING] 23:20:09 - core.engine - [Foreman:levanlinh.kma@gmail.com] 🔄 Escalating to HARD NAVIGATION (full page reload failed — forcing VEO URL navigation)
+[WARNING] 23:20:09 - core.extension_bridge - [ExtensionBridge] 🔄 Hard navigation for levanlinh.kma@gmail.com -> https://labs.google/fx/vi/tools/flow (reCAPTCHA recovery)
+[INFO ] 23:20:09 - core.extension_bridge - [ExtensionBridge] 📍 Navigating levanlinh.kma@gmail.com to: https://labs.google/fx/vi/tools/flow
+[WARNING] 23:20:11 - core.extension_bridge - [ExtensionBridge] reCAPTCHA failed for levanlinh.kma@gmail.com: None
+[WARNING] 23:20:11 - core.account_manager - [levanlinh.kma@gmail.com] Extension bridge returned no reCAPTCHA token (attempt 3)
+[WARNING] 23:20:11 - core.account_manager - [levanlinh.kma@gmail.com] ❌ reCAPTCHA refresh failed all 3 attempts (consecutive failures: 3)
+[WARNING] 23:20:16 - core.account_manager - [levanlinh.kma@gmail.com] ⏸️ reCAPTCHA circuit-breaker: 3 consecutive failures → backing off 60s before retry
+[INFO ] 23:20:18 - core.app_controller - [ExtensionBridge] Headers updated for levanlinh.kma@gmail.com: ['x-browser-channel', 'x-browser-year', 'x-browser-validation', 'x-browser-copyright', 'x-client-data'] (xcd=28)
+[INFO ] 23:20:25 - core.extension_bridge - [ExtensionBridge] 📧 Extension disconnected: levanlinh.kma@gmail.com
+[WARNING] 23:20:25 - core.extension_bridge - [ExtensionBridge] ❌ Navigation failed for levanlinh.kma@gmail.com: Extension disconnected
+[WARNING] 23:20:25 - core.extension_bridge - [ExtBridge] ⏱️ SLOW response: navigate_tab for levanlinh.kma@gmail.com took 15.6s (requestId=21a2f073)
+[ERROR] 23:20:25 - core.extension_bridge - [ExtensionBridge] ❌ Hard navigation failed for levanlinh.kma@gmail.com: Extension disconnected
+[WARNING] 23:20:25 - core.engine - [Supervisor:levanlinh.kma@gmail.com] ⚠️ reCAPTCHA not ready — foremen will retry before first submit
+[INFO ] 23:20:25 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 1/2) — validating reCAPTCHA token...
+[WARNING] 23:20:25 - core.extension_bridge - [ExtensionBridge] No connection for levanlinh.kma@gmail.com — cannot request reCAPTCHA
+[WARNING] 23:20:25 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe: reCAPTCHA token too short (0 chars)
+[WARNING] 23:20:29 - core.engine - ⚡ [CircuitBreaker] levanlinh.kma@gmail.com: OPEN — extension disconnected. Trip #1/3. All workers for this account will sleep until extension reconnects.
+[INFO ] 23:20:29 - core.engine - [DD4] levanlinh.kma@gmail.com: Foreman abort signal sent
+[INFO ] 23:20:35 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe (attempt 2/2) — validating reCAPTCHA token...
+[WARNING] 23:20:35 - core.extension_bridge - [ExtensionBridge] No connection for levanlinh.kma@gmail.com — cannot request reCAPTCHA
+[WARNING] 23:20:35 - core.engine - [Supervisor:levanlinh.kma@gmail.com] 🧪 Probe: reCAPTCHA token too short (0 chars)
+[WARNING] 23:20:35 - core.engine - [Supervisor:levanlinh.kma@gmail.com] Startup probe failed — NOT unblocking foremen, cooldown 60s
+[WARNING] 23:20:35 - core.engine - [Cooldown] levanlinh.kma@gmail.com: startup_probe_failed → cooldown 30s (consecutive #1)
+[INFO ] 23:20:35 - veo - [Status] levanlinh.kma@gmail.com: ⛔ startup_probe_failed (30s)
+[INFO ] 23:20:56 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[WARNING] 23:21:26 - core.extension_bridge - [ExtensionBridge] 🚨 All connections lost for 60s — triggering recovery (attempt #1)
+[WARNING] 23:21:26 - core.app_controller - [AppController] 🚨 Extension lost — auto-reinstalling...
+[INFO ] 23:21:26 - core.extension_manager - [ExtMgr] install_if_needed called (port=9222, email=levanlinh.kma@gmail.com, caller=ensure_all_extensions)
+[INFO ] 23:21:26 - core.extension_manager - [ExtMgr] Extension ID: oioemlokfchhpnjchhkcelipnflhnbdp
+[INFO ] 23:21:26 - core.extension_manager - [ExtMgr] Reusing existing chrome://extensions tab, ws=ws://127.0.0.1:9222/devtools/page/4F4AEF51E0EB29EBFD7B980680...
+[INFO ] 23:21:27 - core.extension_manager - [ExtMgr] Closed extensions tab 4F4AEF51... (PUT)
+[INFO ] 23:21:27 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 23:21:27 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.14
+[INFO ] 23:21:27 - core.extension_manager - [ExtMgr] Extension v2.3.14 up-to-date — skipping
+[WARNING] 23:21:27 - core.extension_manager - [ExtMgr] CDP identity injection returned unexpected result: {'id': 1, 'result': {'result': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.1'}, 'exceptionDetails': {'exceptionId': 2, 'text': 'Uncaught', 'lineNumber': 0, 'columnNumber': 15, 'scriptId': '6', 'exception': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.2'}}}}
+[WARNING] 23:21:29 - core.extension_manager - [ExtMgr] CDP identity injection returned unexpected result: {'id': 1, 'result': {'result': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.1'}, 'exceptionDetails': {'exceptionId': 3, 'text': 'Uncaught', 'lineNumber': 0, 'columnNumber': 15, 'scriptId': '6', 'exception': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.2'}}}}
+[WARNING] 23:21:29 - core.extension_manager - [ExtMgr] ⚠️ CDP identity injection failed for levanlinh.kma@gmail.com (port 9222) after 2 attempts
+[INFO ] 23:21:29 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅'}
+[INFO ] 23:21:29 - core.app_controller - [AppController] Extension auto-reinstall results: {'levanlinh.kma@gmail.com': '✅'}
+[INFO ] 23:21:56 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 23:22:56 - core.extension_bridge - [ExtBridge] 📊 Health: no accounts | conns=0, pending=0
+[INFO ] 23:23:07 - security.integrity_check - [Integrity] DEV MISMATCH (ignored): security/license_client.py (expected=f6ee88ad520035c9..., got=MISSING...)
+[INFO ] 23:23:07 - security.integrity_check - [Integrity] DEV MISMATCH (ignored): security/firebase_rest_client.py (expected=da09fb94387846bc..., got=MISSING...)
+[INFO ] 23:23:07 - security.integrity_check - [Integrity] DEV MISMATCH (ignored): security/trial_protection.py (expected=a5a0f8eee0f8aafc..., got=MISSING...)
+[INFO ] 23:23:07 - security.integrity_check - [Integrity] DEV MISMATCH (ignored): security/_encrypted_keys.py (expected=5f54acf0ad1c7bc7..., got=MISSING...)
+[INFO ] 23:23:07 - security.integrity_check - [Integrity] DEV MISMATCH (ignored): security/_encrypted_api_keys.py (expected=09f906eb6af8355e..., got=MISSING...)
+[INFO ] 23:23:07 - security.integrity_check - [Integrity] DEV MISMATCH (ignored): services/permissions.py (expected=94b85392156de689..., got=MISSING...)
+[INFO ] 23:23:07 - security.integrity_check - [Integrity] DEV MISMATCH (ignored): security/anti_tamper.py (expected=5b2ad36f6ce99d9f..., got=MISSING...)
+[WARNING] 23:23:26 - core.extension_bridge - [ExtensionBridge] 🚨 All connections lost for 180s — triggering recovery (attempt #2)
+[WARNING] 23:23:26 - core.app_controller - [AppController] 🚨 Extension lost — auto-reinstalling...
+[INFO ] 23:23:26 - core.extension_manager - [ExtMgr] install_if_needed called (port=9222, email=levanlinh.kma@gmail.com, caller=ensure_all_extensions)
+[INFO ] 23:23:26 - core.extension_manager - [ExtMgr] Extension ID: oioemlokfchhpnjchhkcelipnflhnbdp
+[INFO ] 23:23:26 - core.extension_manager - [ExtMgr] Opened chrome://extensions tab (PUT), ws=ws://127.0.0.1:9222/devtools/page/72B6365179072E22FDBF5ACD51...
+[INFO ] 23:23:27 - core.extension_manager - [ExtMgr] Closed extensions tab 72B63651... (PUT)
+[INFO ] 23:23:27 - core.extension_manager - [ExtMgr] Cleaned up 1 extensions tab(s)
+[INFO ] 23:23:27 - core.extension_manager - [ExtMgr] Installed extension version: 2.3.14
+[INFO ] 23:23:27 - core.extension_manager - [ExtMgr] Extension v2.3.14 up-to-date — skipping
+[WARNING] 23:23:27 - core.extension_manager - [ExtMgr] CDP identity injection returned unexpected result: {'id': 1, 'result': {'result': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.1'}, 'exceptionDetails': {'exceptionId': 5, 'text': 'Uncaught', 'lineNumber': 0, 'columnNumber': 15, 'scriptId': '6', 'exception': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.2'}}}}
+[WARNING] 23:23:29 - core.extension_manager - [ExtMgr] CDP identity injection returned unexpected result: {'id': 1, 'result': {'result': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.1'}, 'exceptionDetails': {'exceptionId': 6, 'text': 'Uncaught', 'lineNumber': 0, 'columnNumber': 15, 'scriptId': '6', 'exception': {'type': 'object', 'subtype': 'error', 'className': 'TypeError', 'description': "TypeError: Cannot read properties of undefined (reading 'local')\n    at <anonymous>:1:16", 'objectId': '-7629549978659167902.1.2'}}}}
+[WARNING] 23:23:29 - core.extension_manager - [ExtMgr] ⚠️ CDP identity injection failed for levanlinh.kma@gmail.com (port 9222) after 2 attempts
+[INFO ] 23:23:29 - core.app_controller - [AppController] Extension batch check results: {'levanlinh.kma@gmail.com': '✅'}
+[INFO ] 23:23:29 - core.app_controller - [AppController] Extension auto-reinstall results: {'levanlinh.kma@gmail.com': '✅'}
+[INFO ] 23:23:38 - core.session_manager - [Session] Saved to C:\Users\Linh\.veoauto\session.json

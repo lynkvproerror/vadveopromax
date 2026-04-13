@@ -167,6 +167,11 @@ class AppController:
         self._notified_groups: set = set()  # Track notified group IDs
         self._pipeline_awaiting_queue: bool = False  # Pipeline mid-transition (defer auto-stop)
         self._pipeline_mode_active: bool = False  # True while ANY pipeline stage is running
+        # ★ P1: Synchronous counter for OTF→AutoStop race prevention.
+        # Incremented synchronously in _run_on_the_fly_sweep() Phase 3 BEFORE
+        # run_coroutine_threadsafe(), decremented in re_upscale_task()._run() finally.
+        # Without this, AutoStop fires before async UQ enqueue executes.
+        self._otf_pending_reupscales: int = 0
         self._queue_groups_cache: Optional[List[Dict]] = None
         self._queue_groups_cache_ts = 0.0
         self._queue_groups_cache_ttl = 0.75  # Serve a short-lived snapshot to keep Queue tab responsive
@@ -1211,34 +1216,71 @@ class AppController:
         )
         
         try:
-            # Pause engine workers — set long cooldown so workers stop attempting
-            if hasattr(self, '_engine') and self._engine:
-                delay = self._engine.set_account_cooldown(
-                    email,
-                    "tab_dead/pause",
-                    override_delay=300,
-                    mutate_backoff=False,
-                    decay_backoff_on_expiry=False,
+            # ★ P2-5: When coordinator exists, it will handle cooldown + UQ pause
+            # as part of its drain-remedy sequence (Steps 1-4). Direct mutations
+            # here would split ownership and race the coordinator.
+            _has_coordinator = False
+            try:
+                _has_coordinator = bool(
+                    hasattr(self, '_engine') and self._engine and
+                    getattr(self._engine, '_recovery_coordinator', None)
                 )
-                log.warning(
-                    f"[AppController] ⏸️ Engine workers paused for {email} "
-                    f"({delay}s cooldown after tab death)"
-                )
+            except Exception:
+                pass
             
-            # Pause upscale queue workers
-            if hasattr(self, '_engine') and self._engine:
-                uq = getattr(self._engine, '_upscale_queue', None)
-                if uq and hasattr(uq, 'pause_account'):
-                    uq.pause_account(email)
-                    log.warning(f"[AppController] ⏸️ UpscaleQueue paused for {email}")
+            if not _has_coordinator:
+                # Legacy: no coordinator — direct state mutations
+                if hasattr(self, '_engine') and self._engine:
+                    delay = self._engine.set_account_cooldown(
+                        email,
+                        "tab_dead/pause",
+                        override_delay=300,
+                        mutate_backoff=False,
+                        decay_backoff_on_expiry=False,
+                    )
+                    log.warning(
+                        f"[AppController] ⏸️ Engine workers paused for {email} "
+                        f"({delay}s cooldown after tab death)"
+                    )
+                
+                if hasattr(self, '_engine') and self._engine:
+                    uq = getattr(self._engine, '_upscale_queue', None)
+                    if uq and hasattr(uq, 'pause_account'):
+                        uq.pause_account(email)
+                        log.warning(f"[AppController] ⏸️ UpscaleQueue paused for {email}")
             
-            # ★ Fix 2: 2+ deaths in 10 min → Kill Chrome + restart browser
+            # ★ Fix 2: 2+ deaths in 10 min → recovery needed
             if deaths >= 2:
                 log.warning(
                     f"[AppController] 💀💀 Tab dead #{deaths} for {email} "
-                    f"— KILLING Chrome and restarting browser"
+                    f"— initiating recovery"
                 )
-                self._force_restart_browser(email)
+                # ★ P1-4: When coordinator exists, it is the SOLE owner.
+                # Send CRITICAL signal → coordinator will run BROWSER_RESTARTING.
+                # Do NOT call _force_restart_browser — that's double-fire.
+                _delegated = False
+                try:
+                    coordinator = getattr(self._engine, '_recovery_coordinator', None) if hasattr(self, '_engine') and self._engine else None
+                    if coordinator:
+                        import asyncio as _aio
+                        from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                        if self._loop and not self._loop.is_closed():
+                            _aio.run_coroutine_threadsafe(
+                                coordinator.report_signal(RecoverySignal(
+                                    account_email=email,
+                                    source="app_controller",
+                                    error_type="tab_dead",
+                                    severity=SignalSeverity.CRITICAL,
+                                    detail=f"tab dead #{deaths} in 10min",
+                                )),
+                                self._loop,
+                            )
+                            _delegated = True
+                except Exception:
+                    pass
+                # Legacy fallback: no coordinator → direct Chrome kill + restart
+                if not _delegated:
+                    self._force_restart_browser(email)
             
             self._push_all_status_debounced()  # Round 5 Fix F: Coalesce
         except Exception as e:
@@ -1457,6 +1499,8 @@ class AppController:
                         acc.set_profiles_controller(self._profiles_controller)
                         acc.extension_bridge = self._extension_bridge
                         acc._parent_manager = self._multi_account  # for bridge auto-recovery
+                    # Inject bridge ref into profiles_controller for CDP→bridge xcd propagation
+                    self._profiles_controller._extension_bridge = self._extension_bridge
                     log.info(f"[AutoLaunch] ProfilesController + ExtensionBridge injected into {len(self._multi_account._accounts)} accounts")
                 
                 # Step 2.5: Pre-launch tier check — call /v1/credits via HTTP (no browser)
@@ -1561,6 +1605,13 @@ class AppController:
                     # (covers startup timing race where accounts created before bridge)
                     for acc in self._multi_account._accounts:
                         self._ensure_account_bridge(acc)
+                    
+                    # Step 4.5: Push CDP-captured x-client-data into bridge cache.
+                    # Extension only captures the 8-char stub; CDP ExtraInfo has the
+                    # real value from Chrome Variations. Bridge gates submit on xcd.
+                    self._propagate_cdp_xcd_to_bridge()
+                    # Schedule deferred retries — Variations may need 30-60s to load
+                    asyncio.ensure_future(self._deferred_xcd_propagation())
                 else:
                     log.info("[AutoLaunch] No accounts to connect")
                 
@@ -1670,6 +1721,78 @@ class AppController:
         # Run in background async loop
         if self._loop:
             asyncio.run_coroutine_threadsafe(_launch(), self._loop)
+    
+    def _propagate_cdp_xcd_to_bridge(self):
+        """Push CDP-captured x-client-data into bridge cache.
+        
+        CDP ExtraInfo captures the REAL xcd from Chrome Variations Service,
+        while Extension's onBeforeSendHeaders only sees the 8-char stub.
+        Bridge gates task submission on xcd length (MIN_VALID_XCD=40),
+        so we inject the CDP value to unblock submissions.
+        
+        The bridge's existing downgrade guard prevents subsequent extension
+        headers_update messages from overwriting the injected value.
+        """
+        if not self._extension_bridge:
+            return 0
+        pc = getattr(self, '_profiles_controller', None)
+        if not pc or not hasattr(pc, '_debug_browsers'):
+            return 0
+        
+        from config.constants import MIN_VALID_XCD
+        propagated = 0
+        for email, entry in pc._debug_browsers.items():
+            cdp_xcd = (entry.get("captured_headers") or {}).get("x-client-data", "")
+            if cdp_xcd and len(cdp_xcd) >= MIN_VALID_XCD:
+                self._extension_bridge.upgrade_cached_xcd(email, cdp_xcd)
+                propagated += 1
+        if propagated:
+            log.info(f"[XCD] 🔑 Propagated CDP x-client-data to bridge for {propagated} account(s)")
+        return propagated
+    
+    async def _deferred_xcd_propagation(self):
+        """Retry x-client-data propagation until valid or timeout.
+        
+        Chrome Variations Service may take 30-60s to compute full xcd
+        after browser launch. This retries at increasing intervals.
+        Once all accounts have valid xcd, it stops early.
+        """
+        from config.constants import MIN_VALID_XCD
+        
+        for delay in [15, 30, 60, 120]:
+            await asyncio.sleep(delay)
+            
+            # Check if all enabled accounts already have valid xcd
+            if self._extension_bridge:
+                all_valid = True
+                for acc in self._multi_account._accounts:
+                    if not acc.is_enabled:
+                        continue
+                    ready, reason = self._extension_bridge.is_submit_ready(acc.email)
+                    if not ready and "xcd_short" in reason:
+                        all_valid = False
+                        break
+                
+                if all_valid:
+                    log.info("[DeferredXCD] ✅ All accounts have valid x-client-data")
+                    return
+            
+            # Try propagation from CDP captured headers
+            count = self._propagate_cdp_xcd_to_bridge()
+            if count:
+                log.info(f"[DeferredXCD] 🔑 Propagated CDP xcd at +{delay}s ({count} account(s))")
+        
+        # Final status report
+        if self._extension_bridge:
+            for acc in self._multi_account._accounts:
+                if not acc.is_enabled:
+                    continue
+                ready, reason = self._extension_bridge.is_submit_ready(acc.email)
+                if not ready and "xcd_short" in reason:
+                    log.warning(
+                        f"[DeferredXCD] ⚠️ {acc.email}: x-client-data still short after 225s — "
+                        f"Chrome Variations may need a browser restart to fully enroll"
+                    )
     
     def _hot_add_profile(self, email: str):
         """Hot-add a single profile mid-session (no app restart needed).
@@ -4194,13 +4317,16 @@ class AppController:
     def add_i2i_batch(self, prompts: List, settings: Dict) -> str:
         """Add Image-to-Image batch to queue.
         
+        Each prompt gets ONLY its own reference images (not all images from all prompts).
+        HAR verified: the API accepts 1-5 imageInputs per request, not 40.
+        
         Args:
             prompts: List of PromptRow objects with image_tags
             settings: Sidebar settings dict
         """
-        images = []
+        per_prompt_images = {}
         prompt_texts = []
-        for p in prompts:
+        for i, p in enumerate(prompts):
             prompt_texts.append(p.text if hasattr(p, 'text') else str(p))
             resolved = []
             if hasattr(p, 'image_tags') and p.image_tags:
@@ -4210,13 +4336,14 @@ class AppController:
                 from pathlib import Path as _P
                 if _P(p.image_path).exists():
                     resolved = [p.image_path]
-                    log.info(f"  [I2I] using drag-drop image_path → {p.image_path}")
-            images.extend(resolved)
+                    log.info(f"  [I2I] Row {i}: using drag-drop image_path → {p.image_path}")
+            if resolved:
+                per_prompt_images[i] = resolved
         
         return self.submit_prompts(
             prompts=prompt_texts,
             workflow=WorkflowType.I2I,
-            images=images if images else None,
+            per_prompt_images=per_prompt_images if per_prompt_images else None,
             settings=settings
         )
     
@@ -4832,6 +4959,23 @@ class AppController:
                 if uq and uq.has_pending_work():
                     log.info("[AutoStop] Deferred — UpscaleQueue still has pending work")
                     return
+                # ★ P1: Don't auto-stop if UQ still owns tasks (refcount-based)
+                # (stronger than has_pending_work which only checks queue/worker state)
+                if uq and uq._owned_task_refcount:
+                    log.info(
+                        f"[AutoStop] Deferred — UQ still owns "
+                        f"{len(uq._owned_task_refcount)} task(s) "
+                        f"({sum(uq._owned_task_refcount.values())} job(s))"
+                    )
+                    return
+            
+            # ★ P1: Don't auto-stop if OTF has pending re-upscales not yet scheduled
+            if getattr(self, '_otf_pending_reupscales', 0) > 0:
+                log.info(
+                    f"[AutoStop] Deferred — {self._otf_pending_reupscales} "
+                    f"OTF re-upscale(s) pending scheduling"
+                )
+                return
             
             # ★ On-the-fly sweep gate: before auto-stopping, check if we can
             # rescue failed tasks/videos/upscales and keep engine running.
@@ -4872,15 +5016,27 @@ class AppController:
             
             max_rounds = getattr(s, 'auto_sweep_max_rounds', 5)
             otf_count = getattr(self, '_otf_sweep_count', 0)
-            if otf_count >= max_rounds:
+            _persistent = getattr(s, 'persistent_recovery', True)
+            
+            # Non-persistent: hard stop at max_rounds (original behavior)
+            if not _persistent and otf_count >= max_rounds:
                 if otf_count == max_rounds:  # Log once
                     log.info(f"[OTF-Sweep] Max {max_rounds} rounds exhausted — no more auto-retry")
                 return False
             
-            # Throttle: 30s cooldown between sweep rounds
+            # Persistent: escalating cooldown after max_rounds
+            # Gate reads _otf_sweep_count BEFORE _run_on_the_fly_sweep increments (L4926),
+            # so otf_count == max_rounds means "about to enter round max_rounds+1".
+            # +1 offset: R6 (first extra) → 2^1=60s, R7 → 2^2=120s cap.
+            if _persistent and otf_count >= max_rounds:
+                _cooldown = min(30 * (2 ** (otf_count - max_rounds + 1)), 120)
+            else:
+                _cooldown = 30.0
+            
+            # Throttle: cooldown between sweep rounds
             import time as _time
             last_sweep_ts = getattr(self, '_otf_last_sweep_ts', 0)
-            if (_time.monotonic() - last_sweep_ts) < 30.0:
+            if (_time.monotonic() - last_sweep_ts) < _cooldown:
                 return False
             
             # Check for incomplete work
@@ -4958,6 +5114,9 @@ class AppController:
                     if vo.quality == 'retrying':
                         continue
                     if vo.upscale_status == 'failed':
+                        # ★ v5.2: Skip if file_upscaled already exists — stale status
+                        if getattr(vo, 'file_upscaled', ''):
+                            continue
                         if vo.media_id:
                             needs_reupscale = True
                         else:
@@ -4977,15 +5136,12 @@ class AppController:
                     engine = getattr(self, '_engine', None)
                     if engine:
                         uq = getattr(engine, '_upscale_queue', None)
-                        if uq and hasattr(uq, '_job_queue'):
-                            try:
-                                for job in list(uq._job_queue.queue):
-                                    if getattr(job, 'task_id', None) == task.id:
-                                        already_queued = True
-                                        break
-                            except Exception:
-                                pass
+                        if uq:
+                            # ★ P1: Use _owned_task_ids (gap-free) instead of
+                            # _enqueued_ids (cleared on dequeue → race window)
+                            already_queued = uq.has_jobs_for_task(task.id)
                     if not already_queued:
+                        self._otf_pending_reupscales += 1  # ★ P1: sync increment BEFORE async schedule
                         self.re_upscale_task(task.id, failed_only=True)
                         reupscale_count += 1
         except Exception as e:
@@ -5421,22 +5577,49 @@ class AppController:
             return {"is_licensed": False, "is_trial": True, "trial_expired": False, "tier": None, "tier_name": None, "days_remaining": 0, "expires": None, "expires_dt": None}
     
     def get_account_summary(self) -> Dict:
-        """Get account summary for status bar display."""
+        """Get account summary for status bar + DevConsole display.
+        
+        Capacity tiers (§9.5):
+        - registered_*:  ALL accounts in pool (including disabled/quarantined)
+        - effective_*:   READY accounts only (enabled + session healthy)
+                         → status bar denominator; excludes disabled,
+                         reconnecting, quarantined, and not-ready accounts
+        
+        Active counts (per-pool, from session.py):
+        - active_workers_fast: Fast ops slots held (session.active_workers)
+        - active_workers_lp:   LP ops slots held (session.active_workers_lp)
+        - active_upscale:      Upscale slots held
+        - total_held:          Sum of all three pools
+        """
+        ma = self._multi_account
+        active_fast = sum(acc.session.active_workers for acc in ma._accounts)
+        active_lp = ma.total_active_lp
+        active_upscale = ma.total_active_upscale
         return {
-            "total": self._multi_account.account_count,
-            "ready": len(self._multi_account.ready_accounts),
-            "active": self._multi_account.total_active,
-            # ★ Fix: dispatcher._running_count tracks ALL tasks in RUNNING state
-            # (submit + download + upscale), not just acquired worker slots
+            # ── Account counts ──
+            "total": ma.account_count,            # registered (all)
+            "enabled": ma.enabled_count,           # enabled subset
+            "ready": ma.ready_count,               # ready subset (enabled + session healthy)
+            "active": ma.total_active,
+            # ── Running tasks (dispatcher) ──
             "running_tasks": self._dispatcher.running_count,
-            # Actual session worker slots currently held (released at submit for T2I)
-            "active_workers": self._multi_account.total_active,
-            # ★ Pool Separation: upscale worker counts
-            "active_upscale": self._multi_account.total_active_upscale,
-            "max_upscale": self._multi_account.total_max_upscale,
-            # ★ LP worker counts (Fast Low Priority)
-            "active_workers_lp": self._multi_account.total_active_lp,
-            "max_workers_lp": self._multi_account.total_capacity_lp,
+            # ── Per-pool active counts (directly from session) ──
+            "active_workers_fast": active_fast,
+            "active_workers": active_fast,         # backward compat
+            "active_workers_lp": active_lp,
+            "active_upscale": active_upscale,
+            "total_held": active_fast + active_lp + active_upscale,
+            # ── Effective capacity (READY accounts — enabled + session OK) ──
+            "eff_capacity_fast": ma.total_capacity,
+            "eff_capacity_lp": ma.total_capacity_lp,
+            "eff_max_upscale": ma.total_max_upscale,
+            # backward compat aliases
+            "max_upscale": ma.total_max_upscale,
+            "max_workers_lp": ma.total_capacity_lp,
+            # ── Registered capacity (ALL accounts — DevConsole/debug) ──
+            "reg_capacity_fast": ma.registered_capacity,
+            "reg_capacity_lp": ma.registered_capacity_lp,
+            "reg_max_upscale": ma.registered_max_upscale,
         }
     
     def get_queue_items(self) -> List[Dict]:
@@ -5493,6 +5676,40 @@ class AppController:
         if isinstance(value, datetime):
             return value.isoformat()
         return value or None
+
+    def _is_task_account_recovering(self, task) -> bool:
+        """Check if the task's assigned account is being recovered by coordinator.
+        
+        Used by DTO payload to suppress terminal FAIL display in UI
+        when coordinator is actively trying to remedy the account.
+        """
+        try:
+            email = getattr(task, 'assigned_account', None)
+            if not email:
+                return False
+            coordinator = getattr(self._engine, '_recovery_coordinator', None)
+            if not coordinator:
+                return False
+            return coordinator.is_account_recovering(email)
+        except Exception:
+            return False
+
+    def _is_task_account_quarantined(self, task) -> bool:
+        """Check if team's account is quarantined (SICK — all recovery exhausted).
+        
+        Used by DTO payload + renderer to show ⛔ QUARANTINED label
+        (distinct from transient 🔄 RECOVERING).
+        """
+        try:
+            email = getattr(task, 'assigned_account', None)
+            if not email:
+                return False
+            coordinator = getattr(self._engine, '_recovery_coordinator', None)
+            if not coordinator:
+                return False
+            return coordinator.is_account_quarantined(email)
+        except Exception:
+            return False
 
     @staticmethod
     def _task_elapsed_seconds(task: Task, now: datetime) -> float:
@@ -5560,6 +5777,10 @@ class AppController:
             "elapsed_seconds": elapsed_seconds,
             "retry_progress": getattr(task, '_retry_progress', -1),
             "retry_status_text": getattr(task, '_retry_status_text', ''),
+            # ★ T2-1: Account recovery state for UI — suppresses terminal FAIL display
+            "account_recovering": self._is_task_account_recovering(task),
+            # ★ T2-3: Account quarantine state for UI — shows ⛔ QUARANTINED
+            "account_quarantined": self._is_task_account_quarantined(task),
             "video_outputs": [
                 {
                     "index": getattr(vo, 'index', 0),
@@ -5605,6 +5826,9 @@ class AppController:
             getattr(task, '_retry_progress', -1),
             getattr(task, '_retry_status_text', ''),
             self._task_video_output_signature(task),
+            # ★ T2: Account recovery state (volatile — must bust cache on change)
+            self._is_task_account_recovering(task),
+            self._is_task_account_quarantined(task),
         )
 
     def _build_task_dto_dict(self, task: Task, index: int, now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -5984,6 +6208,8 @@ class AppController:
             except Exception as e:
                 log.error(f"[ReUpscale] Task {task_id} crashed: {e}", exc_info=True)
             finally:
+                # ★ P1: Decrement OTF pending counter (closes AutoStop race)
+                self._otf_pending_reupscales = max(0, self._otf_pending_reupscales - 1)
                 # Trigger queue refresh so UI updates status
                 for cb in self._on_queue_updated:
                     try:
@@ -5992,6 +6218,7 @@ class AppController:
                         pass
         
         asyncio.run_coroutine_threadsafe(_run(), self._loop)
+    
     
     def re_upscale_single_video(self, task_id: str, video_index: int):
         """Re-upscale a single video by index.

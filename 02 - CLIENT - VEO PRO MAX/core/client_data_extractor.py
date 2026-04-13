@@ -272,11 +272,9 @@ def _extract_via_temp_chrome() -> Optional[str]:
         
         log.info(f"[ClientDataExtractor] Temp Chrome launched: PID={proc.pid}, port={port}")
         
-        # Fully hide Chrome window (including taskbar) via Win32 API
-        from config.settings import get_settings as _get_settings
-        _s = _get_settings()
-        if getattr(_s, 'smart_hide_enabled', True) or getattr(_s, 'hide_all_browsers', False):
-            _hide_process_windows(proc.pid)
+        # Always hide temp Chrome — this is a utility process for data extraction,
+        # NOT a user-facing browser. Hide regardless of smart_hide setting.
+        _hide_process_windows(proc.pid)
         
         # Wait for CDP to be ready
         deadline = time.time() + 15

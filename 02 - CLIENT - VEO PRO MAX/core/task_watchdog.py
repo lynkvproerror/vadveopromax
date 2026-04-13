@@ -88,8 +88,33 @@ class TaskWatchdog:
                 for task in self._dispatcher.get_all_tasks():
                     # Skip tasks managed by UpscaleQueue (background upscale)
                     # These tasks have state=WAITING_POLL but are NOT stuck —
-                    # they're actively being processed by UpscaleQueue
+                    # they're actively being processed by UpscaleQueue.
                     if getattr(task, 'stage', None) in (TaskStage.UPSCALING, TaskStage.UPSCALED):
+                        continue
+                    # ★ P0: UQ-aware ownership guard.
+                    # has_live_background_owner() relies on time-based lease (120s)
+                    # which expires when jobs queue for minutes. Instead, ask UQ
+                    # directly if it still has work for this task via _owned_task_ids
+                    # (gap-free across enqueue→dequeue→delay→process→complete).
+                    if task.background_owner == "upscale_queue":
+                        uq = getattr(self._engine, '_upscale_queue', None)
+                        if uq and uq.has_jobs_for_task(task.id):
+                            continue  # UQ owns this task — not stuck
+                    # ★ T0-3: Canonical ownership guard — replaces v5.2 _counter_decremented
+                    # If task has a live background owner (e.g. UpscaleQueue with valid lease),
+                    # it is NOT orphaned — do not requeue.
+                    from core.dispatcher import has_live_background_owner
+                    _coordinator = getattr(self._engine, '_recovery_coordinator', None)
+                    if has_live_background_owner(task, coordinator=_coordinator):
+                        continue
+                    # ★ FIX: Skip tasks that have active replacement tasks in flight.
+                    # Requeuing them changes state to WAITING_POLL → blocks promote
+                    # when replacement completes (_try_promote_after_slot).
+                    _has_active_replacement = any(
+                        oid == task.id
+                        for oid, _ in self._dispatcher._replace_target_map.values()
+                    )
+                    if _has_active_replacement:
                         continue
                     
                     if task.state == TaskState.RUNNING:
@@ -256,6 +281,24 @@ class TaskWatchdog:
         }, source="watchdog")
         
         self._recoveries += 1
+        
+        # ★ T1-5: Report to coordinator — stuck tasks often indicate browser issues
+        if assigned_account:
+            try:
+                coordinator = getattr(self._engine, '_recovery_coordinator', None)
+                if coordinator:
+                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                    import asyncio
+                    asyncio.ensure_future(coordinator.report_signal(RecoverySignal(
+                        account_email=assigned_account,
+                        source="watchdog",
+                        error_type=f"stuck_{reason.lower().replace(' ', '_')}",
+                        severity=SignalSeverity.MEDIUM,
+                        task_id=task.id,
+                        detail=f"Task stuck for {elapsed:.0f}s",
+                    )))
+            except Exception as e:
+                log.debug(f"[Watchdog] Could not report signal: {e}")
     
     # ─── Status ───────────────────────────────────────────────────
     

@@ -40,60 +40,58 @@ DEFAULT_OUTPUT = BASE_DIR / "03 - Final App Client" / "main.dist" / "extension"
 # Files that run in Service Worker context (NO window object)
 SERVICE_WORKER_FILES = {"background.js"}
 
-# MV3-safe obfuscation config for BROWSER context (content.js, popup.js, stealth.js)
-# These files run in page/popup context where `window` is available.
+# ── Extension Obfuscation — LIGHT MODE ──────────────────────────────────────
+#
+# Strategy: Minify + rename local variables only.
+# NO string array, NO control flow flattening, NO dead code injection.
+#
+# Why light mode:
+#   - Full obfuscation creates massive string arrays and control flow switches
+#     that cause Chrome "Extension context invalidated" + SyntaxError on hot-reload
+#   - Light mode keeps code compact and unreadable enough to deter casual copying
+#     while being 100% stable across Chrome extension lifecycle events
+#
+# IIFE wrapping is applied POST-obfuscation in obfuscate_js_file() to prevent
+# global scope pollution when Chrome re-injects content scripts.
+
 BROWSER_CONFIG = {
-    # ── Core transforms ──
-    "compact": True,
-    "simplify": True,
-    "renameGlobals": False,          # Don't rename globals (chrome.*, etc.)
-    "renameProperties": False,       # Don't rename object properties
+    # ── Core: minify + rename ──
+    "compact": True,                     # Single-line output
+    "simplify": True,                    # Simplify expressions
+    "renameGlobals": False,              # Keep chrome.*, window.* intact
+    "renameProperties": False,           # Keep object keys for API calls
     "identifierNamesGenerator": "hexadecimal",  # _0x1a2b3c style
 
-    # ── String protection ──
-    "stringArray": True,
-    "stringArrayThreshold": 0.75,
-    "stringArrayEncoding": ["base64"],   # Safe for MV3 (no eval)
-    "stringArrayRotate": True,
-    "stringArrayShuffle": True,
-    "stringArrayWrappersCount": 2,
-    "stringArrayWrappersChainedCalls": True,
-    "stringArrayWrappersType": "variable",  # 'function' may use eval
+    # ── String protection: OFF ──
+    # String array is the #1 cause of global scope pollution and bloat.
+    "stringArray": False,
 
-    # ── Control flow ──
-    "controlFlowFlattening": True,
-    "controlFlowFlatteningThreshold": 0.5,  # Light (50% of blocks)
-    "deadCodeInjection": True,
-    "deadCodeInjectionThreshold": 0.2,      # Light (20%)
+    # ── Control flow: OFF ──
+    # Flattening + dead code cause massive size increase and runtime overhead.
+    "controlFlowFlattening": False,
+    "deadCodeInjection": False,
 
-    # ── Console removal ──
-    "disableConsoleOutput": True,
+    # ── Console: KEEP ──
+    # Removing console.log breaks debugging and uses window-dependent wrappers.
+    "disableConsoleOutput": False,
 
     # ── Safety: MV3 compatible ──
-    "selfDefending": False,          # MUST be false for Service Worker
-    "debugProtection": False,        # Can freeze dev tools
-    "domainLock": [],                # Extension has no domain
+    "selfDefending": False,              # MUST be false for Service Worker
+    "debugProtection": False,            # Can freeze dev tools
+    "domainLock": [],                    # Extension has no domain
     "target": "browser",
 
     # ── Numbers ──
-    "numbersToExpressions": True,
-    "transformObjectKeys": False,    # Keep object keys readable for API calls
-    "unicodeEscapeSequence": False,  # Keep strings compact
+    "numbersToExpressions": True,        # Light obfuscation for numeric constants
+    "transformObjectKeys": False,        # Keep object keys readable
+    "unicodeEscapeSequence": False,      # Keep strings compact
 }
 
-# Service Worker config (background.js) — NO window, NO eval, NO console disable
-# Service Workers use `self` / `globalThis` instead of `window`.
-# Key differences from BROWSER_CONFIG:
-#   - target = "browser-no-eval" (avoids window-dependent injection)
-#   - disableConsoleOutput = False (console.disable wrapper uses window)
-#   - selfDefending = False (already false, but critical here)
-#   - controlFlowFlattening = lighter (reduce Service Worker boot time)
+# Service Worker config (background.js) — identical to BROWSER but with
+# browser-no-eval target to avoid window-dependent references.
 SERVICE_WORKER_CONFIG = {
     **BROWSER_CONFIG,
-    "target": "browser-no-eval",        # Avoids window-dependent global references
-    "disableConsoleOutput": False,       # Console disable uses window → crash in SW
-    "controlFlowFlatteningThreshold": 0.3,  # Lighter for faster SW boot
-    "deadCodeInjectionThreshold": 0.1,      # Lighter for SW
+    "target": "browser-no-eval",
 }
 
 
@@ -147,6 +145,14 @@ def obfuscate_js_file(input_path: Path, output_path: Path, config: dict) -> dict
         if result.returncode != 0:
             stderr = result.stderr.strip()
             raise RuntimeError(f"Obfuscation failed for {input_path.name}: {stderr}")
+
+        # ── Post-obfuscation: wrap in IIFE ──
+        # Prevents global scope pollution when content scripts are
+        # re-injected during extension hot-reload/update without page refresh.
+        # Without this, const/let declarations collide → SyntaxError.
+        obfuscated = output_path.read_text(encoding='utf-8')
+        wrapped = f'(function(){{\n{obfuscated}\n}})();'
+        output_path.write_text(wrapped, encoding='utf-8')
 
         new_size = output_path.stat().st_size
         ratio = (1 - new_size / original_size) * 100 if original_size > 0 else 0

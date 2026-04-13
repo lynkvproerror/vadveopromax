@@ -838,6 +838,47 @@ class GenerationTabBase(QWidget):
             )
             return
         
+        # ★ R2V Lite Guard: block unsupported Lite/Lite LP models for R2V
+        # R2V Lite model keys are pattern-inferred (not HAR-verified) and cause
+        # 100% HTTP 500 on the API. Force user to switch to Fast or Fast LP.
+        model_name = settings.get("model", "")
+        _is_r2v_tab = (
+            getattr(self, 'TAB_LABEL', '').upper() == 'R2V'
+            or getattr(self, 'CONTROLLER_METHOD', '') == 'add_r2v_batch'
+        )
+        _is_lite_r2v = _is_r2v_tab and "Lite" in model_name
+        
+        if not _is_lite_r2v:
+            # Check by resolved model key pattern (fallback for non-class workflows)
+            _resolved = settings.get("model", "")
+            if _resolved.startswith("veo_") and "_r2v_" in _resolved and "_lite" in _resolved:
+                _is_lite_r2v = True
+        
+        if _is_lite_r2v:
+            from ui.popups import show_confirm
+            confirmed = show_confirm(
+                self,
+                "⚠️ R2V không hỗ trợ model Lite",
+                f"Model \"{model_name}\" không được API hỗ trợ cho chế độ R2V.\n"
+                "Tất cả request sẽ bị lỗi 500.\n\n"
+                "• Yes — Tự động chuyển sang Fast [LP] và tiếp tục\n"
+                "• No — Quay lại để chọn model khác",
+                danger=True,
+            )
+            if confirmed:
+                # Auto-switch to Fast LP
+                lp_name = "Veo 3.1 - Fast [LP]"
+                if hasattr(self, 'sidebar') and hasattr(self.sidebar, 'model'):
+                    idx = self.sidebar.model.findText(lp_name)
+                    if idx >= 0:
+                        self.sidebar.model.setCurrentIndex(idx)
+                settings["model"] = lp_name
+                main_win = self.window()
+                if hasattr(main_win, 'show_toast'):
+                    main_win.show_toast(f"⬇️ R2V Model → {lp_name}", "info")
+            else:
+                return  # User chose No — go back to pick different model
+        
         # ★ Credit cost warning gate
         # Scenarios:  Fast+4K → 60/video | Fast+non4K → 10/video | LP+4K → 50/video
         model_name = settings.get("model", "")

@@ -42,6 +42,9 @@ from ui.tabs.queue_components.animation_engine import QueueAnimationMixin
 from ui.tabs.queue_components.thumbnail_system import QueueThumbnailMixin
 from ui.tabs.queue_components.context_menu import QueueContextMenuMixin
 from ui.tabs.queue_components.group_renderer import QueueGroupMixin
+from ui.tabs.queue_components.console_log_widget import ConsoleLogWidget
+from ui.tabs.queue_components.queue_log_translator import QueueLogTranslator
+from core.event_manager import emit_event, EventType
 
 
 def _is_widget_alive(widget) -> bool:
@@ -224,7 +227,11 @@ class TabQueue(
         self._queue_updated_signal.connect(self._on_queue_updated)
         # ★ FIX P1-#1: Register post-queue action check at app level
         if hasattr(self.controller, 'set_queue_complete_callback'):
-            self.controller.set_queue_complete_callback(self._check_post_queue_action)    
+            self.controller.set_queue_complete_callback(self._check_post_queue_action)
+        # ★ Console Log: wire translator → widget
+        self._log_translator = QueueLogTranslator(self)
+        if hasattr(self, '_console_log'):
+            self._log_translator.log_entry_signal.connect(self._console_log.append_entry)
     
     def _on_progress_update_from_thread(self, task_id: str, progress: int, status_text: str = ""):
         """Thread-safe bridge: emit signal from worker thread → main thread."""
@@ -635,6 +642,10 @@ class TabQueue(
         # Stats bar
         stats_bar = self._create_stats_bar()
         layout.addWidget(stats_bar)
+        
+        # Console Log (collapsible panel — collapsed by default)
+        self._console_log = ConsoleLogWidget(self)
+        layout.addWidget(self._console_log)
     
     def _create_filter_bar(self) -> QWidget:
         """Create filter bar with dropdowns and search."""
@@ -2348,6 +2359,9 @@ class TabQueue(
         self._retry_pending_ids = list(failed_ids)
         total = len(self._retry_pending_ids)
         self.retry_failed.emit()
+        emit_event(EventType.UI_STATUS_UPDATE, {
+            'message': f'retry failed tasks {total}',
+        }, source='tab_queue')
         
         main_window = self.window()
         if main_window and hasattr(main_window, 'show_toast'):
@@ -2371,6 +2385,9 @@ class TabQueue(
         if mw and hasattr(mw, 'show_toast'):
             if retried > 0:
                 mw.show_toast(f"♻️ Retrying {retried} failed video(s) across all tasks", "info")
+                emit_event(EventType.UI_STATUS_UPDATE, {
+                    'message': f'retry failed videos {retried}',
+                }, source='tab_queue')
             else:
                 mw.show_toast("No failed videos found to retry", "info")
         
@@ -2509,6 +2526,9 @@ class TabQueue(
         mw = self.window()
         if mw and hasattr(mw, 'show_toast'):
             mw.show_toast(f"🧹 Cleaned {removed} completed task(s)", "info")
+        emit_event(EventType.UI_STATUS_UPDATE, {
+            'message': f'clean completed {removed}',
+        }, source='tab_queue')
 
     def _on_delete_all(self):
         """Delete ALL groups and tasks from the queue."""
@@ -2531,6 +2551,9 @@ class TabQueue(
             main_window.show_toast(
                 f"🗑 Deleted all {group_count} group(s), {count} tasks removed", "info"
             )
+        emit_event(EventType.UI_STATUS_UPDATE, {
+            'message': f'delete all groups {group_count}',
+        }, source='tab_queue')
     
     def _on_reset_all(self):
         """Reset ALL tasks — delete downloaded files, thumbnails, cache. Re-queue."""

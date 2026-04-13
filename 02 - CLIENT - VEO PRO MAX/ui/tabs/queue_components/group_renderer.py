@@ -155,21 +155,24 @@ class QueueGroupMixin:
             else:
                 settled_count = materialized_count
 
-        has_active_upscale = (
+        has_real_active_upscale = (
             upscaling_count > 0
             or upscale_status in ('submitting', 'polling')
-            or (
-                status_text
-                and ('✅' not in status_text)
-                and ('⚠️' not in status_text)
-                and (
-                    '⬆️' in status_text
-                    or '⬇️' in status_text
-                    or 'upscal' in status_text_lower
-                    or 'polling' in status_text_lower
-                    or 'submitted' in status_text_lower
-                )
+        )
+        has_text_active_upscale = (
+            status_text
+            and ('✅' not in status_text)
+            and ('⚠️' not in status_text)
+            and (
+                '⬆️' in status_text
+                or '⬇️' in status_text
+                or 'upscal' in status_text_lower
+                or 'polling' in status_text_lower
+                or 'submitted' in status_text_lower
             )
+        )
+        has_active_upscale = has_real_active_upscale or (
+            status != 'completed' and has_text_active_upscale
         )
         has_failed_outputs = failed_count > 0 or upscale_status == 'failed'
         has_pending_outputs = pending_count > 0
@@ -198,6 +201,8 @@ class QueueGroupMixin:
             'has_pending_outputs': has_pending_outputs,
             'has_retrying_outputs': has_retrying_outputs,
             'is_fully_completed': is_fully_completed,
+            # ★ T2-3: Account recovery state (suppresses terminal FAIL in UI)
+            'is_recovering': bool(td.get('account_recovering', False)),
         }
 
     def _is_fully_completed_task_data(self, td: dict) -> bool:
@@ -965,7 +970,13 @@ class QueueGroupMixin:
                 if has_retrying or has_upscaling:
                     accent = Theme.PURPLE
                 elif has_upscale_fail:
-                    accent = Theme.YELLOW
+                    # ★ T2-3: Red for quarantined, blue for recovering, yellow for normal fail
+                    if td.get('account_quarantined', False):
+                        accent = Theme.RED
+                    elif td.get('account_recovering', False):
+                        accent = Theme.BLUE
+                    else:
+                        accent = Theme.YELLOW
             
             if getattr(widget, '_last_accent', None) != accent:
                 widget._last_accent = accent
@@ -1099,24 +1110,55 @@ class QueueGroupMixin:
 
             # ── Priority 3: Failed / incomplete outputs ──
             if state['has_failed_outputs']:
-                if total <= 1:
-                    label = "⚠️ FAIL"
+                # ★ T2-3: Check quarantine FIRST (terminal) then recovering (transient)
+                is_quarantined = td.get('account_quarantined', False)
+                is_recovering = td.get('account_recovering', False)
+                if is_quarantined:
+                    # Terminal: all recovery exhausted — account is SICK
+                    if total <= 1:
+                        label = "⛔ QUARANTINED"
+                    else:
+                        label = f"⛔ {state['failed_count']}/{total} QUARANTINED"
+                    widget.status_label.setText(label)
+                    widget.status_label.setStyleSheet(
+                        f"color: {Theme.RED}; font-size: 10px; font-weight: bold; border: none;"
+                    )
+                    widget.status_label.setToolTip(
+                        "Account quarantined — all automatic recovery exhausted. "
+                        "Manual intervention or auto-heal required."
+                    )
+                elif is_recovering:
+                    # Transient: coordinator is actively trying remedies
+                    if total <= 1:
+                        label = "🔄 RECOVERING"
+                    else:
+                        label = f"🔄 {state['failed_count']}/{total} RECOVERING"
+                    widget.status_label.setText(label)
+                    widget.status_label.setStyleSheet(
+                        f"color: {Theme.BLUE}; font-size: 10px; font-weight: bold; border: none;"
+                    )
+                    widget.status_label.setToolTip(
+                        "Account recovery in progress — upscale will be retried automatically"
+                    )
                 else:
-                    label = f"⚠️ {state['failed_count']}/{total} FAIL"
-                widget.status_label.setText(label)
-                widget.status_label.setStyleSheet(
-                    f"color: {Theme.YELLOW}; font-size: 10px; font-weight: bold; border: none;"
-                )
-                fail_details = []
-                for vo in video_outputs:
-                    quality = str(vo.get('quality', '') or '').lower()
-                    vo_upscale = str(vo.get('upscale_status', '') or '').lower()
-                    if quality == 'failed' or vo_upscale == 'failed':
-                        msg = vo.get('upscale_error') or vo.get('error') or 'Failed'
-                        fail_details.append(f"Video {vo.get('index', 0) + 1}: {msg}")
-                widget.status_label.setToolTip(
-                    "\n".join(fail_details) if fail_details else "One or more outputs failed"
-                )
+                    if total <= 1:
+                        label = "⚠️ FAIL"
+                    else:
+                        label = f"⚠️ {state['failed_count']}/{total} FAIL"
+                    widget.status_label.setText(label)
+                    widget.status_label.setStyleSheet(
+                        f"color: {Theme.YELLOW}; font-size: 10px; font-weight: bold; border: none;"
+                    )
+                    fail_details = []
+                    for vo in video_outputs:
+                        quality = str(vo.get('quality', '') or '').lower()
+                        vo_upscale = str(vo.get('upscale_status', '') or '').lower()
+                        if quality == 'failed' or vo_upscale == 'failed':
+                            msg = vo.get('upscale_error') or vo.get('error') or 'Failed'
+                            fail_details.append(f"Video {vo.get('index', 0) + 1}: {msg}")
+                    widget.status_label.setToolTip(
+                        "\n".join(fail_details) if fail_details else "One or more outputs failed"
+                    )
                 return
 
             if state['is_fully_completed']:
@@ -1143,8 +1185,6 @@ class QueueGroupMixin:
                 color = Theme.SAPPHIRE
             elif "⬆️" in display or "Upscal" in display:
                 color = Theme.PURPLE
-            elif "✅" in display:
-                color = Theme.GREEN
             else:
                 color = Theme.PEACH
             widget.status_label.setStyleSheet(
@@ -1318,17 +1358,53 @@ class QueueGroupMixin:
         else:
             for i, slot in enumerate(widget.thumb_slots):
                 try:
+                    vi = None
                     if i < len(video_outputs):
-                        slot._video_info = video_outputs[i]
-                        bc_name = video_outputs[i].get('border_color', '')
+                        vi = video_outputs[i]
+                        slot._video_info = vi
+                        bc_name = vi.get('border_color', '')
                         if bc_name:
                             slot._border_color_name = bc_name
+                    
+                    # ★ Per-video upscale awareness: slots already 'success'
+                    # should show as completed (green border, no overlay),
+                    # not be uniformly covered with task-level 96% progress.
+                    us = vi.get('upscale_status', '') if vi else ''
+                    if us == 'success':
+                        # This slot is done — render like a completed slot
+                        self._unregister_shimmer_slot(slot)
+                        thumb_path = (vi.get('thumbnail_path', '') if vi else '') or (
+                            thumbnails[i] if i < len(thumbnails) else ''
+                        )
+                        if thumb_path:
+                            self._invalidate_file_cache(thumb_path)
+                            if self._cached_file_exists(thumb_path):
+                                pix = self._get_cached_pixmap(thumb_path, 40)
+                                if not pix.isNull():
+                                    slot.setPixmap(pix)
+                                    slot._original_pixmap = pix
+                        bc = self._slot_border(slot, Theme.GREEN)
+                        slot.setText('')
+                        slot.setStyleSheet(
+                            f"QLabel {{ border: 2px solid {bc}; border-radius: 4px;"
+                            f"background-color: {Theme.BASE}; padding: 1px; }}"
+                            f"QLabel:hover {{ border-color: {Theme.LAVENDER}; }}"
+                        )
+                        # Wire click-to-play for completed slot
+                        best_file = (vi.get('best_file', '') if vi else '') or (
+                            output_files[i] if i < len(output_files) else ''
+                        )
+                        if best_file and self._cached_file_exists(best_file):
+                            slot.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                            slot.mousePressEvent = lambda e, p=best_file: (
+                                self._open_media(p) if e.button() == Qt.MouseButton.LeftButton else None
+                            )
+                        continue
                     
                     # Load thumbnail into slot if available but not yet loaded
                     # This ensures _apply_thumb_effect can render upscale overlay
                     has_pixmap = slot.pixmap() and not slot.pixmap().isNull()
                     if not has_pixmap:
-                        vi = video_outputs[i] if i < len(video_outputs) else None
                         thumb_path = (vi.get('thumbnail_path', '') if vi else '') or (
                             thumbnails[i] if i < len(thumbnails) else ''
                         )

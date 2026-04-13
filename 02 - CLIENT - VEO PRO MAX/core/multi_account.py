@@ -59,7 +59,21 @@ class MultiAccountManager:
     
     @property
     def total_capacity(self) -> int:
-        """Total capacity = N accounts × max_workers."""
+        """Effective Fast capacity = sum of max_workers for READY accounts only.
+        
+        is_ready = enabled AND session healthy.  Excludes disabled, quarantined,
+        reconnecting, and not-ready accounts so the status bar denominator
+        reflects truly usable capacity at this instant.
+        """
+        return sum(acc.max_workers for acc in self._accounts if acc.is_ready)
+    
+    @property
+    def registered_capacity(self) -> int:
+        """Registered Fast capacity = sum of max_workers for ALL accounts.
+        
+        Includes disabled/quarantined accounts. Use for DevConsole/debug
+        to show the full configured pool size vs effective usable size.
+        """
         return sum(acc.max_workers for acc in self._accounts)
     
     @property
@@ -91,7 +105,15 @@ class MultiAccountManager:
     
     @property
     def total_capacity_lp(self) -> int:
-        """Sum of LP worker caps from all accounts."""
+        """Effective LP cap = sum from READY accounts only (enabled + session healthy)."""
+        return sum(
+            getattr(acc.session, 'max_workers_lp', 20)
+            for acc in self._accounts if acc.is_ready
+        )
+    
+    @property
+    def registered_capacity_lp(self) -> int:
+        """Registered LP cap = sum from ALL accounts (including disabled)."""
         return sum(
             getattr(acc.session, 'max_workers_lp', 20)
             for acc in self._accounts
@@ -99,12 +121,28 @@ class MultiAccountManager:
     
     @property
     def total_max_upscale(self) -> int:
-        """Sum of UI-facing upscale caps from all accounts."""
+        """Effective upscale cap from READY accounts only (enabled + session healthy)."""
+        ready = sum(1 for acc in self._accounts if acc.is_ready)
+        return ready * self._display_max_upscale_per_account()
+    
+    @property
+    def registered_max_upscale(self) -> int:
+        """Registered upscale cap from ALL accounts."""
         return self.account_count * self._display_max_upscale_per_account()
     
     @property
+    def enabled_count(self) -> int:
+        """Number of enabled accounts (subset of registered)."""
+        return sum(1 for acc in self._accounts if acc.is_enabled)
+    
+    @property
+    def ready_count(self) -> int:
+        """Number of ready accounts (enabled + session healthy)."""
+        return sum(1 for acc in self._accounts if acc.is_ready)
+    
+    @property
     def account_count(self) -> int:
-        """Number of registered accounts."""
+        """Number of registered accounts (all, including disabled)."""
         return len(self._accounts)
     
     @property

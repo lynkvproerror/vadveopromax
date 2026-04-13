@@ -376,9 +376,25 @@ class AccountSupervisor:
                     f"[Supervisor:{email}] ❌ No projectId after 2 attempts — "
                     f"marking account NOT READY (foremen will idle)"
                 )
-                # ★ FIX 401: Mark account sick so foremen idle instead of
-                # spamming 401s. Recovery loop will clear this when session heals.
-                self.engine._mark_account_sick(email)
+                # ★ P2-5: Route quarantine decision through coordinator.
+                # Coordinator decides escalation level; direct _mark_account_sick
+                # only when no coordinator (legacy fallback).
+                _coord = getattr(self.engine, '_recovery_coordinator', None)
+                if _coord:
+                    try:
+                        from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                        import asyncio as _aio
+                        _aio.ensure_future(_coord.report_signal(RecoverySignal(
+                            account_email=email,
+                            source="supervisor",
+                            error_type="no_project_id",
+                            severity=SignalSeverity.CRITICAL,
+                            detail="no projectId after 2 attempts — account not ready",
+                        )))
+                    except Exception:
+                        self.engine._mark_account_sick(email)
+                else:
+                    self.engine._mark_account_sick(email)
                 return
         
         # Project ready — tab stays on main flow page.
@@ -785,6 +801,7 @@ class Engine:
             extension_bridge=self._extension_bridge,
             wake_event=self._upscale_wake_event,  # T1: event-driven wake
             pre_submit_gate_fn=self._pre_submit_gate,  # Centralized xcd + reCAPTCHA gate
+            regenerate_thumbnail_fn=self._regenerate_thumbnail,  # ★ B3: Thumbnail regen from upscaled file
         )
         
         # Manifest manager: portable project data alongside output videos
@@ -898,6 +915,7 @@ class Engine:
         self._force_prewarm: set = set()  # emails that need forced prewarm (Fix-M1)
         self._prewarm_stats: Dict[str, dict] = {}  # email → {count, last_idle_secs, last_time}
         self._prewarm_locks: Dict[str, asyncio.Lock] = {}  # email → Lock (coordinate foremen)
+        self._pre_submit_active: Dict[str, int] = {}  # email → foremen in pre-submit phases
         
         # Gemini AI: Prompt enhancement + policy fix
         from core.prompt_enhancer import PromptEnhancer
@@ -908,6 +926,14 @@ class Engine:
         # Tab Keepalive tracking (read by get_dashboard_stats)
         self._keepalive_last_ping_count: int = 0
         self._keepalive_last_ping_time: float = 0.0
+        
+        # ★ T1-1: Account Recovery Coordinator
+        # Single source of truth for all browser/account recovery actions.
+        from core.account_recovery_coordinator import AccountRecoveryCoordinator
+        self._recovery_coordinator = AccountRecoveryCoordinator(
+            engine=self,
+            upscale_queue=self._upscale_queue,
+        )
     
     @property
     def is_running(self) -> bool:
@@ -1424,6 +1450,14 @@ class Engine:
         if self._stop_event.is_set():
             return False
         
+        # ★ T1-2: Coordinator submit block — reject if account is recovering
+        if hasattr(self, '_recovery_coordinator') and self._recovery_coordinator.is_submit_blocked(email):
+            log.info(
+                f"[PreSubmitGate:{email}] BLOCKED — account recovery in progress "
+                f"(coordinator state={self._recovery_coordinator.get_account_state(email).value})"
+            )
+            return False
+        
         # ── Gate 1: x-client-data check ──
         # When Extension bridge is connected, submit uses page-context fetch()
         # where Chrome auto-adds the REAL x-client-data (72 chars).
@@ -1716,9 +1750,24 @@ class Engine:
             log.warning(
                 f"⚠️ No projectId for {email} — marking account NOT READY"
             )
-            # ★ FIX 401: Mark account sick to stop foremen from submitting.
-            # Without this, every foreman keeps trying → 401 retry storm.
-            self._mark_account_sick(email)
+            # ★ P2-5: Route quarantine decision through coordinator.
+            # Coordinator runs full escalation ladder; direct _mark_account_sick
+            # only when no coordinator (legacy fallback).
+            _coord = getattr(self, '_recovery_coordinator', None)
+            if _coord:
+                try:
+                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                    asyncio.ensure_future(_coord.report_signal(RecoverySignal(
+                        account_email=email,
+                        source="engine_setup",
+                        error_type="no_project_id",
+                        severity=SignalSeverity.CRITICAL,
+                        detail="no projectId — account not ready",
+                    )))
+                except Exception:
+                    self._mark_account_sick(email)
+            else:
+                self._mark_account_sick(email)
     
     async def _check_app_availability(self, account):
         """Fix 3: checkAppAvailability — HAR-verified startup signal.
@@ -1850,9 +1899,26 @@ class Engine:
             supervisor.abort_foreman()
             log.info(f"[DD4] {email}: Foreman abort signal sent")
         
-        # ★ Sick detection: N consecutive trips → mark account sick
+        # ★ Sick detection: N consecutive trips → route through coordinator
         if trip_count >= self.SICK_TRIP_THRESHOLD and email not in self._sick_accounts:
-            self._mark_account_sick(email)
+            # ★ P2-5: Route quarantine through coordinator signal.
+            # Coordinator runs full escalation; direct _mark_account_sick only
+            # when no coordinator (legacy).
+            _coord = getattr(self, '_recovery_coordinator', None)
+            if _coord:
+                try:
+                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                    asyncio.ensure_future(_coord.report_signal(RecoverySignal(
+                        account_email=email,
+                        source="circuit_breaker",
+                        error_type="sick_threshold",
+                        severity=SignalSeverity.CRITICAL,
+                        detail=f"trip #{trip_count} >= SICK_TRIP_THRESHOLD ({self.SICK_TRIP_THRESHOLD})",
+                    )))
+                except Exception:
+                    self._mark_account_sick(email)
+            else:
+                self._mark_account_sick(email)
     
     def _close_circuit_breaker(self, email: str):
         """CLOSE breaker — wake all sleeping workers.
@@ -1871,6 +1937,10 @@ class Engine:
         # ★ Clear sick status if account was marked sick
         if email in self._sick_accounts:
             self._sick_accounts.pop(email, None)
+            # ★ P1-fix: Clear coordinator quarantine latch
+            coord = getattr(self, '_recovery_coordinator', None)
+            if coord:
+                coord.clear_quarantine(email)
             log.info(
                 f"✅ [SickAccount] {email}: RECOVERED — "
                 f"circuit closed, account available for dispatch again"
@@ -1976,26 +2046,52 @@ class Engine:
         1. Account added to _sick_accounts (foreman will idle)
         2. All RUNNING/WAITING_POLL tasks requeued (high priority, any account)
         3. ★ Auto-close browser + set 5-min cooldown to prevent infinite restart loops
+        4. ★ P1-4: Sync SICK state to coordinator (single source of truth)
         """
         import time as _time
         self._sick_accounts[email] = _time.time()
         
         # Requeue all running tasks from this account
         requeued = 0
+        skipped_owned = 0
         if self._dispatcher:
-            from core.dispatcher import TaskState
+            from core.dispatcher import TaskState, has_live_background_owner
             for task in list(self._dispatcher._all_tasks.values()):
                 if (task.assigned_account == email and 
                         task.state in (TaskState.RUNNING, TaskState.WAITING_POLL)):
+                    # ★ T0-3 (GAP-8): Skip tasks with live background owner
+                    # (e.g. UpscaleQueue). Requeuing these would orphan the
+                    # owner's job and create cross-account pickup errors.
+                    if has_live_background_owner(task, coordinator=getattr(self, '_recovery_coordinator', None)):
+                        skipped_owned += 1
+                        continue
                     if self._dispatcher.requeue_task(task):
                         requeued += 1
         
         log.warning(
             f"🤒 [SickAccount] {email}: MARKED SICK — "
             f"{self._circuit_trip_count.get(email, 0)} consecutive circuit trips. "
-            f"Requeued {requeued} task(s) to healthy accounts. "
+            f"Requeued {requeued} task(s) to healthy accounts"
+            f"{f', skipped {skipped_owned} background-owned' if skipped_owned else ''}. "
             f"Account will idle until circuit breaker closes."
         )
+        
+        # ★ P1-4: Sync SICK state to coordinator — single source of truth.
+        # Coordinator must know to freeze leases, block submits, pause UQ.
+        # Without this, engine marks sick but coordinator thinks HEALTHY.
+        coord = getattr(self, '_recovery_coordinator', None)
+        if coord:
+            from core.account_recovery_coordinator import AccountState
+            coord._escalation_exhausted[email] = True
+            coord._account_states[email] = AccountState.SICK
+            coord._submit_blocked.add(email)
+            # Pause UQ through coordinator
+            if coord._upscale_queue:
+                coord._upscale_queue.pause_account(email)
+            log.info(
+                f"[SickAccount] {email}: coordinator synced → "
+                f"SICK + submit_blocked + UQ paused"
+            )
         
         # ★ Fix 4b: Auto-close browser on persistent failures
         # Browser state is broken (reCAPTCHA cascade, zombie cleanup loop).
@@ -2117,25 +2213,46 @@ class Engine:
                             
                             log.warning(
                                 f"🔄 [CircuitBreaker] {email}: {consecutive}× consecutive 403 "
-                                f"→ soft recovery (no browser kill, preserving sessions)"
+                                f"→ routing to recovery coordinator"
                             )
                             try:
-                                ok = await account.soft_recover_browser()
-                                if ok:
-                                    log.info(
-                                        f"✅ [CircuitBreaker] {email}: soft recovery OK "
-                                        f"— resetting counter, closing breaker"
-                                    )
-                                    self._circuit_consecutive_403[email] = 0
-                                    self._close_circuit_breaker(email)
+                                # ★ P1-3: Route through coordinator instead of direct call
+                                coordinator = getattr(self, '_recovery_coordinator', None)
+                                if coordinator:
+                                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                                    await coordinator.report_signal(RecoverySignal(
+                                        account_email=email,
+                                        source="circuit_breaker",
+                                        error_type="consecutive_403",
+                                        severity=SignalSeverity.MEDIUM,
+                                        detail=f"{consecutive}x 403",
+                                    ))
+                                    # Check if coordinator recovered the account
+                                    if not coordinator.is_account_blocked(email):
+                                        log.info(
+                                            f"✅ [CircuitBreaker] {email}: coordinator recovery done "
+                                            f"— resetting counter, closing breaker"
+                                        )
+                                        self._circuit_consecutive_403[email] = 0
+                                        self._close_circuit_breaker(email)
                                 else:
-                                    log.warning(
-                                        f"⚠️ [CircuitBreaker] {email}: soft recovery returned False "
-                                        f"— keeping circuit open, will retry next cycle"
-                                    )
+                                    # Fallback: no coordinator — direct call (legacy path)
+                                    ok = await account.soft_recover_browser()
+                                    if ok:
+                                        log.info(
+                                            f"✅ [CircuitBreaker] {email}: soft recovery OK "
+                                            f"— resetting counter, closing breaker"
+                                        )
+                                        self._circuit_consecutive_403[email] = 0
+                                        self._close_circuit_breaker(email)
+                                    else:
+                                        log.warning(
+                                            f"⚠️ [CircuitBreaker] {email}: soft recovery returned False "
+                                            f"— keeping circuit open, will retry next cycle"
+                                        )
                             except Exception as e:
                                 log.error(
-                                    f"❌ [CircuitBreaker] {email}: soft recovery error: {e}"
+                                    f"❌ [CircuitBreaker] {email}: recovery error: {e}"
                                 )
                             finally:
                                 self._circuit_restart_pending[email] = False
@@ -2205,19 +2322,44 @@ class Engine:
                                             self._last_hard_nav_time = {}
                                         self._last_hard_nav_time[email] = time.time()
                                         try:
-                                            nav_ok = await bridge.trigger_hard_navigation(email)
-                                            if nav_ok:
-                                                log.info(
-                                                    f"✅ [CircuitBreaker] {email}: hard navigation sent, "
-                                                    f"waiting 25s for reCAPTCHA widget..."
-                                                )
-                                                if await self._interruptible_sleep(25):
-                                                    return  # Stop-aware
+                                            # ★ P1-3: Route through coordinator
+                                            coordinator = getattr(self, '_recovery_coordinator', None)
+                                            if coordinator:
+                                                from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                                                await coordinator.report_signal(RecoverySignal(
+                                                    account_email=email,
+                                                    source="circuit_breaker",
+                                                    error_type="recaptcha_unhealthy",
+                                                    severity=SignalSeverity.HIGH,
+                                                    detail=f"unhealthy {unhealthy_duration:.0f}s",
+                                                ))
                                                 self._recaptcha_unhealthy_since.pop(email, None)
+                                            else:
+                                                # Fallback: no coordinator — direct call (legacy path)
+                                                nav_ok = await bridge.trigger_hard_navigation(email)
+                                                if nav_ok:
+                                                    log.info(
+                                                        f"✅ [CircuitBreaker] {email}: hard navigation sent, "
+                                                        f"waiting 25s for reCAPTCHA widget..."
+                                                    )
+                                                    if await self._interruptible_sleep(25):
+                                                        return  # Stop-aware
+                                                    self._recaptcha_unhealthy_since.pop(email, None)
+                                                else:
+                                                    log.error(
+                                                        f"💀 [CircuitBreaker] {email}: hard navigation FAILED "
+                                                        f"(no response) — escalating to tab_dead"
+                                                    )
+                                                    if bridge.on_tab_dead:
+                                                        bridge.on_tab_dead(email, "hard_nav_no_response")
+                                                    self._recaptcha_unhealthy_since.pop(email, None)
                                         except Exception as e:
                                             log.error(
                                                 f"❌ [CircuitBreaker] {email}: hard navigation error: {e}"
                                             )
+                                            # ★ v5.2: Exception during hard nav = tab dead
+                                            if bridge.on_tab_dead:
+                                                bridge.on_tab_dead(email, f"hard_nav_exception: {e}")
                         else:
                             # reCAPTCHA healthy — clear tracker
                             if hasattr(self, '_recaptcha_unhealthy_since'):
@@ -2241,6 +2383,10 @@ class Engine:
                                 if ok:
                                     self._sick_accounts.pop(email, None)
                                     self._close_circuit_breaker(email)
+                                    # ★ P1-fix: Clear coordinator quarantine latch
+                                    coord = getattr(self, '_recovery_coordinator', None)
+                                    if coord:
+                                        coord.clear_quarantine(email)
                                     if bridge:
                                         bridge.clear_browser_cooldown(email)
                                     log.info(
@@ -2690,6 +2836,38 @@ class Engine:
     
     # (should_upscale_wait removed — UpscaleQueue now runs independently)
     
+    # ── Pre-submit Activity Tracking ──
+    
+    def _enter_pre_submit(self, email: str, task) -> None:
+        """Mark that a foreman has entered the pre-submit phase for this account.
+        
+        Called AFTER all requeue-only branches pass (LP swap, capacity,
+        D2 affinity, cancel check). Uses per-task flag to prevent double-count.
+        
+        The _pre_submit_active counter is checked by _maybe_prewarm() to avoid
+        soft-recovering a browser tab while other foremen have active operations.
+        """
+        if getattr(task, '_in_pre_submit', False):
+            return  # Already counted — idempotent
+        task._in_pre_submit = True
+        self._pre_submit_active[email] = self._pre_submit_active.get(email, 0) + 1
+    
+    def _leave_pre_submit(self, email: str, task) -> None:
+        """Release pre-submit tracking for this task.
+        
+        Called when foreman enters real submit (mark_submit_started),
+        when task is requeued from pre-submit path, or as safety net
+        in the finally block. Per-task flag prevents double-decrement.
+        """
+        if not task or not getattr(task, '_in_pre_submit', False):
+            return  # Not counted — idempotent
+        task._in_pre_submit = False
+        count = self._pre_submit_active.get(email, 0)
+        if count > 1:
+            self._pre_submit_active[email] = count - 1
+        else:
+            self._pre_submit_active.pop(email, None)
+    
     # ── Pre-warm: Proactive reCAPTCHA Recovery ──
     
     async def _maybe_prewarm(self, account) -> None:
@@ -2743,6 +2921,17 @@ class Engine:
                     f"(sem={sem._value}), would abort active fetch"
                 )
                 return
+        
+        # ── Guard: skip prewarm if ANY foreman is in pre-submit phase ──
+        # Pre-submit includes: image upload, gate wait, burst delay, frame
+        # re-upload. Soft recovery would abort these active operations.
+        _ps_count = self._pre_submit_active.get(email, 0)
+        if _ps_count > 0:
+            log.debug(
+                f"[PreWarm] {email}: SKIP — {_ps_count} foremen in pre-submit "
+                f"phases, would abort active operations"
+            )
+            return
     
         # BUG-32: Skip prewarm during stop (soft recovery + reCAPTCHA = 20+s)
         if self._stop_event.is_set():
@@ -2769,12 +2958,50 @@ class Engine:
             if not force and idle_secs < threshold_secs:
                 return  # Another foreman already prewarmed
             
+            # ★ P0-B: Skip if UpscaleQueue has active/pending work for this account.
+            # PreWarm's LOW signal triggers coordinator drain → pause_account → worker cancel.
+            # That destroys active upscale workers. Only prewarm truly idle accounts.
+            _uq = getattr(self, '_upscale_queue', None)
+            if _uq:
+                # Check if worker is actively running
+                _uq_worker = _uq._upscale_processors.get(email)
+                if _uq_worker and not _uq_worker.done():
+                    log.info(f"[PreWarm] {email}: SKIP — UpscaleQueue worker active")
+                    return
+                # Check if queue has pending jobs
+                _uq_q = _uq._queues.get(email)
+                if _uq_q and not _uq_q.empty():
+                    log.info(f"[PreWarm] {email}: SKIP — UpscaleQueue has pending jobs")
+                    return
+            
+            # ★ P1-A: Skip if coordinator says account is not HEALTHY.
+            # Account in recovery/sick state should not get more recovery signals.
+            _coord = getattr(self, '_recovery_coordinator', None)
+            if _coord:
+                from core.account_recovery_coordinator import AccountState
+                _state = _coord.get_account_state(email)
+                if _state != AccountState.HEALTHY:
+                    log.info(
+                        f"[PreWarm] {email}: SKIP — coordinator state={_state.value} "
+                        f"(not HEALTHY)"
+                    )
+                    return
+            
             # Re-check in-flight guard inside lock
             if bridge:
                 sem = bridge._submit_semaphores.get(email)
                 if sem and getattr(sem, '_value', 1) < getattr(bridge, '_MAX_CONCURRENT_SUBMITS', 1):
                     log.info(f"[PreWarm] {email}: SKIP (inside lock) — submit in-flight")
                     return
+            
+            # Re-check pre-submit activity inside lock
+            _ps_count2 = self._pre_submit_active.get(email, 0)
+            if _ps_count2 > 0:
+                log.info(
+                    f"[PreWarm] {email}: SKIP (inside lock) — "
+                    f"{_ps_count2} foremen in pre-submit"
+                )
+                return
             
             if self._stop_event.is_set():
                 return
@@ -2807,7 +3034,20 @@ class Engine:
             if self._stop_event.is_set():
                 return
             try:
-                recovered = await account.soft_recover_browser()
+                # ★ P1-3: Route through coordinator
+                coordinator = getattr(self, '_recovery_coordinator', None)
+                if coordinator:
+                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                    await coordinator.report_signal(RecoverySignal(
+                        account_email=email,
+                        source="prewarm",
+                        error_type="idle_prewarm",
+                        severity=SignalSeverity.LOW,
+                        detail="pre-submit soft recovery",
+                    ))
+                    recovered = not coordinator.is_account_blocked(email)
+                else:
+                    recovered = await account.soft_recover_browser()
             except Exception as e:
                 log.warning(f"[PreWarm] {email}: soft recovery failed: {e}")
                 recovered = False
@@ -3015,12 +3255,16 @@ class Engine:
             return True  # Assume healthy if no bridge
         self._dispatcher.set_recaptcha_health_fn(_check_recaptcha_health)
         
-        # Hard cap: Wire max_workers lookup so dispatcher can cap _per_account_running
-        # Without this, T2I fire-and-forget releases session workers immediately,
-        # allowing unbounded task dispatch (e.g., 54 tasks for max_workers=20)
-        def _get_max_workers(email: str) -> int:
+        # Hard cap: expose task-aware prompt capacity so dispatcher reserves
+        # tasks against the correct model pool (LP vs Fast) and output_count.
+        def _get_max_workers(email: str, task: Task = None) -> int:
             for acc in self._account_manager._accounts:
                 if acc.email == email:
+                    if task is not None:
+                        output_count = getattr(task, 'output_count', 1) or 1
+                        worker_cap = self._get_lp_worker_cap(acc) \
+                            if self._task_uses_lp_workers(task) else acc.session.max_workers
+                        return self._get_prompt_concurrency_cap(worker_cap, output_count)
                     return acc.session.max_workers
             return 20  # Fallback default
         self._dispatcher.set_max_workers_fn(_get_max_workers)
@@ -3209,34 +3453,82 @@ class Engine:
             self._task_group = None
             log.info("Engine stopped — worker/foreman tracking reset")
     
-    def _get_typical_output_count(self) -> int:
-        """Peek at queue to determine typical output_count for foreman sizing.
-        
-        Returns: most common output_count in ready queue, or 2 as default.
-        """
+    def _peek_ready_tasks(self, limit: int = 10) -> List[Task]:
+        """Peek READY tasks from dispatcher queue without consuming them."""
+        items = []
+        tasks: List[Task] = []
         try:
-            # Peek up to 10 items from ready queue without consuming them
-            items = []
-            while not self._dispatcher._ready_queue.empty() and len(items) < 10:
+            while not self._dispatcher._ready_queue.empty() and len(items) < limit:
                 try:
-                    items.append(self._dispatcher._ready_queue.get_nowait())
+                    item = self._dispatcher._ready_queue.get_nowait()
                 except Exception:
                     break
-            
-            if items:
-                counts = [
-                    getattr(self._dispatcher._unpack_ready_queue_item(item)[-1], 'output_count', 2) or 2
-                    for item in items
-                ]
-                # Put items back
-                for item in items:
+                items.append(item)
+                try:
+                    tasks.append(self._dispatcher._unpack_ready_queue_item(item)[-1])
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            for item in items:
+                try:
                     self._dispatcher._ready_queue.put_nowait(item)
-                # Return most common
-                from collections import Counter
-                return Counter(counts).most_common(1)[0][0]
+                except Exception:
+                    pass
+        return tasks
+
+    def _get_typical_output_count(self, ready_tasks: Optional[List[Task]] = None) -> int:
+        """Determine typical output_count for foreman sizing."""
+        try:
+            tasks = ready_tasks if ready_tasks is not None else self._peek_ready_tasks(limit=10)
+            if tasks:
+                counts = [getattr(task, 'output_count', 2) or 2 for task in tasks]
+                return collections.Counter(counts).most_common(1)[0][0]
         except Exception:
             pass
         return 2  # Safe default: most T2V projects use output_count=2
+
+    def _get_lp_worker_cap(self, account: AccountManager) -> int:
+        """Return effective LP worker cap within the shared account pool."""
+        total_cap = int(getattr(account.session, 'max_workers', 0) or 0)
+        lp_cap = int(getattr(account.session, 'max_workers_lp', total_cap) or total_cap)
+        if total_cap > 0 and lp_cap > 0:
+            return min(total_cap, lp_cap)
+        return max(total_cap, lp_cap, 1)
+
+    def _task_uses_lp_workers(self, task: Optional[Task]) -> bool:
+        """Check whether a task should consume LP worker capacity."""
+        if not task:
+            return False
+        try:
+            from config.constants import is_relaxed_model
+            return bool(is_relaxed_model(getattr(task, 'model', '') or ''))
+        except Exception:
+            return False
+
+    def _get_foreman_worker_cap(
+        self,
+        account: AccountManager,
+        ready_tasks: Optional[List[Task]] = None,
+    ) -> int:
+        """Choose the worker pool cap used for foreman sizing.
+
+        If the queued workload is mostly LP, size foremen from the LP pool.
+        Mixed queues are still protected by dispatcher's task-aware hard cap.
+        """
+        tasks = ready_tasks if ready_tasks is not None else self._peek_ready_tasks(limit=10)
+        if tasks:
+            lp_count = sum(1 for task in tasks if self._task_uses_lp_workers(task))
+            if lp_count and lp_count >= len(tasks) / 2:
+                return self._get_lp_worker_cap(account)
+        return max(1, int(getattr(account.session, 'max_workers', 0) or 1))
+
+    def _get_prompt_concurrency_cap(self, worker_cap: int, output_count: int) -> int:
+        """Convert worker-slot capacity into concurrent prompt capacity."""
+        worker_cap = max(1, int(worker_cap or 1))
+        output_count = max(1, int(output_count or 1))
+        return max(1, worker_cap // output_count)
     
     def _is_image_only_workload(self) -> bool:
         """Check if all READY queued tasks are T2I/I2I (image generation).
@@ -3288,13 +3580,13 @@ class Engine:
                 evt.set()
         account._on_lp_released = _lp_released_cb
         
-        # RC4: Calculate foreman count from max_workers / typical_output.
-        # Multiple foremen allow parallel polling (20/20 workers active).
-        # 429 prevention relies on _GLOBAL_MIN_SUBMIT_GAP (45s) + SubmitGate,
-        # NOT on limiting foremen count.
-        import math
-        typical_output = self._get_typical_output_count()
-        raw_foreman_count = max(1, math.ceil(account.max_workers / typical_output))
+        # RC4: Size foremen from prompt concurrency, not raw worker slots.
+        # LP queues use the LP pool cap so submitters cannot exceed Settings >
+        # Profile limits for that model family.
+        ready_tasks = self._peek_ready_tasks(limit=10)
+        typical_output = self._get_typical_output_count(ready_tasks)
+        worker_cap = self._get_foreman_worker_cap(account, ready_tasks)
+        raw_foreman_count = self._get_prompt_concurrency_cap(worker_cap, typical_output)
         
         # G1: License gate — GLOBAL cap by permissions.limits.max_foremen
         # This caps total foremen across ALL accounts (not per-account)
@@ -3360,7 +3652,7 @@ class Engine:
         self._active_account_emails.add(account.email)
         log.info(
             f"[Supervisor:{account.email}] Spawned CHỦ + {foreman_count} Foremen "
-            f"(max_workers={account.max_workers}, output={typical_output}, "
+            f"(worker_cap={worker_cap}, output={typical_output}, "
             f"retry={account.retry_count}, timeout={account.request_timeout}s)"
         )
     
@@ -3412,14 +3704,14 @@ class Engine:
                     
                     current = self._foreman_count.get(account.email, 0)
                     
-                    # Calculate optimal foreman count per account
-                    import math
-                    typical_output = self._get_typical_output_count()
-                    foreman_cap = 12 if self._is_image_only_workload() else account.max_workers
-                    optimal = max(1, min(
-                        math.ceil(account.max_workers / typical_output),
-                        foreman_cap,
-                    ))
+                    # Calculate optimal foreman count per account from the
+                    # effective worker pool for the queued workload.
+                    ready_tasks = self._peek_ready_tasks(limit=10)
+                    typical_output = self._get_typical_output_count(ready_tasks)
+                    worker_cap = self._get_foreman_worker_cap(account, ready_tasks)
+                    optimal = self._get_prompt_concurrency_cap(worker_cap, typical_output)
+                    if self._is_image_only_workload():
+                        optimal = min(optimal, 12)
                     
                     # Target = optimal (each account independently scales to its max)
                     # No per_account_ready splitting — accounts pick from global queue
@@ -3447,7 +3739,7 @@ class Engine:
                     log.info(
                         f"[ScaleForemen:{account.email}] Scaling {current} → "
                         f"{current + to_add} foremen (pending={total_pending}, "
-                        f"optimal={optimal}, max_workers={account.max_workers})"
+                        f"optimal={optimal}, worker_cap={worker_cap})"
                     )
                     
                     start_idx = current
@@ -3577,10 +3869,14 @@ class Engine:
             log.error(f"Failed to queue hot-reload for {account.email}: {e}")
     
     async def _do_browser_recovery(self, account, worker_id: str, tier: str) -> bool:
-        """Deduped browser recovery.
+        """Deduped browser recovery — routes through coordinator.
         
         All workers sharing the same account use one recovery key.
         Lock ensures only one recovery attempt runs at a time.
+        
+        ★ P1-3: Routes through coordinator.report_signal() when available.
+        Falls back to direct account.soft_recover_browser() / restart_browser()
+        when coordinator is not initialized.
         
         Args:
             account: AccountManager for the target account
@@ -3615,7 +3911,40 @@ class Engine:
                 )
                 return True
             
-            # We are the first worker — perform actual recovery
+            # ★ P1-3: Route through coordinator
+            coordinator = getattr(self, '_recovery_coordinator', None)
+            if coordinator:
+                try:
+                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                    severity = SignalSeverity.HIGH if tier == "hard" else SignalSeverity.MEDIUM
+                    await coordinator.report_signal(RecoverySignal(
+                        account_email=recovery_key,
+                        source=f"worker_{worker_id}",
+                        error_type=f"browser_{tier}",
+                        severity=severity,
+                        detail=f"{tier} recovery request",
+                    ))
+                    # Check if coordinator recovered successfully
+                    ok = not coordinator.is_account_blocked(recovery_key)
+                    if ok:
+                        self._browser_recovery_epoch[recovery_key] = epoch_now + 1
+                        log.info(
+                            f"✅ Worker {worker_id}: coordinator {tier} recovery complete "
+                            f"(epoch→{epoch_now + 1})"
+                        )
+                        self._account_manager.fix_short_client_data()
+                    else:
+                        log.warning(
+                            f"⚠️ Worker {worker_id}: coordinator {tier} recovery — "
+                            f"account still blocked"
+                        )
+                    return ok
+                except Exception as e:
+                    log.warning(
+                        f"[{worker_id}] Coordinator signal failed: {e} — fallback to direct"
+                    )
+            
+            # Fallback: direct browser recovery (legacy path)
             try:
                 if tier == "soft":
                     log.warning(f"🔄 Worker {worker_id}: soft browser recovery for {recovery_key}...")
@@ -3630,8 +3959,6 @@ class Engine:
                         f"✅ Worker {worker_id}: {tier} browser recovery complete "
                         f"(epoch→{epoch_now + 1})"
                     )
-                    # After restart, borrow x-client-data from other accounts
-                    # if ours is still short (Variations Service not enrolled)
                     self._account_manager.fix_short_client_data()
                 else:
                     log.error(f"❌ Worker {worker_id}: {tier} browser recovery returned False")
@@ -3669,16 +3996,18 @@ class Engine:
             foreman_idx = 0
         
         if foreman_idx > 0:
-            # Wait for first submit to succeed (max 90s)
+            # Wait for first submit to succeed (max 30s)
+            # ★ Reduced from 90s: probe already validates reCAPTCHA pipeline,
+            # so first real submit shouldn't take long. Start anyway on timeout.
             if supervisor and not supervisor._first_submit_ok.is_set():
                 log.info(f"[{fid}] ⏳ Waiting for foreman-0 first submit success...")
                 try:
                     await asyncio.wait_for(
-                        supervisor._first_submit_ok.wait(), timeout=90.0
+                        supervisor._first_submit_ok.wait(), timeout=30.0
                     )
                     log.info(f"[{fid}] ✅ First submit verified — starting")
                 except asyncio.TimeoutError:
-                    log.warning(f"[{fid}] ⚠️ First submit timeout (90s) — starting anyway")
+                    log.warning(f"[{fid}] ⚠️ First submit timeout (30s) — starting anyway")
             
             # ★ Cold profile gate: foremen idx>1 wait for 2nd success
             # Serializes early submits to build reCAPTCHA trust per-account.
@@ -3690,12 +4019,14 @@ class Engine:
                     f"successful submit ({account.email})..."
                 )
                 try:
+                    # ★ Reduced from 120s: probe validates pipeline + 1st success
+                    # proves trust. Don't block foremen for 2 full minutes.
                     await asyncio.wait_for(
-                        supervisor._second_submit_ok.wait(), timeout=120.0
+                        supervisor._second_submit_ok.wait(), timeout=30.0
                     )
                     log.info(f"[{fid}] ✅ 2nd submit verified — trust established, starting")
                 except asyncio.TimeoutError:
-                    log.warning(f"[{fid}] ⚠️ 2nd submit timeout (120s) — starting anyway")
+                    log.warning(f"[{fid}] ⚠️ 2nd submit timeout (30s) — starting anyway")
             # Stagger: always use Settings tab anti-detect delay
             from config.settings import get_settings as _get_stagger_settings
             _s = _get_stagger_settings()
@@ -3866,7 +4197,8 @@ class Engine:
                                 f"({account.session.active_workers_lp}/{account.session.max_workers_lp}) "
                                 f"— requeueing task {task.id}, waiting for LP slot"
                             )
-                            self._dispatcher.requeue_task(task, notify=False)
+                            self._dispatcher.requeue_task(task, notify=False, preserve_progress=True,
+                                                          status_text="⏳ Waiting for LP slot")
                             # Event-driven LP wait — prevents busy-loop churn
                             _lp_evt = self._lp_workers_available.setdefault(
                                 account.email, asyncio.Event()
@@ -3941,14 +4273,20 @@ class Engine:
                         except Exception:
                             pass
                     
-                    # Edge case: if max_workers < output_count, clamp to max_workers
-                    # Otherwise acquire_workers(output_count) would ALWAYS fail
-                    if output_count > account.max_workers:
+                    # Edge case: if the model-specific worker cap is smaller than
+                    # output_count, clamp before trying to acquire workers.
+                    task_worker_cap = (
+                        self._get_lp_worker_cap(account)
+                        if getattr(task, "_is_lp_task", False)
+                        else max(1, int(account.max_workers or 1))
+                    )
+                    if output_count > task_worker_cap:
                         log.warning(
                             f"[{fid}] output_count={output_count} > "
-                            f"max_workers={account.max_workers} — clamping"
+                            f"worker_cap={task_worker_cap} — clamping"
                         )
-                        output_count = account.max_workers
+                        output_count = task_worker_cap
+                        task.output_count = output_count
                     if output_count > 1:
                         extra = output_count - 1
                         if (account.acquire_workers_lp(extra) if getattr(task, "_is_lp_task", False) else account.acquire_workers(extra)):
@@ -3970,12 +4308,17 @@ class Engine:
                                     f"output_count={output_count} "
                                     f"(need {output_count}, have {account.session.available_workers + 1})"
                                 )
-                            self._dispatcher.requeue_task(task, notify=False)
+                            self._dispatcher.requeue_task(task, notify=False, preserve_progress=True)
                             (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                             worker_count = 0
-                            # 15s base + random jitter prevents all workers retrying simultaneously
-                            if await self._interruptible_sleep(15.0 + random.uniform(0, 5.0)):
-                                continue  # Stop-aware — re-check loop condition
+                            # Event-driven: wait for any worker release on this account
+                            # (replaces blind sleep — instant wake when capacity freed)
+                            _cap_evt = self._workers_available.setdefault(account.email, asyncio.Event())
+                            _cap_evt.clear()
+                            try:
+                                await asyncio.wait_for(_cap_evt.wait(), timeout=15.0 + random.uniform(0, 5.0))
+                            except asyncio.TimeoutError:
+                                pass
                             continue
                     
                     # H3 fix: Store worker_count on task for proper cleanup
@@ -3995,7 +4338,10 @@ class Engine:
                         # BUG FIX: Use requeue_task (decrements _running_count)
                         # instead of submit_task (which leaked +1)
                         task.state = TaskState.READY
-                        self._dispatcher.requeue_task(task)
+                        self._dispatcher.requeue_task(
+                            task,
+                            status_text=f"↩ Routed to {task.required_account}"
+                        )
                         (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                         worker_count = 0
                         await asyncio.sleep(0.1)
@@ -4008,6 +4354,12 @@ class Engine:
                         (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                         worker_count = 0
                         continue
+                    
+                    # ★ Pre-submit tracking: foreman has passed all requeue-only
+                    # branches (LP swap, capacity, D2 affinity, cancel). From here
+                    # until mark_submit_started(), this foreman is "in pre-submit"
+                    # and prewarm must not soft-recover this account's browser.
+                    self._enter_pre_submit(account.email, task)
                     
                     # Step 3: Lazy browser start if not yet initialized
                     if not account._browser_session or not account._browser_session.is_ready:
@@ -4051,11 +4403,24 @@ class Engine:
                     if task.stage in (TaskStage.SUBMITTED, TaskStage.GENERATED,
                                       TaskStage.DOWNLOADED_720, TaskStage.UPSCALING,
                                       TaskStage.UPSCALED):
+                        # ★ C1: Set stage-appropriate progress immediately to avoid 0% flash
+                        _stage_progress_map = {
+                            TaskStage.SUBMITTED: (15, "🔁 Resuming: polling generation..."),
+                            TaskStage.GENERATED: (40, "🔁 Resuming: downloading 720p..."),
+                            TaskStage.DOWNLOADED_720: (80, "🔁 Resuming: waiting for upscale"),
+                            TaskStage.UPSCALING: (88, "🔁 Resuming: upscale in progress"),
+                            TaskStage.UPSCALED: (95, "🔁 Resuming: post-processing"),
+                        }
+                        _cp_progress, _cp_text = _stage_progress_map.get(
+                            task.stage, (15, "🔁 Resuming...")
+                        )
+                        self._dispatcher.update_progress(task.id, _cp_progress, _cp_text)
                         log.info(
                             f"[Foreman:{account.email}] Task {task.id}: "
                             f"RESUMING from stage {task.stage.value} → concurrent pipeline"
                         )
                         # ★ FIX: Release pre-submit claim so other foremen can pick tasks
+                        self._leave_pre_submit(account.email, task)
                         self._dispatcher.mark_submit_started(task.id)
                         task.state = TaskState.WAITING_POLL
                         task.watchdog_reset_at = datetime.now()  # ★ Reset watchdog timer for resume
@@ -4187,6 +4552,7 @@ class Engine:
                     # This prevents 403 cascade — cheaper than recovering after failure
                     # BUG-35: Check stop before prewarm (20+s)
                     if not self._stop_event.is_set():
+                        self._dispatcher.update_progress(task.id, 1, "🔥 Warming up...")
                         await self._maybe_prewarm(account)
                     
                     # ═══ T2I/I2I FIRE-AND-FORGET DISPATCH ═══
@@ -4199,6 +4565,7 @@ class Engine:
                     _wt_dispatch = (task.workflow_type or "").upper()
                     if _wt_dispatch in ("T2I", "I2I"):
                         # ★ FIX: Release pre-submit claim so other foremen can pick tasks
+                        self._leave_pre_submit(account.email, task)
                         self._dispatcher.mark_submit_started(task.id)
                         log.info(
                             f"[Foreman:{account.email}] Task {task.id}: "
@@ -4220,6 +4587,7 @@ class Engine:
                     
                     # ★ FIX: Release pre-submit claim BEFORE retry loop
                     # so other foremen can pick tasks while this one submits
+                    self._leave_pre_submit(account.email, task)
                     self._dispatcher.mark_submit_started(task.id)
                     
                     for attempt in range(max_retries + 1):
@@ -4311,6 +4679,7 @@ class Engine:
                                     task.image_uris = [fresh_uri]
                         
                         # ── Pre-Submit Gate: validate xcd + reCAPTCHA ──
+                        self._dispatcher.update_progress(task.id, 2, "🛡️ Gate check...")
                         gate_ok = await self._pre_submit_gate(account, task, attempt)
                         if not gate_ok:
                             self._dispatcher.requeue_task(task)
@@ -4893,61 +5262,84 @@ class Engine:
                                     f"⛔ {status} recover"
                                 )
                                 
-                                # ═══ SMART RECOVERY — replaces Phase 0-3 state machine ═══
-                                # Diagnose error → try targeted remedies → verify health
-                                # If all remedies fail → suspend account + migrate tasks
-                                # Routes: 403 → RECAPTCHA_403, 401 → AUTH_EXPIRED, etc.
+                                # ═══ SMART RECOVERY — coordinator-first ═══
+                                # ★ P1-4: Route through coordinator when available.
+                                # Coordinator runs drain-remedy-probe-resume.
+                                # Legacy execute_recovery() only when no coordinator.
                                 consecutive_403 = self._circuit_consecutive_403.get(acct_email, 0)
                                 
-                                # Build context for error classifier
-                                recovery_context = {
-                                    "consecutive_403": consecutive_403,
-                                    "token_len": getattr(result, '_token_len', 9999),
-                                }
-                                # Get x-client-data length if available
-                                ext_bridge = getattr(account, 'extension_bridge', None)
-                                if ext_bridge and hasattr(ext_bridge, '_header_cache'):
-                                    cache = ext_bridge._header_cache.get(acct_email, {})
-                                    recovery_context["xcd_len"] = len(cache.get("x-client-data", ""))
-                                
-                                recovery_result = await execute_recovery(
-                                    account=account,
-                                    error_msg=result.error or "",
-                                    context=recovery_context,
-                                    ext_bridge=ext_bridge,
-                                    dispatcher=self._dispatcher,
-                                    credit_window=self._credit_window,
-                                    multi_account=self._account_manager,
-                                )
-                                
-                                if recovery_result.failover:
-                                    # Account suspended, tasks migrated — requeue this task too
-                                    log.warning(
-                                        f"[⚡Recovery] {acct_email}: FAILOVER — "
-                                        f"account suspended, requeuing task {task.id}"
+                                coordinator = getattr(self, '_recovery_coordinator', None)
+                                if coordinator:
+                                    from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                                    _sev = SignalSeverity.HIGH if (auth_fail or tab_dead or consecutive_403 >= 5) else SignalSeverity.MEDIUM
+                                    await coordinator.report_signal(RecoverySignal(
+                                        account_email=acct_email,
+                                        source="foreman",
+                                        error_type=f"submit_{status}",
+                                        severity=_sev,
+                                        task_id=task.id,
+                                        detail=f"attempt {attempt+1}, consecutive_403={consecutive_403}",
+                                    ))
+                                    # After coordinator finishes — check if failover happened
+                                    if coordinator.is_account_quarantined(acct_email):
+                                        log.warning(
+                                            f"[⚡Recovery] {acct_email}: QUARANTINED by coordinator — "
+                                            f"requeuing task {task.id}"
+                                        )
+                                        self._dispatcher.requeue_task(task)
+                                        if not hasattr(task, 'excluded_accounts'):
+                                            task.excluded_accounts = set()
+                                        task.excluded_accounts.add(acct_email)
+                                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
+                                        worker_count = 0
+                                        result = None
+                                        break  # Exit retry loop
+                                    
+                                    backoff = 10  # Coordinator handled recovery; simple backoff
+                                    backoff = min(int(backoff * (1.5 ** attempt)), 60)
+                                else:
+                                    # Legacy fallback: direct remedy chain (no coordinator)
+                                    # Build context for error classifier
+                                    recovery_context = {
+                                        "consecutive_403": consecutive_403,
+                                        "token_len": getattr(result, '_token_len', 9999),
+                                    }
+                                    ext_bridge = getattr(account, 'extension_bridge', None)
+                                    if ext_bridge and hasattr(ext_bridge, '_header_cache'):
+                                        cache = ext_bridge._header_cache.get(acct_email, {})
+                                        recovery_context["xcd_len"] = len(cache.get("x-client-data", ""))
+                                    
+                                    recovery_result = await execute_recovery(
+                                        account=account,
+                                        error_msg=result.error or "",
+                                        context=recovery_context,
+                                        ext_bridge=ext_bridge,
+                                        dispatcher=self._dispatcher,
+                                        credit_window=self._credit_window,
+                                        multi_account=self._account_manager,
                                     )
-                                    self._dispatcher.requeue_task(task)
-                                    # Add to excluded so it won't come back
-                                    if not hasattr(task, 'excluded_accounts'):
-                                        task.excluded_accounts = set()
-                                    task.excluded_accounts.add(acct_email)
-                                    (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
-                                    worker_count = 0
-                                    result = None
-                                    break  # Exit retry loop
-                                
-                                backoff = recovery_result.backoff or 5
-                                
-                                # Fix ⑧: Exponential backoff — scale with attempt
-                                # attempt 0 → base, 1 → 1.5x, 2 → 2.25x, ...
-                                # Prevents rapid-fire failures burning credits
-                                backoff = min(int(backoff * (1.5 ** attempt)), 60)
+                                    
+                                    if recovery_result.failover:
+                                        log.warning(
+                                            f"[⚡Recovery] {acct_email}: FAILOVER — "
+                                            f"account suspended, requeuing task {task.id}"
+                                        )
+                                        self._dispatcher.requeue_task(task)
+                                        if not hasattr(task, 'excluded_accounts'):
+                                            task.excluded_accounts = set()
+                                        task.excluded_accounts.add(acct_email)
+                                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
+                                        worker_count = 0
+                                        result = None
+                                        break  # Exit retry loop
+                                    
+                                    backoff = recovery_result.backoff or 5
+                                    backoff = min(int(backoff * (1.5 ** attempt)), 60)
                                 
                                 log.info(
                                     f"[Recovery] {acct_email}: recovery "
-                                    f"{'OK' if recovery_result.success else 'tried'} "
-                                    f"(remedy={recovery_result.remedy_used}, "
-                                    f"backoff={backoff}s)"
+                                    f"{'coordinator' if coordinator else 'legacy'} "
+                                    f"(backoff={backoff}s)"
                                 )
                             else:
                                 # Non-reCAPTCHA, non-403, non-401 errors: refresh headers (lightweight — no tab reload)
@@ -5050,6 +5442,11 @@ class Engine:
                                 task.id, 20,
                                 f"✅ Submitted, polling..."
                             )
+                            emit_event(EventType.UI_STATUS_UPDATE, {
+                                'message': f'submit prompt success {task.id}',
+                                'task_label': f'#{getattr(task, "prompt_index", "?") }',
+                                'prompt_short': (task.prompt or '')[:40],
+                            }, source='engine')
                             
                             # ★ PARTIAL RESPONSE DETECTION: server returned fewer ops
                             expected = getattr(task, 'output_count', 0) or 0
@@ -5057,7 +5454,7 @@ class Engine:
                             if expected > 0 and actual < expected:
                                 variant_letters = "abcdefghijklmnopqrstuvwxyz"
                                 prompt_num = getattr(task, 'prompt_index', 0) + 1
-                                idx_str = str(prompt_num).zfill(3)
+                                idx_str = str(prompt_num).zfill(4)
                                 # Identify missing variants by letter
                                 present = set(range(actual))
                                 missing = [i for i in range(expected) if i not in present]
@@ -5193,6 +5590,10 @@ class Engine:
                 finally:
                     # ★ Bug #4 fix: Centralized cleanup — guarantees workers released
                     # regardless of which code path was taken (success, error, exception)
+                    # ★ Pre-submit tracking safety net: ensure counter is decremented
+                    # even if an exception skipped the normal _leave_pre_submit() call
+                    if task:
+                        self._leave_pre_submit(account.email, task)
                     if worker_count > 0:
                         (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
                         worker_count = 0
@@ -5384,10 +5785,19 @@ class Engine:
         log_prefix = f"[Worker:{email[:12]}:V{video_index}]"
         
         try:
-            # Map worker index → original video index for correct variant letter naming
-            # e.g., retry_original_indices=[2,3] → worker 0 maps to index 2, worker 1 to index 3
+            # Map worker index to original video index for correct variant letter naming
+            # e.g., retry_original_indices=[2,3] -> worker 0 maps to index 2, worker 1 to index 3
+            # For replacement tasks (force_retry_video), use replace_target[1]
+            # which is the original slot index in the parent task's video_outputs.
             ori = getattr(task, 'retry_original_indices', [])
-            effective_video_index = ori[video_index] if video_index < len(ori) else video_index
+            if video_index < len(ori):
+                effective_video_index = ori[video_index]
+            else:
+                _rt = getattr(task, 'replace_target', None)
+                if _rt and len(_rt) > 1 and _rt[1] >= 0:
+                    effective_video_index = _rt[1]
+                else:
+                    effective_video_index = video_index
             
             # ── Phase 1: Self-poll op ──
             task.video_outputs[video_index].quality = "polling"
@@ -5448,6 +5858,12 @@ class Engine:
                         error_msg += f" (after {timeout_retries} auto-retries)"
                 
                 log.warning(f"{log_prefix} Poll returned no result (failed/timeout): {error_msg}")
+                emit_event(EventType.UI_STATUS_UPDATE, {
+                    'message': f'video generation failed {error_msg}',
+                    'task_label': f'#{getattr(task, "prompt_index", "?")}',
+                    'prompt_short': (task.prompt or '')[:40],
+                    'video_label': f'v{video_index}',
+                }, source='engine')
                 task.video_outputs[video_index].quality = "failed"
                 results_dict[video_index] = WorkerVideoResult(
                     index=video_index, op_name=op_name,
@@ -5533,8 +5949,14 @@ class Engine:
                     target_quality=task.download_quality,
                     aspect_ratio=task.aspect_ratio,
                     retry_indices=[video_index],
+                    generated_at=getattr(task, 'watchdog_reset_at', None),  # ★ Phase timestamp proxy
                 ))
                 log.info(f"{log_prefix} Delegated upscale → UpscaleQueue")
+                emit_event(EventType.UI_STATUS_UPDATE, {
+                    'message': f'upscale enqueued {task.id}',
+                    'task_label': f'#{getattr(task, "prompt_index", "?")}',
+                    'video_label': f'v{video_index}',
+                }, source='engine')
 
             # ── Report result ──
             results_dict[video_index] = WorkerVideoResult(
@@ -5942,13 +6364,17 @@ class Engine:
             
             if is_transient and not is_policy and _transient_attempts < FINALIZER_MAX_TRANSIENT_RETRIES:
                 task._transient_retry_attempts = _transient_attempts + 1
-                delay = min(15 * (2 ** _transient_attempts), 120)  # 15s, 30s, 60s
+                delay = min(15 * (2 ** _transient_attempts), 60)  # 15s, 30s, 60s
                 log.warning(
                     f"🔄 [Finalizer:{email}] Task {task.id}: "
                     f"transient error '{all_errors[0][:60]}' — "
                     f"auto-retry {_transient_attempts + 1}/{FINALIZER_MAX_TRANSIENT_RETRIES} "
                     f"in {delay}s"
                 )
+                # ★ v5.2: Release running counter BEFORE sleep — frees slot immediately
+                if not getattr(task, '_counter_decremented', False):
+                    self._dispatcher.decrement_running(account.email)
+                    task._counter_decremented = True
                 await asyncio.sleep(delay)
                 # ★ Fix 3: Exit if engine stopping during retry delay
                 if self._stop_event.is_set():
@@ -5991,7 +6417,7 @@ class Engine:
             failed_labels = []
             for r in failures:
                 idx = r.index
-                label = f"{str(prompt_num).zfill(3)}{variant_letters[idx] if idx < len(variant_letters) else '?'}"
+                label = f"{str(prompt_num).zfill(4)}{variant_letters[idx] if idx < len(variant_letters) else '?'}"
                 failed_labels.append(label)
             
             log.warning(
@@ -6037,6 +6463,20 @@ class Engine:
             )
             return
         task.stage = TaskStage.DOWNLOADED_720
+        # ★ FIX: Mark failed-generation video slots as upscale "skipped".
+        # Without this, slots with quality="failed" (e.g. PUBLIC_ERROR_HIGH_TRAFFIC)
+        # keep upscale_status="" → _all_outputs_terminal() never returns True →
+        # task stuck at "Upscaling 1080p (3/4)" forever.
+        for vo in task.video_outputs:
+            if (vo.quality == "failed"
+                    and not vo.file_720p
+                    and not vo.media_id
+                    and vo.upscale_status in ("", None)):
+                vo.upscale_status = "skipped"
+                log.info(
+                    f"[Finalizer:{email}] Task {task.id}: video[{vo.index}] "
+                    f"failed generation — upscale_status set to 'skipped'"
+                )
         self._sync_overall_upscale_status(task)
         
         # G5: License usage — count on successful 720p download (not submit)
@@ -6094,7 +6534,10 @@ class Engine:
         
         if has_pending_upscale:
             # Don't call complete_task — UpscaleQueue owns completion.
-            # Keep stage as UPSCALING (already set by _poll_operation).
+            # ★ FIX: Set stage to UPSCALING so watchdog guard at L92 works.
+            # Without this, stage stays DOWNLOADED_720 → watchdog doesn't skip
+            # → requeue → WAITING_POLL → _try_promote_after_slot misses it.
+            task.stage = TaskStage.UPSCALING
             # Continuation extraction may have already pushed the task to 95%.
             # Use a monotonic progress value here so the persisted status_text
             # does not get stuck on "Uploading frame..." after the next refresh.
@@ -6284,6 +6727,82 @@ class Engine:
                     # RC3: Timestamp INSIDE lock
                     self._per_account_last_submit_ts[account.email] = time.time()
             
+            # ── Phase 1.5: Upload images for I2I ──
+            # BUG FIX: T2I pipeline previously skipped image upload entirely.
+            # For I2I tasks with local image_paths, we must upload them to get
+            # remote image_uris (mediaIds) BEFORE building the request body.
+            _wt_upper = (task.workflow_type or "").upper()
+            if task.image_paths and _wt_upper == "I2I":
+                # ★ Safety cap on image_paths BEFORE upload — prevents uploading
+                # 40 images from session-restored tasks (HAR max = 3)
+                _MAX_I2I_PATHS = 10
+                if len(task.image_paths) > _MAX_I2I_PATHS:
+                    _orig_path_count = len(task.image_paths)
+                    task.image_paths = task.image_paths[:_MAX_I2I_PATHS]
+                    log.warning(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"⚠️ I2I image_paths capped {_orig_path_count} → {_MAX_I2I_PATHS} "
+                        f"(session-restored task had too many images)"
+                    )
+                if task.image_uris and task.image_uris_account == account.email:
+                    log.debug(
+                        f"[T2I-BG:{account.email}] Task {task.id}: reusing "
+                        f"{len(task.image_uris)} existing image_uris "
+                        f"(uploaded by same account)"
+                    )
+                else:
+                    if task.image_uris:
+                        log.info(
+                            f"[T2I-BG:{account.email}] Task {task.id}: account changed "
+                            f"({task.image_uris_account} → {account.email}) — "
+                            f"re-uploading {len(task.image_paths)} image(s)"
+                        )
+                        task.image_uris.clear()
+                        task.image_uris_account = None
+                    else:
+                        log.info(
+                            f"[T2I-BG:{account.email}] Task {task.id}: uploading "
+                            f"{len(task.image_paths)} I2I reference image(s)"
+                        )
+                    try:
+                        await self._resolve_image_paths(task, account)
+                    except Exception as upload_err:
+                        log.error(
+                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                            f"I2I image upload failed: {upload_err}",
+                            exc_info=True,
+                        )
+                # Guard: I2I MUST have images after upload
+                if not task.image_uris:
+                    log.error(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"I2I has no image_uris after upload — failing task "
+                        f"(image_paths={len(task.image_paths or [])})"
+                    )
+                    self._dispatcher.fail_task(
+                        task.id,
+                        f"I2I has no images (upload failed or image_paths empty)"
+                    )
+                    (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
+                    worker_count = 0
+                    return
+                # ★ Safety cap: API accepts max 10 imageInputs.
+                # Prevents 400 errors from session-restored tasks with bloated image lists.
+                _MAX_I2I_REFS = 10
+                if len(task.image_uris) > _MAX_I2I_REFS:
+                    _orig_count = len(task.image_uris)
+                    task.image_uris = task.image_uris[:_MAX_I2I_REFS]
+                    log.warning(
+                        f"[T2I-BG:{account.email}] Task {task.id}: "
+                        f"⚠️ I2I imageInputs capped {_orig_count} → {_MAX_I2I_REFS} "
+                        f"(API max={_MAX_I2I_REFS})"
+                    )
+                log.info(
+                    f"[T2I-BG:{account.email}] Task {task.id}: "
+                    f"I2I ready — {len(task.image_uris)} image_uris: "
+                    f"{[u[:20] for u in task.image_uris]}"
+                )
+            
             # ── Phase 2: Build all request bodies upfront ──
             ext_bridge = getattr(account, 'extension_bridge', None)
             if not ext_bridge or not ext_bridge.is_connected(account.email):
@@ -6403,6 +6922,25 @@ class Engine:
                     
                     self._burst_controller_t2i.record_success(account.email)
                     self.record_circuit_success(account.email)
+                    # ★ BUG FIX: Signal cold profile gates for T2I/I2I too.
+                    # Without this, foremen 2-19 are permanently stuck at the
+                    # cold gate because only video workers signaled these events.
+                    supervisor = self._supervisors.get(account.email)
+                    if supervisor:
+                        if not supervisor._first_submit_ok.is_set():
+                            supervisor._first_submit_ok.set()
+                            log.info(
+                                f"[T2I-BG:{account.email}] 🚀 First T2I/I2I success "
+                                f"→ unlocking foreman-1"
+                            )
+                        if not supervisor._second_submit_ok.is_set():
+                            supervisor._success_count += 1
+                            if supervisor._success_count >= 2:
+                                supervisor._second_submit_ok.set()
+                                log.info(
+                                    f"[T2I-BG:{account.email}] 🚀🚀 2nd T2I/I2I success "
+                                    f"→ trust established, unlocking ALL foremen"
+                                )
                     
                     if img_uris:
                         all_output_uris.extend(img_uris)
@@ -6434,12 +6972,43 @@ class Engine:
                         )
                     
                     if status_code == 400 or "invalid argument" in error_lower:
+                        # ★ Enhanced 400 logging: capture full error.details
+                        _resp_data = ext_result.get('data', {})
+                        _err_obj = _resp_data.get('error', {}) if isinstance(_resp_data, dict) else {}
+                        _err_details = _err_obj.get('details', []) if isinstance(_err_obj, dict) else []
+                        _err_code = _err_obj.get('code', '') if isinstance(_err_obj, dict) else ''
+                        _err_msg = _err_obj.get('message', '') if isinstance(_err_obj, dict) else ''
+                        
+                        # ★ FIX: PUBLIC_ERROR_UNSAFE_GENERATION is content safety,
+                        # NOT transient. Retrying same prompt won't fix it.
+                        # Skip this image immediately without counting as consecutive 400.
+                        _is_unsafe = any(
+                            isinstance(d, dict) and 'UNSAFE' in str(d.get('reason', ''))
+                            for d in (_err_details if isinstance(_err_details, list) else [])
+                        )
+                        if _is_unsafe:
+                            log.warning(
+                                f"[T2I-BG:{account.email}] Task {task.id}: "
+                                f"image {img_idx+1}/{_oc} rejected by safety filter "
+                                f"— skipping (not retryable)"
+                            )
+                            # Don't increment consecutive_400_count — this is NOT an API error
+                            # Don't add to failed_indices — skip retry for this image
+                            continue
+                        
                         consecutive_400_count += 1  # ★ Fix I
-                        log.warning(
+                        log.error(
                             f"[T2I-BG:{account.email}] Task {task.id}: "
-                            f"HTTP 400 — will retry "
-                            f"(count={consecutive_400_count}/3, "
-                            f"model={task.model}, ar={task.aspect_ratio})"
+                            f"HTTP 400 DIAGNOSTIC — "
+                            f"count={consecutive_400_count}/3 "
+                            f"model={task.model} ar={task.aspect_ratio} "
+                            f"wt={task.workflow_type} "
+                            f"projectId={account.project_id or 'EMPTY'} "
+                            f"imageUris={len(task.image_uris or [])} "
+                            f"\n  error.code={_err_code}"
+                            f"\n  error.message={str(_err_msg)[:300]}"
+                            f"\n  error.details={_err_details}"
+                            f"\n  full_response_keys={list(_resp_data.keys()) if isinstance(_resp_data, dict) else type(_resp_data).__name__}"
                         )
                         if consecutive_400_count >= 3:
                             log.error(
@@ -6561,6 +7130,19 @@ class Engine:
                                     )
                                 self._burst_controller_t2i.record_success(account.email)
                                 self.record_circuit_success(account.email)
+                                # ★ BUG FIX: Signal cold profile gates on retry success too
+                                supervisor = self._supervisors.get(account.email)
+                                if supervisor:
+                                    if not supervisor._first_submit_ok.is_set():
+                                        supervisor._first_submit_ok.set()
+                                    if not supervisor._second_submit_ok.is_set():
+                                        supervisor._success_count += 1
+                                        if supervisor._success_count >= 2:
+                                            supervisor._second_submit_ok.set()
+                                            log.info(
+                                                f"[T2I-BG:{account.email}] 🚀🚀 2nd T2I/I2I "
+                                                f"retry success → unlocking ALL foremen"
+                                            )
                                 _retry_success = True
                                 break
                             elif ext_result_r:
@@ -6573,6 +7155,21 @@ class Engine:
                                 )
                                 # ★ Fix I: 400 in retry → transient, just delay and retry
                                 if sc_r == 400 or "invalid argument" in err_r_lower:
+                                    # ★ FIX: Check for safety filter — don't retry
+                                    _resp_data_r = ext_result_r.get('data', {})
+                                    _err_obj_r = _resp_data_r.get('error', {}) if isinstance(_resp_data_r, dict) else {}
+                                    _err_details_r = _err_obj_r.get('details', []) if isinstance(_err_obj_r, dict) else []
+                                    _is_unsafe_r = any(
+                                        isinstance(d, dict) and 'UNSAFE' in str(d.get('reason', ''))
+                                        for d in (_err_details_r if isinstance(_err_details_r, list) else [])
+                                    )
+                                    if _is_unsafe_r:
+                                        log.warning(
+                                            f"[T2I-BG:{account.email}] Task {task.id}: "
+                                            f"retry #{attempt} safety filter — "
+                                            f"not retryable, skipping image"
+                                        )
+                                        break  # Stop retrying this image
                                     log.info(
                                         f"[T2I-BG:{account.email}] Task {task.id}: "
                                         f"retry #{attempt} got 400 — treating as transient"
@@ -6587,21 +7184,41 @@ class Engine:
                                     self.set_account_cooldown(account.email, f"{_err_status}/{err_r}")
                                     
                                     ext_br = getattr(account, 'extension_bridge', None)
-                                    recovery_ctx = {
-                                        "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
-                                    }
-                                    recovery_result = await execute_recovery(
-                                        account=account, error_msg=err_r or "",
-                                        context=recovery_ctx, ext_bridge=ext_br,
-                                        dispatcher=self._dispatcher,
-                                        credit_window=self._credit_window,
-                                        multi_account=self._account_manager,
-                                    )
-                                    if recovery_result.failover:
-                                        self._dispatcher.requeue_task(task)
-                                        (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
-                                        worker_count = 0
-                                        return
+                                    
+                                    # ★ P1-4: Route through coordinator when available
+                                    coordinator = getattr(self, '_recovery_coordinator', None)
+                                    if coordinator:
+                                        from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                                        await coordinator.report_signal(RecoverySignal(
+                                            account_email=account.email,
+                                            source="t2i_foreman",
+                                            error_type=f"t2i_{_err_status}",
+                                            severity=SignalSeverity.HIGH if _err_status == 401 else SignalSeverity.MEDIUM,
+                                            task_id=task.id,
+                                            detail=f"attempt {attempt+1}/{max_retries}",
+                                        ))
+                                        if coordinator.is_account_quarantined(account.email):
+                                            self._dispatcher.requeue_task(task)
+                                            (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
+                                            worker_count = 0
+                                            return
+                                    else:
+                                        # Legacy fallback: direct remedy chain
+                                        recovery_ctx = {
+                                            "consecutive_403": self._circuit_consecutive_403.get(account.email, 0),
+                                        }
+                                        recovery_result = await execute_recovery(
+                                            account=account, error_msg=err_r or "",
+                                            context=recovery_ctx, ext_bridge=ext_br,
+                                            dispatcher=self._dispatcher,
+                                            credit_window=self._credit_window,
+                                            multi_account=self._account_manager,
+                                        )
+                                        if recovery_result.failover:
+                                            self._dispatcher.requeue_task(task)
+                                            (account.release_workers_lp(worker_count) if getattr(task, "_is_lp_task", False) else account.release_workers(worker_count))
+                                            worker_count = 0
+                                            return
                                 if attempt < max_retries:
                                     await asyncio.sleep(5)
                                     continue
@@ -6891,6 +7508,7 @@ class Engine:
                     local_paths=local_paths,
                     upscale_quality=upscale_quality,
                     original_account=account.email,
+                    generated_at=getattr(task, 'watchdog_reset_at', None),  # ★ Phase timestamp
                 )
                 upscale_queue.enqueue(upscale_job)
                 log.info(
@@ -7403,6 +8021,46 @@ class Engine:
                     if self._stop_event.is_set():
                         log.info(f"[Poll] Task {task.id}: stop signal — skipping resume upscale")
                         return
+                    # ★ P0+P2: UQ-aware DOWNLOADED_720 resume guard.
+                    # Two cases when background_owner == 'upscale_queue':
+                    #   (a) UQ still owns the task → just release slot, UQ will finish
+                    #   (b) owner flag set but UQ registry empty → orphaned, re-enqueue
+                    if task.background_owner == "upscale_queue":
+                        uq = self._upscale_queue
+                        if uq.has_jobs_for_task(task.id):
+                            # Case (a): UQ still has active work → don't duplicate
+                            log.info(
+                                f"[Poll] Task {task.id}: DOWNLOADED_720 resume but "
+                                f"UQ still owns this task — releasing slot only"
+                            )
+                            self._dispatcher.decrement_running(account.email)
+                            task._counter_decremented = True
+                            return
+                        else:
+                            # Case (b): owner flag stale, UQ lost the job → re-enqueue
+                            log.warning(
+                                f"[Poll] Task {task.id}: DOWNLOADED_720 resume, "
+                                f"background_owner='upscale_queue' but UQ registry "
+                                f"empty — re-enqueuing as recovery"
+                            )
+                            from core.upscale_queue import UpscaleJob
+                            output_uris_for_upscale = [vo.file_720p for vo in task.video_outputs if vo.file_720p]
+                            uq.enqueue(UpscaleJob(
+                                task_id=task.id,
+                                account_email=account.email,
+                                original_account=account.email,
+                                media_ids=list(media_ids),
+                                output_uris=list(output_uris_for_upscale),
+                                target_quality=task.download_quality,
+                                aspect_ratio=task.aspect_ratio,
+                            ))
+                            task.upscale_media_ids = list(media_ids)
+                            self._dispatcher.update_progress(
+                                task.id, 88, f"⬆️ Resuming upscale {task.download_quality} (re-queued to UQ)"
+                            )
+                            self._dispatcher.decrement_running(account.email)
+                            task._counter_decremented = True
+                            return
                     # Resume upscale from DOWNLOADED_720 — inline path
                     self._dispatcher.update_progress(task.id, 88, "⬆️ Resuming upscale")
                     task.upscale_media_ids = list(media_ids)
@@ -7449,6 +8107,10 @@ class Engine:
                     )
                     return
                 
+                # ★ P1: Normalize stale upscale_status before completion.
+                # Prevents file_upscaled=Y + upscale_status='failed' → pink border
+                # and infinite OTF re-upscale loops. Same logic as UQ L731.
+                self._upscale_queue._normalize_upscale_status_before_completion(task)
                 self._sync_overall_upscale_status(task)
                 
                 # Post-processing + complete
@@ -7668,7 +8330,7 @@ class Engine:
                         failed_labels = []
                         for op in failed_ops:
                             idx = task.operation_names.index(op)
-                            label = f"{str(prompt_num).zfill(3)}{variant_letters[idx] if idx < len(variant_letters) else '?'}"
+                            label = f"{str(prompt_num).zfill(4)}{variant_letters[idx] if idx < len(variant_letters) else '?'}"
                             failed_labels.append(label)
                         
                         log.warning(
@@ -7730,6 +8392,7 @@ class Engine:
                     
                     task.stage = TaskStage.GENERATED  # ★ Checkpoint: poll complete
                     task.watchdog_reset_at = datetime.now()  # ★ Reset watchdog timer for download/upscale phase
+                    _generated_at = datetime.now()  # ★ Phase timestamp: used by UpscaleQueue warmup heuristic
                     
                     # Always save media_ids early — needed for re-upscale
                     # even if upscale block is skipped (720p or token failure)
@@ -7770,7 +8433,7 @@ class Engine:
                         variant_letters = "abcdefghijklmnopqrstuvwxyz"
                         prompt_num = getattr(task, 'prompt_index', 0) + 1
                         failed_labels = [
-                            f"{str(prompt_num).zfill(3)}{variant_letters[i] if i < len(variant_letters) else '?'}"
+                            f"{str(prompt_num).zfill(4)}{variant_letters[i] if i < len(variant_letters) else '?'}"
                             for i in failed_indices
                         ]
                         
@@ -7814,6 +8477,11 @@ class Engine:
                         "task_id": task.id, "stage": "downloaded_720",
                         "progress": 87,
                     }, source="engine")
+                    emit_event(EventType.UI_STATUS_UPDATE, {
+                        'message': f'download 720p complete {task.id}',
+                        'task_label': f'#{getattr(task, "prompt_index", "?")}',
+                        'prompt_short': (task.prompt or '')[:40],
+                    }, source='engine')
                     
                     # === Stage: Auto-upscale if needed (88-92%) ===
                     upscale_paths = [None] * len(media_ids)  # None placeholders
@@ -7844,6 +8512,7 @@ class Engine:
                                 output_uris=list(output_uris),
                                 target_quality=task.download_quality,
                                 aspect_ratio=task.aspect_ratio,
+                                generated_at=_generated_at,  # ★ Phase timestamp for warmup heuristic
                             ))
                             task.upscale_media_ids = list(media_ids)
                             task.stage = TaskStage.UPSCALING
@@ -8589,53 +9258,106 @@ class Engine:
                         f"[Foreman:{account.email}] 🔄 Escalating to HARD NAVIGATION "
                         f"(full page reload failed — forcing VEO URL navigation)"
                     )
-                    try:
-                        nav_ok = await bridge.trigger_hard_navigation(account.email)
-                        if nav_ok:
-                            # Wait for reCAPTCHA widget to initialize after navigation
-                            nav_wait = 20.0
-                            log.info(
-                                f"[Foreman:{account.email}] ⏳ Waiting {nav_wait:.0f}s "
-                                f"for reCAPTCHA widget after hard navigation..."
-                            )
-                            await asyncio.sleep(nav_wait)
-                            
-                            # Verify widget is ready after navigation
-                            for nav_verify in range(3):
-                                try:
-                                    nav_ready = await bridge.check_recaptcha_ready(
-                                        account.email, timeout=8.0
-                                    )
-                                    if nav_ready:
-                                        log.info(
-                                            f"[Foreman:{account.email}] ✅ reCAPTCHA recovered "
-                                            f"after hard navigation (verify #{nav_verify + 1})"
+                    
+                    # ★ P1-5: Route hard navigation through coordinator
+                    coordinator = getattr(self, '_recovery_coordinator', None)
+                    if coordinator:
+                        try:
+                            from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                            await coordinator.report_signal(RecoverySignal(
+                                account_email=account.email,
+                                source="foreman_recaptcha",
+                                error_type="recaptcha_stuck",
+                                severity=SignalSeverity.HIGH,
+                                detail="hard navigation needed — reCAPTCHA dead after reload",
+                            ))
+                            # Coordinator ran RECOVERING_HARD → trigger_hard_navigation
+                            # Check if account recovered
+                            if not coordinator.is_account_blocked(account.email):
+                                # Wait for reCAPTCHA widget to initialize after navigation
+                                nav_wait = 20.0
+                                log.info(
+                                    f"[Foreman:{account.email}] ⏳ Waiting {nav_wait:.0f}s "
+                                    f"for reCAPTCHA widget after coordinator hard recovery..."
+                                )
+                                await asyncio.sleep(nav_wait)
+                                
+                                # Verify widget is ready after navigation
+                                for nav_verify in range(3):
+                                    try:
+                                        nav_ready = await bridge.check_recaptcha_ready(
+                                            account.email, timeout=8.0
                                         )
-                                        self._account_recovery_phase[account.email] = 0
-                                        self._account_phase_403_count[account.email] = 0
-                                        return True
-                                except Exception:
-                                    pass
-                                if nav_verify < 2:
-                                    await asyncio.sleep(3.0)
-                            
-                            log.warning(
-                                f"[Foreman:{account.email}] ⚠️ reCAPTCHA still dead "
-                                f"after hard navigation + {nav_wait:.0f}s + 3 verify attempts"
-                            )
-                        
-                        # ★ Tab-dead bail-out after hard navigation fails
-                        # AppController._on_tab_dead handles browser restart.
-                        if bridge.is_tab_dead(account.email):
+                                        if nav_ready:
+                                            log.info(
+                                                f"[Foreman:{account.email}] ✅ reCAPTCHA recovered "
+                                                f"after coordinator hard recovery (verify #{nav_verify + 1})"
+                                            )
+                                            self._account_recovery_phase[account.email] = 0
+                                            self._account_phase_403_count[account.email] = 0
+                                            return True
+                                    except Exception:
+                                        pass
+                                    if nav_verify < 2:
+                                        await asyncio.sleep(3.0)
+                            else:
+                                log.warning(
+                                    f"[Foreman:{account.email}] ⚠️ Account still blocked "
+                                    f"after coordinator hard recovery"
+                                )
+                        except Exception as e:
                             log.error(
-                                f"[Foreman:{account.email}] 💀 Tab confirmed dead after hard nav failure — "
-                                f"aborting recovery (AppController will restart browser)"
+                                f"[Foreman:{account.email}] Coordinator hard recovery error: {e}"
                             )
-                            return False
-                    except Exception as e:
-                        log.error(
-                            f"[Foreman:{account.email}] Hard navigation error: {e}"
-                        )
+                    else:
+                        # Legacy fallback: direct hard navigation
+                        try:
+                            nav_ok = await bridge.trigger_hard_navigation(account.email)
+                            if nav_ok:
+                                # Wait for reCAPTCHA widget to initialize after navigation
+                                nav_wait = 20.0
+                                log.info(
+                                    f"[Foreman:{account.email}] ⏳ Waiting {nav_wait:.0f}s "
+                                    f"for reCAPTCHA widget after hard navigation..."
+                                )
+                                await asyncio.sleep(nav_wait)
+                                
+                                # Verify widget is ready after navigation
+                                for nav_verify in range(3):
+                                    try:
+                                        nav_ready = await bridge.check_recaptcha_ready(
+                                            account.email, timeout=8.0
+                                        )
+                                        if nav_ready:
+                                            log.info(
+                                                f"[Foreman:{account.email}] ✅ reCAPTCHA recovered "
+                                                f"after hard navigation (verify #{nav_verify + 1})"
+                                            )
+                                            self._account_recovery_phase[account.email] = 0
+                                            self._account_phase_403_count[account.email] = 0
+                                            return True
+                                    except Exception:
+                                        pass
+                                    if nav_verify < 2:
+                                        await asyncio.sleep(3.0)
+                                
+                                log.warning(
+                                    f"[Foreman:{account.email}] ⚠️ reCAPTCHA still dead "
+                                    f"after hard navigation + {nav_wait:.0f}s + 3 verify attempts"
+                                )
+                            
+                            # ★ Tab-dead bail-out after hard navigation fails
+                            # AppController._on_tab_dead handles browser restart.
+                            if bridge.is_tab_dead(account.email):
+                                log.error(
+                                    f"[Foreman:{account.email}] 💀 Tab confirmed dead after hard nav failure — "
+                                    f"aborting recovery (AppController will restart browser)"
+                                )
+                                return False
+                        except Exception as e:
+                            log.error(
+                                f"[Foreman:{account.email}] Hard navigation error: {e}"
+                            )
             except Exception as e:
                 log.debug(f"[Foreman:{account.email}] Recovery reload failed: {e}")
         
@@ -9158,6 +9880,11 @@ class Engine:
                 f"original_indices={failed_indices}, "
                 f"replacing {', '.join(failed_labels)})"
             )
+            emit_event(EventType.UI_STATUS_UPDATE, {
+                'message': f'auto retry submitted {failed_count}',
+                'task_label': f'#{getattr(original_task, "prompt_index", "?")}',
+                'prompt_short': (original_task.prompt or '')[:40],
+            }, source='engine')
         else:
             log.error(
                 f"❌ Auto-retry submit failed for {retry_id} "
@@ -9435,59 +10162,69 @@ class Engine:
                     
                     # Tiered browser recovery on reCAPTCHA failures (same as worker)
                     if "recaptcha" in error_lower:
-                        if attempt == 1:
-                            # Tier 1: Soft recovery (keep browser alive)
-                            log.warning(
-                                f"🔄 Upscale {video_label}: reCAPTCHA failed {attempt + 1}x. "
-                                f"Soft recovery (no kill)..."
-                            )
+                        # ★ P1-3: Route through coordinator
+                        _coord = getattr(self, '_recovery_coordinator', None)
+                        if _coord:
                             try:
-                                soft_ok = await account.soft_recover_browser()
-                                if soft_ok:
-                                    log.info(f"✅ Upscale: Soft recovery OK for {account.email}")
-                                else:
-                                    # BUG-D: Extension-only accounts have no browser
-                                    # → reload VEO tab via Extension bridge instead
+                                from core.account_recovery_coordinator import RecoverySignal, SignalSeverity
+                                await _coord.report_signal(RecoverySignal(
+                                    account_email=account.email,
+                                    source="engine_upscale",
+                                    error_type="upscale_recaptcha",
+                                    severity=SignalSeverity.MEDIUM if attempt < 2 else SignalSeverity.HIGH,
+                                    detail=f"attempt {attempt+1}/{max_submit_retries}",
+                                ))
+                            except Exception as _ce:
+                                log.debug(f"Upscale: coordinator signal failed: {_ce}")
+                        else:
+                            # Legacy fallback: direct recovery
+                            if attempt == 1:
+                                log.warning(
+                                    f"🔄 Upscale {video_label}: reCAPTCHA failed {attempt + 1}x. "
+                                    f"Soft recovery (no kill)..."
+                                )
+                                try:
+                                    soft_ok = await account.soft_recover_browser()
+                                    if soft_ok:
+                                        log.info(f"✅ Upscale: Soft recovery OK for {account.email}")
+                                    else:
+                                        _ext = getattr(account, 'extension_bridge', None)
+                                        if _ext and _ext.is_connected(account.email):
+                                            log.info(f"🔄 Upscale: Trying Extension tab reload for {account.email}")
+                                            try:
+                                                await _ext.send_and_wait(
+                                                    {'action': 'reload_tab', 'email': account.email},
+                                                    timeout=15.0,
+                                                )
+                                                await asyncio.sleep(3.0)
+                                                log.info(f"✅ Upscale: Extension tab reloaded")
+                                            except Exception:
+                                                log.warning(f"⚠️ Upscale: Extension tab reload failed")
+                                        else:
+                                            log.warning(f"⚠️ Upscale: No recovery path available")
+                                except Exception as soft_err:
+                                    log.error(f"❌ Upscale soft recovery failed: {soft_err}")
+                                    
+                            elif attempt >= 2:
+                                log.warning(
+                                    f"🔄 Upscale {video_label}: reCAPTCHA failed {attempt + 1}x. "
+                                    f"Extended soft recovery (no kill)..."
+                                )
+                                try:
+                                    soft_ok = await account.soft_recover_browser()
+                                    if soft_ok:
+                                        log.info(f"✅ Upscale: Soft recovery OK for {account.email}. Retrying...")
+                                    else:
+                                        log.warning(f"⚠️ Upscale: Soft recovery returned False for {account.email}")
                                     _ext = getattr(account, 'extension_bridge', None)
                                     if _ext and _ext.is_connected(account.email):
-                                        log.info(f"🔄 Upscale: Trying Extension tab reload for {account.email}")
                                         try:
-                                            await _ext.send_and_wait(
-                                                {'action': 'reload_tab', 'email': account.email},
-                                                timeout=15.0,
-                                            )
-                                            await asyncio.sleep(3.0)  # Wait for page reload
-                                            log.info(f"✅ Upscale: Extension tab reloaded")
+                                            await _ext.simulate_activity(account.email, timeout=3.0)
                                         except Exception:
-                                            log.warning(f"⚠️ Upscale: Extension tab reload failed")
-                                    else:
-                                        log.warning(f"⚠️ Upscale: No recovery path available")
-                            except Exception as soft_err:
-                                log.error(f"❌ Upscale soft recovery failed: {soft_err}")
-                                
-                        elif attempt >= 2:
-                            # Tier 2: Extended soft recovery (no browser kill — preserves sessions)
-                            log.warning(
-                                f"🔄 Upscale {video_label}: reCAPTCHA failed {attempt + 1}x. "
-                                f"Extended soft recovery (no kill)..."
-                            )
-                            try:
-                                soft_ok = await account.soft_recover_browser()
-                                if soft_ok:
-                                    log.info(f"✅ Upscale: Soft recovery OK for {account.email}. Retrying...")
-                                else:
-                                    log.warning(f"⚠️ Upscale: Soft recovery returned False for {account.email}")
-                                # Simulate activity to rebuild trust score
-                                _ext = getattr(account, 'extension_bridge', None)
-                                if _ext and _ext.is_connected(account.email):
-                                    try:
-                                        await _ext.simulate_activity(account.email, timeout=3.0)
-                                    except Exception:
-                                        pass
-                                # Longer cooldown to let reCAPTCHA reset
-                                await asyncio.sleep(15)
-                            except Exception as soft_err:
-                                log.error(f"❌ Upscale soft recovery failed: {soft_err}")
+                                            pass
+                                    await asyncio.sleep(15)
+                                except Exception as soft_err:
+                                    log.error(f"❌ Upscale soft recovery failed: {soft_err}")
                     
                     if attempt < max_submit_retries - 1:
                         # ★ FIX: Check stop event before delay
@@ -9790,7 +10527,7 @@ class Engine:
                 failed_indices = [
                     vo.index for vo in task.video_outputs
                     if (
-                        vo.upscale_status in ("failed", "skipped", "", "pending")
+                        vo.upscale_status in ("failed", "skipped", "")
                         and not vo.file_upscaled
                     )
                 ]
@@ -10312,25 +11049,7 @@ class Engine:
         
         local_paths = []
         import aiohttp
-        from datetime import datetime
-        
-        # Global prompt index (1-based, 3-digit padded)
-        prompt_num = getattr(task, 'prompt_index', 0) + 1
-        idx_str = str(prompt_num).zfill(3)
-        
-        # Variant suffixes for multi-output
-        variant_letters = "abcdefghijklmnopqrstuvwxyz"
-        # Multi-output: either batch download (len>1) or single worker with output_count>1
-        task_output_count = getattr(task, 'output_count', 1) or 1
-        is_multi = len(output_uris) > 1 or task_output_count > 1
-        
-        # ★ DEBUG: Trace naming logic
-        log.debug(
-            f"[Download-Naming] Task {task.id}: "
-            f"prompt_idx={idx_str}, output_count={task_output_count}, "
-            f"uris={len(output_uris)}, is_multi={is_multi}, "
-            f"video_index={video_index}"
-        )
+        from core.output_naming import build_output_filename, ensure_unique_path
         
         # Bug 4A: Timeout prevents infinite hang on unresponsive FIFE server
         dl_timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
@@ -10347,50 +11066,16 @@ class Engine:
                             filepath.unlink()
                             log.info(f"[Download] Removed old file for overwrite: {filepath.name}")
                     else:
-                        # Build filename parts
-                        parts = []
-                        
-                        # Index + variant suffix
-                        # Use video_index (from worker) if provided, otherwise loop index
-                        variant_idx = video_index if video_index >= 0 else i
-                        if is_multi and variant_idx < len(variant_letters):
-                            parts.append(f"{idx_str}{variant_letters[variant_idx]}")
-                        else:
-                            parts.append(idx_str)
-                        
-                        if settings.include_timestamp:
-                            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            parts.append(ts)
-                        
-                        if settings.include_quality:
-                            # Use actual quality (subfolder name), not target quality
-                            file_quality = quality_subfolder or task.download_quality
-                            parts.append(file_quality)
-                        
-                        if settings.include_model:
-                            model_short = task.model.replace("veo_3_1_", "v31_").replace("_fast_", "_")
-                            parts.append(model_short)
-                        
-                        sep = settings.separator
-                        # Detect file type from task workflow
-                        wf = getattr(task, 'workflow_type', '') or ''
-                        is_image_task = wf.upper() in ('T2I', 'I2I', 'TEXT_TO_IMAGE', 'IMAGE_TO_IMAGE')
-                        file_ext = '.png' if is_image_task else '.mp4'
-                        filename = sep.join(parts) + file_ext
-                        filepath = output_path / filename
-                        
-                        # ★ DEBUG: Trace per-file naming
-                        log.debug(
-                            f"[Download-Naming] Task {task.id} uri[{i}]: "
-                            f"variant_idx={variant_idx}, is_multi={is_multi}, "
-                            f"parts={parts} → {filename}"
+                        # ★ Unified naming via shared helper
+                        filename = build_output_filename(
+                            task=task,
+                            video_index=video_index,
+                            loop_index=i,
+                            total_outputs=len(output_uris),
+                            quality_subfolder=quality_subfolder,
+                            settings=settings,
                         )
-                        
-                        # Avoid overwrite — add numeric suffix if exists
-                        counter = 1
-                        while filepath.exists():
-                            filepath = output_path / f"{sep.join(parts)}_{counter}{file_ext}"
-                            counter += 1
+                        filepath = ensure_unique_path(output_path / filename)
                     
                     # Download with retry for suspiciously small files
                     # Google FIFE can serve HTTP 200 with black/incomplete MP4
@@ -10705,6 +11390,7 @@ class Engine:
         # ★ Semaphore: limit concurrent watermark FFmpeg jobs to prevent CPU saturation.
         # At ~25% CPU each (with -threads 4), Semaphore(2) caps total at ~50%.
         async with self._ffmpeg_watermark_semaphore:
+            process = None
             try:
                 # ★ BELOW_NORMAL_PRIORITY_CLASS: prevent FFmpeg from competing
                 # with Chrome browser and main app for CPU time.
@@ -10725,9 +11411,6 @@ class Engine:
                 if process.returncode != 0:
                     err_msg = (stderr or b"").decode(errors="replace")[-200:]
                     log.warning(f"[Non-Watermark] FFmpeg failed (rc={process.returncode}): {err_msg}")
-                    # Clean up temp file
-                    if tmp_path.exists():
-                        tmp_path.unlink()
                     return
                 
                 # Verify output file is reasonable size
@@ -10741,17 +11424,41 @@ class Engine:
                     )
                 else:
                     log.warning(f"[Non-Watermark] Output too small, keeping original")
-                    if tmp_path.exists():
-                        tmp_path.unlink()
-                        
+                    
+            except asyncio.CancelledError:
+                # ★ P1: Kill FFmpeg on task cancellation to release file handle
+                log.info(f"[Non-Watermark] Cancelled — killing FFmpeg for {filepath.name}")
+                if process and process.returncode is None:
+                    try:
+                        process.kill()
+                        await process.wait()
+                    except Exception:
+                        pass
+                raise  # Propagate cancellation
             except asyncio.TimeoutError:
+                # ★ P1: Kill FFmpeg BEFORE cleaning temp (prevents Windows file lock)
                 log.warning(f"[Non-Watermark] FFmpeg timed out for {filepath.name}")
-                if tmp_path.exists():
-                    tmp_path.unlink()
+                if process and process.returncode is None:
+                    try:
+                        process.kill()
+                        await process.wait()
+                    except Exception:
+                        pass
             except Exception as e:
                 log.warning(f"[Non-Watermark] Error: {e}")
+                if process and process.returncode is None:
+                    try:
+                        process.kill()
+                        await process.wait()
+                    except Exception:
+                        pass
+            finally:
+                # ★ P1: Guaranteed temp cleanup — prevents stale .tmp.mp4 files
                 if tmp_path.exists():
-                    tmp_path.unlink()
+                    try:
+                        tmp_path.unlink()
+                    except OSError as e:
+                        log.debug(f"[Non-Watermark] Could not remove temp: {e}")
 
     # ── Manifest & Thumbnail Helpers ─────────────────────────────
     
@@ -10913,7 +11620,11 @@ class Engine:
             return False
         if not self._is_transient_error(error_msg):
             return False
-        if task.chain_retry_count >= self.CHAIN_MAX_AUTO_RETRIES:
+        # ★ v5.2: Runtime read — persistent recovery raises cap to 999
+        from config.settings import get_settings as _gs_chain
+        _persistent = getattr(_gs_chain(), 'persistent_recovery', True)
+        _max = 999 if _persistent else self.CHAIN_MAX_AUTO_RETRIES
+        if task.chain_retry_count >= _max:
             return False
         
         # Check if task is a chain root (has or had descendants)

@@ -43,6 +43,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.constants import MIN_VALID_XCD
+from core.event_manager import emit_event, EventType
 
 try:
     import websockets
@@ -667,6 +668,17 @@ class ExtensionBridge:
         if email in self._check_ready_cache:
             del self._check_ready_cache[email]
             cleared.append("check_ready_cache")
+        # ★ FIX: Also clear passive readiness cache (docstring promised this
+        # but code never did it — caused stale "warm" after tab reload)
+        if email in self._recaptcha_readiness:
+            del self._recaptcha_readiness[email]
+            cleared.append("recaptcha_readiness")
+        # ★ FIX: Cancel in-flight check_recaptcha_ready task to prevent
+        # new callers from piggybacking onto a stale request
+        _inflight = self._check_ready_inflight.pop(email, None)
+        if _inflight and not _inflight.done():
+            _inflight.cancel()
+            cleared.append("check_ready_inflight(cancelled)")
         self._short_token_counts[email] = 0
         
         if cleared:
@@ -710,6 +722,47 @@ class ExtensionBridge:
             removed += 1
         if removed:
             log.info(f"[ExtensionBridge] 🗑️ Cleaned up {removed} per-email entries for {email}")
+
+    def upgrade_cached_xcd(self, email: str, xcd: str):
+        """Upgrade x-client-data in bridge cache from external source (CDP).
+        
+        Extension's onBeforeSendHeaders only captures the 8-char stub xcd.
+        CDP Network.requestWillBeSentExtraInfo captures the REAL value from
+        Chrome's Variations Service. This method injects the CDP value into
+        the bridge cache so is_submit_ready() sees it.
+        
+        The existing downgrade guard in headers_update handler (line ~2100)
+        prevents subsequent extension updates from overwriting this value.
+        
+        Only upgrades (never downgrades): new value must be longer than existing.
+        Thread-safe: called from app_controller's async loop.
+        """
+        from config.constants import MIN_VALID_XCD
+        if not xcd or len(xcd) < MIN_VALID_XCD:
+            return  # Not worth injecting
+        
+        for conn in self._connections:
+            if email in conn.headers:
+                old_xcd = conn.headers[email].get('x-client-data', '')
+                if len(xcd) > len(old_xcd):
+                    conn.headers[email]['x-client-data'] = xcd
+                    conn.headers_updated_at[email] = datetime.now()
+                    log.info(
+                        f"[ExtensionBridge] 🔑 CDP x-client-data injected for {email}: "
+                        f"{len(old_xcd)} → {len(xcd)} chars"
+                    )
+                return  # Found the connection — done
+        
+        # No live connection has headers yet — store in preserved for later
+        if email not in self._preserved_headers:
+            self._preserved_headers[email] = {}
+        old_xcd = self._preserved_headers[email].get('x-client-data', '')
+        if len(xcd) > len(old_xcd):
+            self._preserved_headers[email]['x-client-data'] = xcd
+            log.info(
+                f"[ExtensionBridge] 🔑 CDP x-client-data preserved for {email}: "
+                f"{len(xcd)} chars (no live connection yet)"
+            )
 
     # Port fallback list: try primary -> backup1 -> backup2
     FALLBACK_PORTS = [8765, 8766, 8767]
@@ -1672,6 +1725,9 @@ class ExtensionBridge:
                     f"[ExtensionBridge] ✅ grecaptcha ready for {email} "
                     f"(trial token: {token_len} chars)"
                 )
+                emit_event(EventType.UI_STATUS_UPDATE, {
+                    'message': f'recaptcha ready {email}',
+                }, source='extension_bridge')
                 if token and len(token) > self.MIN_TOKEN_LENGTH:
                     if self.on_readiness_token:
                         try:
@@ -2025,6 +2081,9 @@ class ExtensionBridge:
                 # ★ Option D: Persist version on connection for reload verification
                 conn.ext_version = ext_version
                 log.info(f"[ExtensionBridge] 📧 Extension registered: {email} (v{ext_version}, src={source}, tabId={tab_id})")
+                emit_event(EventType.UI_STATUS_UPDATE, {
+                    'message': f'extension connected {email}',
+                }, source='extension_bridge')
                 
                 # ★ Reset frozen/refresh tracking — new browser session starts fresh
                 old_count = self._frozen_tab_counts.pop(email, 0)
@@ -2214,6 +2273,11 @@ class ExtensionBridge:
                 self._short_token_counts.pop(email, None)
                 self._frozen_tab_counts.pop(email, None)
                 self._frozen_tab_first_at.pop(email, None)
+                # ★ FIX: Also clear check_ready state (consistency with tab_reloading)
+                self._check_ready_cache.pop(email, None)
+                _inflight = self._check_ready_inflight.pop(email, None)
+                if _inflight and not _inflight.done():
+                    _inflight.cancel()
                 log.info(f"[ExtensionBridge] 🧹 Cleaned up all cached state for {email}")
 
         elif action == 'pong':
@@ -2265,9 +2329,19 @@ class ExtensionBridge:
             if email:
                 self._reload_grace[email] = time.time() + (grace_ms / 1000)
                 conn.last_activity = time.time()  # Reset activity to prevent immediate zombie
+                # ★ FIX: Clear ALL readiness state — tab content (grecaptcha
+                # widget, DOM, content script) is destroyed during reload.
+                # Without this, stale "warm" cache lets startup_probe() pass
+                # before the reloaded tab is actually ready.
+                self._recaptcha_readiness.pop(email, None)
+                self._check_ready_cache.pop(email, None)
+                _inflight = self._check_ready_inflight.pop(email, None)
+                if _inflight and not _inflight.done():
+                    _inflight.cancel()
                 log.info(
                     f"[ExtensionBridge] ⏸️ Tab reloading for {email} — "
-                    f"zombie detection suspended {grace_ms // 1000}s (reason: {reason})"
+                    f"zombie detection suspended {grace_ms // 1000}s, "
+                    f"readiness cache cleared (reason: {reason})"
                 )
 
         elif action == 'recaptcha_ready':
@@ -2417,6 +2491,9 @@ class ExtensionBridge:
 
             for email in conn.registered_emails:
                 log.info(f"[ExtensionBridge] 📧 Extension disconnected: {email}")
+                emit_event(EventType.UI_STATUS_UPDATE, {
+                    'message': f'extension disconnected {email}',
+                }, source='extension_bridge')
                 if self.on_extension_disconnect:
                     try:
                         self.on_extension_disconnect(email)

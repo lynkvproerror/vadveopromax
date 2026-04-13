@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 # Bump this when adding/removing/renaming fields
-SETTINGS_VERSION = 19
+SETTINGS_VERSION = 21
 
 
 @dataclass
@@ -111,6 +111,7 @@ class AppSettings:
     smart_recovery_enabled: bool = True       # Smart Recovery: Credit Window + Diagnose-Remedy
     credit_passive_interval: int = 5          # minutes — passive credit recovery interval
     credit_probe_after: int = 3               # credits threshold for probe request
+    auto_retry_upscale_durable_max: int = 3   # Durable retries after normal upscale retry exhaustion (transient-only)
     
     # === ENHANCER IMAGE (AI Upscale — Real-ESRGAN + GFPGAN) ===
     enhance_context_menu: bool = False        # Toggle 1: Right-click → ✨ Enhance Image
@@ -144,6 +145,7 @@ class AppSettings:
     post_queue_action: str = "nothing"       # "nothing" | "shutdown" | "sleep"
     auto_sweep_max_rounds: int = 5           # Max retry rounds before giving up
     auto_retry_failed: bool = True             # Auto-retry failed tasks/videos while queue is processing
+    persistent_recovery: bool = True            # Retry transient errors indefinitely (no hard caps)
     
     # === AUTO-UPDATE ===
     auto_update_enabled: bool = True         # Check for updates on startup + every 30min
@@ -298,6 +300,14 @@ class AppSettings:
             # 18 → 19: Add auto-retry failed setting (on-the-fly sweep)
             18: lambda d: {**d,
                 'auto_retry_failed': True,
+            },
+            # 19 → 20: Add durable retry max for upscale
+            19: lambda d: {**d,
+                'auto_retry_upscale_durable_max': 3,
+            },
+            # 20 → 21: Add persistent recovery toggle
+            20: lambda d: {**d,
+                'persistent_recovery': True,
             },
         }
         

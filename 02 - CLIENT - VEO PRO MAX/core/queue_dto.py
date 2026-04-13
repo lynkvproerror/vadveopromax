@@ -76,6 +76,8 @@ class TaskDTO:
     elapsed_seconds: float = 0.0  # computed per-task processing time
     retry_progress: int = -1       # replacement task progress (-1 = not retrying)
     retry_status_text: str = ""    # replacement task status text
+    account_recovering: bool = False  # ★ T2-1: True when coordinator is recovering this task's account
+    account_quarantined: bool = False # ★ T2-3: True when account is SICK (all recovery exhausted)
     video_outputs: List[VideoSlotDTO] = field(default_factory=list)
     
     def to_dict(self) -> dict:
