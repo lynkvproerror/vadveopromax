@@ -1,0 +1,17 @@
+{
+    "version": "2.4.2",
+    "ext_version": "2.4.2",
+    "release_date": "2026-04-20",
+    "changelog": "v2.4.2 — Runtime Stability & Machine Identity Hardening\n\n🚀 Tính năng mới\n• Console Log: bảng log thời gian thực trong Queue tab.\n• Hiển thị rõ prompt nào (#N), video nào (vN) trong mỗi sự kiện.\n• Theo dõi toàn bộ pipeline: Submit → 720p → Upscale → Hoàn tất.\n\n🔧 Engine & Performance\n• Account Recovery Coordinator: tự động khôi phục tài khoản lỗi.\n• Output naming cải tiến: đặt tên video rõ ràng theo variant.\n• LP Worker cap tự động theo số tài khoản.\n• Giảm upscale loop khi reCAPTCHA lỗi.\n• Machine ID mới ổn định hơn trên nhiều dòng máy Windows.\n• Cải thiện compatibility khi khôi phục license/trial sau nâng cấp.\n\n🛡️ Stability\n• Fix trùng lặp task khi retry partial failure.\n• Fix upscale queue concurrency cho image workflows.\n• Cải thiện pre-submit gate và stage retry logic.\n• Cải thiện độ ổn định cho build app, extension và installer.",
+    "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.4.2/VEO_Pro_Max_v2.4.2.zip",
+    "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.4.2/VEO_Extension_v2.4.2.zip",
+    "sha256": "27b81eb2bdbe1bf865b54a3520749cc776ee4291986ef841e8370dc3816b5b77",
+    "ext_sha256": "ed6a34ab654e30ed6656070cbcac32c0f8291f7473311cbb030a9b04244d1fe6",
+    "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.4.2/VEO_Pro_Max_Setup_v2.4.2.exe",
+    "installer_sha256": "9d9f8eb249892ecd13ddb112f4ebc75fb0908393a9c0ecf92178a3cd7dd63d04",
+    "installer_filename": "VEO_Pro_Max_Setup_v2.4.2.exe",
+    "min_version": "1.0.0",
+    "force_update": false,
+    "build_number": 1776691802,
+    "build_time": "2026-04-20T20:30:02.250104"
+}
