@@ -19,6 +19,18 @@ if (window.__veoContentLoaded) {
 } else {
     window.__veoContentLoaded = true;
 
+    // C11: Send early heartbeat immediately — tells background.js this tab
+    // is alive before email detection completes (which takes 3-36s).
+    // background.js will create placeholder tabState if needed.
+    try {
+        chrome.runtime.sendMessage({
+            action: 'content_heartbeat',
+            email: null,
+            timestamp: Date.now(),
+            readyState: document.readyState,
+        });
+    } catch(e) {}
+
     // ── Constants ──────────────────────────────────────────────────────────
     // (reCAPTCHA execution moved to background.js via chrome.scripting.executeScript)
 
@@ -42,6 +54,9 @@ if (window.__veoContentLoaded) {
     let _scrollTimer = null;
     let _recaptchaWarmTimer = null;
     let _emailObserver = null;  // MutationObserver for __NEXT_DATA__ fallback
+    let _runtimeFailureCount = 0;
+    let _lastRuntimeFailureLogAt = 0;
+    let _runtimeRecoveryTimer = null;
 
 
     // ── Tab Registration ───────────────────────────────────────────────────
@@ -59,7 +74,10 @@ if (window.__veoContentLoaded) {
         const email = extractEmail();
         if (email) {
             _registeredEmail = email;
-            chrome.runtime.sendMessage({ action: 'register_tab', email });
+            sendRuntimeMessageSafe({ action: 'register_tab', email }, {
+                source: 'register_tab',
+                scheduleRecovery: true,
+            });
             console.log(`[VEO Bridge Content] ✅ Registered tab with email: ${email}`);
             // Clean up observer if it was started
             if (_emailObserver) { _emailObserver.disconnect(); _emailObserver = null; }
@@ -115,7 +133,10 @@ if (window.__veoContentLoaded) {
             const email = extractEmail();
             if (email) {
                 _registeredEmail = email;
-                chrome.runtime.sendMessage({ action: 'register_tab', email });
+                sendRuntimeMessageSafe({ action: 'register_tab', email }, {
+                    source: 'register_tab_observer',
+                    scheduleRecovery: true,
+                });
                 console.log(`[VEO Bridge Content] ✅ Registered tab via MutationObserver: ${email}`);
                 _emailObserver.disconnect();
                 _emailObserver = null;
@@ -241,21 +262,86 @@ if (window.__veoContentLoaded) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
+    function noteRuntimeRecovered(source = 'unknown') {
+        if (_runtimeFailureCount > 0) {
+            console.log(
+                `[VEO Bridge Content] ✅ Runtime messaging recovered ` +
+                `via ${source} after ${_runtimeFailureCount} failure(s)`
+            );
+        }
+        _runtimeFailureCount = 0;
+        if (_runtimeRecoveryTimer) {
+            clearTimeout(_runtimeRecoveryTimer);
+            _runtimeRecoveryTimer = null;
+        }
+    }
+
+    function scheduleRuntimeRecovery(reason = 'runtime_error') {
+        if (_runtimeRecoveryTimer) return;
+        _runtimeRecoveryTimer = setTimeout(() => {
+            _runtimeRecoveryTimer = null;
+            try {
+                console.log(
+                    `[VEO Bridge Content] 🔄 Runtime recovery tick ` +
+                    `(${reason}) — re-registering tab`
+                );
+                detectAndRegister();
+                startAntiIdle();
+            } catch (e) {
+                console.debug('[VEO Bridge Content] Runtime recovery tick failed:', e.message);
+            }
+        }, 5000);
+    }
+
+    function sendRuntimeMessageSafe(payload, options = {}) {
+        const {
+            source = payload?.action || 'unknown',
+            quiet = false,
+            scheduleRecovery = false,
+        } = options;
+        try {
+            chrome.runtime.sendMessage(payload);
+            noteRuntimeRecovered(source);
+            return true;
+        } catch (e) {
+            _runtimeFailureCount += 1;
+            const now = Date.now();
+            if (!quiet && (
+                _runtimeFailureCount === 1 ||
+                (now - _lastRuntimeFailureLogAt) > 15000
+            )) {
+                _lastRuntimeFailureLogAt = now;
+                console.warn(
+                    `[VEO Bridge Content] Runtime message failed ` +
+                    `(${source}, #${_runtimeFailureCount}): ${e.message}`
+                );
+            }
+            if (scheduleRecovery) {
+                scheduleRuntimeRecovery(source);
+            }
+            return false;
+        }
+    }
+
     function startAntiIdle() {
+        let startedAny = false;
         // 1. Heartbeat to background.js
         if (!_heartbeatTimer) {
             _heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
             sendHeartbeat(); // First heartbeat immediately
+            startedAny = true;
         }
 
         // 2. Human-like mouse simulation
         if (!_mouseSimTimer) {
             scheduleMouseSim();
+            startedAny = true;
         }
 
         // 3. Human-like micro-scroll simulation
         if (!_scrollTimer) {
             scheduleMicroScroll();
+            startedAny = true;
         }
 
         // 4. reCAPTCHA warmth check
@@ -263,25 +349,25 @@ if (window.__veoContentLoaded) {
             _recaptchaWarmTimer = setInterval(checkRecaptchaWarmth, RECAPTCHA_WARM_INTERVAL);
             // First check after 10s (give page time to load reCAPTCHA)
             setTimeout(checkRecaptchaWarmth, 10000);
+            startedAny = true;
         }
 
-        console.log('[VEO Bridge Content] 🏃 Anti-idle systems started (human-like mode)');
+        if (startedAny) {
+            console.log('[VEO Bridge Content] 🏃 Anti-idle systems started (human-like mode)');
+        }
     }
 
     function sendHeartbeat() {
-        try {
-            chrome.runtime.sendMessage({
-                action: 'content_heartbeat',
-                email: _registeredEmail,
-                timestamp: Date.now(),
-                url: window.location.href,
-                readyState: document.readyState,
-            });
-        } catch (e) {
-            // Extension context invalidated (reload/update)
-            console.debug('[VEO Bridge Content] Heartbeat failed:', e.message);
-            stopAntiIdle();
-        }
+        sendRuntimeMessageSafe({
+            action: 'content_heartbeat',
+            email: _registeredEmail,
+            timestamp: Date.now(),
+            url: window.location.href,
+            readyState: document.readyState,
+        }, {
+            source: 'content_heartbeat',
+            scheduleRecovery: true,
+        });
     }
 
     function scheduleMouseSim() {
@@ -517,14 +603,12 @@ if (window.__veoContentLoaded) {
 
             const ready = hasExecute && hasSiteKey;
 
-            // ★ Piggyback: also refresh x-client-data by triggering a small fetch
-            // to Google domains. Chrome adds x-client-data to these requests,
-            // which onBeforeSendHeaders in background.js captures.
-            // This ensures xcd doesn't stay at 8 chars — refreshes every 60s.
-            performLightweightRefresh();
+            // Do not trigger synthetic API traffic from the warmth timer. Header
+            // capture must follow real page/app traffic so extension mode does
+            // not create a request pattern different from normal Flow usage.
 
             // Report to background
-            chrome.runtime.sendMessage({
+            sendRuntimeMessageSafe({
                 action: 'recaptcha_warmth',
                 email: _registeredEmail,
                 ready,
@@ -535,6 +619,10 @@ if (window.__veoContentLoaded) {
                     siteKey: hasSiteKey,
                     pageLoaded: document.readyState === 'complete',
                 },
+            }, {
+                source: 'recaptcha_warmth',
+                quiet: true,
+                scheduleRecovery: true,
             });
         } catch (e) {
             // Extension context invalidated
@@ -563,7 +651,11 @@ if (window.__veoContentLoaded) {
             const email = msg.email;
             if (email) {
                 _registeredEmail = email;
-                chrome.runtime.sendMessage({ action: 'register_tab', email });
+                sendRuntimeMessageSafe({ action: 'register_tab', email }, {
+                    source: 'assign_email_register',
+                    scheduleRecovery: true,
+                });
+                startAntiIdle();
                 console.log(`[VEO Bridge Content] ✅ Assigned email from server: ${email}`);
             }
             sendResponse({ ok: true });
@@ -582,7 +674,7 @@ if (window.__veoContentLoaded) {
             return false;
         }
 
-        // Lightweight header refresh — trigger a small fetch to VEO API
+        // Lightweight header refresh — passive in current builds.
         if (msg.action === 'lightweight_header_refresh') {
             performLightweightRefresh();
             sendResponse({ ok: true });
@@ -590,15 +682,11 @@ if (window.__veoContentLoaded) {
         }
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // submit_prompt — Content script relay for page-context API calls
+        // submit_prompt — Legacy compatibility relay
         //
-        // Why relay via content script instead of chrome.scripting.executeScript?
-        // MV3 service workers can terminate after 30s, killing pending
-        // executeScript promises. Content scripts live as long as the page,
-        // making them reliable for long-running async operations.
-        //
-        // Flow: background.js → content.js → <script> (MAIN world)
-        //       → window.postMessage → content.js → background.js
+        // Current production path submits directly from background.js via
+        // chrome.scripting.executeScript(MAIN world). This relay is retained
+        // only as a fallback/compatibility path and must not leak listeners.
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         if (msg.action === 'submit_prompt') {
             const requestId = msg.requestId;
@@ -615,51 +703,57 @@ if (window.__veoContentLoaded) {
                 `endpoint=${msg.endpoint} needsRecaptcha=${needsRecaptcha}`
             );
 
+            let settled = false;
+            let timeout = null;
+            const cleanup = () => {
+                if (settled) return;
+                settled = true;
+                if (timeout) {
+                    clearTimeout(timeout);
+                    timeout = null;
+                }
+                window.removeEventListener('message', resultHandler);
+            };
+
             // One-time listener for result from MAIN world script
             const resultHandler = (event) => {
                 if (event.source !== window) return;
                 if (!event.data || event.data.type !== '__VEO_SUBMIT_RESULT__') return;
                 if (event.data.requestId !== requestId) return;
 
-                window.removeEventListener('message', resultHandler);
+                cleanup();
                 console.log(
                     `[VEO Bridge Content] ${event.data.result?.success ? '✅' : '❌'} ` +
                     `submit_prompt result: status=${event.data.result?.status || 'N/A'}`
                 );
 
                 // Send result back to background.js
-                chrome.runtime.sendMessage({
+                sendRuntimeMessageSafe({
                     action: 'submit_prompt_relay_result',
                     requestId: requestId,
                     ...event.data.result,
+                }, {
+                    source: 'submit_prompt_relay_result',
+                    scheduleRecovery: true,
                 });
             };
             window.addEventListener('message', resultHandler);
 
             // Safety timeout — scales with fetchTimeout (2x for reCAPTCHA + fetch + margin)
             const relayTimeout = Math.max((rcTimeout + fetchTimeout) * 2, 60000);
-            const timeout = setTimeout(() => {
-                window.removeEventListener('message', resultHandler);
+            timeout = setTimeout(() => {
+                cleanup();
                 console.error(`[VEO Bridge Content] ❌ submit_prompt timed out (${relayTimeout / 1000}s)`);
-                chrome.runtime.sendMessage({
+                sendRuntimeMessageSafe({
                     action: 'submit_prompt_relay_result',
                     requestId: requestId,
                     success: false,
                     error: `Content script relay timeout (${relayTimeout / 1000}s)`,
+                }, {
+                    source: 'submit_prompt_relay_timeout',
+                    scheduleRecovery: true,
                 });
             }, relayTimeout);
-
-            // Override cleanup on result
-            const origHandler = resultHandler;
-            const wrappedHandler = (event) => {
-                if (event.source !== window) return;
-                if (!event.data || event.data.type !== '__VEO_SUBMIT_RESULT__') return;
-                if (event.data.requestId !== requestId) return;
-                clearTimeout(timeout);
-                origHandler(event);
-            };
-            window.removeEventListener('message', resultHandler);
-            window.addEventListener('message', wrappedHandler);
 
             // Inject <script> tag into MAIN world
             const script = document.createElement('script');
@@ -858,28 +952,13 @@ if (window.__veoContentLoaded) {
 
 
     // ── Lightweight Header Refresh ──────────────────────────────────────────
-    // Trigger a small fetch to VEO API which causes onBeforeSendHeaders to fire
-    // and capture fresh headers WITHOUT reloading the entire page.
+    // Kept for backwards-compatible messages. It intentionally does not issue
+    // cross-site Google API probes; those showed up in the page console and made
+    // managed sessions diverge from a normal browser.
 
     function performLightweightRefresh() {
         try {
-            // Fetch a lightweight VEO API endpoint that triggers header attachment
-            // The fetch itself will fail or succeed — doesn't matter, we just need
-            // onBeforeSendHeaders to fire in background.js
-            fetch('https://labs.google/fx/api/trpc/t2v.generateComposite?batch=1', {
-                method: 'HEAD',
-                credentials: 'include',  // Include cookies → triggers auth headers
-                cache: 'no-store',
-            }).catch(() => { /* Expected — we don't care about the response */ });
-
-            // Also try aisandbox API
-            fetch('https://aisandbox-pa.googleapis.com/$discovery/rest?version=v1&key=AIzaSyDqz9yFaVcD3GreJfBUv2qnTN0Qw0jcXfA', {
-                method: 'HEAD',
-                credentials: 'include',
-                cache: 'no-store',
-            }).catch(() => { });
-
-            console.log('[VEO Bridge Content] 🔄 Lightweight header refresh triggered');
+            console.debug('[VEO Bridge Content] Lightweight header refresh skipped (passive mode)');
         } catch (e) {
             console.debug('[VEO Bridge Content] Lightweight refresh failed:', e.message);
         }

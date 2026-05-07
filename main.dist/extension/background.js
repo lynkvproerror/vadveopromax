@@ -66,6 +66,15 @@ function persistTabState() {
         accessToken: state.accessToken,
         lastHeartbeat: state.lastHeartbeat,
         recaptchaReady: state.recaptchaReady || false,
+        // Lifecycle state (survive SW restart)
+        _lifecycle: state._lifecycle || TAB_LIFECYCLE.ALIVE,
+        _lifecycleAt: state._lifecycleAt || 0,
+        _recoveryAttempts: state._recoveryAttempts || 0,
+        _deadNotified: state._deadNotified || false,
+        _registerGeneration: state._registerGeneration || 0,
+        // Timer state (survive SW restart)
+        _frozenWindowStart: state._frozenWindowStart || 0,
+        _lastReloadAt: state._lastReloadAt || 0,
       };
     }
     chrome.storage.session.set({ tabState: serializable }).catch(() => { });
@@ -84,6 +93,36 @@ async function restoreTabState() {
           // Chrome to consider offscreen doc unnecessary and kill it
           if (tab && tab.url && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome:')) {
             tabState[tabId] = state;
+
+            // ★ Recompute lifecycle after SW restart
+            const isVeoPage = tab.url && tab.url.includes('labs.google');
+            const now = Date.now();
+
+            // Reset stale frozen window — old attempts shouldn't count
+            if (state._frozenWindowStart &&
+              (now - state._frozenWindowStart) > FROZEN_RELOAD_WINDOW) {
+              state._recoveryAttempts = 0;
+              state._frozenWindowStart = 0;
+              persistTabState(); // P2: persist timer reset across SW restart
+            }
+
+            if (state._lifecycle === TAB_LIFECYCLE.DEAD) {
+              // Keep DEAD — user must intervene
+            } else if (state._lifecycle === TAB_LIFECYCLE.SUSPENDED && !isVeoPage) {
+              // Still on non-VEO page — keep SUSPENDED
+            } else if (!isVeoPage) {
+              setLifecycle(tabId, TAB_LIFECYCLE.SUSPENDED);
+            } else if (state._lifecycle === TAB_LIFECYCLE.RELOADING ||
+              state._lifecycle === TAB_LIFECYCLE.NAVIGATING ||
+              state._lifecycle === TAB_LIFECYCLE.RECOVERING) {
+              if (tab.status === 'complete') {
+                setLifecycle(tabId, TAB_LIFECYCLE.RECOVERING);
+              }
+              // If still loading, keep current state — onUpdated will handle
+            } else {
+              // ALIVE or unknown — set RECOVERING (content.js may need re-init)
+              setLifecycle(tabId, TAB_LIFECYCLE.RECOVERING);
+            }
           } else if (tab) {
             console.debug(`[VEO Bridge] Skipping restored tab ${tabId} (URL: ${tab.url || 'none'})`);
           }
@@ -157,15 +196,50 @@ let _heartbeatCheckTimer = null;
 // to reload the same tab. Without cooldown, the VEO page (13s+ load time)
 // never finishes loading → grecaptcha never initializes → 330-char tokens.
 const RELOAD_COOLDOWN_MS = 20000; // 20s between reloads per tab
-const tabLastReloadTime = {};     // tabId → Date.now() of last reload
+// NOTE: tabLastReloadTime replaced by tabState[tabId]._lastReloadAt (persisted)
+
+// ── Tab Lifecycle State Machine ───────────────────────────────────────
+// Prevents false "Tab DEAD" by tracking tab transitions explicitly.
+// Watchdog skips heartbeat checks during NAVIGATING/RELOADING/RECOVERING/SUSPENDED.
+const TAB_LIFECYCLE = {
+  ALIVE: 'alive',
+  NAVIGATING: 'navigating',  // Tab navigating/loading within VEO scope
+  RELOADING: 'reloading',    // Explicit reload issued, waiting for status=complete
+  RECOVERING: 'recovering',  // Reload done + complete, waiting for real heartbeat
+  SUSPENDED: 'suspended',    // Tab navigated outside labs.google — watchdog skips
+  DEAD: 'dead',
+};
+
+const RELOAD_RESULT = {
+  RELOADED: 'reloaded',
+  SKIPPED_COOLDOWN: 'skipped',
+  FAILED: 'failed',
+};
 
 /**
- * Reload a tab with global cooldown protection.
- * Returns true if reload was executed, false if skipped (cooldown active).
+ * Set tab lifecycle state and persist. ALL lifecycle mutations MUST go through this.
+ * @param {string|number} tabId
+ * @param {string} newState - TAB_LIFECYCLE value
+ * @param {Object} extraFields - additional fields to merge (e.g. _recoveryAttempts)
+ */
+function setLifecycle(tabId, newState, extraFields = {}) {
+  const state = tabState[tabId];
+  if (!state) return;
+  state._lifecycle = newState;
+  state._lifecycleAt = Date.now();
+  Object.assign(state, extraFields);
+  persistTabState(); // Debounced — batches rapid changes
+}
+
+/**
+ * Reload a tab with cooldown protection and lifecycle management.
+ * safeTabReload() OWNS the RELOADING state — callers must NOT pre-set it.
+ * Returns RELOAD_RESULT enum.
  */
 async function safeTabReload(tabId, reason, bypassCache = false) {
   const now = Date.now();
-  const lastReload = tabLastReloadTime[tabId] || 0;
+  const state = tabState[tabId];
+  const lastReload = state?._lastReloadAt || 0;
   const elapsed = now - lastReload;
 
   if (elapsed < RELOAD_COOLDOWN_MS) {
@@ -173,31 +247,41 @@ async function safeTabReload(tabId, reason, bypassCache = false) {
       `[VEO Bridge] ⏳ Skipping reload for tab ${tabId} — ` +
       `cooldown active (${Math.ceil((RELOAD_COOLDOWN_MS - elapsed) / 1000)}s remaining, reason: ${reason})`
     );
-    return false;
+    return RELOAD_RESULT.SKIPPED_COOLDOWN;
   }
 
+  // ★ Save previous lifecycle to revert on failure
+  const prevLifecycle = state?._lifecycle;
+
+  // ★ Set RELOADING before reload attempt (owns this state)
+  setLifecycle(tabId, TAB_LIFECYCLE.RELOADING);
+
   try {
-    // ★ Notify Python to suspend zombie detection for this tab's email
-    // Tab reload kills content.js → 20-40s email detection gap → Python would
-    // false-positive zombie-detect and kill the WS connection
-    const state = tabState[tabId];
+    // Notify Python to suspend zombie detection
     if (state && state.email) {
       wsSend({
         action: 'tab_reloading',
         email: state.email,
         tabId: tabId,
-        gracePeriodMs: 60000, // 60s grace for reload + email detect + reCAPTCHA init
+        gracePeriodMs: 60000,
         reason: reason,
       });
     }
 
     await chrome.tabs.reload(tabId, { bypassCache });
-    tabLastReloadTime[tabId] = now;
+    if (tabState[tabId]) {
+      tabState[tabId]._lastReloadAt = now;
+      persistTabState(); // P2: persist reload timestamp across SW restart
+    }
+    // ★ Do NOT set lastHeartbeat = now — that fakes liveness.
+    // Stay in RELOADING — onUpdated will transition to RECOVERING.
     console.log(`[VEO Bridge] 🔄 Reloaded tab ${tabId} (reason: ${reason})`);
-    return true;
+    return RELOAD_RESULT.RELOADED;
   } catch (e) {
     console.debug(`[VEO Bridge] Tab ${tabId} reload failed: ${e.message}`);
-    return false;
+    // ★ Revert lifecycle — don't leave stuck in RELOADING
+    setLifecycle(tabId, prevLifecycle || TAB_LIFECYCLE.ALIVE);
+    return RELOAD_RESULT.FAILED;
   }
 }
 
@@ -478,6 +562,7 @@ function pushTabSnapshotToApp(tabId, reason = 'snapshot', force = false) {
     email: state.email,
     tabId: parseInt(tabId),
     version: EXT_VERSION,
+    source: 'tab_snapshot',  // ★ Layer A: distinguish from cdp_identity
   });
 
   let pushed = false;
@@ -532,6 +617,28 @@ async function onWsConnected() {
     }
   }
 
+  // ★ Layer A: CDP Deterministic Identity Check
+  // Read identity injected by Python app via CDP into chrome.storage.local.
+  // This runs BEFORE tab registration so the app knows which profile this is.
+  try {
+    const stored = await chrome.storage.local.get('__veo_identity');
+    const identityEmail = stored.__veo_identity;
+    if (identityEmail) {
+      console.log(`[VEO Bridge] 🔐 CDP identity found: ${identityEmail}`);
+      // Send identity-based register FIRST
+      // tabId=null signals Layer A resolved, Layer B tab not yet ready
+      wsSend({
+        action: 'register',
+        email: identityEmail,
+        tabId: null,
+        version: EXT_VERSION,
+        source: 'cdp_identity',
+      });
+    }
+  } catch (e) {
+    console.debug('[VEO Bridge] CDP identity check failed:', e.message);
+  }
+
   // Register all known tabs + immediately push cached data
   for (const [tabId, state] of Object.entries(tabState)) {
     if (state.email) {
@@ -566,6 +673,19 @@ async function handleAppMessage(msg) {
         });
         return;
       }
+
+      const flowReady = await ensureTabOnFlow(tabId, 'request_recaptcha');
+      if (!flowReady.success) {
+        wsSend({
+          action: 'recaptcha_token',
+          requestId: msg.requestId,
+          email: msg.email,
+          token: null,
+          error: flowReady.error || 'Flow page unavailable',
+        });
+        return;
+      }
+      tabId = flowReady.tabId;
 
       try {
         // Execute directly in page's MAIN world via chrome.scripting API
@@ -646,8 +766,8 @@ async function handleAppMessage(msg) {
               `${shortTokenCounts[tabId]} consecutive short tokens (reCAPTCHA widget broken)`
             );
             shortTokenCounts[tabId] = 0;
-            const reloaded = await safeTabReload(tabId, 'short-token-threshold', true);
-            if (reloaded) {
+            const reloadResult = await safeTabReload(tabId, 'short-token-threshold', true);
+            if (reloadResult === RELOAD_RESULT.RELOADED) {
               // Wait for page to reload and reCAPTCHA to re-initialize
               await new Promise(r => setTimeout(r, 5000));
             }
@@ -677,8 +797,14 @@ async function handleAppMessage(msg) {
     }
 
     case 'request_headers': {
-      // Return cached headers for email
-      const tabId = findTabForEmail(msg.email);
+      // Return cached headers for email after ensuring the tab is on Flow.
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId && msg.email) {
+        const ensured = await ensureFlowForEmail(msg.email, 'request_headers');
+        if (ensured.success) tabId = ensured.tabId;
+      } else if (tabId) {
+        await ensureTabOnFlow(tabId, 'request_headers');
+      }
       const state = tabId ? tabState[tabId] : null;
 
       wsSend({
@@ -691,7 +817,11 @@ async function handleAppMessage(msg) {
     }
 
     case 'request_access_token': {
-      const tabId = findTabForEmail(msg.email);
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId && msg.email) {
+        const ensured = await ensureFlowForEmail(msg.email, 'request_access_token');
+        if (ensured.success) tabId = ensured.tabId;
+      }
       if (!tabId) {
         wsSend({
           action: 'access_token',
@@ -702,6 +832,19 @@ async function handleAppMessage(msg) {
         });
         return;
       }
+
+      const flowReady = await ensureTabOnFlow(tabId, 'request_access_token');
+      if (!flowReady.success) {
+        wsSend({
+          action: 'access_token',
+          requestId: msg.requestId,
+          email: msg.email,
+          token: null,
+          error: flowReady.error || 'Flow page unavailable',
+        });
+        return;
+      }
+      tabId = flowReady.tabId;
 
       try {
         const response = await chrome.tabs.sendMessage(tabId, {
@@ -728,14 +871,26 @@ async function handleAppMessage(msg) {
     }
 
     case 'refresh_headers': {
-      // App requests fresh headers → reload VEO tabs to trigger API requests
-      console.log('[VEO Bridge] App requested header refresh');
-      const refreshed = await reloadVeoTabs(msg.email);
+      // Passive mode: do not reload Flow tabs just to refresh headers. Real
+      // page traffic is the only trusted source for browser headers.
+      console.log('[VEO Bridge] App requested header refresh — skipped (passive mode)');
       wsSend({
         action: 'headers_refreshed',
         requestId: msg.requestId || null,
         email: msg.email || null,
-        tabsReloaded: refreshed,
+        tabsReloaded: 0,
+        passive: true,
+      });
+      break;
+    }
+
+    case 'ensure_veo_tab': {
+      const result = await ensureVeoTabForEmail(msg.email);
+      wsSend({
+        action: 'ensure_veo_tab_result',
+        requestId: msg.requestId || null,
+        email: msg.email || null,
+        ...result,
       });
       break;
     }
@@ -743,9 +898,16 @@ async function handleAppMessage(msg) {
     case 'refresh_headers_lightweight': {
       // Lightweight refresh — tell content.js to trigger a fetch (no page reload)
       console.log('[VEO Bridge] App requested lightweight header refresh');
-      const tabId = findTabForEmail(msg.email);
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId && msg.email) {
+        const ensured = await ensureFlowForEmail(msg.email, 'refresh_headers_lightweight');
+        if (ensured.success) tabId = ensured.tabId;
+      }
       if (tabId) {
         try {
+          const flowReady = await ensureTabOnFlow(tabId, 'refresh_headers_lightweight');
+          if (!flowReady.success) throw new Error(flowReady.error || 'Flow page unavailable');
+          tabId = flowReady.tabId;
           await chrome.tabs.sendMessage(tabId, { action: 'lightweight_header_refresh' });
           wsSend({
             action: 'headers_refreshed_lightweight',
@@ -754,14 +916,14 @@ async function handleAppMessage(msg) {
             success: true,
           });
         } catch (e) {
-          // Content script not responding — fall back to full reload
-          console.log('[VEO Bridge] Lightweight refresh failed, falling back to full reload');
-          const refreshed = await reloadVeoTabs(msg.email);
+          console.log('[VEO Bridge] Lightweight refresh skipped — content unavailable');
           wsSend({
-            action: 'headers_refreshed',
+            action: 'headers_refreshed_lightweight',
             requestId: msg.requestId || null,
             email: msg.email || null,
-            tabsReloaded: refreshed,
+            success: false,
+            passive: true,
+            error: e.message,
           });
         }
       } else {
@@ -822,6 +984,10 @@ async function handleAppMessage(msg) {
       const email = msg.email;
       if (!email) break;
 
+      // ★ Persist identity — survive service worker restarts.
+      // On next onWsConnected(), extension will read this and self-register.
+      chrome.storage.local.set({ __veo_identity: email });
+
       const serverProfilePath = msg.profilePath || '';
       // NOTE: MV3 extensions cannot access the browser's user-data-dir,
       // so client-side profile verification is not possible. The profilePath
@@ -832,7 +998,7 @@ async function handleAppMessage(msg) {
       let existingTabId = findTabForEmail(email);
       if (existingTabId) {
         console.log(`[VEO Bridge] Email ${email} already assigned to tab ${existingTabId}`);
-        wsSend({ action: 'register', email, tabId: existingTabId, version: EXT_VERSION });
+        wsSend({ action: 'register', email, tabId: existingTabId, version: EXT_VERSION, source: 'assign_email' });
         break;
       }
 
@@ -847,7 +1013,7 @@ async function handleAppMessage(msg) {
         }
         tabState[tabId].email = email;
         console.log(`[VEO Bridge] Assigned email ${email} to existing VEO tab ${tabId} (${targetTab.url})`);
-        wsSend({ action: 'register', email, tabId, version: EXT_VERSION });
+        wsSend({ action: 'register', email, tabId, version: EXT_VERSION, source: 'assign_email' });
       } else {
         // No VEO tab exists — check tab limit before creating
         const allTabs = await chrome.tabs.query({ currentWindow: true });
@@ -869,7 +1035,7 @@ async function handleAppMessage(msg) {
           });
           tabState[newTab.id] = { email, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
           console.log(`[VEO Bridge] Created VEO tab ${newTab.id} for ${email}`);
-          wsSend({ action: 'register', email, tabId: newTab.id, version: EXT_VERSION });
+          wsSend({ action: 'register', email, tabId: newTab.id, version: EXT_VERSION, source: 'assign_email' });
           try { chrome.tabs.update(newTab.id, { autoDiscardable: false }); } catch (_) { }
           startZombieTimer(newTab.id);
         }
@@ -877,6 +1043,31 @@ async function handleAppMessage(msg) {
       break;
     }
 
+    case 'check_identity': {
+      // ★ Corrective: App injected __veo_identity via CDP, now triggers re-read.
+      // Extension re-reads storage and re-registers with the correct email.
+      // This fixes wrong bindings from earlier assign_email guesses.
+      try {
+        const stored = await chrome.storage.local.get('__veo_identity');
+        const identityEmail = stored.__veo_identity;
+        if (identityEmail) {
+          console.log(`[VEO Bridge] 🔐 check_identity: re-registering as ${identityEmail}`);
+          const tabId = findTabForEmail(identityEmail);
+          wsSend({
+            action: 'register',
+            email: identityEmail,
+            tabId: tabId || null,
+            version: EXT_VERSION,
+            source: 'identity_refresh',
+          });
+        } else {
+          console.debug('[VEO Bridge] check_identity: no __veo_identity in storage');
+        }
+      } catch (e) {
+        console.debug('[VEO Bridge] check_identity failed:', e.message);
+      }
+      break;
+    }
 
     case 'check_recaptcha_ready': {
       // Layer 1: Deep readiness check — trial-execute a real token.
@@ -899,6 +1090,18 @@ async function handleAppMessage(msg) {
         });
         return;
       }
+
+      const flowReady = await ensureTabOnFlow(tabId, 'check_recaptcha_ready');
+      if (!flowReady.success) {
+        wsSend({
+          action: 'recaptcha_ready',
+          requestId: msg.requestId,
+          ready: false,
+          details: { error: flowReady.error || 'Flow page unavailable' },
+        });
+        return;
+      }
+      tabId = flowReady.tabId;
 
       try {
         // Race: trial-execute vs 8s timeout (execute itself takes 3-5s)
@@ -1067,6 +1270,18 @@ async function handleAppMessage(msg) {
         return;
       }
 
+      const flowReady = await ensureTabOnFlow(tabId, 'submit_prompt');
+      if (!flowReady.success) {
+        wsSend({
+          action: 'submit_prompt_result',
+          requestId: msg.requestId,
+          success: false,
+          error: flowReady.error || 'Flow page unavailable',
+        });
+        return;
+      }
+      tabId = flowReady.tabId;
+
       // ── MV3 Keepalive ──────────────────────────────────────────────────
       // Call extension API every 25s to reset Chrome's 30s inactivity timer.
       // This prevents service worker termination during long operations
@@ -1074,6 +1289,41 @@ async function handleAppMessage(msg) {
       const keepaliveTimer = setInterval(() => {
         chrome.runtime.getPlatformInfo(() => { });
       }, 25000);
+
+      // ── Pre-flight Tab Health Check ──────────────────────────────────
+      // Verify tab DOM is alive before wasting reCAPTCHA + fetch attempt.
+      // Chrome Memory Saver can discard tabs while they're still in tabState.
+      // "Could not extract reCAPTCHA site key" = dead DOM → detect early.
+      try {
+        const tabInfo = await chrome.tabs.get(tabId);
+        const isVeoPage = isFlowUrl(tabInfo.url || '');
+
+        if (tabInfo.discarded || tabInfo.status === 'unloaded') {
+          console.warn(
+            `[VEO Bridge] ⚠️ Pre-flight: tab ${tabId} discarded/unloaded ` +
+            `— reloading before submit`
+          );
+          // C8: safeTabReload() owns RELOADING
+          await safeTabReload(tabId, 'submit-preflight-discarded');
+          await new Promise(r => setTimeout(r, 15000)); // VEO needs 13-15s
+        } else if (!isVeoPage) {
+          console.warn(
+            `[VEO Bridge] ⚠️ Pre-flight: tab ${tabId} not on VEO page ` +
+            `(url=${tabInfo.url}) — navigating back`
+          );
+          // C5: NAVIGATING before VEO navigation
+          setLifecycle(tabId, TAB_LIFECYCLE.NAVIGATING);
+          await chrome.tabs.update(tabId, {
+            url: VEO_URL
+          });
+          await new Promise(r => setTimeout(r, 15000));
+        }
+      } catch (preFlightErr) {
+        console.warn(
+          `[VEO Bridge] Pre-flight check failed for tab ${tabId}: ` +
+          preFlightErr.message
+        );
+      }
 
       try {
         // Endpoint URLs mapped by type
@@ -1085,7 +1335,7 @@ async function handleAppMessage(msg) {
           // T2I: dynamic — requires projects/{projectId}/ prefix (see below)
           STATUS: 'https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus',
           UPSCALE_VIDEO: 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoUpsampleVideo',
-          UPLOAD: 'https://aisandbox-pa.googleapis.com/v1:uploadUserImage',
+          UPLOAD: 'https://aisandbox-pa.googleapis.com/v1/flow/uploadImage',
           UPSCALE_IMAGE: 'https://aisandbox-pa.googleapis.com/v1/flow/upsampleImage',
         };
 
@@ -1276,6 +1526,13 @@ async function handleAppMessage(msg) {
               }
             }
 
+            // ── Step 4.5: Request Storage Access (if needed) ──────────────
+            if (document.requestStorageAccess) {
+              try {
+                await document.requestStorageAccess();
+              } catch (e) { /* non-fatal */ }
+            }
+
             // ── Step 5: Send API request (with 20s AbortController) ──────
             const headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
             if (authHeaderValue) {
@@ -1314,22 +1571,9 @@ async function handleAppMessage(msg) {
                 responseData = { raw: responseText.substring(0, 1000) };
               }
 
-              // ── Step 6: recaptcha/enterprise/clr — Report completion ────
-              // F12 analysis (definitive): Web calls recaptcha/enterprise/clr
-              // after EVERY successful submit (reload → submit → clr cycle).
-              // This builds reCAPTCHA trust score for subsequent requests.
-              // Fire-and-forget: don't block on response, don't fail on error.
-              if (siteKey && recaptchaToken) {
-                try {
-                  fetch(`https://www.google.com/recaptcha/enterprise/clr?k=${siteKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-protobuffer' },
-                    credentials: 'include',
-                    mode: 'no-cors',  // F12: sec-fetch-mode: no-cors
-                    body: `\n(${siteKey}`,  // Minimal protobuf: field 5 (site key)
-                  }).catch(() => {}); // Truly fire-and-forget
-                } catch (_clrErr) { /* non-fatal */ }
-              }
+              // Let the page's official reCAPTCHA runtime own reload/clr traffic.
+              // A synthetic no-cors clr POST from the extension adds malformed
+              // post-submit traffic and can degrade the profile's risk signals.
 
               return {
                 success: resp.ok,
@@ -1448,7 +1692,11 @@ async function handleAppMessage(msg) {
     // Used for: TRPC project creation/listing, checkAppAvailability, etc.
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     case 'relay_fetch': {
-      const tabId = findTabForEmail(msg.email);
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId && msg.email) {
+        const ensured = await ensureFlowForEmail(msg.email, 'relay_fetch');
+        if (ensured.success) tabId = ensured.tabId;
+      }
       if (!tabId) {
         wsSend({
           action: 'relay_fetch_result',
@@ -1470,35 +1718,18 @@ async function handleAppMessage(msg) {
         // domain, navigate to VEO flow page first.
         const requestUrl = msg.url || '';
         if (requestUrl.includes('labs.google')) {
-          try {
-            const tab = await chrome.tabs.get(tabId);
-            if (tab && tab.url && !tab.url.includes('labs.google')) {
-              console.log(
-                `[VEO Bridge] 🔄 relay_fetch: tab on ${new URL(tab.url).hostname} — ` +
-                `navigating to labs.google first`
-              );
-              await chrome.tabs.update(tabId, { url: VEO_URL });
-              // Wait for navigation to complete (up to 15s)
-              await new Promise((resolve) => {
-                const onUpdated = (updatedTabId, changeInfo) => {
-                  if (updatedTabId === tabId && changeInfo.status === 'complete') {
-                    chrome.tabs.onUpdated.removeListener(onUpdated);
-                    resolve();
-                  }
-                };
-                chrome.tabs.onUpdated.addListener(onUpdated);
-                setTimeout(() => {
-                  chrome.tabs.onUpdated.removeListener(onUpdated);
-                  resolve(); // Proceed anyway after timeout
-                }, 15000);
-              });
-              // Extra settle time for page scripts to initialize
-              await new Promise(r => setTimeout(r, 2000));
-              console.log(`[VEO Bridge] ✅ Tab navigated to labs.google — proceeding with fetch`);
-            }
-          } catch (navErr) {
-            console.warn(`[VEO Bridge] ⚠️ Domain check failed: ${navErr.message}`);
+          const flowReady = await ensureTabOnFlow(tabId, 'relay_fetch');
+          if (!flowReady.success) {
+            wsSend({
+              action: 'relay_fetch_result',
+              requestId: msg.requestId,
+              success: false,
+              error: flowReady.error || 'Flow page unavailable',
+            });
+            return;
           }
+          tabId = flowReady.tabId;
+          console.log(`[VEO Bridge] ✅ relay_fetch Flow guard passed — proceeding with fetch`);
         }
 
         const scriptResult = await chrome.scripting.executeScript({
@@ -1594,7 +1825,11 @@ async function handleAppMessage(msg) {
     case 'navigate_tab': {
       // Navigate VEO tab to a specific URL (e.g. project page)
       // Uses chrome.tabs.update — cleaner than window.location.href
-      const tabId = findTabForEmail(msg.email);
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId) {
+        const ensured = await ensureVeoTabForEmail(msg.email, msg.url || VEO_URL);
+        if (ensured.success) tabId = ensured.tabId;
+      }
       if (!tabId) {
         wsSend({
           action: 'navigate_tab_result',
@@ -1619,6 +1854,12 @@ async function handleAppMessage(msg) {
       try {
         const startTime = Date.now();
         console.log(`[VEO Bridge] 📍 Navigating tab ${tabId} to: ${targetUrl}`);
+
+        // C5: Set NAVIGATING or SUSPENDED based on target scope
+        const isVeoScope = targetUrl.includes('labs.google');
+        setLifecycle(tabId, isVeoScope
+          ? TAB_LIFECYCLE.NAVIGATING
+          : TAB_LIFECYCLE.SUSPENDED);
 
         // Navigate using chrome.tabs.update
         await chrome.tabs.update(tabId, { url: targetUrl });
@@ -1714,7 +1955,8 @@ async function handleAppMessage(msg) {
 
       try {
         console.log(`[VEO Bridge] 🔄 Reloading tab ${tabId} for ${msg.email} (soft recovery)`);
-        await chrome.tabs.reload(tabId);
+        // C8: safeTabReload() owns RELOADING
+        await safeTabReload(tabId, 'reload-tab-soft-recovery');
 
         // Wait for tab to finish loading (up to 15s)
         await new Promise((resolve) => {
@@ -1770,10 +2012,13 @@ async function handleAppMessage(msg) {
       break;
 
     case 'probe_browser_headers': {
-      // Trigger a cross-origin fetch from the VEO page to googleapis.com
-      // This causes Chrome to add x-browser-validation header,
-      // which is captured by the webRequest listener above.
-      const tabId = findTabForEmail(msg.email);
+      // Passive probe only: report headers captured from real Flow traffic.
+      // Do not create synthetic googleapis requests from the page context.
+      let tabId = findTabForEmail(msg.email);
+      if (!tabId && msg.email) {
+        const ensured = await ensureFlowForEmail(msg.email, 'probe_browser_headers');
+        if (ensured.success) tabId = ensured.tabId;
+      }
       if (!tabId) {
         wsSend({
           action: 'probe_browser_headers_result',
@@ -1784,44 +2029,37 @@ async function handleAppMessage(msg) {
         break;
       }
 
-      try {
-        console.log(`[VEO Bridge] 🔍 Probing browser headers from tab ${tabId} (${msg.email})`);
-
-        // Execute a simple fetch in the page's MAIN world context
-        // The URL must be a cross-origin googleapis.com endpoint
-        const results = await chrome.scripting.executeScript({
-          target: { tabId },
-          world: 'MAIN',
-          func: async (apiKey) => {
-            try {
-              // Simple GET to credits endpoint — we don't care about the response,
-              // only that Chrome adds x-browser-validation to this cross-origin request
-              const resp = await fetch(
-                `https://aisandbox-pa.googleapis.com/v1/credits?key=${apiKey}`,
-                {
-                  method: 'GET',
-                  credentials: 'include',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Origin': 'https://labs.google',
-                    'Referer': 'https://labs.google/',
-                  },
-                }
-              );
-              return { status: resp.status, triggered: true };
-            } catch (e) {
-              // Even if the fetch fails (CORS, etc.), the webRequest listener
-              // should have already captured the headers before the response
-              return { triggered: true, error: e.message };
-            }
-          },
-          args: [msg.apiKey || 'AIzaSyBtrm0o5ab1c-Ec8ZuLcGt3oJAA5VWt3pY'],
+      const flowReady = await ensureTabOnFlow(tabId, 'probe_browser_headers');
+      if (!flowReady.success) {
+        wsSend({
+          action: 'probe_browser_headers_result',
+          requestId: msg.requestId || null,
+          success: false,
+          error: flowReady.error || 'Flow page unavailable',
         });
+        break;
+      }
+      tabId = flowReady.tabId;
 
-        const result = results?.[0]?.result;
+      // C8: Layer 1 — Check lifecycle before running probe
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        const lifecycle = tabState[tabId]?._lifecycle;
+        if (tab.status !== 'complete' ||
+          !isFlowUrl(tab.url || '') ||
+          lifecycle === TAB_LIFECYCLE.RELOADING ||
+          lifecycle === TAB_LIFECYCLE.NAVIGATING) {
+          wsSend({
+            action: 'probe_browser_headers_result',
+            requestId: msg.requestId || null,
+            success: false, error: 'tab_transitioning',
+          });
+          break;
+        }
+      } catch (e) { /* tab gone */ break; }
 
-        // Wait a bit for webRequest listener to process
-        await new Promise(r => setTimeout(r, 500));
+      try {
+        console.log(`[VEO Bridge] 🔍 Passive browser-header probe for tab ${tabId} (${msg.email})`);
 
         // Send current state of headers back
         const state = tabState[tabId];
@@ -1837,7 +2075,7 @@ async function handleAppMessage(msg) {
           requestId: msg.requestId || null,
           email: msg.email,
           success: true,
-          probeResult: result,
+          probeResult: { passive: true },
           headers: currentHeaders,
           hasValidation: !!currentHeaders['x-browser-validation'],
           globalValidation: globalBrowserValidation,
@@ -1854,12 +2092,18 @@ async function handleAppMessage(msg) {
           });
         }
       } catch (e) {
-        console.error(`[VEO Bridge] Probe failed: ${e.message}`);
+        // C8: Layer 2 — Classify transient frame errors vs real errors
+        const isTransient = e.message?.includes('Frame with ID') ||
+          e.message?.includes('No frame with id') ||
+          e.message?.includes('Cannot access') ||
+          e.message?.includes('No tab with id');
+        console.error(`[VEO Bridge] Probe failed: ${e.message}${isTransient ? ' (transient)' : ''}`);
         wsSend({
           action: 'probe_browser_headers_result',
           requestId: msg.requestId || null,
           success: false,
-          error: e.message,
+          error: isTransient ? 'tab_transitioning' : e.message,
+          transient: isTransient,
         });
       }
       break;
@@ -2009,6 +2253,8 @@ async function handleAppMessage(msg) {
           const origUrl = (await chrome.tabs.get(parseInt(tabId))).url;
 
           // Navigate to AI Studio to get SNlM0e token from DOM
+          // C5: SUSPENDED — AI Studio is outside VEO scope
+          setLifecycle(tabId, TAB_LIFECYCLE.SUSPENDED);
           await chrome.tabs.update(parseInt(tabId), { url: 'https://aistudio.google.com/api-keys' });
           await new Promise(r => setTimeout(r, 6000)); // Wait for SPA to load
 
@@ -2122,7 +2368,9 @@ async function handleAppMessage(msg) {
 
           // Navigate back to VEO
           setTimeout(() => {
-            chrome.tabs.update(parseInt(tabId), { url: origUrl || 'https://labs.google/fx/vi/tools/flow' });
+            // C5: NAVIGATING — returning to VEO scope
+            setLifecycle(tabId, TAB_LIFECYCLE.NAVIGATING);
+            chrome.tabs.update(parseInt(tabId), { url: origUrl || VEO_URL });
           }, 1000);
         }
 
@@ -2199,6 +2447,26 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 
     // Merge headers (don't overwrite with empty)
     Object.assign(state.headers, headers);
+
+    // C6: Reset lifecycle on header capture (liveness signal)
+    // Only if tab is on VEO scope — SUSPENDED tabs must NOT be unsuspended
+    if (state._lifecycle &&
+      state._lifecycle !== TAB_LIFECYCLE.ALIVE &&
+      state._lifecycle !== TAB_LIFECYCLE.SUSPENDED &&
+      Object.keys(headers).length > 0) {
+      // Async URL check (onBeforeSendHeaders is synchronous)
+      setTimeout(async () => {
+        try {
+          const currentTab = await chrome.tabs.get(details.tabId);
+          if (currentTab.url && currentTab.url.includes('labs.google')) {
+            console.log(`[VEO Bridge] ✅ Tab ${details.tabId} alive — headers captured`);
+            setLifecycle(details.tabId, TAB_LIFECYCLE.ALIVE, {
+              _recoveryAttempts: 0, _deadNotified: false,
+            });
+          }
+        } catch (_) { /* tab gone */ }
+      }, 0);
+    }
 
     // Inject global x-browser-validation if not already present in per-tab headers
     if (globalBrowserValidation && !state.headers['x-browser-validation']) {
@@ -2329,9 +2597,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     tabState[tabId].email = msg.email;
     tabState[tabId].lastHeartbeat = Date.now();
+    // C12: Increment register generation for fresh-detection tracking
+    tabState[tabId]._registerGeneration = (tabState[tabId]._registerGeneration || 0) + 1;
     _bridgeDebug.lastTabRegisterAt = Date.now();
     _bridgeDebug.lastTabRegisterEmail = msg.email;
-    persistTabState(); // Survive SW restart
+    // C6: Reset lifecycle — register_tab proves tab is alive
+    setLifecycle(tabId, TAB_LIFECYCLE.ALIVE, {
+      _recoveryAttempts: 0, _deadNotified: false,
+    });
     // Clear zombie timer if was pending
     if (tabState[tabId]._zombieTimer) {
       clearTimeout(tabState[tabId]._zombieTimer);
@@ -2366,28 +2639,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // ── Content Heartbeat ──
   if (msg.action === 'content_heartbeat' && sender.tab) {
     const tabId = sender.tab.id;
-    const state = tabState[tabId];
-    if (state) {
-      state.lastHeartbeat = Date.now();
-
-      // If the tab is alive but the bridge is not, recover immediately instead
-      // of waiting for the watchdog. This is the main path for orange-stuck UI
-      // where background keeps capturing headers but app-side WS has drifted.
-      if (!wsConnected) {
-        ensureBridgeReady(`content_heartbeat:${state.email || tabId}`).catch(() => { });
-      } else if (state.email && Object.keys(state.headers || {}).length > 0) {
-        pushTabSnapshotToApp(tabId, 'content_heartbeat');
-      }
-
-      // Forward heartbeat to Python app for tracking
-      wsSend({
-        action: 'content_heartbeat',
-        email: state.email || msg.email,
-        tabId,
-        timestamp: msg.timestamp,
-        readyState: msg.readyState,
-      });
+    // C11: Auto-create placeholder if tabState doesn't exist yet
+    if (!tabState[tabId]) {
+      tabState[tabId] = {
+        email: msg.email || null,
+        headers: {},
+        accessToken: null,
+        lastHeartbeat: 0,
+        recaptchaReady: false,
+      };
+      console.log(`[VEO Bridge] 📝 Created placeholder tabState for ${tabId} (early heartbeat)`);
     }
+    const state = tabState[tabId];
+    state.lastHeartbeat = Date.now();
+    // Update email if provided and not yet set
+    if (msg.email && !state.email) {
+      state.email = msg.email;
+    }
+    // C6: Reset lifecycle via helper — tab is alive
+    if (state._lifecycle && state._lifecycle !== TAB_LIFECYCLE.ALIVE) {
+      console.log(`[VEO Bridge] ✅ Tab ${tabId} recovered — heartbeat`);
+    }
+    setLifecycle(tabId, TAB_LIFECYCLE.ALIVE, {
+      _recoveryAttempts: 0, _deadNotified: false,
+    });
+
+    // If the tab is alive but the bridge is not, recover immediately
+    if (!wsConnected) {
+      ensureBridgeReady(`content_heartbeat:${state.email || tabId}`).catch(() => { });
+    } else if (state.email && Object.keys(state.headers || {}).length > 0) {
+      pushTabSnapshotToApp(tabId, 'content_heartbeat');
+    }
+
+    // Forward heartbeat to Python app for tracking
+    wsSend({
+      action: 'content_heartbeat',
+      email: state.email || msg.email,
+      tabId,
+      timestamp: msg.timestamp,
+      readyState: msg.readyState,
+    });
     sendResponse({ ok: true });
   }
 
@@ -2425,6 +2716,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const mainResult = results?.[0]?.result;
           if (mainResult) {
             state.recaptchaReady = mainResult.ready;
+            // C6: Reset lifecycle — reCAPTCHA warmth proves tab is alive
+            if (mainResult.ready && state._lifecycle && state._lifecycle !== TAB_LIFECYCLE.ALIVE) {
+              setLifecycle(tabId, TAB_LIFECYCLE.ALIVE, {
+                _recoveryAttempts: 0, _deadNotified: false,
+              });
+            }
             wsSend({
               action: 'recaptcha_warmth',
               email: state.email || msg.email,
@@ -2561,7 +2858,7 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
   if (!state || !state.email) {
     // Tab wasn't tracked or had no email — just clean up
     delete tabState[tabId];
-    delete tabLastReloadTime[tabId];
+
     return;
   }
 
@@ -2570,7 +2867,6 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 
   // Clean up closed tab state
   delete tabState[tabId];
-  delete tabLastReloadTime[tabId];
   delete shortTokenCounts[tabId];
 
   // Notify app that the email's tab was closed
@@ -2602,10 +2898,11 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
       if (!tabState[newTabId]) {
         tabState[newTabId] = { email: null, headers: {}, accessToken: null, lastHeartbeat: 0, recaptchaReady: false };
       }
-      tabState[newTabId].email = orphanedEmail;
-      console.log(`[VEO Bridge] 🔄 Reassigned ${orphanedEmail} to existing VEO tab ${newTabId}`);
 
-      // Inject content.js to ensure the tab can communicate
+      // C12a: Record generation BEFORE waiting — detect fresh register_tab
+      const genBefore = tabState[newTabId]._registerGeneration || 0;
+
+      // Inject content.js → it will detectAndRegister() with correct email
       try {
         await chrome.scripting.executeScript({
           target: { tabId: newTabId },
@@ -2615,21 +2912,34 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
         console.debug(`[VEO Bridge] Content.js inject on reassign: ${e.message}`);
       }
 
-      // Re-register with Python app
-      wsSend({ action: 'register', email: orphanedEmail, tabId: newTabId, version: EXT_VERSION });
+      // Wait for a NEW register_tab (generation must increment)
+      const confirmed = await new Promise(resolve => {
+        const timeout = setTimeout(() => resolve(false), 40000);
+        const check = setInterval(() => {
+          const gen = tabState[newTabId]?._registerGeneration || 0;
+          if (gen > genBefore) {
+            clearInterval(check);
+            clearTimeout(timeout);
+            resolve(true);
+          }
+        }, 2000);
+      });
 
-      // Prevent Chrome from discarding this tab (same as initial registration)
-      try { chrome.tabs.update(newTabId, { autoDiscardable: false }); } catch (_) { }
-
-      // Push any cached headers from the new tab
-      const newState = tabState[newTabId];
-      if (Object.keys(newState.headers).length > 0) {
-        wsSend({
-          action: 'headers_update',
-          email: orphanedEmail,
-          headers: newState.headers,
-          accessToken: newState.accessToken,
-        });
+      if (confirmed) {
+        const detectedEmail = tabState[newTabId].email;
+        if (detectedEmail === orphanedEmail) {
+          console.log(`[VEO Bridge] ✅ Reassign verified: tab ${newTabId} = ${orphanedEmail}`);
+        } else {
+          console.warn(
+            `[VEO Bridge] ⚠️ Tab ${newTabId} belongs to ${detectedEmail}, ` +
+            `not orphaned ${orphanedEmail} — no forced reassign`
+          );
+        }
+      } else {
+        console.warn(
+          `[VEO Bridge] ⚠️ Tab ${newTabId} did not register in 40s — ` +
+          `${orphanedEmail} has no tab`
+        );
       }
     } else {
       console.warn(`[VEO Bridge] ⚠️ No remaining VEO tab for ${orphanedEmail} — will reconnect when new tab opens`);
@@ -2642,64 +2952,120 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 function checkHeartbeats() {
   const now = Date.now();
   for (const [tabId, state] of Object.entries(tabState)) {
-    if (!state.email || !state.lastHeartbeat) continue;
+    // Email required for watchdog monitoring
+    if (!state.email) continue;
 
-    const elapsed = now - state.lastHeartbeat;
-    if (elapsed > HEARTBEAT_TIMEOUT) {
-      // Initialize reload tracking per tab
-      if (!state._frozenReloadCount) state._frozenReloadCount = 0;
-      if (!state._frozenWindowStart) state._frozenWindowStart = now;
+    const lifecycle = state._lifecycle || TAB_LIFECYCLE.ALIVE;
 
-      // Reset window if expired
-      if (now - state._frozenWindowStart > FROZEN_RELOAD_WINDOW) {
-        state._frozenReloadCount = 0;
-        state._frozenWindowStart = now;
+    // ── DEAD / SUSPENDED: skip entirely ──
+    if (lifecycle === TAB_LIFECYCLE.DEAD) continue;
+    if (lifecycle === TAB_LIFECYCLE.SUSPENDED) continue;
+
+    // ── NAVIGATING / RELOADING: skip heartbeat check, but timeout at 60s ──
+    if (lifecycle === TAB_LIFECYCLE.NAVIGATING ||
+      lifecycle === TAB_LIFECYCLE.RELOADING) {
+      if (now - (state._lifecycleAt || 0) > 60000) {
+        setLifecycle(tabId, TAB_LIFECYCLE.ALIVE, {
+          _recoveryAttempts: (state._recoveryAttempts || 0) + 1,
+        });
+        console.warn(
+          `[VEO Bridge] ⚠️ Tab ${tabId} stuck in ${lifecycle} for >60s — ` +
+          `recovery cycle ${state._recoveryAttempts}/${FROZEN_RELOAD_MAX} failed`
+        );
       }
+      continue;
+    }
 
-      state._frozenReloadCount++;
-
-      if (state._frozenReloadCount > FROZEN_RELOAD_MAX) {
-        // Tab is truly dead — stop reloading, notify Python
-        if (state._frozenReloadCount === FROZEN_RELOAD_MAX + 1) {
+    // ── RECOVERING: waiting for heartbeat after reload+complete ──
+    if (lifecycle === TAB_LIFECYCLE.RECOVERING) {
+      if (now - (state._lifecycleAt || 0) > 60000) {
+        const attempts = (state._recoveryAttempts || 0) + 1;
+        console.warn(
+          `[VEO Bridge] ⚠️ Recovery cycle ${attempts}/${FROZEN_RELOAD_MAX} ` +
+          `failed for tab ${tabId} (${state.email}) — no heartbeat in 60s settle`
+        );
+        if (attempts >= FROZEN_RELOAD_MAX) {
+          setLifecycle(tabId, TAB_LIFECYCLE.DEAD, {
+            _recoveryAttempts: attempts,
+            _deadNotified: true,
+          });
           console.error(
             `[VEO Bridge] 💀 Tab ${tabId} (${state.email}) DEAD — ` +
-            `${FROZEN_RELOAD_MAX} reloads failed in ${FROZEN_RELOAD_WINDOW / 1000}s`
+            `${FROZEN_RELOAD_MAX} recovery cycles exhausted`
           );
           wsSend({
-            action: 'tab_dead',
-            email: state.email,
-            tabId: parseInt(tabId),
-            reloadAttempts: FROZEN_RELOAD_MAX,
-            elapsedMs: elapsed,
+            action: 'tab_dead', email: state.email,
+            tabId: parseInt(tabId), reloadAttempts: attempts,
+          });
+        } else {
+          // Try next cycle — revert to ALIVE so next check triggers reload
+          setLifecycle(tabId, TAB_LIFECYCLE.ALIVE, {
+            _recoveryAttempts: attempts,
           });
         }
-        // Don't reload — just wait for manual intervention or window reset
-        continue;
       }
+      continue;
+    }
 
-      console.warn(
-        `[VEO Bridge] ⚠️ Tab ${tabId} (${state.email}) missed heartbeat ` +
-        `(${Math.floor(elapsed / 1000)}s ago) — ` +
-        `reload attempt ${state._frozenReloadCount}/${FROZEN_RELOAD_MAX}`
-      );
+    // ── ALIVE: normal heartbeat timeout check ──
+    // Only ALIVE tabs need lastHeartbeat to be set
+    if (!state.lastHeartbeat) continue;
+    const elapsed = now - state.lastHeartbeat;
+    if (elapsed <= HEARTBEAT_TIMEOUT) continue;
 
-      // Notify Python app about the frozen tab
-      wsSend({
-        action: 'tab_frozen',
-        email: state.email,
-        tabId: parseInt(tabId),
-        lastHeartbeat: state.lastHeartbeat,
-        elapsedMs: elapsed,
-        reloadAttempt: state._frozenReloadCount,
-      });
-
-      // Try to wake it up by reloading (with cooldown protection)
-      safeTabReload(parseInt(tabId), `heartbeat-frozen-attempt-${state._frozenReloadCount}`).then(didReload => {
-        if (didReload) {
-          state.lastHeartbeat = now; // Reset to avoid immediate re-trigger
-        }
+    // Window reset
+    if (!state._frozenWindowStart) {
+      state._frozenWindowStart = now;
+      persistTabState(); // P2: persist initial window start
+    }
+    if (now - state._frozenWindowStart > FROZEN_RELOAD_WINDOW) {
+      setLifecycle(tabId, TAB_LIFECYCLE.ALIVE, {
+        _recoveryAttempts: 0,
+        _frozenWindowStart: now, // P2: include in setLifecycle for auto-persist
       });
     }
+
+    // Already exhausted?
+    if ((state._recoveryAttempts || 0) >= FROZEN_RELOAD_MAX) {
+      if (!state._deadNotified) {
+        setLifecycle(tabId, TAB_LIFECYCLE.DEAD, { _deadNotified: true });
+        wsSend({
+          action: 'tab_dead', email: state.email,
+          tabId: parseInt(tabId), reloadAttempts: FROZEN_RELOAD_MAX,
+        });
+      }
+      continue;
+    }
+
+    // Notify Python (info only — Python does NOT recover/escalate)
+    wsSend({
+      action: 'tab_frozen', email: state.email,
+      tabId: parseInt(tabId), lastHeartbeat: state.lastHeartbeat,
+      elapsedMs: elapsed,
+      reloadAttempt: (state._recoveryAttempts || 0) + 1,
+    });
+
+    // ★ safeTabReload() owns RELOADING — DO NOT pre-set lifecycle here
+    console.warn(
+      `[VEO Bridge] ⚠️ Tab ${tabId} (${state.email}) heartbeat miss ` +
+      `(${Math.floor(elapsed / 1000)}s) — recovery cycle ` +
+      `${(state._recoveryAttempts || 0) + 1}/${FROZEN_RELOAD_MAX}`
+    );
+
+    safeTabReload(parseInt(tabId),
+      `heartbeat-recovery-${(state._recoveryAttempts || 0) + 1}`
+    ).then(result => {
+      if (result === RELOAD_RESULT.RELOADED) {
+        // safeTabReload() set RELOADING — onUpdated transitions to RECOVERING
+      } else if (result === RELOAD_RESULT.SKIPPED_COOLDOWN) {
+        // Didn't change state — retry next cycle
+      } else {
+        // FAILED — safeTabReload() reverted. Count as failed cycle.
+        setLifecycle(tabId, TAB_LIFECYCLE.ALIVE, {
+          _recoveryAttempts: (state._recoveryAttempts || 0) + 1,
+        });
+      }
+    });
   }
 }
 
@@ -2707,6 +3073,41 @@ function checkHeartbeats() {
 if (!_heartbeatCheckTimer) {
   _heartbeatCheckTimer = setInterval(checkHeartbeats, 20000);
 }
+
+// ── Change 4: Tab lifecycle transition listener ──────────────────────────
+// Transitions RELOADING/NAVIGATING → RECOVERING (VEO page) or SUSPENDED (non-VEO)
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return;
+  const state = tabState[tabId];
+  if (!state) return;
+
+  if (state._lifecycle === TAB_LIFECYCLE.RELOADING ||
+    state._lifecycle === TAB_LIFECYCLE.NAVIGATING) {
+    const isVeoPage = tab.url && tab.url.includes('labs.google');
+    if (isVeoPage) {
+      setLifecycle(tabId, TAB_LIFECYCLE.RECOVERING);
+      console.log(
+        `[VEO Bridge] Tab ${tabId} complete — RECOVERING ` +
+        `(waiting for heartbeat, 60s settle)`
+      );
+    } else {
+      setLifecycle(tabId, TAB_LIFECYCLE.SUSPENDED);
+      console.log(
+        `[VEO Bridge] Tab ${tabId} complete on non-VEO page — SUSPENDED`
+      );
+    }
+  }
+
+  // SUSPENDED tab returned to VEO? → start RECOVERING
+  if (state._lifecycle === TAB_LIFECYCLE.SUSPENDED) {
+    if (tab.url && tab.url.includes('labs.google')) {
+      setLifecycle(tabId, TAB_LIFECYCLE.RECOVERING);
+      console.log(
+        `[VEO Bridge] Tab ${tabId} returned to VEO — RECOVERING`
+      );
+    }
+  }
+});
 
 
 // ── Zombie Tab Tracking ────────────────────────────────────────────────
@@ -2855,56 +3256,101 @@ async function recoverStaleTab(email) {
     // 3. If tab was discarded by Chrome, reload it
     if (targetTab.discarded) {
       try {
-        await chrome.tabs.reload(targetTab.id);
+        // C8: safeTabReload() owns RELOADING
+        await safeTabReload(targetTab.id, 'recover-stale-discarded');
         console.log(`[VEO Bridge] 🔄 Reloaded discarded tab ${targetTab.id}`);
-        await new Promise(r => setTimeout(r, 5000));  // Wait for page load
+        await new Promise(r => setTimeout(r, 15000));
       } catch (e) {
         console.warn(`[VEO Bridge] Failed to reload discarded tab: ${e.message}`);
         return null;
       }
     }
 
-    // 4. Re-inject content.js to revive the content script
+    // 3.5. Verify tab is on correct VEO tool page (not just labs.google/*)
+    // Tab may be on labs.google/some-other-tool → no reCAPTCHA widget
     try {
-      await chrome.scripting.executeScript({
-        target: { tabId: targetTab.id },
-        files: ['content.js'],
-      });
-      console.log(`[VEO Bridge] 💉 Re-injected content.js into tab ${targetTab.id}`);
-      await new Promise(r => setTimeout(r, 3000));  // Wait for content.js init
-    } catch (e) {
-      console.warn(`[VEO Bridge] Content.js injection failed for tab ${targetTab.id}: ${e.message}`);
-      // Don't return null — tab might still be usable for executeScript in MAIN world
+      const updatedTab = await chrome.tabs.get(targetTab.id);
+      const isVeoPage = isFlowUrl(updatedTab.url || '');
+      if (!isVeoPage) {
+        console.warn(
+          `[VEO Bridge] 🔄 Tab ${targetTab.id} on wrong page ` +
+          `(${updatedTab.url}) — navigating to VEO tool`
+        );
+        // C5: NAVIGATING before VEO navigation
+        setLifecycle(targetTab.id, TAB_LIFECYCLE.NAVIGATING);
+        await chrome.tabs.update(targetTab.id, {
+          url: VEO_URL
+        });
+        await new Promise(r => setTimeout(r, 15000)); // Full VEO load
+      }
+    } catch (urlErr) {
+      console.warn(`[VEO Bridge] URL verification failed: ${urlErr.message}`);
     }
 
-    // 5. Register in tabState
+    // 4. Create placeholder tabState if needed
     if (!tabState[targetTab.id]) {
       tabState[targetTab.id] = {
         email: null, headers: {}, accessToken: null,
         lastHeartbeat: 0, recaptchaReady: false,
       };
     }
-    tabState[targetTab.id].email = email;
-    tabState[targetTab.id].lastHeartbeat = Date.now();
-    persistTabState();
+    // NOTE: Removed optimistic email binding — was poisoning reCAPTCHA tokens
+
+    // C12: Capture generation BEFORE inject — content.js may register_tab immediately
+    const genBefore = tabState[targetTab.id]._registerGeneration || 0;
+
+    // 5. Re-inject content.js to revive the content script
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: targetTab.id },
+        files: ['content.js'],
+      });
+      console.log(`[VEO Bridge] 💉 Re-injected content.js into tab ${targetTab.id}`);
+    } catch (e) {
+      console.warn(`[VEO Bridge] Content.js injection failed for tab ${targetTab.id}: ${e.message}`);
+      // Don't return null — tab might still be usable
+    }
 
     // 6. Prevent Chrome from auto-discarding this tab again
     try {
       await chrome.tabs.update(targetTab.id, { autoDiscardable: false });
     } catch (_) { }
 
-    // 7. Notify Python
-    wsSend({
-      action: 'register',
-      email,
-      tabId: targetTab.id,
-      version: EXT_VERSION,
+    // 7. Wait for content.js to self-register (generation must increment)
+    // C12: Verified email + generation check prevents wrong-tab binding
+    const confirmed = await new Promise(resolve => {
+      const timeout = setTimeout(() => resolve(false), 40000);
+      const check = setInterval(() => {
+        const gen = tabState[targetTab.id]?._registerGeneration || 0;
+        if (gen > genBefore) {
+          clearInterval(check);
+          clearTimeout(timeout);
+          resolve(true);
+        }
+      }, 2000);
     });
 
-    console.warn(
-      `[VEO Bridge] ✅ Recovered stale tab ${targetTab.id} for ${email} — re-registered with app`
-    );
-    return targetTab.id;
+    if (confirmed) {
+      const detectedEmail = tabState[targetTab.id].email;
+      if (detectedEmail === email) {
+        console.log(
+          `[VEO Bridge] ✅ Recovered tab ${targetTab.id} confirmed for ${email}`
+        );
+        return targetTab.id;
+      } else {
+        console.warn(
+          `[VEO Bridge] ⚠️ Tab ${targetTab.id} = ${detectedEmail}, ` +
+          `not ${email} — recovery did not match`
+        );
+        return null;
+      }
+    } else {
+      console.warn(
+        `[VEO Bridge] ⚠️ Tab ${targetTab.id} did not self-register in 40s — ` +
+        `aborting recovery for ${email}`
+      );
+      return null;
+    }
 
   } catch (e) {
     console.error(`[VEO Bridge] Stale tab recovery failed for ${email}: ${e.message}`);
@@ -2946,8 +3392,9 @@ const TAB_CLEANUP_ALARM = 'tab-cleanup';
 // Chrome suspends service workers after ~30s of inactivity.
 // Reduced from 30s to 20s for faster keepalive.
 chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.33 });
-// Refresh headers every 3 minutes via lightweight fetch (instead of 5 min full reload)
-chrome.alarms.create(HEADER_REFRESH_ALARM, { periodInMinutes: 3 });
+// Header refresh is passive. Do not schedule periodic page-context probes/reloads;
+// real Flow traffic updates captured headers naturally.
+chrome.alarms.clear(HEADER_REFRESH_ALARM);
 // Periodic tab cleanup every 2 minutes
 chrome.alarms.create(TAB_CLEANUP_ALARM, { periodInMinutes: 2 });
 
@@ -2961,10 +3408,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 
   if (alarm.name === HEADER_REFRESH_ALARM) {
-    console.log('[VEO Bridge] ⏰ Periodic header refresh (lightweight)');
-    // Use lightweight refresh first — content.js triggers a fetch
-    // which causes onBeforeSendHeaders to fire and capture fresh headers
-    lightweightRefreshAll();
+    console.log('[VEO Bridge] ⏰ Periodic header refresh skipped (passive mode)');
+    chrome.alarms.clear(HEADER_REFRESH_ALARM);
   }
 
   if (alarm.name === TAB_CLEANUP_ALARM) {
@@ -2978,15 +3423,9 @@ async function lightweightRefreshAll() {
     if (!state.email) continue;
     try {
       await sendMessageWithRetry(parseInt(tabId), { action: 'lightweight_header_refresh' });
-      console.log(`[VEO Bridge] 🔄 Lightweight refresh for tab ${tabId} (${state.email})`);
+      console.log(`[VEO Bridge] 🔄 Passive header refresh for tab ${tabId} (${state.email})`);
     } catch (e) {
-      // Content script not responding even after retry — try full reload as fallback
-      console.debug(`[VEO Bridge] Lightweight refresh failed for tab ${tabId}, using full reload`);
-      try {
-        await safeTabReload(parseInt(tabId), 'lightweight-refresh-failed');
-      } catch (re) {
-        console.debug(`[VEO Bridge] Full reload also failed for tab ${tabId}: ${re.message}`);
-      }
+      console.debug(`[VEO Bridge] Passive header refresh skipped for tab ${tabId}: ${e.message}`);
     }
   }
 }
@@ -3007,8 +3446,8 @@ async function reloadVeoTabs(email = null) {
       }
 
       try {
-        const didReload = await safeTabReload(tab.id, 'header-refresh');
-        if (didReload) reloaded++;
+        const reloadResult = await safeTabReload(tab.id, 'header-refresh');
+        if (reloadResult === RELOAD_RESULT.RELOADED) reloaded++;
       } catch (e) {
         console.debug(`[VEO Bridge] Could not reload tab ${tab.id}: ${e.message}`);
       }
@@ -3044,11 +3483,18 @@ async function injectExistingTabs() {
           console.log(`[VEO Bridge] 📌 Pinned VEO tab ${tab.id}`);
         }
 
-        // Reload tab to trigger fresh API requests → headers get captured
-        setTimeout(() => {
-          chrome.tabs.reload(tab.id, { bypassCache: false });
-          console.log(`[VEO Bridge] Reloaded tab ${tab.id} for header capture`);
-        }, 1000); // Wait 1s for content.js to register email first
+        // Do not reload an existing Flow tab just to capture headers. The app
+        // should not mutate a tab the user is already using.
+        const existingState = tabState[tab.id];
+        const hasHeaders = existingState && Object.keys(existingState.headers || {}).length > 0;
+        const hasRecentHeartbeat = existingState &&
+          existingState.lastHeartbeat > 0 &&
+          (Date.now() - existingState.lastHeartbeat) < 120000; // 2 min
+        if (hasHeaders && hasRecentHeartbeat) {
+          console.log(`[VEO Bridge] ⏭️ Skipping reload for tab ${tab.id} — has valid headers + recent heartbeat`);
+        } else {
+          console.log(`[VEO Bridge] ⏭️ Skipping startup reload for tab ${tab.id} — passive header capture`);
+        }
 
       } catch (e) {
         // Tab may not be accessible (e.g. chrome:// pages, about:blank)
@@ -3063,8 +3509,262 @@ async function injectExistingTabs() {
 
 // ── Ensure VEO Tab (auto-open + pin) ───────────────────────────────────
 
-const VEO_URL = 'https://labs.google/fx/vi/tools/flow';
+const VEO_URL = 'https://labs.google/fx/tools/flow';
+const FLOW_PATH_RE = /^\/fx\/(?:[a-z]{2}\/)?tools\/flow(?:\/|$)/;
 let _ensureVeoTabRunning = false; // debounce guard
+
+function isFlowUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'labs.google' && FLOW_PATH_RE.test(parsed.pathname);
+  } catch (_) {
+    return url.includes('/fx/tools/flow') ||
+      url.includes('/fx/vi/tools/flow') ||
+      url.includes('/tools/flow');
+  }
+}
+
+async function waitForTabLoad(tabId, maxWaitMs = 25000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.status === 'complete') return true;
+    } catch (_) {
+      // Tab can be transiently unavailable while navigating.
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return false;
+}
+
+async function ensureTabOnFlow(tabId, reason = 'flow_guard', targetUrl = VEO_URL) {
+  if (!tabId) {
+    return { success: false, error: 'missing_tab' };
+  }
+
+  let lastUrl = '';
+  let lastError = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let tab = null;
+    try {
+      tab = await chrome.tabs.get(tabId);
+      lastUrl = tab?.url || '';
+    } catch (e) {
+      return { success: false, tabId, error: `tab_get_failed: ${e.message}` };
+    }
+
+    if (isFlowUrl(lastUrl) && tab.status === 'complete' && !tab.discarded) {
+      try {
+        await chrome.tabs.update(tabId, { pinned: true, autoDiscardable: false });
+      } catch (_) { /* best effort */ }
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content.js'],
+        });
+      } catch (e) {
+        console.debug(`[VEO Bridge] Flow guard content.js refresh skipped for ${tabId}: ${e.message}`);
+      }
+      return { success: true, tabId, url: lastUrl, loadComplete: true };
+    }
+
+    console.warn(
+      `[VEO Bridge] Flow guard (${reason}): tab ${tabId} at ` +
+      `${lastUrl || '<blank>'} — navigating to ${targetUrl || VEO_URL} ` +
+      `(attempt ${attempt}/3)`
+    );
+
+    try {
+      if (tabState[tabId]) {
+        tabState[tabId].recaptchaReady = false;
+        setLifecycle(tabId, TAB_LIFECYCLE.NAVIGATING);
+        persistTabState();
+      }
+
+      await chrome.tabs.update(tabId, {
+        url: targetUrl || VEO_URL,
+        pinned: true,
+        autoDiscardable: false,
+      });
+      const loadComplete = await waitForTabLoad(tabId, 30000);
+      await new Promise(r => setTimeout(r, 1200));
+
+      const after = await chrome.tabs.get(tabId).catch(() => null);
+      lastUrl = after?.url || lastUrl;
+      if (loadComplete && isFlowUrl(lastUrl)) {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content.js'],
+          });
+        } catch (e) {
+          console.debug(`[VEO Bridge] Flow guard content.js inject failed for ${tabId}: ${e.message}`);
+        }
+        if (tabState[tabId]) {
+          setLifecycle(tabId, TAB_LIFECYCLE.RECOVERING);
+          persistTabState();
+        }
+        return { success: true, tabId, url: lastUrl, loadComplete };
+      }
+    } catch (e) {
+      lastError = e.message || String(e);
+    }
+  }
+
+  return {
+    success: false,
+    tabId,
+    url: lastUrl,
+    error: `flow_navigation_failed: ${lastError || lastUrl || 'unknown_url'}`,
+  };
+}
+
+async function ensureFlowForEmail(email, reason = 'flow_guard') {
+  const ensured = await ensureVeoTabForEmail(email, VEO_URL);
+  if (!ensured.success) return ensured;
+  return ensureTabOnFlow(ensured.tabId, reason, VEO_URL);
+}
+
+async function ensureVeoTabForEmail(email, targetUrl = VEO_URL) {
+  if (!email) {
+    return { success: false, error: 'missing_email' };
+  }
+
+  try {
+    const stored = await chrome.storage.local.get('__veo_identity');
+    const identityEmail = stored.__veo_identity || '';
+    const knownEmails = new Set(
+      Object.values(tabState).map(s => s.email).filter(Boolean)
+    );
+
+    // Avoid cross-account binding. CDP identity is the strongest signal for
+    // the browser profile that owns this extension instance.
+    if (identityEmail && identityEmail !== email) {
+      return {
+        success: false,
+        error: `identity_mismatch (${identityEmail} != ${email})`,
+      };
+    }
+    if (!identityEmail && knownEmails.size > 0 && !knownEmails.has(email)) {
+      return {
+        success: false,
+        error: 'ambiguous_profile_identity',
+      };
+    }
+
+    let tabId = findTabForEmail(email);
+    // Do not call recoverStaleTab() here. It waits up to 40s for content.js
+    // self-registration and can make startup ensure_veo_tab exceed the Python
+    // timeout. This ensure path has an identity guard above, so it can safely
+    // bind an existing Flow tab directly or create one below.
+
+    let tab = null;
+    if (tabId) {
+      try {
+        tab = await chrome.tabs.get(tabId);
+      } catch (_) {
+        tabId = null;
+      }
+    }
+
+    if (!tabId) {
+      const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+      tab = tabs.find(t => (t.url || '').includes('/tools/flow')) || tabs[0] || null;
+
+      if (!tab) {
+        console.warn(`[VEO Bridge] 🆕 Creating VEO tab for ${email}`);
+        tab = await chrome.tabs.create({
+          url: targetUrl || VEO_URL,
+          active: false,
+          pinned: true,
+        });
+      }
+      tabId = tab.id;
+    }
+
+    if (!tabState[tabId]) {
+      tabState[tabId] = {
+        email: null,
+        headers: {},
+        accessToken: null,
+        lastHeartbeat: 0,
+        recaptchaReady: false,
+      };
+    }
+
+    // CDP identity/one-profile ownership makes this binding deterministic.
+    tabState[tabId].email = email;
+    tabState[tabId]._deadNotified = false;
+    persistTabState();
+
+    const currentUrl = tab?.url || '';
+    const isAlreadyFlow = isFlowUrl(currentUrl);
+    let loadComplete = true;
+
+    try {
+      if (isAlreadyFlow) {
+        // Do not navigate an already-good Flow tab. Re-navigation can keep the
+        // tab in NAVIGATING/RECOVERING long enough for Python startup to time out.
+        await chrome.tabs.update(tabId, {
+          pinned: true,
+          autoDiscardable: false,
+        });
+      } else {
+        tabState[tabId].recaptchaReady = false;
+        setLifecycle(tabId, TAB_LIFECYCLE.NAVIGATING);
+        persistTabState();
+        await chrome.tabs.update(tabId, {
+          url: targetUrl || VEO_URL,
+          pinned: true,
+          autoDiscardable: false,
+        });
+        loadComplete = await waitForTabLoad(tabId, 30000);
+      }
+    } catch (e) {
+      return { success: false, error: `tab_update_failed: ${e.message}` };
+    }
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js'],
+      });
+      console.log(`[VEO Bridge] 💉 Ensured content.js in tab ${tabId} for ${email}`);
+    } catch (e) {
+      console.debug(`[VEO Bridge] ensure content.js inject failed for ${tabId}: ${e.message}`);
+    }
+
+    const hasFreshHeartbeat =
+      Boolean(tabState[tabId].lastHeartbeat) &&
+      Date.now() - tabState[tabId].lastHeartbeat < 30000;
+    if (isAlreadyFlow && hasFreshHeartbeat) {
+      setLifecycle(tabId, TAB_LIFECYCLE.ALIVE);
+    } else {
+      setLifecycle(tabId, TAB_LIFECYCLE.RECOVERING);
+    }
+    tabState[tabId]._registerGeneration = (tabState[tabId]._registerGeneration || 0) + 1;
+    persistTabState();
+
+    wsSend({
+      action: 'register',
+      email,
+      tabId,
+      version: EXT_VERSION,
+      source: 'ensure_veo_tab',
+    });
+
+    return {
+      success: true,
+      tabId,
+      url: targetUrl || VEO_URL,
+      loadComplete,
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
 
 async function ensureVeoTab() {
   if (_ensureVeoTabRunning) return;
