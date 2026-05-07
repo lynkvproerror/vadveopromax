@@ -5,13 +5,13 @@
     "changelog": "v2.4.5 - I2V Lite Fix & Native Submit Stability\n\nFixes\n- Fix I2V Lite model key: website dùng veo_3_1_i2v_lite (không có _s_), tool trước đó gửi sai key gây lỗi 500.\n- Fix native submit \"Failed to fetch\": chuyển header injection sang CDP layer, tránh CORS preflight.\n- R2V Lite [LP] cho phép khi có Voice từ Voice Library.\n\nImprovements\n- Normalizer tự động sửa model key cũ từ tasks đã tạo trước bản fix.\n- CDP headers (x-browser-*, x-client-data) inject ở network layer thay vì JS fetch.",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.4.5/VEO_Pro_Max_v2.4.5.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.4.5/VEO_Extension_v2.4.5.zip",
-    "sha256": "a7382ceb70ce4754d2d9462ca1759be60a42d1570aa8a65089818a09a5620e3f",
+    "sha256": "00e75532c23b2ee224f1956e04eb88a6cd65bae861fdbb9ddc0ff6c821832748",
     "ext_sha256": "257a830d3778b5838c7db3a893eab21a985d04d6d376cab9ee4ee8ba637dc1d0",
     "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v2.4.5/VEO_Pro_Max_Setup_v2.4.5.exe",
-    "installer_sha256": "b787ac58c8a61ce2b82dc9352c349cabd9b24f5bcdb9add9668dec608017eeae",
+    "installer_sha256": "c6616b682b864c0ae392cf9e5259c804c1cbbe59eeccf408b276965bc96cd398",
     "installer_filename": "VEO_Pro_Max_Setup_v2.4.5.exe",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1778167450,
-    "build_time": "2026-05-07T22:24:10.432429"
+    "build_number": 1778169468,
+    "build_time": "2026-05-07T22:57:48.376877"
 }
