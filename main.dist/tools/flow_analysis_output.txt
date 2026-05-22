@@ -1,0 +1,1706 @@
+﻿FLOW LOGIC ANALYSIS
+================================================================================
+
+================================================================================
+SESSION: 11.05 (97 entries)
+================================================================================
+
+--- reCAPTCHA (4 calls) ---
+  2026-05-11T00:18:30 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T00:18:30 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T03:46:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T03:46:27 POST  clr                            S=200 XCD=True XBV=True
+
+--- Submits (1) ---
+  2026-05-11T03:46:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+
+--- Polls (9) ---
+  Intervals: min=10.7s avg=1564.6s max=12439.9s
+  PENDING: 7, SUCCESSFUL: 2
+
+--- Upscales (1) ---
+  2026-05-11T00:18:30 S=200 reCAPTCHA=True Auth=False
+
+--- Redirects/Downloads (1) ---
+  2026-05-11T00:19:29 S=307 upsampled=True Auth=False XCD=False XBV=False
+
+--- Credits checks (12) ---
+  First: 2026-05-11T00:18:27, Last: 2026-05-11T03:47:35
+  Before submit: 11, After submit: 1
+
+--- Session refreshes (9) ---
+
+--- TRPC (22 total, 13 ack heartbeats) ---
+
+--- Telemetry (batchLog=4, frontendEvents=4) ---
+
+--- PATCH workflow updates (1) ---
+
+--- Errors (9) ---
+  2026-05-11T03:02:03 GET   general.fetchUserAcknowledgement         S=401 domain=trpc
+  2026-05-11T03:02:05 GET   general.fetchUserAcknowledgement         S=401 domain=trpc
+  2026-05-11T03:02:05 GET   credits                                  S=401 domain=aisandbox
+  2026-05-11T03:02:05 GET   credits                                  S=401 domain=aisandbox
+  2026-05-11T03:02:05 GET   credits                                  S=401 domain=aisandbox
+  2026-05-11T03:02:05 POST  v1:fetchUserRecommendations              S=401 domain=aisandbox
+  2026-05-11T03:02:06 GET   credits                                  S=401 domain=aisandbox
+  2026-05-11T03:02:06 POST  v1:fetchUserRecommendations              S=401 domain=aisandbox
+  2026-05-11T03:02:06 GET   credits                                  S=401 domain=aisandbox
+
+--- COMPLETE FLOW TIMELINE ---
+  2026-05-11T00:18:27 ACK                  S=200 [---]
+  2026-05-11T00:18:27 CREDITS              S=200 [-XB]
+  2026-05-11T00:18:30 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T00:18:30 UPSCALE              S=200 [-XB]
+  2026-05-11T00:18:30 RECAP_CLR            S=200 [-XB]
+  2026-05-11T00:18:35 BATCH_LOG            S=200 [-XB]
+  2026-05-11T00:18:35 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T00:18:45 POLL                 S=200 [-XB]
+    ... (4 more POLL)
+  2026-05-11T00:19:29 REDIRECT             S=307 [---]
+  2026-05-11T00:19:36 BATCH_LOG            S=200 [-XB]
+  2026-05-11T00:19:36 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T00:19:42 ACK                  S=200 [---]
+  2026-05-11T00:19:42 CREDITS              S=200 [-XB]
+  2026-05-11T00:47:45 SESSION              S=200 [---]
+  2026-05-11T00:47:45 ACK                  S=200 [---]
+  2026-05-11T03:02:03 SESSION              S=200 [---]
+  2026-05-11T03:02:03 ACK                  S=401 [---]
+  2026-05-11T03:02:04 labs_other:providers S=304 [---]
+  2026-05-11T03:02:04 labs_other:providers S=304 [---]
+  2026-05-11T03:02:04 labs_other:csrf      S=200 [---]
+  2026-05-11T03:02:04 labs_other:csrf      S=200 [---]
+  2026-05-11T03:02:04 labs_other:google    S=200 [---]
+  2026-05-11T03:02:05 labs_other:google    S=200 [---]
+  2026-05-11T03:02:05 ACK                  S=401 [---]
+  2026-05-11T03:02:05 SESSION              S=200 [---]
+  2026-05-11T03:02:05 CREDITS              S=401 [-XB]
+  2026-05-11T03:02:05 SESSION              S=200 [---]
+  2026-05-11T03:02:05 CREDITS              S=401 [-XB]
+    ... (1 more CREDITS)
+  2026-05-11T03:02:05 labs_other:providers S=304 [---]
+  2026-05-11T03:02:05 FETCH_REC            S=401 [-XB]
+  2026-05-11T03:02:05 labs_other:csrf      S=200 [---]
+  2026-05-11T03:02:05 labs_other:google    S=200 [---]
+  2026-05-11T03:02:06 CREDITS              S=401 [-XB]
+  2026-05-11T03:02:06 FETCH_REC            S=401 [-XB]
+  2026-05-11T03:02:06 TRPC                 S=200 [---]
+  2026-05-11T03:02:06 CREDITS              S=401 [-XB]
+  2026-05-11T03:02:06 labs_other:providers S=304 [---]
+  2026-05-11T03:02:08 CHECK_APP            S=200 [-XB]
+  2026-05-11T03:02:08 TRPC                 S=200 [---]
+  2026-05-11T03:02:08 ACK                  S=200 [---]
+    ... (1 more ACK)
+  2026-05-11T03:02:08 TRPC                 S=200 [---]
+  2026-05-11T03:02:08 TRPC                 S=200 [---]
+  2026-05-11T03:02:08 TRPC                 S=200 [---]
+  2026-05-11T03:02:10 CREDITS              S=200 [-XB]
+  2026-05-11T03:02:10 FETCH_REC            S=200 [-XB]
+  2026-05-11T03:02:10 SESSION              S=200 [---]
+  2026-05-11T03:02:10 TRPC                 S=200 [---]
+  2026-05-11T03:02:10 TRPC                 S=200 [---]
+  2026-05-11T03:02:10 TRPC                 S=200 [---]
+  2026-05-11T03:02:10 ACK                  S=200 [---]
+  2026-05-11T03:02:10 FETCH_REC            S=200 [-XB]
+  2026-05-11T03:02:12 CREDITS              S=200 [-XB]
+  2026-05-11T03:02:12 SESSION              S=200 [---]
+  2026-05-11T03:02:12 labs_other:library.json S=200 [---]
+  2026-05-11T03:02:13 FETCH_REC            S=200 [-XB]
+  2026-05-11T03:46:13 CREDITS              S=200 [-XB]
+  2026-05-11T03:46:14 SESSION              S=200 [---]
+  2026-05-11T03:46:14 ACK                  S=200 [---]
+    ... (1 more ACK)
+  2026-05-11T03:46:22 CREDITS              S=200 [-XB]
+  2026-05-11T03:46:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T03:46:27 SUBMIT               S=200 [-XB]
+  2026-05-11T03:46:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T03:46:31 BATCH_LOG            S=200 [-XB]
+  2026-05-11T03:46:31 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T03:46:48 POLL                 S=200 [-XB]
+    ... (3 more POLL)
+  2026-05-11T03:47:23 PATCH_WF             S=200 [-XB]
+  2026-05-11T03:47:31 SESSION              S=200 [---]
+  2026-05-11T03:47:31 ACK                  S=200 [---]
+    ... (1 more ACK)
+  2026-05-11T03:47:35 CREDITS              S=200 [-XB]
+  2026-05-11T03:47:39 BATCH_LOG            S=200 [-XB]
+  2026-05-11T03:47:39 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T03:48:48 SESSION              S=200 [---]
+  2026-05-11T03:48:48 ACK                  S=200 [---]
+
+================================================================================
+SESSION: 12.05_full (446 entries)
+================================================================================
+
+--- reCAPTCHA (124 calls) ---
+  2026-05-11T23:06:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:13 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:13 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:13 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:56 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:56 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:21 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:45 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:45 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:07 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:08 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:08 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:08 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:45 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:45 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:03 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:03 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:03 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:06 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:06 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:06 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:30 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:30 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:33 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:47 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:47 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:11:00 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:11:10 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:11:11 POST  clr                            S=200 XCD=True XBV=True
+
+--- Submits (52) ---
+  2026-05-11T23:06:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:12 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:12 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:13 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:13 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:55 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:55 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:55 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:56 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:03 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:04 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:04 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:04 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:05 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:05 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:05 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:06 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:30 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:31 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:31 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:31 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:32 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:32 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:32 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:33 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:46 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:46 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:47 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:59 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:59 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:11:00 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:11:11 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+
+--- Polls (27) ---
+  Intervals: min=1.5s avg=12.1s max=28.2s
+  PENDING: 26, SUCCESSFUL: 2
+
+--- Upscales (10) ---
+  2026-05-11T23:08:45 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:08:54 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:08:54 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:08 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:08 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:19 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:19 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:28 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:28 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:45 S=200 reCAPTCHA=True Auth=False
+
+--- Redirects/Downloads (10) ---
+  2026-05-11T23:09:35 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:46 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:46 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:46 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:59 S=307 upsampled=True Auth=False XCD=False XBV=False
+
+--- Credits checks (15) ---
+  First: 2026-05-11T23:06:16, Last: 2026-05-11T23:11:10
+  Before submit: 1, After submit: 14
+
+--- Session refreshes (1) ---
+
+--- TRPC (19 total, 1 ack heartbeats) ---
+
+--- Telemetry (batchLog=25, frontendEvents=25) ---
+
+--- PATCH workflow updates (52) ---
+
+--- Errors (8) ---
+  2026-05-11T23:07:13 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:07:36 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:08:07 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:09 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:16 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:24 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:30 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:37 POST  v1:batchLog                              S=400 domain=aisandbox
+
+--- COMPLETE FLOW TIMELINE ---
+  2026-05-11T23:06:14 TRPC                 S=200 [---]
+  2026-05-11T23:06:14 TRPC                 S=200 [---]
+  2026-05-11T23:06:15 TRPC                 S=200 [---]
+  2026-05-11T23:06:15 labs_other:a4fda8e7-6dbb-4ade-9 S=200 [---]
+  2026-05-11T23:06:15 TRPC                 S=200 [---]
+  2026-05-11T23:06:15 TRPC                 S=200 [---]
+  2026-05-11T23:06:16 CREDITS              S=200 [-XB]
+  2026-05-11T23:06:16 FETCH_REC            S=200 [-XB]
+  2026-05-11T23:06:16 SESSION              S=200 [---]
+  2026-05-11T23:06:16 TRPC                 S=200 [---]
+  2026-05-11T23:06:16 TRPC                 S=200 [---]
+  2026-05-11T23:06:16 ACK                  S=200 [---]
+  2026-05-11T23:06:16 FETCH_REC            S=200 [-XB]
+  2026-05-11T23:06:23 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:06:23 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:06:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:30 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:06:30 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:06:42 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:06:42 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:06:48 POLL                 S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:02 CREDITS              S=200 [-XB]
+  2026-05-11T23:07:05 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:07:05 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:12 POLL                 S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:12 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:12 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:13 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:13 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:13 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:13 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:13 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:13 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:07:13 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:24 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:07:24 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:25 CREDITS              S=200 [-XB]
+  2026-05-11T23:07:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:25 POLL                 S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:36 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:07:36 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:43 CREDITS              S=200 [-XB]
+  2026-05-11T23:07:53 POLL                 S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:55 POLL                 S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:55 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:55 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:55 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:56 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:56 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:56 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:02 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:08:02 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:08:07 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:08:07 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:08:10 CREDITS              S=200 [-XB]
+  2026-05-11T23:08:20 POLL                 S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 POLL                 S=200 [-XB]
+  2026-05-11T23:08:21 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:36 CREDITS              S=200 [-XB]
+  2026-05-11T23:08:36 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:36 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:45 POLL                 S=200 [-XB]
+  2026-05-11T23:08:45 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:45 UPSCALE              S=200 [-XB]
+  2026-05-11T23:08:45 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:48 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:08:48 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:08:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:54 POLL                 S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:54 UPSCALE              S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:54 UPSCALE              S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:56 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:08:56 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:01 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:01 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:02 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:09:02 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:03 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:03 FETCH_REC            S=200 [-XB]
+  2026-05-11T23:09:03 TRPC                 S=200 [---]
+  2026-05-11T23:09:07 POLL                 S=200 [-XB]
+  2026-05-11T23:09:07 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:08 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:08 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:08 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:08 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:08 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:09 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:09 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:16 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:16 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:16 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:16 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:16 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:19 POLL                 S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:19 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:19 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:24 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:24 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:25 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:27 POLL                 S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:28 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:28 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:30 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:30 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:35 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:35 REDIRECT             S=307 [---]
+  2026-05-11T23:09:37 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:37 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:45 POLL                 S=200 [-XB]
+  2026-05-11T23:09:45 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:45 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:45 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:47 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:09:47 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:54 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:09:54 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:01 POLL                 S=200 [-XB]
+  2026-05-11T23:10:01 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:01 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:03 POLL                 S=200 [-XB]
+  2026-05-11T23:10:03 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:03 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:03 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:03 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:04 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:04 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:04 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:05 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:05 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:05 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:06 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:06 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:06 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:06 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:08 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:08 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:20 CREDITS              S=200 [-XB]
+  2026-05-11T23:10:24 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:24 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:30 POLL                 S=200 [-XB]
+  2026-05-11T23:10:30 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:30 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:30 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:31 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:31 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:31 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:32 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:32 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:32 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:33 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:33 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:46 CREDITS              S=200 [-XB]
+  2026-05-11T23:10:46 REDIRECT             S=307 [---]
+  2026-05-11T23:10:46 REDIRECT             S=307 [---]
+  2026-05-11T23:10:46 REDIRECT             S=307 [---]
+  2026-05-11T23:10:46 POLL                 S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:46 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:46 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:47 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:47 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:47 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:52 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:52 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:59 CREDITS              S=200 [-XB]
+  2026-05-11T23:10:59 REDIRECT             S=307 [---]
+  2026-05-11T23:10:59 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:10:59 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:10:59 POLL                 S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:59 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:59 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:11:00 SUBMIT               S=200 [-XB]
+  2026-05-11T23:11:00 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:11:06 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:11:06 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:11:10 CREDITS              S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 POLL                 S=200 [-XB]
+  2026-05-11T23:11:10 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:11:11 SUBMIT               S=200 [-XB]
+  2026-05-11T23:11:11 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:11:20 POLL                 S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:30 POLL                 S=200 [-XB]
+  2026-05-11T23:11:31 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:31 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:31 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:31 POLL                 S=200 [-XB]
+    ... (1 more POLL)
+  2026-05-11T23:11:42 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:42 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:42 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:42 POLL                 S=200 [-XB]
+  2026-05-11T23:11:43 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:52 POLL                 S=200 [-XB]
+  2026-05-11T23:11:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:53 POLL                 S=200 [-XB]
+    ... (1 more POLL)
+  2026-05-11T23:12:03 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:36:01 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:36:01 FRONTEND_LOG         S=200 [-XB]
+
+================================================================================
+SESSION: 12.05_DL (477 entries)
+================================================================================
+
+--- reCAPTCHA (124 calls) ---
+  2026-05-11T23:06:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:06:49 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:12 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:13 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:13 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:13 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:25 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:26 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:27 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:55 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:07:56 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:07:56 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:21 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:22 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:45 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:45 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:08:54 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:07 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:08 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:08 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:08 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:19 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:28 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:09:45 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:09:45 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:03 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:03 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:03 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:04 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:05 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:06 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:06 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:06 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:30 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:30 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:31 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:32 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:33 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:46 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:47 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:47 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:10:59 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:11:00 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-11T23:11:10 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-11T23:11:11 POST  clr                            S=200 XCD=True XBV=True
+
+--- Submits (52) ---
+  2026-05-11T23:06:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:06:49 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:12 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:12 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:13 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:13 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:25 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:26 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:27 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:55 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:55 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:55 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:07:56 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:08:22 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:03 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:04 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:04 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:04 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:05 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:05 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:05 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:06 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:30 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:31 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:31 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:31 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:32 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:32 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:32 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:33 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:46 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:46 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:47 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:59 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:10:59 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:11:00 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+  2026-05-11T23:11:11 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+
+--- Polls (27) ---
+  Intervals: min=1.5s avg=12.1s max=28.2s
+  PENDING: 26, SUCCESSFUL: 2
+
+--- Upscales (10) ---
+  2026-05-11T23:08:45 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:08:54 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:08:54 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:08 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:08 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:19 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:19 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:28 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:28 S=200 reCAPTCHA=True Auth=False
+  2026-05-11T23:09:45 S=200 reCAPTCHA=True Auth=False
+
+--- Redirects/Downloads (14) ---
+  2026-05-11T23:09:35 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:02 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:46 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:46 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:46 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:10:59 S=307 upsampled=True Auth=False XCD=False XBV=False
+  2026-05-11T23:37:50 S=307 upsampled=False Auth=False XCD=False XBV=False
+  2026-05-12T02:26:47 S=307 upsampled=False Auth=False XCD=False XBV=False
+  2026-05-12T02:26:57 S=307 upsampled=False Auth=False XCD=False XBV=False
+  2026-05-12T02:27:03 S=307 upsampled=False Auth=False XCD=False XBV=False
+
+--- Credits checks (17) ---
+  First: 2026-05-11T23:06:16, Last: 2026-05-12T02:26:45
+  Before submit: 1, After submit: 16
+
+--- Session refreshes (2) ---
+
+--- TRPC (26 total, 4 ack heartbeats) ---
+
+--- Telemetry (batchLog=30, frontendEvents=30) ---
+
+--- PATCH workflow updates (52) ---
+
+--- Errors (8) ---
+  2026-05-11T23:07:13 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:07:36 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:08:07 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:09 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:16 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:24 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:30 POST  v1:batchLog                              S=400 domain=aisandbox
+  2026-05-11T23:09:37 POST  v1:batchLog                              S=400 domain=aisandbox
+
+--- COMPLETE FLOW TIMELINE ---
+  2026-05-11T23:06:14 TRPC                 S=200 [---]
+  2026-05-11T23:06:14 TRPC                 S=200 [---]
+  2026-05-11T23:06:15 TRPC                 S=200 [---]
+  2026-05-11T23:06:15 labs_other:a4fda8e7-6dbb-4ade-9 S=200 [---]
+  2026-05-11T23:06:15 TRPC                 S=200 [---]
+  2026-05-11T23:06:15 TRPC                 S=200 [---]
+  2026-05-11T23:06:16 CREDITS              S=200 [-XB]
+  2026-05-11T23:06:16 FETCH_REC            S=200 [-XB]
+  2026-05-11T23:06:16 SESSION              S=200 [---]
+  2026-05-11T23:06:16 TRPC                 S=200 [---]
+  2026-05-11T23:06:16 TRPC                 S=200 [---]
+  2026-05-11T23:06:16 ACK                  S=200 [---]
+  2026-05-11T23:06:16 FETCH_REC            S=200 [-XB]
+  2026-05-11T23:06:23 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:06:23 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:06:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:30 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:06:30 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:06:42 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:06:42 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:06:48 POLL                 S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:06:49 SUBMIT               S=200 [-XB]
+  2026-05-11T23:06:49 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:02 CREDITS              S=200 [-XB]
+  2026-05-11T23:07:05 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:07:05 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:12 POLL                 S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:12 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:12 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:12 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:13 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:13 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:13 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:13 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:13 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:13 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:07:13 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:24 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:07:24 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:25 CREDITS              S=200 [-XB]
+  2026-05-11T23:07:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:25 POLL                 S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:25 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:25 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:26 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:26 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:27 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:27 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:36 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:07:36 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:07:43 CREDITS              S=200 [-XB]
+  2026-05-11T23:07:53 POLL                 S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:54 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:07:55 POLL                 S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:55 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:55 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:55 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:55 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:07:56 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:07:56 SUBMIT               S=200 [-XB]
+  2026-05-11T23:07:56 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:02 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:08:02 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:08:07 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:08:07 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:08:10 CREDITS              S=200 [-XB]
+  2026-05-11T23:08:20 POLL                 S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:21 POLL                 S=200 [-XB]
+  2026-05-11T23:08:21 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:22 SUBMIT               S=200 [-XB]
+  2026-05-11T23:08:22 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:36 CREDITS              S=200 [-XB]
+  2026-05-11T23:08:36 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:36 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:45 POLL                 S=200 [-XB]
+  2026-05-11T23:08:45 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:45 UPSCALE              S=200 [-XB]
+  2026-05-11T23:08:45 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:48 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:08:48 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:08:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:08:54 POLL                 S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:54 UPSCALE              S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:08:54 UPSCALE              S=200 [-XB]
+  2026-05-11T23:08:54 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:08:56 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:08:56 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:01 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:01 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:02 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:09:02 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:03 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:03 FETCH_REC            S=200 [-XB]
+  2026-05-11T23:09:03 TRPC                 S=200 [---]
+  2026-05-11T23:09:07 POLL                 S=200 [-XB]
+  2026-05-11T23:09:07 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:08 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:08 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:08 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:08 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:08 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:09 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:09 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:16 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:16 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:16 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:16 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:16 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:19 POLL                 S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:19 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:19 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:19 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:24 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:24 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:25 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:25 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:09:27 POLL                 S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:28 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:28 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:28 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:30 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:30 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:35 CREDITS              S=200 [-XB]
+  2026-05-11T23:09:35 REDIRECT             S=307 [---]
+  2026-05-11T23:09:37 BATCH_LOG            S=400 [-XB]
+  2026-05-11T23:09:37 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:45 POLL                 S=200 [-XB]
+  2026-05-11T23:09:45 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:09:45 UPSCALE              S=200 [-XB]
+  2026-05-11T23:09:45 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:09:47 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:09:47 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:09:54 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:09:54 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:01 POLL                 S=200 [-XB]
+  2026-05-11T23:10:01 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:01 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:02 REDIRECT             S=307 [---]
+  2026-05-11T23:10:03 POLL                 S=200 [-XB]
+  2026-05-11T23:10:03 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:03 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:03 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:03 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:04 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:04 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:04 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:04 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:05 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:05 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:05 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:05 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:06 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:06 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:06 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:06 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:08 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:08 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:20 CREDITS              S=200 [-XB]
+  2026-05-11T23:10:24 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:24 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:30 POLL                 S=200 [-XB]
+  2026-05-11T23:10:30 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:30 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:30 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:31 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:31 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:31 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:31 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:32 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:32 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:32 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:32 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:33 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:33 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:46 CREDITS              S=200 [-XB]
+  2026-05-11T23:10:46 REDIRECT             S=307 [---]
+  2026-05-11T23:10:46 REDIRECT             S=307 [---]
+  2026-05-11T23:10:46 REDIRECT             S=307 [---]
+  2026-05-11T23:10:46 POLL                 S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:46 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:46 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:46 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:47 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:47 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:47 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:52 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:10:52 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:10:59 CREDITS              S=200 [-XB]
+  2026-05-11T23:10:59 REDIRECT             S=307 [---]
+  2026-05-11T23:10:59 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:10:59 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:10:59 POLL                 S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:59 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:10:59 SUBMIT               S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:10:59 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:11:00 SUBMIT               S=200 [-XB]
+  2026-05-11T23:11:00 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:11:06 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:11:06 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:11:10 CREDITS              S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:10 POLL                 S=200 [-XB]
+  2026-05-11T23:11:10 RECAP_RELOAD         S=200 [-XB]
+  2026-05-11T23:11:11 SUBMIT               S=200 [-XB]
+  2026-05-11T23:11:11 RECAP_CLR            S=200 [-XB]
+  2026-05-11T23:11:20 POLL                 S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:21 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:30 POLL                 S=200 [-XB]
+  2026-05-11T23:11:31 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:31 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:31 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:31 POLL                 S=200 [-XB]
+    ... (1 more POLL)
+  2026-05-11T23:11:42 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:42 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:42 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:42 POLL                 S=200 [-XB]
+  2026-05-11T23:11:43 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:52 POLL                 S=200 [-XB]
+  2026-05-11T23:11:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:52 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:11:53 POLL                 S=200 [-XB]
+    ... (1 more POLL)
+  2026-05-11T23:12:03 PATCH_WF             S=200 [-XB]
+  2026-05-11T23:36:01 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:36:01 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:36:38 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:36:38 FRONTEND_LOG         S=200 [-XB]
+  2026-05-11T23:37:48 ACK                  S=200 [---]
+  2026-05-11T23:37:48 CREDITS              S=200 [-XB]
+  2026-05-11T23:37:50 REDIRECT             S=307 [---]
+  2026-05-11T23:37:51 BATCH_LOG            S=200 [-XB]
+  2026-05-11T23:37:51 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T00:15:49 BATCH_LOG            S=200 [-XB]
+  2026-05-12T00:15:49 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T02:26:43 SESSION              S=200 [---]
+  2026-05-12T02:26:43 ACK                  S=200 [---]
+    ... (1 more ACK)
+  2026-05-12T02:26:45 CREDITS              S=200 [-XB]
+  2026-05-12T02:26:47 REDIRECT             S=307 [---]
+  2026-05-12T02:26:52 BATCH_LOG            S=200 [-XB]
+  2026-05-12T02:26:52 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T02:26:57 REDIRECT             S=307 [---]
+  2026-05-12T02:27:02 BATCH_LOG            S=200 [-XB]
+  2026-05-12T02:27:02 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T02:27:03 REDIRECT             S=307 [---]
+
+================================================================================
+SESSION: Fast_OK (87 entries)
+================================================================================
+
+--- reCAPTCHA (4 calls) ---
+  2026-05-12T11:57:18 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-12T11:57:19 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-12T11:59:00 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-12T11:59:00 POST  clr                            S=200 XCD=True XBV=True
+
+--- Submits (1) ---
+  2026-05-12T11:57:19 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+
+--- Polls (13) ---
+  Intervals: min=10.7s avg=13.8s max=46.4s
+  PENDING: 11, SUCCESSFUL: 2
+
+--- Upscales (1) ---
+  2026-05-12T11:59:00 S=200 reCAPTCHA=True Auth=False
+
+--- Redirects/Downloads (2) ---
+  2026-05-12T11:58:53 S=307 upsampled=False Auth=False XCD=False XBV=False
+  2026-05-12T12:00:21 S=307 upsampled=True Auth=False XCD=False XBV=False
+
+--- Credits checks (13) ---
+  First: 2026-05-12T11:57:08, Last: 2026-05-12T12:00:28
+  Before submit: 1, After submit: 12
+
+--- Session refreshes (18) ---
+
+--- TRPC (15 total, 13 ack heartbeats) ---
+
+--- Telemetry (batchLog=5, frontendEvents=5) ---
+
+--- PATCH workflow updates (1) ---
+
+--- Errors (0) ---
+
+--- COMPLETE FLOW TIMELINE ---
+  2026-05-12T11:57:08 ACK                  S=200 [---]
+  2026-05-12T11:57:08 CREDITS              S=200 [-XB]
+  2026-05-12T11:57:18 RECAP_RELOAD         S=200 [-XB]
+  2026-05-12T11:57:19 SUBMIT               S=200 [-XB]
+  2026-05-12T11:57:19 RECAP_CLR            S=200 [-XB]
+  2026-05-12T11:57:24 SESSION              S=200 [---]
+  2026-05-12T11:57:24 BATCH_LOG            S=200 [-XB]
+  2026-05-12T11:57:24 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:57:35 SESSION              S=200 [---]
+  2026-05-12T11:57:35 POLL                 S=200 [-XB]
+  2026-05-12T11:57:44 SESSION              S=200 [---]
+  2026-05-12T11:57:44 ACK                  S=200 [---]
+  2026-05-12T11:57:44 CREDITS              S=200 [-XB]
+  2026-05-12T11:57:45 SESSION              S=200 [---]
+  2026-05-12T11:57:46 POLL                 S=200 [-XB]
+  2026-05-12T11:57:46 SESSION              S=200 [---]
+    ... (1 more SESSION)
+  2026-05-12T11:57:48 ACK                  S=200 [---]
+  2026-05-12T11:57:48 CREDITS              S=200 [-XB]
+  2026-05-12T11:57:56 SESSION              S=200 [---]
+    ... (1 more SESSION)
+  2026-05-12T11:57:57 ACK                  S=200 [---]
+  2026-05-12T11:57:57 POLL                 S=200 [-XB]
+  2026-05-12T11:57:57 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:08 POLL                 S=200 [-XB]
+    ... (1 more POLL)
+  2026-05-12T11:58:20 ACK                  S=200 [---]
+  2026-05-12T11:58:20 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:20 SESSION              S=200 [---]
+  2026-05-12T11:58:21 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:21 SESSION              S=200 [---]
+  2026-05-12T11:58:21 ACK                  S=200 [---]
+  2026-05-12T11:58:22 SESSION              S=200 [---]
+    ... (1 more SESSION)
+  2026-05-12T11:58:24 ACK                  S=200 [---]
+  2026-05-12T11:58:24 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:26 SESSION              S=200 [---]
+  2026-05-12T11:58:29 POLL                 S=200 [-XB]
+  2026-05-12T11:58:30 PATCH_WF             S=200 [-XB]
+  2026-05-12T11:58:35 SESSION              S=200 [---]
+  2026-05-12T11:58:35 ACK                  S=200 [---]
+  2026-05-12T11:58:35 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:45 BATCH_LOG            S=200 [-XB]
+  2026-05-12T11:58:45 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:58:53 REDIRECT             S=307 [---]
+  2026-05-12T11:58:58 BATCH_LOG            S=200 [-XB]
+  2026-05-12T11:58:58 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:59:00 RECAP_RELOAD         S=200 [-XB]
+  2026-05-12T11:59:00 UPSCALE              S=200 [-XB]
+  2026-05-12T11:59:00 RECAP_CLR            S=200 [-XB]
+  2026-05-12T11:59:05 BATCH_LOG            S=200 [-XB]
+  2026-05-12T11:59:05 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:59:16 POLL                 S=200 [-XB]
+  2026-05-12T11:59:24 SESSION              S=200 [---]
+  2026-05-12T11:59:27 POLL                 S=200 [-XB]
+  2026-05-12T11:59:27 SESSION              S=200 [---]
+  2026-05-12T11:59:27 ACK                  S=200 [---]
+  2026-05-12T11:59:27 CREDITS              S=200 [-XB]
+  2026-05-12T11:59:37 POLL                 S=200 [-XB]
+  2026-05-12T11:59:38 ACK                  S=200 [---]
+  2026-05-12T11:59:38 CREDITS              S=200 [-XB]
+  2026-05-12T11:59:41 ACK                  S=200 [---]
+  2026-05-12T11:59:41 CREDITS              S=200 [-XB]
+  2026-05-12T11:59:43 SESSION              S=200 [---]
+  2026-05-12T11:59:48 POLL                 S=200 [-XB]
+  2026-05-12T11:59:56 SESSION              S=200 [---]
+  2026-05-12T11:59:56 ACK                  S=200 [---]
+  2026-05-12T11:59:56 CREDITS              S=200 [-XB]
+  2026-05-12T11:59:59 POLL                 S=200 [-XB]
+    ... (2 more POLL)
+  2026-05-12T12:00:21 REDIRECT             S=307 [---]
+  2026-05-12T12:00:28 ACK                  S=200 [---]
+  2026-05-12T12:00:28 CREDITS              S=200 [-XB]
+  2026-05-12T12:00:28 BATCH_LOG            S=200 [-XB]
+  2026-05-12T12:00:28 FRONTEND_LOG         S=200 [-XB]
+
+================================================================================
+SESSION: Lite_OK (92 entries)
+================================================================================
+
+--- reCAPTCHA (4 calls) ---
+  2026-05-12T11:57:42 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-12T11:57:42 POST  clr                            S=200 XCD=True XBV=True
+  2026-05-12T11:59:55 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-12T11:59:55 POST  clr                            S=200 XCD=True XBV=True
+
+--- Submits (1) ---
+  2026-05-12T11:57:42 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+
+--- Polls (14) ---
+  Intervals: min=10.7s avg=12.7s max=33.0s
+  PENDING: 12, SUCCESSFUL: 2
+
+--- Upscales (1) ---
+  2026-05-12T11:59:55 S=200 reCAPTCHA=True Auth=False
+
+--- Redirects/Downloads (2) ---
+  2026-05-12T11:59:49 S=307 upsampled=False Auth=False XCD=False XBV=False
+  2026-05-12T12:00:45 S=307 upsampled=True Auth=False XCD=False XBV=False
+
+--- Credits checks (10) ---
+  First: 2026-05-12T11:57:35, Last: 2026-05-12T12:00:59
+  Before submit: 1, After submit: 9
+
+--- Session refreshes (18) ---
+
+--- TRPC (20 total, 10 ack heartbeats) ---
+
+--- Telemetry (batchLog=4, frontendEvents=4) ---
+
+--- PATCH workflow updates (1) ---
+
+--- Errors (0) ---
+
+--- COMPLETE FLOW TIMELINE ---
+  2026-05-12T11:57:33 TRPC                 S=200 [---]
+  2026-05-12T11:57:33 TRPC                 S=200 [---]
+  2026-05-12T11:57:33 TRPC                 S=200 [---]
+  2026-05-12T11:57:33 TRPC                 S=200 [---]
+  2026-05-12T11:57:33 labs_other:5f6e7b34-ee23-4342-9 S=200 [---]
+  2026-05-12T11:57:34 TRPC                 S=200 [---]
+  2026-05-12T11:57:34 TRPC                 S=200 [---]
+  2026-05-12T11:57:35 CREDITS              S=200 [-XB]
+  2026-05-12T11:57:35 FETCH_REC            S=200 [-XB]
+  2026-05-12T11:57:35 SESSION              S=200 [---]
+  2026-05-12T11:57:35 TRPC                 S=200 [---]
+  2026-05-12T11:57:35 TRPC                 S=200 [---]
+  2026-05-12T11:57:35 ACK                  S=200 [---]
+  2026-05-12T11:57:35 FETCH_REC            S=200 [-XB]
+  2026-05-12T11:57:42 RECAP_RELOAD         S=200 [-XB]
+  2026-05-12T11:57:42 SUBMIT               S=200 [-XB]
+  2026-05-12T11:57:42 RECAP_CLR            S=200 [-XB]
+  2026-05-12T11:57:44 SESSION              S=200 [---]
+    ... (1 more SESSION)
+  2026-05-12T11:57:45 ACK                  S=200 [---]
+  2026-05-12T11:57:45 CREDITS              S=200 [-XB]
+  2026-05-12T11:57:46 SESSION              S=200 [---]
+  2026-05-12T11:57:47 BATCH_LOG            S=200 [-XB]
+  2026-05-12T11:57:47 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:57:48 SESSION              S=200 [---]
+    ... (1 more SESSION)
+  2026-05-12T11:57:55 ACK                  S=200 [---]
+  2026-05-12T11:57:55 CREDITS              S=200 [-XB]
+  2026-05-12T11:57:57 SESSION              S=200 [---]
+  2026-05-12T11:57:59 POLL                 S=200 [-XB]
+    ... (1 more POLL)
+  2026-05-12T11:58:20 SESSION              S=200 [---]
+    ... (1 more SESSION)
+  2026-05-12T11:58:21 POLL                 S=200 [-XB]
+  2026-05-12T11:58:22 SESSION              S=200 [---]
+  2026-05-12T11:58:22 ACK                  S=200 [---]
+  2026-05-12T11:58:22 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:24 ACK                  S=200 [---]
+  2026-05-12T11:58:24 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:24 SESSION              S=200 [---]
+    ... (1 more SESSION)
+  2026-05-12T11:58:26 ACK                  S=200 [---]
+  2026-05-12T11:58:26 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:32 POLL                 S=200 [-XB]
+  2026-05-12T11:58:35 ACK                  S=200 [---]
+  2026-05-12T11:58:35 CREDITS              S=200 [-XB]
+  2026-05-12T11:58:36 SESSION              S=200 [---]
+  2026-05-12T11:58:43 POLL                 S=200 [-XB]
+    ... (3 more POLL)
+  2026-05-12T11:59:23 SESSION              S=200 [---]
+  2026-05-12T11:59:23 ACK                  S=200 [---]
+  2026-05-12T11:59:23 CREDITS              S=200 [-XB]
+  2026-05-12T11:59:27 SESSION              S=200 [---]
+  2026-05-12T11:59:27 POLL                 S=200 [-XB]
+    ... (1 more POLL)
+  2026-05-12T11:59:39 PATCH_WF             S=200 [-XB]
+  2026-05-12T11:59:42 SESSION              S=200 [---]
+  2026-05-12T11:59:42 ACK                  S=200 [---]
+  2026-05-12T11:59:42 CREDITS              S=200 [-XB]
+  2026-05-12T11:59:49 REDIRECT             S=307 [---]
+  2026-05-12T11:59:51 BATCH_LOG            S=200 [-XB]
+  2026-05-12T11:59:51 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:59:55 RECAP_RELOAD         S=200 [-XB]
+  2026-05-12T11:59:55 UPSCALE              S=200 [-XB]
+  2026-05-12T11:59:55 RECAP_CLR            S=200 [-XB]
+  2026-05-12T11:59:57 SESSION              S=200 [---]
+  2026-05-12T12:00:00 BATCH_LOG            S=200 [-XB]
+  2026-05-12T12:00:00 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T12:00:11 POLL                 S=200 [-XB]
+    ... (3 more POLL)
+  2026-05-12T12:00:45 REDIRECT             S=307 [---]
+  2026-05-12T12:00:53 BATCH_LOG            S=200 [-XB]
+  2026-05-12T12:00:53 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T12:00:59 SESSION              S=200 [---]
+  2026-05-12T12:00:59 ACK                  S=200 [---]
+  2026-05-12T12:00:59 CREDITS              S=200 [-XB]
+
+================================================================================
+SESSION: Err1 (85 entries)
+================================================================================
+
+--- reCAPTCHA (2 calls) ---
+  2026-05-12T10:35:32 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-12T10:35:33 POST  clr                            S=200 XCD=True XBV=True
+
+--- Submits (1) ---
+  2026-05-12T10:35:33 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+
+--- Polls (56) ---
+  Intervals: min=10.6s avg=10.8s max=13.6s
+  PENDING: 56, SUCCESSFUL: 0
+
+--- Upscales (0) ---
+
+--- Redirects/Downloads (0) ---
+
+--- Credits checks (2) ---
+  First: 2026-05-12T10:35:21, Last: 2026-05-12T10:38:49
+  Before submit: 1, After submit: 1
+
+--- Session refreshes (1) ---
+
+--- TRPC (10 total, 2 ack heartbeats) ---
+
+--- Telemetry (batchLog=1, frontendEvents=1) ---
+
+--- PATCH workflow updates (0) ---
+
+--- Errors (0) ---
+
+--- COMPLETE FLOW TIMELINE ---
+  2026-05-12T10:35:20 TRPC                 S=200 [---]
+  2026-05-12T10:35:20 TRPC                 S=200 [---]
+  2026-05-12T10:35:20 TRPC                 S=200 [---]
+  2026-05-12T10:35:20 TRPC                 S=200 [---]
+  2026-05-12T10:35:20 labs_other:a45184fb-eb86-400a-b S=200 [---]
+  2026-05-12T10:35:21 TRPC                 S=200 [---]
+  2026-05-12T10:35:21 TRPC                 S=200 [---]
+  2026-05-12T10:35:21 CREDITS              S=200 [-XB]
+  2026-05-12T10:35:21 FETCH_REC            S=200 [-XB]
+  2026-05-12T10:35:21 SESSION              S=200 [---]
+  2026-05-12T10:35:21 TRPC                 S=200 [---]
+  2026-05-12T10:35:21 TRPC                 S=200 [---]
+  2026-05-12T10:35:21 ACK                  S=200 [---]
+  2026-05-12T10:35:22 FETCH_REC            S=200 [-XB]
+  2026-05-12T10:35:32 RECAP_RELOAD         S=200 [-XB]
+  2026-05-12T10:35:33 SUBMIT               S=200 [-XB]
+  2026-05-12T10:35:33 RECAP_CLR            S=200 [-XB]
+  2026-05-12T10:35:37 BATCH_LOG            S=200 [-XB]
+  2026-05-12T10:35:37 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T10:35:53 POLL                 S=200 [-XB]
+    ... (16 more POLL)
+  2026-05-12T10:38:49 ACK                  S=200 [---]
+  2026-05-12T10:38:49 CREDITS              S=200 [-XB]
+  2026-05-12T10:38:56 POLL                 S=200 [-XB]
+    ... (38 more POLL)
+
+================================================================================
+SESSION: Err2 (93 entries)
+================================================================================
+
+--- reCAPTCHA (2 calls) ---
+  2026-05-12T10:59:40 POST  reload                         S=200 XCD=True XBV=True
+  2026-05-12T10:59:40 POST  clr                            S=200 XCD=True XBV=True
+
+--- Submits (1) ---
+  2026-05-12T10:59:40 S=200 model=? seed=? reCAPTCHA=True Auth=False XCD=True XBV=True
+
+--- Polls (55) ---
+  Intervals: min=10.7s avg=11.0s max=12.0s
+  PENDING: 55, SUCCESSFUL: 0
+
+--- Upscales (0) ---
+
+--- Redirects/Downloads (0) ---
+
+--- Credits checks (3) ---
+  First: 2026-05-12T10:59:33, Last: 2026-05-12T11:00:29
+  Before submit: 1, After submit: 2
+
+--- Session refreshes (3) ---
+
+--- TRPC (13 total, 5 ack heartbeats) ---
+
+--- Telemetry (batchLog=2, frontendEvents=2) ---
+
+--- PATCH workflow updates (0) ---
+
+--- Errors (1) ---
+  2026-05-12T11:00:20 POST  v1:batchLog                              S=400 domain=aisandbox
+
+--- COMPLETE FLOW TIMELINE ---
+  2026-05-12T10:59:31 TRPC                 S=200 [---]
+  2026-05-12T10:59:31 TRPC                 S=200 [---]
+  2026-05-12T10:59:31 TRPC                 S=200 [---]
+  2026-05-12T10:59:31 TRPC                 S=200 [---]
+  2026-05-12T10:59:32 labs_other:8fcaaa27-38c1-4784-b S=200 [---]
+  2026-05-12T10:59:32 TRPC                 S=200 [---]
+  2026-05-12T10:59:32 TRPC                 S=200 [---]
+  2026-05-12T10:59:33 CREDITS              S=200 [-XB]
+  2026-05-12T10:59:33 FETCH_REC            S=200 [-XB]
+  2026-05-12T10:59:33 SESSION              S=200 [---]
+  2026-05-12T10:59:33 TRPC                 S=200 [---]
+  2026-05-12T10:59:33 TRPC                 S=200 [---]
+  2026-05-12T10:59:33 ACK                  S=200 [---]
+  2026-05-12T10:59:33 FETCH_REC            S=200 [-XB]
+  2026-05-12T10:59:40 RECAP_RELOAD         S=200 [-XB]
+  2026-05-12T10:59:40 SUBMIT               S=200 [-XB]
+  2026-05-12T10:59:40 RECAP_CLR            S=200 [-XB]
+  2026-05-12T10:59:45 BATCH_LOG            S=200 [-XB]
+  2026-05-12T10:59:45 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:00:00 POLL                 S=200 [-XB]
+  2026-05-12T11:00:09 ACK                  S=200 [---]
+  2026-05-12T11:00:09 CREDITS              S=200 [-XB]
+  2026-05-12T11:00:11 POLL                 S=200 [-XB]
+  2026-05-12T11:00:20 BATCH_LOG            S=400 [-XB]
+  2026-05-12T11:00:20 FRONTEND_LOG         S=200 [-XB]
+  2026-05-12T11:00:22 POLL                 S=200 [-XB]
+  2026-05-12T11:00:29 ACK                  S=200 [---]
+  2026-05-12T11:00:29 CREDITS              S=200 [-XB]
+  2026-05-12T11:00:32 POLL                 S=200 [-XB]
+    ... (8 more POLL)
+  2026-05-12T11:02:05 SESSION              S=200 [---]
+  2026-05-12T11:02:05 ACK                  S=200 [---]
+  2026-05-12T11:02:10 POLL                 S=200 [-XB]
+    ... (42 more POLL)
+  2026-05-12T11:51:46 SESSION              S=200 [---]
+  2026-05-12T11:51:46 ACK                  S=200 [---]
+
+--- Fast_cURL: reCAPTCHA tokens in submit (2) ---
+  Token 1: 0cAFcWeA6CymBg2PprENeTBhJRLqOCwoCo8jyTuV0YFE4utqYC... (unique prefix)
+  Token 2: 0cAFcWeA7K6XE2D5Mdbf_NZUJAEKZMHD40jav0K3w0UF2TEy1d... (unique prefix)
+  Unique tokens: 2/2 (ALL UNIQUE)
+
+--- Lite_cURL: reCAPTCHA tokens in submit (2) ---
+  Token 1: 0cAFcWeA5FKXNncpFaxGMCBkR0rJApxtgdv8hrTo3RbeeLjZwR... (unique prefix)
+  Token 2: 0cAFcWeA5t8s6uD4ncHStAaxEefs9hMjyv0_tUbgb8ZcWeNfN-... (unique prefix)
+  Unique tokens: 2/2 (ALL UNIQUE)

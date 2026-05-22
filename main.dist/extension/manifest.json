@@ -1,24 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "VEO Pro Max Bridge",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1p/zQiuay375DJEoFSc42vD8K+ZkHjYR8ONdxj/nGFcvS6HwO6IyOX00a8F6cb7naXTqMWINp3AwPOLTvHffR7GnzDp2qlaM/9e2ESTrBQOLuY3TMJYC9SKAcwj3Jhv7BjmedTgfl/0zo+5GSiX553oNdoVY1OBe4VVK+2fN98VP/TG/UKNW/2dqD/5QIKL8vkPzHLoBTjsv6FXy5sXJrhqGFwvDYY0nclzAjQz8vjvf7JjasK+U58j8l035HEmzbYITZ05EWLOCZHdK8s52Xot3kRwhz5IvBet4YeyWS1Ysg+6q4krACBdm3T8CwecLrHdMddpLhd1rNIwLgImQ+wIDAQAB",
-  "version": "2.4.5",
-  "description": "Bridges VEO web tokens and headers to VEO Pro Max app via WebSocket",
-  "permissions": [
-    "webRequest",
-    "cookies",
-    "activeTab",
-    "tabs",
-    "scripting",
-    "storage",
-    "alarms",
-    "offscreen"
-  ],
+  "name": "Flow Extension",
+  "version": "3.0.0",
+  "description": "Local agent bridge for Google Flow API — captures tokens, solves reCAPTCHA, proxies API calls",
+  "permissions": ["storage", "alarms", "tabs", "webRequest", "scripting", "declarativeNetRequest", "sidePanel"],
   "host_permissions": [
-    "*://labs.google/*",
-    "*://*.googleapis.com/*",
-    "*://*.aisandbox.com/*",
-    "*://aistudio.google.com/*"
+    "https://labs.google/*",
+    "https://aisandbox-pa.googleapis.com/*",
+    "https://www.googleapis.com/*",
+    "http://127.0.0.1:8100/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -26,19 +16,33 @@
   "content_scripts": [
     {
       "matches": [
-        "*://labs.google/*"
+        "https://labs.google/fx/tools/flow*",
+        "https://labs.google/fx/*/tools/flow*"
       ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_idle"
+      "js": ["content.js"],
+      "run_at": "document_start"
     }
   ],
-  "action": {
-    "default_popup": "popup.html"
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["https://labs.google/*"]
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "referer_rules",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
   },
-  "icons": {
-    "48": "icon48.png",
-    "128": "icon128.png"
+  "side_panel": {
+    "default_path": "side_panel.html"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Flow Extension"
   }
 }

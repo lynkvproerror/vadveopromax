@@ -1,6 +1,6 @@
 {
     "app": {
-        "title": "VEO Pro Max",
+        "title": "Flow Pro Max",
         "welcome": "Welcome {name}",
         "welcome_default": "Welcome",
         "contact_support": "Contact Support",
@@ -110,7 +110,7 @@
         }
     },
     "splash": {
-        "starting": "Starting VEO Pro Max...",
+        "starting": "Starting Flow Pro Max...",
         "subtitle": "AI Video Generation Suite",
         "ready": "Ready!"
     },
@@ -216,9 +216,9 @@
         "prompt_count": "{count} prompts",
         "credit_warning": {
             "title": "⚠️ CREDIT WARNING",
-            "message": "Model: {model}\n\nEstimated credit usage:\n  {prompts} prompt × {outputs} video × 10 = 💰 {total} credits\n\nContinue with Fast model?\nSelect 'No' to switch to Fast [LP] (free).",
+            "message": "Model: {model}\n\nEstimated credit usage:\n  {prompts} prompt × {outputs} video × 10 = 💰 {total} credits\n\nContinue with Fast model?\nSelect 'No' to switch to Lite [LP] (free).",
             "confirm": "Yes, use Fast",
-            "cancel": "No → Fast [LP]",
+            "cancel": "No → Lite [LP]",
             "switched": "🔄 Switched to {model}"
         }
     },
@@ -232,7 +232,7 @@
         "ai_model": "🤖 AI Model",
         "download_quality_video": "📹 Download Quality",
         "download_quality_image": "🖼️ Download Quality",
-        "image_library": "📂 Image Library",
+        "image_library": "📂 Assest",
         "queue_status": "📊 Queue: {count} pending",
         "add_to_queue": "📋 Add to Queue"
     },
@@ -386,7 +386,7 @@
         "update_required_title": "⚠️ Update Required",
         "version_too_old": "Current version ({current}) is outdated!",
         "min_version_required": "Minimum required version: {minimum}",
-        "update_to_continue": "Please update VEO Pro Max to continue.",
+        "update_to_continue": "Please update Flow Pro Max to continue.",
         "update_now": "🔄 Update Now",
         "exit": "❌ Exit",
         "maintenance_title": "🔧 System Maintenance",

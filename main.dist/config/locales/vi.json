@@ -1,6 +1,6 @@
 {
     "app": {
-        "title": "VEO Pro Max",
+        "title": "Flow Pro Max",
         "welcome": "Chào mừng {name}",
         "welcome_default": "Chào mừng bạn",
         "contact_support": "Liên hệ hỗ trợ",
@@ -110,7 +110,7 @@
         }
     },
     "splash": {
-        "starting": "Đang khởi động VEO Pro Max...",
+        "starting": "Đang khởi động Flow Pro Max...",
         "subtitle": "Bộ công cụ tạo video AI",
         "ready": "Sẵn sàng!"
     },
@@ -216,9 +216,9 @@
         "prompt_count": "{count} prompts",
         "credit_warning": {
             "title": "⚠️ CẢNH BÁO CREDIT",
-            "message": "Model: {model}\n\nƯớc tính credit sử dụng:\n  {prompts} prompt × {outputs} video × 10 = 💰 {total} credits\n\nBạn muốn tiếp tục với model Fast?\nChọn 'Không' để chuyển sang Fast [LP] (miễn phí).",
+            "message": "Model: {model}\n\nƯớc tính credit sử dụng:\n  {prompts} prompt × {outputs} video × 10 = 💰 {total} credits\n\nBạn muốn tiếp tục với model Fast?\nChọn 'Không' để chuyển sang Lite [LP] (miễn phí).",
             "confirm": "Có, dùng Fast",
-            "cancel": "Không → Fast [LP]",
+            "cancel": "Không → Lite [LP]",
             "switched": "🔄 Đã chuyển sang {model}"
         }
     },
@@ -232,7 +232,7 @@
         "ai_model": "🤖 Mô hình AI",
         "download_quality_video": "📹 Chất lượng tải về",
         "download_quality_image": "🖼️ Chất lượng tải về",
-        "image_library": "📂 Thư viện ảnh",
+        "image_library": "📂 Assest",
         "queue_status": "📊 Hàng đợi: {count} đang chờ",
         "add_to_queue": "📋 Thêm vào hàng đợi"
     },
@@ -379,7 +379,7 @@
         "update_required_title": "⚠️ Cập nhật bắt buộc",
         "version_too_old": "Phiên bản hiện tại ({current}) đã quá cũ!",
         "min_version_required": "Phiên bản tối thiểu yêu cầu: {minimum}",
-        "update_to_continue": "Vui lòng cập nhật VEO Pro Max để tiếp tục sử dụng.",
+        "update_to_continue": "Vui lòng cập nhật Flow Pro Max để tiếp tục sử dụng.",
         "update_now": "🔄 Cập nhật ngay",
         "exit": "❌ Thoát",
         "maintenance_title": "🔧 Bảo trì hệ thống",
