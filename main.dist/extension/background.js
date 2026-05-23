@@ -37,6 +37,8 @@ const EXTENSION_CAPABILITIES = [
   'trpc_request',
   'solve_captcha',
   'refresh_token',
+  'clear_request_log',
+  'cancel_request',
   'media_urls_refresh',
   'upload_video_start',
   'upload_video_chunk',
@@ -133,9 +135,25 @@ function _classify403(payload, fallbackError = '') {
   return 'API_403';
 }
 
+function _classify429(payload, fallbackError = '') {
+  const haystack = `${JSON.stringify(payload || {})} ${fallbackError || ''}`.toLowerCase();
+  if (
+    haystack.includes('captcha') ||
+    haystack.includes('recaptcha') ||
+    haystack.includes('reCAPTCHA evaluation failed'.toLowerCase()) ||
+    haystack.includes('public_error_unusual_activity_too_much_traffic') ||
+    haystack.includes('unusual activity') ||
+    haystack.includes('too much traffic')
+  ) {
+    return 'CAPTCHA_429';
+  }
+  return 'API_429';
+}
+
 // ─── Request Log ────────────────────────────────────────────
 
 let requestLog = [];
+const activeApiRequests = new Map();
 
 function addRequestLog(entry) {
   requestLog.unshift(entry);
@@ -200,6 +218,86 @@ function clearRequestLogEntries(filters = {}) {
     broadcastRequestLog();
   }
   return cleared;
+}
+
+function _buildRequestKey(msgId, logContext) {
+  const requestId = _normalizeLogContextValue(logContext?.requestId);
+  return requestId || `msg:${_normalizeLogContextValue(msgId)}`;
+}
+
+function _trackActiveApiRequest(entry) {
+  const requestKey = _normalizeLogContextValue(entry?.requestKey);
+  if (!requestKey) return;
+  activeApiRequests.set(requestKey, entry);
+}
+
+function _clearActiveApiRequest(requestKey) {
+  const normalized = _normalizeLogContextValue(requestKey);
+  if (!normalized) return;
+  activeApiRequests.delete(normalized);
+}
+
+function _collectMatchingActiveRequests(filters = {}) {
+  const requestIds = new Set((filters.request_ids || []).map((value) => _normalizeLogContextValue(value)).filter(Boolean));
+  const sceneIds = new Set((filters.scene_ids || []).map((value) => _normalizeLogContextValue(value)).filter(Boolean));
+  const projectId = _normalizeLogContextValue(filters.project_id);
+  const videoId = _normalizeLogContextValue(filters.video_id);
+  const matched = [];
+  for (const entry of activeApiRequests.values()) {
+    if (!entry) continue;
+    if (entry.requestId && requestIds.has(entry.requestId)) {
+      matched.push(entry);
+      continue;
+    }
+    if (entry.sceneId && sceneIds.has(entry.sceneId)) {
+      matched.push(entry);
+      continue;
+    }
+    if (projectId && entry.projectId === projectId) {
+      matched.push(entry);
+      continue;
+    }
+    if (videoId && entry.videoId === videoId) {
+      matched.push(entry);
+      continue;
+    }
+  }
+  return matched;
+}
+
+function _isCancelAbortError(error, controller = null, requestKey = '') {
+  const text = `${error?.message || ''} ${error || ''}`.toLowerCase();
+  const normalizedKey = _normalizeLogContextValue(requestKey);
+  const entry = normalizedKey ? activeApiRequests.get(normalizedKey) : null;
+  const controllerReason = controller?.signal?.reason;
+  if (controllerReason === 'REQUEST_CANCELLED') return true;
+  if (entry?.cancelledByUser) return true;
+  if (text.includes('request_cancelled') || text.includes('stopped by user')) return true;
+  if (error?.name === 'AbortError' && controllerReason !== 'FETCH_TIMEOUT' && entry?.cancelledByUser) {
+    return true;
+  }
+  return false;
+}
+
+async function abortFlowPageRequest(tabId, requestKey) {
+  if (!tabId || !requestKey) return false;
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: async (key) => {
+        const registry = globalThis.__flowProAbortControllers || {};
+        const controller = registry[key];
+        if (!controller) return false;
+        controller.abort('REQUEST_CANCELLED');
+        return true;
+      },
+      args: [requestKey],
+    });
+    return !!results?.[0]?.result;
+  } catch {
+    return false;
+  }
 }
 
 function newUuid() {
@@ -563,6 +661,8 @@ function connectToAgent() {
         await handleUploadVideoChunk(msg);
       } else if (msg.method === 'clear_request_log') {
         await handleClearRequestLog(msg);
+      } else if (msg.method === 'cancel_request') {
+        await handleCancelRequest(msg);
       } else if (msg.method === 'get_status') {
         const snapshot = await buildSessionSnapshot(false);
         sendToAgent({
@@ -770,6 +870,37 @@ async function handleClearRequestLog(msg) {
   }
 }
 
+async function handleCancelRequest(msg) {
+  const { id, params } = msg;
+  try {
+    const matched = _collectMatchingActiveRequests(params || {});
+    let aborted = 0;
+    for (const entry of matched) {
+      if (!entry) continue;
+      _trackActiveApiRequest({
+        ...entry,
+        cancelledByUser: true,
+      });
+      if (entry.timeoutTimer) {
+        clearTimeout(entry.timeoutTimer);
+      }
+      if (entry.mode === 'background' && entry.controller) {
+        entry.controller.abort('REQUEST_CANCELLED');
+        aborted += 1;
+      } else if (entry.mode === 'page' && entry.pageTabId) {
+        const ok = await abortFlowPageRequest(entry.pageTabId, entry.requestKey);
+        if (ok) aborted += 1;
+      }
+      if (entry.logId) {
+        updateRequestLog(entry.logId, { status: 'failed', error: 'CANCELLED' });
+      }
+    }
+    sendToAgent({ id, result: { ok: true, aborted } });
+  } catch (error) {
+    sendToAgent({ id, error: error?.message || 'REQUEST_CANCEL_FAILED' });
+  }
+}
+
 function decodeBase64ChunkToBytes(chunkBase64) {
   const binary = atob(String(chunkBase64 || ''));
   const bytes = new Uint8Array(binary.length);
@@ -919,6 +1050,7 @@ async function handleApiRequest(msg) {
   const { id, params } = msg;
   const { url, method, headers, body, captchaAction } = params;
   const logContext = _normalizeLogContext(msg);
+  const requestKey = _buildRequestKey(id, logContext);
 
   if (!url) {
     sendToAgent({ id, error: 'MISSING_URL' });
@@ -1015,14 +1147,50 @@ async function handleApiRequest(msg) {
     let responseText = '';
     let responseData;
     let usedPageFallback = false;
+    const requestTimeoutMs = 60000;
+    let timeoutTimer = null;
+    let controller = new AbortController();
+
+    _trackActiveApiRequest({
+      requestKey,
+      messageId: id,
+      requestId: logContext.requestId,
+      sceneId: logContext.sceneId,
+      projectId: logContext.projectId,
+      videoId: logContext.videoId,
+      logId,
+      mode: 'background',
+      controller,
+      timeoutTimer: null,
+      pageTabId: null,
+    });
 
     try {
+      timeoutTimer = setTimeout(() => controller.abort('FETCH_TIMEOUT'), requestTimeoutMs);
+      _trackActiveApiRequest({
+        ...(activeApiRequests.get(requestKey) || {}),
+        requestKey,
+        messageId: id,
+        requestId: logContext.requestId,
+        sceneId: logContext.sceneId,
+        projectId: logContext.projectId,
+        videoId: logContext.videoId,
+        logId,
+        mode: 'background',
+        controller,
+        timeoutTimer,
+        pageTabId: null,
+        cancelledByUser: false,
+      });
       response = await fetch(url, {
         method: method || 'POST',
         headers: fetchHeaders,
         credentials: 'include',
         body: method === 'GET' ? undefined : JSON.stringify(finalBody),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutTimer);
+      timeoutTimer = null;
       responseText = await response.text();
       try {
         responseData = JSON.parse(responseText);
@@ -1031,7 +1199,35 @@ async function handleApiRequest(msg) {
       }
 
       if (shouldRetryInPage && response.status >= 500) {
-        const pageResult = await fetchInFlowPage(url, method || 'POST', fetchHeaders, finalBody);
+        const tabId = await getOrCreateFlowTabId();
+        _trackActiveApiRequest({
+          ...(activeApiRequests.get(requestKey) || {}),
+          requestKey,
+          messageId: id,
+          requestId: logContext.requestId,
+          sceneId: logContext.sceneId,
+          projectId: logContext.projectId,
+          videoId: logContext.videoId,
+          logId,
+          mode: 'page',
+          controller: null,
+          timeoutTimer: null,
+          pageTabId: tabId,
+        });
+        const pageResult = await fetchInFlowPage(tabId, requestKey, url, method || 'POST', fetchHeaders, finalBody);
+        if (pageResult?.aborted && pageResult?.error === 'REQUEST_CANCELLED') {
+          sendToAgent({
+            id,
+            status: 499,
+            error: 'REQUEST_CANCELLED',
+            errorCategory: 'CANCELLED',
+          });
+          updateRequestLog(logId, { status: 'failed', error: 'CANCELLED' });
+          _clearActiveApiRequest(requestKey);
+          chrome.storage.local.set({ metrics });
+          setState('idle');
+          return;
+        }
         if (pageResult?.ok) {
           usedPageFallback = true;
           response = { status: pageResult.status, ok: pageResult.status >= 200 && pageResult.status < 300 };
@@ -1044,8 +1240,53 @@ async function handleApiRequest(msg) {
         }
       }
     } catch (fetchErr) {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      if (_isCancelAbortError(fetchErr, controller, requestKey)) {
+        sendToAgent({
+          id,
+          status: 499,
+          error: 'REQUEST_CANCELLED',
+          errorCategory: 'CANCELLED',
+        });
+        updateRequestLog(logId, { status: 'failed', error: 'CANCELLED' });
+        _clearActiveApiRequest(requestKey);
+        chrome.storage.local.set({ metrics });
+        setState('idle');
+        return;
+      }
       if (!shouldRetryInPage) throw fetchErr;
-      const pageResult = await fetchInFlowPage(url, method || 'POST', fetchHeaders, finalBody);
+      const tabId = await getOrCreateFlowTabId();
+      _trackActiveApiRequest({
+        ...(activeApiRequests.get(requestKey) || {}),
+        requestKey,
+        messageId: id,
+        requestId: logContext.requestId,
+        sceneId: logContext.sceneId,
+        projectId: logContext.projectId,
+        videoId: logContext.videoId,
+        logId,
+        mode: 'page',
+        controller: null,
+        timeoutTimer: null,
+        pageTabId: tabId,
+      });
+      const pageResult = await fetchInFlowPage(tabId, requestKey, url, method || 'POST', fetchHeaders, finalBody);
+      if (pageResult?.aborted && pageResult?.error === 'REQUEST_CANCELLED') {
+        sendToAgent({
+          id,
+          status: 499,
+          error: 'REQUEST_CANCELLED',
+          errorCategory: 'CANCELLED',
+        });
+        updateRequestLog(logId, { status: 'failed', error: 'CANCELLED' });
+        _clearActiveApiRequest(requestKey);
+        chrome.storage.local.set({ metrics });
+        setState('idle');
+        return;
+      }
       if (!pageResult?.ok) {
         throw new Error(pageResult?.error || fetchErr?.message || 'API_REQUEST_FAILED');
       }
@@ -1067,6 +1308,8 @@ async function handleApiRequest(msg) {
           console.warn('[FlowAgent] Token refresh trigger failed after AUTH_403:', refreshErr);
         });
       }
+    } else if (response.status === 429) {
+      errorCategory = _classify429(responseData, responseText);
     }
 
     sendToAgent({
@@ -1097,6 +1340,19 @@ async function handleApiRequest(msg) {
       });
     }
   } catch (e) {
+    if (_isCancelAbortError(e, controller, requestKey)) {
+      sendToAgent({
+        id,
+        status: 499,
+        error: 'REQUEST_CANCELLED',
+        errorCategory: 'CANCELLED',
+      });
+      updateRequestLog(logId, { status: 'failed', error: 'CANCELLED' });
+      _clearActiveApiRequest(requestKey);
+      chrome.storage.local.set({ metrics });
+      setState('idle');
+      return;
+    }
     sendToAgent({
       id,
       status: 500,
@@ -1106,6 +1362,7 @@ async function handleApiRequest(msg) {
     updateRequestLog(logId, { status: 'failed', error: e.message || 'API_REQUEST_FAILED' });
   }
 
+  _clearActiveApiRequest(requestKey);
   chrome.storage.local.set({ metrics });
   setState('idle');
 }
@@ -1146,15 +1403,16 @@ async function getOrCreateFlowTabId() {
   return tabs[0]?.id || null;
 }
 
-async function fetchInFlowPage(url, method, headers, body, timeoutMs = 60000) {
-  const tabId = await getOrCreateFlowTabId();
+async function fetchInFlowPage(tabId, requestKey, url, method, headers, body, timeoutMs = 60000) {
   if (!tabId) return { ok: false, error: 'NO_FLOW_TAB' };
 
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     world: 'MAIN',
-    func: async (requestUrl, requestMethod, requestHeaders, requestBody, requestTimeoutMs) => {
+    func: async (key, requestUrl, requestMethod, requestHeaders, requestBody, requestTimeoutMs) => {
+      globalThis.__flowProAbortControllers = globalThis.__flowProAbortControllers || {};
       const controller = new AbortController();
+      globalThis.__flowProAbortControllers[key] = controller;
       const timer = setTimeout(() => controller.abort('FETCH_TIMEOUT'), requestTimeoutMs);
       try {
         const response = await fetch(requestUrl, {
@@ -1171,15 +1429,22 @@ async function fetchInFlowPage(url, method, headers, body, timeoutMs = 60000) {
           text,
         };
       } catch (error) {
+        const abortReason = controller.signal?.reason;
         return {
           ok: false,
-          error: error?.message || String(error),
+          error: abortReason === 'REQUEST_CANCELLED'
+            ? 'REQUEST_CANCELLED'
+            : abortReason === 'FETCH_TIMEOUT'
+              ? 'FETCH_TIMEOUT'
+              : (error?.message || String(error)),
+          aborted: !!controller.signal?.aborted,
         };
       } finally {
         clearTimeout(timer);
+        delete globalThis.__flowProAbortControllers[key];
       }
     },
-    args: [url, method, filterPageFetchHeaders(headers), body, timeoutMs],
+    args: [requestKey, url, method, filterPageFetchHeaders(headers), body, timeoutMs],
   });
 
   return results?.[0]?.result || { ok: false, error: 'PAGE_FETCH_NO_RESULT' };
