@@ -1,6 +1,6 @@
 {
-  "build_time": "2026-05-22T16:37:05.546794",
-  "app_version": "3.0.0",
+  "build_time": "2026-05-23T16:44:11.137677",
+  "app_version": "3.0.1",
   "python_version": "3.13.6",
   "platform": "win32",
   "critical_file_hashes": {
@@ -12,5 +12,5 @@
     "services/permissions.py": "e14dad2ef2798254f50ece9c88b38e0c79dca21e10fafc5d3b6abcb9ae3f2830",
     "security/anti_tamper.py": "5b2ad36f6ce99d9fe10b6d32c4c07a6b3bcec7970359172eb0741f77f6fd41d8"
   },
-  "build_number": 1779442625
+  "build_number": 1779529451
 }
