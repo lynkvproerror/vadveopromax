@@ -5,13 +5,13 @@
     "changelog": "v3.0.1 - Flow Pro Max runtime stability and release alignment\n\nFeatures\n- Chuyển runtime chính sang FlowKit exact-backend, giữ UI desktop của Flow Pro Max.\n- Hỗ trợ nhiều extension session, nhiều browser, duplicate email với primary session rõ ràng.\n- Bổ sung Omni Flash, upload video và luồng R2V/reference mở rộng.\n\nFixes\n- Sửa đồng bộ queue, session và prompt normalization giữa app, runtime và extension.\n- Sửa logic fail/cooldown theo account và lane cho CAPTCHA_429, CAPTCHA_403, AUTH_403, API_429.\n- Sửa hiển thị thumbnail theo file local thực tế và telemetry lock/fail trong DevConsole/Settings.\n\nImprovements\n- Ổn định hơn cho Flow Extension lifecycle, session cleanup và reconnect detection.\n- Tối ưu refresh queue để tránh block GUI khi runtime polling.\n- Chuẩn hóa build/release cho app, extension và installer ở mốc phát hành v3.0.1.",
     "download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v3.0.1/VEO_Pro_Max_v3.0.1.zip",
     "ext_download_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v3.0.1/VEO_Extension_v3.0.1.zip",
-    "sha256": "51a45edbda9c0b56a4bc410511fd090f836aae77b11b7724dcc0f52024d655cc",
+    "sha256": "dfa9309ca28bedb939f1f23f549b54712d2d6d56421bbeb931907a8a80107097",
     "ext_sha256": "a5410930ce40448cb402e57918c106d828796d0f8e158e0109c4423b45522296",
     "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v3.0.1/VEO_Pro_Max_Setup_v3.0.1.exe",
-    "installer_sha256": "6a7075254be6713dcc6602abf02740a63bbc744fd7cfd38bdcb000d23e8e9307",
+    "installer_sha256": "c200476f49da2277a16884e345f003ca325a6a611e2cdc23347ee7b38509bf12",
     "installer_filename": "VEO_Pro_Max_Setup_v3.0.1.exe",
     "min_version": "1.0.0",
     "force_update": false,
-    "build_number": 1779537378,
-    "build_time": "2026-05-23T18:56:18.710538"
+    "build_number": 1779541766,
+    "build_time": "2026-05-23T20:09:26.046816"
 }
