@@ -124,31 +124,21 @@ function updateRequestLog(entries) {
 
   // Render newest first (entries already sorted DESC by background.js)
   const rows = entries.map((entry) => {
-    const shortId = entry.id ? String(entry.id).slice(0, 8) : '—';
+    const displayId = entry.requestId || entry.id || '';
+    const shortId = displayId ? String(displayId).slice(0, 8) : '—';
     const type   = formatType(entry.type || entry.method);
     const time   = formatTime(entry.time || entry.timestamp || entry.createdAt);
     const status = entry.status || entry.state || 'pending';
     const error  = entry.error || '';
 
-    let badgeHtml;
-    if (status === 'COMPLETED' || status === 'success') {
-      badgeHtml = '<span class="badge badge-ok">&#10003; done</span>';
-    } else if (status === 'FAILED' || status === 'failed' || (typeof status === 'number' && status >= 400)) {
-      badgeHtml = '<span class="badge badge-fail">&#10007; fail</span>';
-    } else if (status === 'PROCESSING') {
-      badgeHtml = '<span class="badge badge-proc">&#9203; gen...</span>';
-    } else if (status === 200 || status === 'processing') {
-      badgeHtml = '<span class="badge badge-proc">&#9203; sent</span>';
-    } else {
-      badgeHtml = '<span class="badge badge-proc">&#9203; sent</span>';
-    }
+    const badgeHtml = renderLifecycleBadge(status, entry.type || entry.method);
 
     const errorDisplay = error
       ? `<td class="td-error" title="${escHtml(error)}">${escHtml(truncate(error, 28))}</td>`
       : `<td class="td-error empty">—</td>`;
 
     return `<tr>
-      <td class="td-id" data-request-id="${escHtml(entry.id || '')}">${escHtml(shortId)}</td>
+      <td class="td-id" data-request-id="${escHtml(displayId)}">${escHtml(shortId)}</td>
       <td class="td-type">${escHtml(type)}</td>
       <td class="td-time">${escHtml(time)}</td>
       <td>${badgeHtml}</td>
@@ -165,6 +155,42 @@ function updateRequestLog(entries) {
       if (reqId) showRequestDetail(reqId);
     });
   });
+}
+
+function normalizeLifecycleStatus(status) {
+  const value = String(status || '').trim().toUpperCase();
+  if (value === 'SUCCESS' || value === 'SUBMITTED' || value === '200') return 'SUBMITTED';
+  if (value === 'PROCESSING' || value === 'GENERATING') return 'PROCESSING';
+  if (value === 'COMPLETED') return 'COMPLETED';
+  if (value === 'FAILED' || value === 'CANCELLED' || value === 'CANCELED') return value;
+  if (value === 'PENDING' || value === 'QUEUED') return 'PENDING';
+  return value || 'PENDING';
+}
+
+function isUpscaleType(type) {
+  const value = String(type || '').trim().toUpperCase();
+  return value === 'UPSCALE_VIDEO' || value === 'UPSCALE_IMAGE' || value === 'UPSCALE' || value === 'UPS_IMG';
+}
+
+function renderLifecycleBadge(status, type = '') {
+  const value = normalizeLifecycleStatus(status);
+  const upscale = isUpscaleType(type);
+  if (value === 'COMPLETED') {
+    return '<span class="badge badge-ok">&#10003; completed</span>';
+  }
+  if (value === 'FAILED') {
+    return '<span class="badge badge-fail">&#10007; failed</span>';
+  }
+  if (value === 'CANCELLED' || value === 'CANCELED') {
+    return '<span class="badge badge-fail">&#10007; cancelled</span>';
+  }
+  if (value === 'PROCESSING') {
+    return `<span class="badge badge-proc">&#9203; ${upscale ? 'upscaling' : 'generating'}</span>`;
+  }
+  if (value === 'SUBMITTED') {
+    return '<span class="badge badge-submitted">&#8594; submitted</span>';
+  }
+  return `<span class="badge badge-proc">&#9203; ${upscale ? 'waiting slot' : 'queued'}</span>`;
 }
 
 function escHtml(str) {
@@ -185,7 +211,7 @@ function truncate(str, len) {
 let _logEntries = [];
 
 function showRequestDetail(reqId) {
-  const entry = _logEntries.find(e => e.id === reqId);
+  const entry = _logEntries.find(e => (e.requestId || e.id) === reqId);
   if (!entry) return;
 
   const overlay = document.getElementById('detail-overlay');
@@ -195,10 +221,17 @@ function showRequestDetail(reqId) {
   title.textContent = `Request ${String(reqId).slice(0, 12)}`;
 
   const fields = [
-    ['ID', entry.id],
+    ['Display ID', entry.requestId || entry.id],
+    ['Log ID', entry.id],
+    ['Request ID', entry.requestId || '—'],
+    ['Scene ID', entry.sceneId || '—'],
+    ['Project ID', entry.projectId || '—'],
+    ['Video ID', entry.videoId || '—'],
     ['Type', formatType(entry.type || entry.method)],
     ['Time', formatTime(entry.time || entry.timestamp || entry.createdAt)],
-    ['Status', entry.status || entry.state || 'pending'],
+    ['Status', normalizeLifecycleStatus(entry.status || entry.state || 'pending')],
+    ['Lifecycle Updated', formatTime(entry.lifecycleUpdatedAt)],
+    ['Connection', entry.connectionId || '—'],
     ['HTTP', entry.httpStatus || '—'],
     ['URL', entry.url || '—'],
     ['Payload', entry.payloadSummary || '—'],

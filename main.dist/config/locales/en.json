@@ -471,7 +471,7 @@
         "confirm_force_retry": "Force Retry All",
         "confirm_force_retry_msg": "⚠️ This will re-generate ALL prompts.\nCompleted items will be re-processed.\n\nContinue?",
         "confirm_delete_all": "Delete All",
-        "confirm_delete_all_msg": "⚠️ This will DELETE all groups and tasks.\nThis cannot be undone.\n\nContinue?",
+        "confirm_delete_all_msg": "⚠️ This will DELETE all groups and tasks from the queue.\nDownloaded output files will be preserved.\nThe queue delete cannot be undone.\n\nContinue?",
         "confirm_reset_all": "Reset All",
         "confirm_reset_all_msg": "⚠️ This will reset all non-completed tasks to pending.\nCompleted tasks will be kept as-is.\n\nContinue?",
         "group_elapsed_tooltip": "Elapsed processing time for this group",
