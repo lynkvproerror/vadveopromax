@@ -6,7 +6,6 @@ nuitka-crash-report.xml
 # Zip files
 *.zip
 
-# Logs and sessions (user-specific)
-main.dist/logs/
-main.dist/sessions/
-main.dist/assets/models/
+# Nuitka compiled dist (intermediate build cache, NEVER track or push to GitHub)
+main.dist/
+*.dist/
