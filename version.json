@@ -8,7 +8,7 @@
     "sha256": "b6c294ec7c52d716406337610e032ce9560215b57cd882db3f4a04719a6af282",
     "ext_sha256": "6080dfcd9b942dc6d95fff60a4aff04e29b03b43b9fd91815a65f269fdbc9b4e",
     "installer_url": "https://github.com/lynkvproerror/vadveopromax/releases/download/v3.2.4/Flow_Pro_Max_Setup_v3.2.4.exe",
-    "installer_sha256": "ec9d5259c179264c748f2696c892cb092724ea1832e14ab4a2d10016d1ffa167",
+    "installer_sha256": "698d1fe8fe2843d76d5a85cb8edbce090712a447ca220db72cf1abc3b95d13c1",
     "installer_filename": "Flow_Pro_Max_Setup_v3.2.4.exe",
     "min_version": "1.0.0",
     "force_update": false,
