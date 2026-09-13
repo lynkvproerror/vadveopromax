@@ -1,16 +1,16 @@
 {
-  "build_time": "2026-09-13T10:15:30.000000",
+  "build_time": "2026-09-13T10:30:45.557014",
   "app_version": "3.2.4",
   "python_version": "3.13.6",
   "platform": "win32",
   "critical_file_hashes": {
     "security/license_client.py": "29d92294f99a27369b4d19c231d615fd1a364cfb5ebb6f4d991f71b2d3d18386",
-    "security/trial_protection.py": "e60280a6aaa37aa5f7de4ff153809a71cd65f20203436e8a8acc05e840b7b060",
     "security/firebase_rest_client.py": "431ecfcb7771771c8c023cd3bcd5117a89dd7afe40ca6adfd0be41b5f4e2ccba",
     "security/_encrypted_keys.py": "59a3761bb495b8accc3140bbc675df14e6eb1cf396b9b1517fc462bfc3892439",
+    "security/trial_protection.py": "7fe515883c4f03909e4a13a0c925d54778c9ef79f2bd8c2196a8d1ce89852170",
     "security/_encrypted_api_keys.py": "09f906eb6af8355ea19f5a402abe6787d01144dbe398c65e24ca763110fc7c51",
     "services/permissions.py": "c17e9fef36405571b1af1952309cd8912c46f82ea0e5959d9567e6431c889352",
     "security/anti_tamper.py": "4bb012334067fbecc12b38499a49888ed5bfc3b68ceef904d6eae5d192fa7858"
   },
-  "build_number": 1788855415
+  "build_number": 1789270245
 }
